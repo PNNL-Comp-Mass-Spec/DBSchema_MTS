@@ -8,7 +8,7 @@ drop view [dbo].[V_Table_Row_Counts]
 GO
 
 
-CREATE VIEW dbo.V_Table_Row_Counts
+CREATE VIEW [dbo].[V_Table_Row_Counts]
 AS
 SELECT TOP 100 PERCENT o.name AS TableName, 
     i.rowcnt AS TableRowCount
@@ -17,6 +17,7 @@ FROM dbo.sysobjects o INNER JOIN
 WHERE (o.type = 'u') AND (i.indid < 2) AND 
     (o.name <> 'dtproperties')
 ORDER BY o.name
+
 
 
 GO

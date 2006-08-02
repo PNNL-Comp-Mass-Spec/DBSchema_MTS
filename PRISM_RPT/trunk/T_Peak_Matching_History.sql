@@ -5,6 +5,7 @@ GO
 CREATE TABLE [T_Peak_Matching_History] (
 	[PM_History_ID] [int] IDENTITY (1, 1) NOT NULL ,
 	[PM_AssignedProcessorName] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
+	[PM_ToolVersion] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_History_PM_ToolVersion] DEFAULT ('Unknown'),
 	[Server_Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[MTDBName] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[TaskID] [int] NOT NULL ,

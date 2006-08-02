@@ -7,7 +7,7 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_QR_Expor
 drop view [dbo].[V_QR_Export_Job]
 GO
 
-CREATE VIEW dbo.V_QR_Export_Job
+CREATE VIEW [dbo].[V_QR_Export_Job]
 AS
 SELECT TOP 100 PERCENT dbo.T_QR_Export_Job.jobkey AS [Key], 
     dbo.T_QR_Export_Job.modified AS Date, 
@@ -36,6 +36,7 @@ FROM dbo.T_QR_Export_Job INNER JOIN
 WHERE (DATEDIFF(Day, dbo.T_QR_Export_Job.modified, 
     { fn NOW() }) < 30)
 ORDER BY dbo.T_QR_Export_Job.modified DESC
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

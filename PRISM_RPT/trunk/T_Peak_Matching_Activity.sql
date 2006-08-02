@@ -4,6 +4,8 @@ GO
 
 CREATE TABLE [T_Peak_Matching_Activity] (
 	[PM_AssignedProcessorName] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
+	[PM_ToolVersion] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Activity_PM_ToolVersion] DEFAULT ('Unknown'),
+	[PM_ToolQueryDate] [datetime] NULL ,
 	[Working] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Activity_Working] DEFAULT (0),
 	[Server_Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[MTDBName] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,

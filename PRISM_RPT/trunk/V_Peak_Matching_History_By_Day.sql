@@ -7,7 +7,7 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Peak_Mat
 drop view [dbo].[V_Peak_Matching_History_By_Day]
 GO
 
-CREATE VIEW dbo.V_Peak_Matching_History_By_Day
+CREATE VIEW [dbo].[V_Peak_Matching_History_By_Day]
 AS
 SELECT TOP 100 PERCENT CONVERT(datetime, 
     CONVERT(varchar(4), TheYear) + '/' + CONVERT(varchar(4), 
@@ -22,6 +22,7 @@ FROM (SELECT DATEPART(year, PM_Start) AS TheYear,
           PM_Start), DATEPART(month, PM_Start)) 
     LookupQ
 ORDER BY date
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

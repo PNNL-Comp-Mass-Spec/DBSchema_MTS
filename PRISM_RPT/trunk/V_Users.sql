@@ -7,7 +7,7 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Users]')
 drop view [dbo].[V_Users]
 GO
 
-create VIEW V_Users
+create VIEW [dbo].[V_Users]
 AS
 SELECT     t1.*
 FROM         OPENROWSET('SQLOLEDB', 'gigasax'; 'DMSWebUser'; 'icr4fun', 'SELECT * FROM dms5.dbo.T_Users') t1

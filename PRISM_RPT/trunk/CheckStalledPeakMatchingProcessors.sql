@@ -16,8 +16,9 @@ CREATE PROCEDURE dbo.CheckStalledPeakMatchingProcessors
 **
 **		Return values: 0: success, otherwise, error code
 ** 
-**		Auth: mem
-**		Date: 11/08/2005
+**		Auth:	mem
+**		Date:	11/08/2005
+**				12/08/2005 mem - Renamed field HoursSinceMostRecentFinish to HoursSinceLastQuery
 **
 *****************************************************/
 	@message varchar(512) = '' output,
@@ -34,12 +35,12 @@ As
 	Declare @StalledProcessorCount int
 	Declare @MultipleRowCount int
 	Declare @MaximumProcessingTimeHoursElapsed int
-	Declare @MaximumHoursSinceMostRecentFinish int
+	Declare @MaximumHoursSinceLastQuery int
 	
 	Set @StalledProcessorCount = 0
 	Set @MultipleRowCount = 0
 	Set @MaximumProcessingTimeHoursElapsed = 0
-	Set @MaximumHoursSinceMostRecentFinish = 0
+	Set @MaximumHoursSinceLastQuery = 0
 	
 	Set @message = ''
 	
@@ -61,13 +62,13 @@ As
 		If @StalledProcessorCount > 0
 			Set @Message = @Message + '; ' + Convert(varchar(9), @StalledProcessorCount) + ' processors have been processing for ' + Convert(varchar(9), @MaximumProcessingTimeHoursElapsed) + ' hours'
 
-		SELECT	@MaximumHoursSinceMostRecentFinish = IsNull(MAX(HoursSinceMostRecentFinish), 0),
+		SELECT	@MaximumHoursSinceLastQuery = IsNull(MAX(HoursSinceLastQuery), 0),
 				@StalledProcessorCount = COUNT(*)
 		FROM V_PeakMatching_Tasks_Stalled
 		WHERE Working = 0
 
 		If @StalledProcessorCount > 0
-			Set @Message = @Message + '; ' + Convert(varchar(9), @StalledProcessorCount) + ' processors have not requested a task in the last ' + Convert(varchar(9), @MaximumHoursSinceMostRecentFinish) + ' hours'
+			Set @Message = @Message + '; ' + Convert(varchar(9), @StalledProcessorCount) + ' processors have not requested a task in the last ' + Convert(varchar(9), @MaximumHoursSinceLastQuery) + ' hours'
 
 
 		If @PostErrorsToLog = 0
