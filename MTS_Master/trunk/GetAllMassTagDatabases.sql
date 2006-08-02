@@ -17,27 +17,27 @@ CREATE PROCEDURE dbo.GetAllMassTagDatabases
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters:
-**		@message   -- explanation of any error that occurred
-**
-**		Auth: grk
-**		Date: 4/07/2004
-**			 04/09/2004 grk - removed default on @message argument
-**			 04/16/2004 mem - Added [Last Update] column
-**			 05/05/2004 mem - Added filtering out of MTDB's with state 'unused'
-**			 05/06/2004 mem - Added @IncludeUnused and @IncludeDeleted parameters
-**			 10/23/2004 mem - Added PostUsageLogEntry and switched to using V_MT_Database_List_Report_Ex in MT_Main
-**			 12/06/2004 mem - Ported to MTS_Master
-**			 12/15/2004 mem - Added [DB ID] column
-**			 05/13/2005 mem - Added parameter @VerboseColumnOutput
-**			 08/02/2005 mem - Added [DB Schema Version] column
+**	Auth:	grk
+**	Date:	04/07/2004
+**			04/09/2004 grk - removed default on @message argument
+**			04/16/2004 mem - Added [Last Update] column
+**			05/05/2004 mem - Added filtering out of MTDB's with state 'unused'
+**			05/06/2004 mem - Added @IncludeUnused and @IncludeDeleted parameters
+**			10/23/2004 mem - Added PostUsageLogEntry and switched to using V_MT_Database_List_Report_Ex in MT_Main
+**			12/06/2004 mem - Ported to MTS_Master
+**			12/15/2004 mem - Added [DB ID] column
+**			05/13/2005 mem - Added parameter @VerboseColumnOutput
+**			08/02/2005 mem - Added [DB Schema Version] column
+**			07/25/2006 mem - Updated to exclude databases with state 15 in addition to state 100 when @IncludeDeleted = 0
 **    
 *****************************************************/
+(
 	@IncludeUnused tinyint = 0,				-- Set to 1 to include unused databases
 	@IncludeDeleted tinyint = 0,			-- Set to 1 to include deleted databases
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
 	@message varchar(512)='' output,
 	@VerboseColumnOutput tinyint = 1
+)
 As	
 	set nocount on
 	
@@ -141,14 +141,14 @@ As
 			Begin
 				If Len(@sqlWhereClause) > 0
 					Set @sqlWhereClause = @sqlWhereClause + ' AND '
-				set @sqlWhereClause = @sqlWhereClause + '(StateID NOT IN (10,15))'
+				set @sqlWhereClause = @sqlWhereClause + '(StateID NOT IN (10, 15))'
 			End
 
 			If @IncludeDeleted = 0
 			Begin
 				If Len(@sqlWhereClause) > 0
 					Set @sqlWhereClause = @sqlWhereClause + ' AND '
-				set @sqlWhereClause = @sqlWhereClause + '(StateID <> 100)'
+				set @sqlWhereClause = @sqlWhereClause + '(NOT StateID IN (15, 100))'
 			End
 			
 			If Len(@sqlWhereClause) > 0

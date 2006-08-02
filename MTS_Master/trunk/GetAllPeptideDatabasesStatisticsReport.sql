@@ -27,17 +27,20 @@ CREATE PROCEDURE dbo.GetAllPeptideDatabasesStatisticsReport
 **		@IncludeUnused					-- 'True' to include unused databases
 **		@message						 -- explanation of any error that occurred
 **
-**		Auth: mem
-**		Date: 10/23/2004
-**			  12/06/2004 mem - Ported to MTS_Master
+**	Auth:	mem
+**	Date:	10/23/2004
+**			12/06/2004 mem - Ported to MTS_Master
+**			07/25/2006 mem - Updated to exclude databases with state 15 and state 100 when @IncludeUnused = 'True'
 **    
 *****************************************************/
+(
 	@ConfigurationSettingsOnly varchar(32) = 'False',
 	@ConfigurationCrosstabMode varchar(32) = 'True',
 	@DBNameFilter varchar(2048) = '',
 	@IncludeUnused varchar(32) = 'False',
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 	
@@ -161,6 +164,13 @@ As
 			Set @SqlWhereClause = @SqlWhereClause + ' AND '
 		Set @SqlWhereClause = @SqlWhereClause + 'PDBs.State_ID < 10'
 	End
+	Else
+	Begin
+		If Len(@SqlWhereClause) > 0
+			Set @SqlWhereClause = @SqlWhereClause + ' AND '
+		Set @SqlWhereClause = @SqlWhereClause + 'PDBs.State_ID NOT IN (15, 100)'
+	End
+	
 	
 	If Len(@SqlWhereClause) > 0
 		Set @Sql = @Sql + ' WHERE ' + @SqlWhereClause

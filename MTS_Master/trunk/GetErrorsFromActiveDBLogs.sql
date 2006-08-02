@@ -10,26 +10,29 @@ GO
 CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 /****************************************************
 ** 
-**		Desc: Returns a combined report of errors (or all log entries) from 
-**			  active DBs on the servers in V_Active_MTS_Servers
+**	Desc: Returns a combined report of errors (or all log entries) from 
+**		  active DBs on the servers in V_Active_MTS_Servers
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	mem
-**		Date:	12/06/2004
-**				12/13/2004 mem - Added the PRISM_RPT database
-**				02/06/2005 mem - Added Master_Sequences_T3
-**				02/24/2005 mem - Moved Master_Sequences to Albert
-**				10/10/2005 mem - Removed PrismDev.Master_Sequences_T3
-**				11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	12/06/2004
+**			12/13/2004 mem - Added the PRISM_RPT database
+**			02/06/2005 mem - Added Master_Sequences_T3
+**			02/24/2005 mem - Moved Master_Sequences to Albert
+**			10/10/2005 mem - Removed PrismDev.Master_Sequences_T3
+**			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**			05/13/2006 mem - Moved Master_Sequences to Daffy
 **    
 *****************************************************/
+(
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the databases on the given Server
 	@errorsOnly int = 1,							-- If 1, then only returns error entries
-	@MaxLogEntriesPerDB int = 100,					-- Set to 0 to disable filtering number of 
+	@MaxLogEntriesPerDB int = 10,					-- Set to 0 to disable filtering number of entries for each DB
 	@message varchar(255) = '' OUTPUT
+)
 As	
 	set nocount on
 	
@@ -255,7 +258,7 @@ As
 						
 						Set @sql = ''
 						Set @sql = @sql + ' SELECT @DBNameMatch = [name]'
-						Set @sql = @sql + ' FROM ' + @CurrentServerPrefix + 'master.dbo.sysdatabases'
+						Set @sql = @sql + ' FROM ' + @CurrentServerPrefix + 'master.dbo.sysdatabases'
 						Set @sql = @sql + ' WHERE [name] = ''' + @CurrentDB + ''''
 						--
 						EXEC @result = sp_executesql @sql, N'@DBNameMatch varchar(128) OUTPUT', @DBNameMatch = @DBNameMatch OUTPUT
@@ -308,15 +311,15 @@ As
 	End -- </A>
 	
 	-----------------------------------------------------------
-	-- Get errors from Albert.Master_Sequences
+	-- Get errors from Daffy.Master_Sequences
 	-----------------------------------------------------------
 
 	Set @Sql = ''				
 	Set @Sql = @Sql + ' INSERT INTO #LE'
 	Set @Sql = @Sql + ' (Server_Name, DBName, Entry_ID, posted_by, posting_time, type, message)'
-	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''Albert'', ''Master_Sequences'', '
+	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''Daffy'', ''Master_Sequences'', '
 	Set @Sql = @Sql + '   Entry_ID, posted_by, posting_time, type, message'
-	Set @Sql = @Sql + ' FROM Albert.Master_Sequences.dbo.T_Log_Entries'
+	Set @Sql = @Sql + ' FROM Daffy.Master_Sequences.dbo.T_Log_Entries'
 	if @errorsOnly = 1
 	begin
 		Set @Sql = @Sql + ' WHERE type = ''error'''

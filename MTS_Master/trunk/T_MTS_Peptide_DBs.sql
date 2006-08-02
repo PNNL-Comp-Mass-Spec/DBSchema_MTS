@@ -9,6 +9,7 @@ CREATE TABLE [T_MTS_Peptide_DBs] (
 	[State_ID] [int] NOT NULL ,
 	[Last_Affected] [datetime] NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_Last_Affected] DEFAULT (getdate()),
 	[DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_DB_Schema_Version] DEFAULT (2),
+	[Comment] [varchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_Comment] DEFAULT (''),
 	CONSTRAINT [PK_T_MTS_Peptide_DBs] PRIMARY KEY  CLUSTERED 
 	(
 		[Peptide_DB_ID]

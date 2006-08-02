@@ -134,6 +134,17 @@ As
 **			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
 */			
 
+/*
+**	QC Trends DB Updating is disabled for now
+**
+**			Exec @result = UpdateDatabaseStatesSingleTable	@ServerID, @UpdateTableNames,
+**															'T_MTS_QCT_DBs', 'QCT_DB_ID', 'QCT_DB_Name', 'State_ID', 'DB_Schema_Version',
+**															'T_QCT_Database_List', 'UDB_ID', 'UDB_Name', 'UDB_State', 'UDB_DB_Schema_Version',
+**															@RemoteStateIgnoreList = @StateIgnoreList,
+**															@DBCountUpdated = @DBCountUpdated OUTPUT, @message = @message OUTPUT
+**			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
+*/			
+
 			Set @processCount = @processCount + 1
 			
 		End -- </B>

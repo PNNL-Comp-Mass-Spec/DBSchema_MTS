@@ -17,22 +17,22 @@ CREATE PROCEDURE dbo.GetAllPeptideDatabases
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters:
-**		@message   -- explanation of any error that occurred
-**
-**		Auth:	mem
-**		Date:	10/24/2004
-**				12/06/2004 mem - Ported to MTS_Master
-**				12/15/2004 mem - Added [DB ID] column
-**				05/13/2005 mem - Added parameter @VerboseColumnOutput
-**				08/02/2005 mem - Added [DB Schema Version] column
+**	Auth:	mem
+**	Date:	10/24/2004
+**			12/06/2004 mem - Ported to MTS_Master
+**			12/15/2004 mem - Added [DB ID] column
+**			05/13/2005 mem - Added parameter @VerboseColumnOutput
+**			08/02/2005 mem - Added [DB Schema Version] column
+**			07/25/2006 mem - Updated to exclude databases with state 15 in addition to state 100 when @IncludeDeleted = 0
 **    
 *****************************************************/
+(
 	@IncludeUnused tinyint = 0,				-- Set to 1 to include unused databases
 	@IncludeDeleted tinyint = 0,			-- Set to 1 to include deleted databases
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
 	@message varchar(512)='' output,
 	@VerboseColumnOutput tinyint = 1
+)
 As	
 	set nocount on
 	
@@ -131,18 +131,18 @@ As
 			Set @Sql = @Sql + '   Created, [Last Update], ''' + @Server + ''', PDB_ID, DB_Schema_Version'
 			Set @Sql = @Sql + ' FROM ' + @MTMain + 'V_Peptide_Database_List_Report_Ex'
 
-			If @IncludeUnused = 0
+			If @IncludeUnused = 0
 			Begin
 				If Len(@sqlWhereClause) > 0
 					Set @sqlWhereClause = @sqlWhereClause + ' AND '
-				set @sqlWhereClause = @sqlWhereClause + '(StateID NOT IN (10,15))'
+				set @sqlWhereClause = @sqlWhereClause + '(StateID NOT IN (10, 15))'
 			End
 
 			If @IncludeDeleted = 0
 			Begin
 				If Len(@sqlWhereClause) > 0
 					Set @sqlWhereClause = @sqlWhereClause + ' AND '
-				set @sqlWhereClause = @sqlWhereClause + '(StateID <> 100)'
+				set @sqlWhereClause = @sqlWhereClause + '(StateID NOT IN (15, 100))'
 			End
 			
 			If Len(@sqlWhereClause) > 0
