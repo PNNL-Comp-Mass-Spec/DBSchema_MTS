@@ -20,27 +20,32 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 ** 
 **		Parameters:
 **
-**		Auth: grk
-**		Date: 07/15/2004
-**			  07/21/2004 mem - Added some @logLevel statements
-**			  07/30/2004 grk - modified subprocess calls for new PTDB design
-**			  08/07/2004 mem - Added @numJobsToProcess parameter and use of @count
-**			  11/04/2004 mem - Moved Load Peptides code to here from MasterUpdateProcessImport
-**			  12/12/2004 mem - Added call to MasterUpdateDatasets
-**			  01/22/2005 mem - Added @MinNETRSquared parameter when calling MasterUpdateNET
-**			  01/31/2005 mem - Added call to ResetChangedAnalysisJobs
-**			  02/16/2005 mem - Now checking for AssignMasterSequenceIDs in T_Process_Step_Control
-**			  05/28/2005 mem - Updated call to MasterUpdateNET to reflect switch to using T_NET_Update_Task
-**			  07/08/2005 mem - Added call to RefreshAnalysisDescriptionInfo
-**							 - Now looking up General_Statistics_Update_Interval and Job_Info_DMS_Update_Interval in T_Process_Config
-**			  09/30/2005 mem - Added call to UpdatePeptideSICStats
-**			  10/31/2005 mem - Added call to CheckStaleJobs
-**			  11/10/2005 mem - Added second call to UpdatePeptideSICStats, this time for jobs in state 35
-**			  11/26/2005 mem - Now passing @ProcessStateFilterEvaluationRequired to CheckAllFiltersForAvailableAnalyses
+**	Auth:	grk
+**	Date:	07/15/2004
+**			07/21/2004 mem - Added some @logLevel statements
+**			07/30/2004 grk - modified subprocess calls for new PTDB design
+**			08/07/2004 mem - Added @numJobsToProcess parameter and use of @count
+**			11/04/2004 mem - Moved Load Peptides code to here from MasterUpdateProcessImport
+**			12/12/2004 mem - Added call to MasterUpdateDatasets
+**			01/22/2005 mem - Added @MinNETRSquared parameter when calling MasterUpdateNET
+**			01/31/2005 mem - Added call to ResetChangedAnalysisJobs
+**			02/16/2005 mem - Now checking for AssignMasterSequenceIDs in T_Process_Step_Control
+**			05/28/2005 mem - Updated call to MasterUpdateNET to reflect switch to using T_NET_Update_Task
+**			07/08/2005 mem - Added call to RefreshAnalysisDescriptionInfo
+**						   - Now looking up General_Statistics_Update_Interval and Job_Info_DMS_Update_Interval in T_Process_Config
+**			09/30/2005 mem - Added call to UpdatePeptideSICStats
+**			10/31/2005 mem - Added call to CheckStaleJobs
+**			11/10/2005 mem - Added second call to UpdatePeptideSICStats, this time for jobs in state 35
+**			11/26/2005 mem - Now passing @ProcessStateFilterEvaluationRequired to CheckAllFiltersForAvailableAnalyses
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			03/18/2006 mem - Added call to ComputeMaxObsAreaForAvailableAnalyses
+**			07/06/2006 mem - Added call to ProcessPeptideProphetTasks and updated call to CheckAllFiltersForAvailableAnalyses
 **    
 *****************************************************/
+(
 	@numJobsToProcess int = 50000,
 	@GeneralStatsUpdateInterval int = 13			-- Minimum interval in hours to call UpdateGeneralStatistics
+)
 As
 
 	Set NoCount On
@@ -54,6 +59,7 @@ As
 	declare @ganetEnabled int
 	declare @count int
 	declare @count2 int
+	declare @UpdateEnabled tinyint
 	
 	declare @logLevel int
 	set @logLevel = 1		-- Default to normal logging
@@ -65,6 +71,11 @@ As
 
 	declare @PeptideDatabase varchar(128)
 	set @PeptideDatabase = DB_Name()
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 	--------------------------------------------------------------
 	-- Lookup the LogLevel state
@@ -98,6 +109,10 @@ As
 		EXEC @result = ResetChangedAnalysisJobs @NextProcessState
 	end
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 	-- < B >
 	--------------------------------------------------------------
@@ -124,7 +139,12 @@ As
 		if @count > 0 and @logLevel >= 1
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end
-	
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 	-- < C >
 	--------------------------------------------------------------
 	-- Update the mapping between dataset and SIC job
@@ -132,7 +152,6 @@ As
 	--
 	EXEC @result = MasterUpdateDatasets @numJobsToProcess
 	
-
 	-- < D >
 	--------------------------------------------------------------
 	-- Populate the SIC columns in T_Peptides
@@ -158,8 +177,12 @@ As
 		if @count > 0 and @logLevel >= 1
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end	
-	
-	
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+		
 	-- < E >
 	--------------------------------------------------------------
 	-- Resolve master sequence ID for each peptide in each new job
@@ -189,7 +212,11 @@ As
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end
 
-	
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 	-- < F >
 	--------------------------------------------------------------
 	-- Verify sequence information
@@ -198,19 +225,7 @@ As
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 30
-	Set @NextProcessState = 40
-
-	-- See if GANET regression is disabled
-	-- If it is, set @NextProcessState to 50
-	--
-	set @ganetEnabled = 0
-	SELECT @ganetEnabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'GANETJobRegression')
-	If @ganetEnabled = 0
-	begin
-		If @logLevel >= 2
-			execute PostLogEntry 'Normal', 'Skipped GANETJobRegression', 'MasterUpdateProcessBackground'
-		Set @NextProcessState = 50
-	end
+	Set @NextProcessState = 33
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -228,11 +243,63 @@ As
 		set @message = 'Completed VerifySequenceInfo: ' + convert(varchar(11), @count) + ' jobs processed and ' + convert(varchar(11), @count2) + ' advanced to next state'
 		If @logLevel >= 1 and @count > 0
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
-	
 	end
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 	-- < G >
+	--------------------------------------------------------------
+	-- Populate Max_Obs_Area_In_Job in T_Peptides
+	--------------------------------------------------------------
+	--
+	Set @ProcessStateMatch = 33
+	Set @NextProcessState = 40
+
+	-- See if GANET regression is disabled
+	-- If it is, set @NextProcessState to 50
+	--
+	set @ganetEnabled = 0
+	SELECT @ganetEnabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'GANETJobRegression')
+	If @ganetEnabled = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped GANETJobRegression', 'MasterUpdateProcessBackground'
+		Set @NextProcessState = 50
+	end
+
+	-- Perform this subprocess if it is enabled
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ComputeMaxObsArea')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped ComputeMaxObsArea', 'MasterUpdateProcessBackground'
+	end
+	Else
+	begin
+		Declare @PostLogEntryOnSuccess tinyint
+		If @logLevel >= 2
+			Set @PostLogEntryOnSuccess = 1
+		Else
+			Set @PostLogEntryOnSuccess = 0
+			
+		EXEC @result = ComputeMaxObsAreaForAvailableAnalyses @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @PostLogEntryOnSuccess, @numJobsProcessed = @count OUTPUT
+
+		set @message = 'Completed ComputeMaxObsAreaForAvailableAnalyses: ' + convert(varchar(11), @count) + ' jobs processed'
+		If @logLevel >= 1 and @count > 0
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+		
+	-- < H >
 	--------------------------------------------------------------
 	-- Update the SIC columns in T_Peptides for jobs that were reset to state 35
 	--------------------------------------------------------------
@@ -254,11 +321,16 @@ As
 		EXEC @result = UpdatePeptideSICStats @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT, @count2 OUTPUT
 
 		set @message = 'Completed updating SIC stats in T_Peptides for available analyses in State ' + Convert(varchar(9), @ProcessStateMatch) + ': ' + convert(varchar(11), @count) + ' jobs processed and ' + Convert(varchar(11), @count2) + ' advanced to next state'
-		if @count > 0 and @logLevel >= 1
+		iF @count > 0 and @logLevel >= 1
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end	
 
-	-- < H >
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+	-- < I >
 	--------------------------------------------------------------
 	-- Call MasterUpdateNET (provided GANET processing is enabled)
 	--------------------------------------------------------------
@@ -284,13 +356,21 @@ As
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end
 
-	-- < I >
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+	-- < J >
 	--------------------------------------------------------------
 	-- Calculate confidence scores for each peptide in each new job
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 50
-	Set @NextProcessState = 60
+	Set @NextProcessState = 90
+	
+	Declare @NextProcessStateSkipPeptideProphet int
+	Set @NextProcessStateSkipPeptideProphet = 60
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -303,14 +383,58 @@ As
 	end
 	Else
 	begin
-		EXEC @result = CalculateConfidenceScores @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT
+		EXEC @result = CalculateConfidenceScores @ProcessStateMatch, @NextProcessState, @NextProcessStateSkipPeptideProphet, 
+												 @numJobsToProcess, @count OUTPUT
 
 		set @message = 'Completed calculating confidence scores for available analyses: ' + convert(varchar(11), @count) + ' jobs processed'
 		If @logLevel >= 1 and @count > 0
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+
+	-- < K >
+	--------------------------------------------------------------
+	-- Peptide Prophet processing
+	--------------------------------------------------------------
+	--
+	Set @NextProcessState = 60
 	
-	-- < J >
+	-- Perform this subprocess if it is enabled
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'PeptideProphetProcessing')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped ProcessPeptideProphetTasks', 'MasterUpdateProcessBackground'
+	end
+	Else
+	begin
+		-- Since peptide prophet task loading is generally quite fast, we'll us @numJobsToProcess * 5 if @numJobsToProcess is 5 or more
+		Declare @numJobsToProcessPProphet int
+		if @numJobsToProcess >= 5
+			Set @numJobsToProcessPProphet = @numJobsToProcess*5
+		else
+			Set @numJobsToProcessPProphet = @numJobsToProcess
+			
+		EXEC @result = ProcessPeptideProphetTasks @NextProcessState, @message OUTPUT, @numJobsToProcessPProphet
+
+		set @message = 'Completed ProcessPeptideProphetTasks: ' + convert(varchar(11), @result)
+		If (@result <> 0 And @logLevel >= 1) Or @logLevel >= 2
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+	
+	-- < L >
 	--------------------------------------------------------------
 	-- Calculate filter results for each peptide in each new job
 	--------------------------------------------------------------
@@ -320,6 +444,9 @@ As
 
 	Declare @ProcessStateFilterEvaluationRequired int
 	Set @ProcessStateFilterEvaluationRequired = 65
+	
+	Declare @ProcessStateAllStepsComplete int
+	Set @ProcessStateAllStepsComplete = 70			-- Update this if additional steps are added below
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -333,18 +460,23 @@ As
 	Else
 	begin
 		EXEC @result = CheckAllFiltersForAvailableAnalyses @ProcessStateMatch, @ProcessStateFilterEvaluationRequired, 
-														   @NextProcessState, @numJobsToProcess, @count OUTPUT
+														   @NextProcessState, @ProcessStateAllStepsComplete,
+														   @numJobsToProcess, @count OUTPUT
 
 		set @message = 'Completed check all filters for available analyses: ' + convert(varchar(11), @count) + ' jobs processed'
 		If @logLevel >= 1 and @count > 0
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
-	
 	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
 CalculateStatistics:
 	
-	-- < K >
+	-- < M >
 	--------------------------------------------------------------
 	-- Update general statistics
 	--------------------------------------------------------------
@@ -400,8 +532,12 @@ CalculateStatistics:
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 		end
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
-	-- < L >
+	-- < N >
 	-------------------------------------------------------------
 	-- Synchronize the analysis description information with DMS
 	-------------------------------------------------------------
@@ -434,8 +570,12 @@ CalculateStatistics:
 	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
-	-- < M >
+	-- < P >
 	-------------------------------------------------------------
 	-- Look for stale jobs
 	-------------------------------------------------------------
@@ -462,14 +602,17 @@ CalculateStatistics:
 	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
-
-Done:
-	
 	--------------------------------------------------------------
 	-- Normal Exit
 	--------------------------------------------------------------
+
 	set @message = 'Completed master update for ' + @PeptideDatabase + ': ' + convert(varchar(32), @myError)
-	If (@logLevel >=1 AND @myError <> 0) OR @logLevel >= 2
+
+Done:
+	If (@logLevel >=1 AND @myError <> 0)
+		execute PostLogEntry 'Error', @message, 'MasterUpdateProcessBackground'
+	Else
+	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
 	return @myError

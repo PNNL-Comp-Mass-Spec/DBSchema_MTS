@@ -15,6 +15,9 @@ CREATE PROCEDURE dbo.SetPermissionRestrictions
 **		For the logins in @UsersToRestrict, restricts 
 **		read/write access to all tables and views except
 **		those listed in @PublicObjects
+**
+**		For the logins in @UsersToExplicitlyGrantSelect,
+**		explicitly grants Select privile
 **		
 **		Optionally, edit @PermissionsList to customize the restrictions applied
 **
@@ -22,13 +25,15 @@ CREATE PROCEDURE dbo.SetPermissionRestrictions
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 05/23/2005
+**	Auth:	mem
+**	Date:	05/23/2005
+**			01/11/2006 mem - Added parameter @UsersToExplicitlyGrantSelect
 **    
 *****************************************************/
 (
-	@UsersToRestrict varchar(1024) = 'dmswebuser, MTUser, MTAdmin, DMS_SP_User',
-	@PublicObjects varchar(1024) = 'T_General_Statistics, T_Log_Entries, T_Process_Config, T_Process_Config_Parameters, V_Config_Info, V_DB_Schema_Version, V_General_Statistics_Report, V_Log_Report, V_Process_Config, V_Table_Row_Counts' ,
+	@UsersToRestrict varchar(1024) = 'dmswebuser, MTUser, MTAdmin, DMS_SP_User, MTS_DB_Lite, MTS_DB_Dev',
+	@UsersToExplicitlyGrantSelect varchar(1024) = '',
+	@PublicObjects varchar(1024) = 'T_Dataset_Process_State, T_Dataset_Scan_Type_Name, T_General_Statistics, T_Log_Entries, T_NET_Update_Task_State_Name, T_Peptide_Cleavage_State_Name, T_Peptide_Terminus_State_Name, T_Process_Config, T_Process_Config_Parameters, T_Process_State, T_Process_Step_Control, V_Config_Info, V_DB_Schema_Version, V_Filter_Set_Overview, V_General_Statistics_Report, V_Import_Analysis_Result_Type_List, V_Import_Organism_DB_File_List, V_Log_Report, V_Process_Config, V_Process_State_Summary, V_Table_Row_Counts' ,
 	@message varchar(512) = '' output
 )
 As
@@ -44,6 +49,11 @@ As
 
 	set @message = ''
 
+	--------------------------------------------------------------
+	-- Validate that @UsersToExplicitlyGrantSelect is not null
+	--------------------------------------------------------------
+	Set @UsersToExplicitlyGrantSelect = IsNull(@UsersToExplicitlyGrantSelect, '')
+	
 	--------------------------------------------------------------
 	-- Create two temporary tables
 	--------------------------------------------------------------
@@ -128,6 +138,10 @@ As
 		Set @Message = 'Updating permissions for ' + convert(varchar(9), @myRowCount) + ' tables & views'
 
 	Exec SetPermissions 'GRANT', 'SELECT', 'public'
+
+	If Len(@UsersToExplicitlyGrantSelect) > 0
+		Exec SetPermissions 'GRANT', 'SELECT', @UsersToExplicitlyGrantSelect, @Cascade=0
+		
 	Exec SetPermissions 'DENY', 'SELECT, INSERT, UPDATE, DELETE', @UsersToRestrict
 	
 

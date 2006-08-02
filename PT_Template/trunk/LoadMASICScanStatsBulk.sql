@@ -15,20 +15,22 @@ CREATE Procedure dbo.LoadMASICScanStatsBulk
 **		Load Scan Stats for MASIC job into T_Dataset_Stats_Scans
 **		for given analysis job using bulk loading techniques
 **
-**	Return values: 0: success, otherwise, error code
+**	Parameters:	Returns 0 if no error, error code if an error
 **
-**	Parameters:
-**	
-**
-**		Auth: mem
-**		Date: 12/12/2004
-**			  10/23/2005 mem - Increased size of @ScanStatsFilePath from varchar(255) to varchar(512)
+**	Auth:	mem
+**	Date:	12/12/2004
+**			10/23/2005 mem - Increased size of @ScanStatsFilePath from varchar(255) to varchar(512)
+**			06/04/2006 mem - Added parameter @ScanStatsLineCountToSkip, which is used to skip the header line, if present in the input file
+**						   - Increased size of the @c variable (used for Bulk Insert)
 **    
 *****************************************************/
+(
 	@ScanStatsFilePath varchar(512),
 	@Job int,
+	@ScanStatsLineCountToSkip int,
 	@numLoaded int=0 output,
 	@message varchar(512)='' output
+)
 As
 	set nocount on
 
@@ -73,9 +75,9 @@ As
 	-----------------------------------------------
 	--
 	declare @result int
-	declare @c nvarchar(255)
+	declare @c nvarchar(2048)
 
-	Set @c = 'BULK INSERT #T_ScanStats_Import FROM ' + '''' + @ScanStatsFilePath + ''''
+	Set @c = 'BULK INSERT #T_ScanStats_Import FROM ' + '''' + @ScanStatsFilePath + ''' WITH (FIRSTROW = ' + Convert(varchar(9), @ScanStatsLineCountToSkip+1) + ')'
 	exec @result = sp_executesql @c
 	--
 	if @result <> 0

@@ -15,6 +15,8 @@ CREATE TABLE [T_Analysis_Description] (
 	[Parameter_File_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[Settings_File_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Organism_DB_Name] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
+	[Protein_Collection_List] [varchar] (2048) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Analysis_Description_Protein_Collection_List] DEFAULT ('na'),
+	[Protein_Options_List] [varchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Analysis_Description_Protein_Options_List] DEFAULT ('na'),
 	[Vol_Client] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[Vol_Server] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Storage_Path] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
@@ -23,7 +25,9 @@ CREATE TABLE [T_Analysis_Description] (
 	[Completed] [datetime] NULL ,
 	[ResultType] [varchar] (32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Separation_Sys_Type] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
-	[Internal_Standard] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
+	[PreDigest_Internal_Std] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
+	[PostDigest_Internal_Std] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
+	[Dataset_Internal_Std] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Enzyme_ID] [int] NULL ,
 	[Labelling] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Created] DEFAULT (getdate()),
@@ -37,6 +41,7 @@ CREATE TABLE [T_Analysis_Description] (
 	[ScanTime_NET_Intercept] [real] NULL ,
 	[ScanTime_NET_RSquared] [real] NULL ,
 	[ScanTime_NET_Fit] [real] NULL ,
+	[RowCount_Loaded] [int] NULL ,
 	CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY  CLUSTERED 
 	(
 		[Job]

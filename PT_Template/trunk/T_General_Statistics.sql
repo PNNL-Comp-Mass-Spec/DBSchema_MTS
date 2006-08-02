@@ -6,7 +6,11 @@ CREATE TABLE [T_General_Statistics] (
 	[category] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[label] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[value] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
-	[sequence] [int] IDENTITY (1000, 1) NOT NULL 
+	[sequence] [int] IDENTITY (1000, 1) NOT NULL ,
+	CONSTRAINT [PK_T_General_Statistics] PRIMARY KEY  CLUSTERED 
+	(
+		[sequence]
+	)  ON [PRIMARY] 
 ) ON [PRIMARY]
 GO
 

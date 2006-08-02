@@ -8,29 +8,32 @@ drop procedure [dbo].[CalculateConfidenceScores]
 GO
 
 
-CREATE PROCEDURE dbo.CalculateConfidenceScores
+CREATE Procedure dbo.CalculateConfidenceScores
 /****************************************************
 **
-**	Desc: 
-**		Updates confidence scores for
-**		all the peptides for the all the analyses with
-**		Process_State = @ProcessStateMatch
+**	Desc:	Updates confidence scores for all the peptides
+**			for the all the analyses with Process_State = @ProcessStateMatch
 **
 **	Return values: 0 if no error; otherwise error code
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 07/30/2004
-**			  08/06/2004 mem - Log entry updates
-**			  09/09/2004 mem - Switched from using a temporary table to polling T_Analysis_Description directly for the next available job
-**			  01/28/2005 mem - Added SkipConfidenceScoreRecalculation option
+**	Auth:	grk
+**	Date:	07/30/2004
+**			08/06/2004 mem - Log entry updates
+**			09/09/2004 mem - Switched from using a temporary table to polling T_Analysis_Description directly for the next available job
+**			01/28/2005 mem - Added SkipConfidenceScoreRecalculation option
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
 **    
 *****************************************************/
+(
 	@ProcessStateMatch int = 50,
-	@NextProcessState int = 60,
+	@NextProcessState int = 90,
+	@NextProcessStateSkipPeptideProphet int = 60,
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int=0 OUTPUT
+)
 AS
 	Set NoCount On
 	
@@ -45,6 +48,7 @@ AS
 	set @jobAvailable = 0
 
 	declare @result int
+	declare @UpdateEnabled tinyint
 	declare @message varchar(255)
 	set @message = ''
 	
@@ -65,10 +69,13 @@ AS
 		-- If found, update their states to @NextProcessState
 
 		UPDATE T_Analysis_Description
-		SET Process_State = @NextProcessState, Last_Affected = GetDate()
-		FROM T_Analysis_Description
-		WHERE Process_State = @ProcessStateMatch AND 
-			  (Job NOT IN
+		SET Process_State = CASE WHEN TAD.ResultType = 'XT_Peptide_Hit' THEN @NextProcessStateSkipPeptideProphet
+							ELSE @NextProcessState 
+							END, 
+			Last_Affected = GetDate()
+		FROM T_Analysis_Description TAD
+		WHERE TAD.Process_State = @ProcessStateMatch AND 
+			  (TAD.Job NOT IN
 				  (	SELECT T_Analysis_Description.Job
 					FROM T_Peptides P INNER JOIN
 						 T_Score_Discriminant SD ON 
@@ -100,7 +107,7 @@ AS
 	set @jobAvailable = 1
 	
 	while @jobAvailable > 0 and @myError = 0 and @numJobsProcessed < @numJobsToProcess
-	begin
+	begin -- <a>
 		-- Look up the next available job
 		SELECT	TOP 1 @Job = Job
 		FROM	T_Analysis_Description
@@ -118,9 +125,9 @@ AS
 		if @myRowCount <> 1
 			Set @jobAvailable = 0
 		else
-		begin
+		begin -- <b>
 			-- Job is available to process
-			Exec @result = CalculateConfidenceScoresOneAnalysis @Job, @NextProcessState, @message OUTPUT
+			Exec @result = CalculateConfidenceScoresOneAnalysis @Job, @NextProcessState, @NextProcessStateSkipPeptideProphet, @message OUTPUT
 		
 			-- make log entry
 			--
@@ -132,8 +139,14 @@ AS
 			-- check number of jobs processed
 			--
 			set @numJobsProcessed = @numJobsProcessed + 1
-		end
-	end
+		end -- </b>
+
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled @CallingFunctionDescription = 'CalculateConfidenceScores', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
+
+	end -- </a>
 
 	if @numJobsProcessed = 0
 		set @message = 'no analyses were available'
@@ -149,7 +162,6 @@ Done:
 		execute PostLogEntry 'Error', @message, 'CalculateConfidenceScores'
 
 	return @myError
-
 
 
 GO

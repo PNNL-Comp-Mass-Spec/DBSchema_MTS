@@ -25,21 +25,27 @@ CREATE PROCEDURE dbo.VerifySequenceInfo
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 7/30/2004
-**
-**		Updated: 08/07/2004 mem - Updated Insert Into T_Sequence query plus various other updates
-**				 09/09/2004 mem - Switched to a consolidated query to simultaneously check all jobs with state @ProcessStateMatch
-**				 02/23/2005 mem - Now checking for jobs in State @ProcessStateMatch that have Last_Affected over 96 hours old
-**				 02/23/2005 mem - Switched Master_Sequences location from PrismDev to Albert
-**				 11/28/2005 mem - Now updating masses in T_Sequences via an alternate query if jobs are present in state 30
+**	Auth:	grk
+**	Date:	07/30/2004
+**			08/07/2004 mem - Updated Insert Into T_Sequence query plus various other updates
+**			09/09/2004 mem - Switched to a consolidated query to simultaneously check all jobs with state @ProcessStateMatch
+**			02/23/2005 mem - Now checking for jobs in State @ProcessStateMatch that have Last_Affected over 96 hours old
+**			02/23/2005 mem - Switched Master_Sequences location from PrismDev to Albert
+**			11/28/2005 mem - Now updating masses in T_Sequences via an alternate query if jobs are present in state 30
+**			02/18/2006 mem - Now also looking for jobs with state @ProcessStateMatch but present in T_Joined_Job_Details; setting their state to 39 rather than @NextProcessState
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			03/18/2006 mem - Changed @NextProcessState from 40 to 33
+**						   - No longer checking for jobs in T_Joined_Job_Details; moved that logic to MasterUpdateProcessBackground
+**			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
 **    
 *****************************************************/
+(
 	@ProcessStateMatch int = 30,
-	@NextProcessState int = 40,
+	@NextProcessState int = 33,
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int = 0 OUTPUT,
 	@numJobsAdvancedToNextState int = 0 OUTPUT
+)
 AS
 	Set NoCount On
 	
@@ -56,12 +62,14 @@ AS
 	declare @maxAgeHours int
 	set @numAgedJobs = 0
 	set @maxAgeHours = 96
-		
+	
+	declare @UpdateEnabled tinyint	
 	declare @message varchar(255)
 	set @message = ''
 	
+	----------------------------------------------
 	-- Determine the number of jobs in state @ProcessStateMatch
-	
+	----------------------------------------------
 	Set @JobMatchCount = 0
 	SELECT @JobMatchCount = Count(*)
 	FROM T_Analysis_Description
@@ -90,7 +98,7 @@ AS
 				) AS SequenceQ ON 
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
 				(	SELECT Monoisotopic_Mass, Seq_ID
-					FROM Albert.Master_Sequences.dbo.T_Sequence
+					FROM Daffy.Master_Sequences.dbo.T_Sequence
 				) M ON S.Seq_ID = M.Seq_ID
 		WHERE S.Monoisotopic_Mass IS NULL AND 
 			  NOT (M.Monoisotopic_Mass IS NULL)
@@ -105,7 +113,7 @@ AS
 		FROM T_Sequence INNER JOIN
 		(
 			SELECT Monoisotopic_Mass, Seq_ID
-			FROM Albert.Master_Sequences.dbo.T_Sequence
+			FROM Daffy.Master_Sequences.dbo.T_Sequence
 		) AS M ON T_Sequence.Seq_ID = M.Seq_ID
 		WHERE T_Sequence.Monoisotopic_Mass IS NULL AND
 			NOT M.Monoisotopic_Mass IS NULL
@@ -127,6 +135,11 @@ AS
 			exec PostLogEntry 'Normal', @message, 'VerifySequenceInfo'
 		end
 	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'VerifySequenceInfo', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	----------------------------------------------
 	-- Verify non-null monoisotopic mass for all peptides
@@ -162,11 +175,13 @@ AS
 		goto done
 	end
 	
+	----------------------------------------------
 	-- Advance jobs with a NullMassCount of 0 to the next state
+	----------------------------------------------
 	UPDATE T_Analysis_Description
 	SET Process_State = @NextProcessState, Last_Affected = GetDate()
-	FROM T_Analysis_Description INNER JOIN #MassStatsByJob ON
-		 T_Analysis_Description.Job = #MassStatsByJob.Job
+	FROM T_Analysis_Description TAD INNER JOIN 
+		 #MassStatsByJob ON TAD.Job = #MassStatsByJob.Job
 	WHERE #MassStatsByJob.NullMassCount = 0
 	--
 	SELECT @myError = @@error, @numJobsAdvancedToNextState = @@rowcount
@@ -177,6 +192,7 @@ AS
 		set @myError = 104
 		goto done
 	end
+
 
 	if @numJobsAdvancedToNextState < @numJobsProcessed
 	Begin

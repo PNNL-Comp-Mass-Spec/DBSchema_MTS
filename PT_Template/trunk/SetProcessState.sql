@@ -8,8 +8,7 @@ drop procedure [dbo].[SetProcessState]
 GO
 
 
-
-CREATE PROCedure SetProcessState
+CREATE PROCEDURE SetProcessState
 /****************************************************
 **
 **	Desc: Sets process state of analysis description
@@ -18,21 +17,21 @@ CREATE PROCedure SetProcessState
 **
 **	Parameters:
 **	
-**		Auth: grk
-**		Date: 10/31/2001
-**
-**		Updated: 07/03/2004 by mem - Now updating the Process_State field
+**	Auth:	grk
+**	Date:	10/31/2001
+**			07/03/2004 by mem - Now updating the Last_Affected field
 **    
 *****************************************************/
+(
 	@Job int,
 	@state int
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	UPDATE T_Analysis_Description 
@@ -42,7 +41,6 @@ As
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
 	return @myError
-
 
 
 GO

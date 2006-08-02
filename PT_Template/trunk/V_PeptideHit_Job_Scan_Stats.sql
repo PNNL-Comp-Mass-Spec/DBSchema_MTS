@@ -21,7 +21,7 @@ FROM dbo.T_Analysis_Description INNER JOIN
      INNER JOIN
     dbo.T_Dataset_Stats_Scans ON 
     dbo.V_SIC_Job_to_PeptideHit_Map.SIC_Job = dbo.T_Dataset_Stats_Scans.Job
-WHERE (dbo.T_Analysis_Description.ResultType = 'peptide_hit')
+WHERE (dbo.T_Analysis_Description.ResultType LIKE '%Peptide_Hit')
 GROUP BY dbo.T_Analysis_Description.Job
 
 

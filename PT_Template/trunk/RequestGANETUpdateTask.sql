@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -22,18 +22,20 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **      If no jobs are available or an error occurs, then @message 
 **		will contain explanatory text.
 **
-**		Auth: grk
-**		Date: 08/26/2003
-**			  04/08/2004 mem - Removed references to T_GANET_Update_Parameters
-**			  04/09/2004 mem - Removed @maxIterations and @maxHours parameters
-**			  07/05/2004 mem - Modified procedure for use in Peptide DB
-**			  09/09/2004 mem - Removed call to SetProcessState
-**			  09/23/2004 mem - Now checking for tasks in states 44, 45, 47, or 48 with Last_Affected over 12 hours old; bumping back to Process_State 40 if found
-**			  01/22/2005 mem - Now setting Process_State = 43 if a job is in state 40 and does not have associated scan time data
-**			  01/24/2005 mem - Now checking for jobs in state 43 that now have a SIC job available; if found, the state is reset back to 40 and a message is posted to the log
-**			  04/08/2005 mem - Changed GANET export call to use ExportGANETData
-**			  05/30/2005 mem - Updated to process batches of jobs using T_NET_Update_Task rather than one job at a time
-**							 - Added parameters @ResultsFolderPath and @BatchSize
+**	Auth:	grk
+**	Date:	08/26/2003
+**			04/08/2004 mem - Removed references to T_GANET_Update_Parameters
+**			04/09/2004 mem - Removed @maxIterations and @maxHours parameters
+**			07/05/2004 mem - Modified procedure for use in Peptide DB
+**			09/09/2004 mem - Removed call to SetProcessState
+**			09/23/2004 mem - Now checking for tasks in states 44, 45, 47, or 48 with Last_Affected over 12 hours old; bumping back to Process_State 40 if found
+**			01/22/2005 mem - Now setting Process_State = 43 if a job is in state 40 and does not have associated scan time data
+**			01/24/2005 mem - Now checking for jobs in state 43 that now have a SIC job available; if found, the state is reset back to 40 and a message is posted to the log
+**			04/08/2005 mem - Changed GANET export call to use ExportGANETData
+**			05/30/2005 mem - Updated to process batches of jobs using T_NET_Update_Task rather than one job at a time
+**						   - Added parameters @ResultsFolderPath and @BatchSize
+**			12/11/2005 mem - Updated to support XTandem results
+**			07/03/2006 mem - Updated to use T_Analysis_Description.RowCount_Loaded to quickly determine the number of peptides loaded for each job
 **
 *****************************************************/
 (
@@ -74,6 +76,17 @@ As
 
 	declare @MatchCount int
 	declare @S varchar(1024)
+
+	-----------------------------------------------
+	-- Populate a temporary table with the list of known Result Types appropriate for NET alignment
+	-----------------------------------------------
+	CREATE TABLE #T_ResultTypeList (
+		ResultType varchar(64)
+	)
+	
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
+	
 		
 	---------------------------------------------------
 	-- Look for jobs that are timed out (State 44) and for which Last_Affected
@@ -179,9 +192,10 @@ As
 	-- See if one or more jobs are in state @ProcessStateMatch
 	---------------------------------------------------
 
-	SELECT @MatchCount = Count(Job)
-	FROM T_Analysis_Description 
-	WHERE Process_State = @ProcessStateMatch
+	SELECT @MatchCount = Count(TAD.Job)
+	FROM T_Analysis_Description TAD INNER JOIN
+		 #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType
+	WHERE TAD.Process_State = @ProcessStateMatch
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -191,7 +205,7 @@ As
 		set @message = 'Error trying to count number of available jobs'
 		goto done
 	end
-
+
 	---------------------------------------------------
 	-- bail if no jobs were found
 	---------------------------------------------------
@@ -213,7 +227,7 @@ As
 	SELECT @myError = @@error, @myRowCount = @@rowcount, @TaskID = Scope_Identity()
 	--
 	if @myError <> 0
-	begin
+	begin
 		rollback transaction @transName
 		set @message = 'Error adding new task to T_NET_Update_Task'
 		goto done
@@ -276,20 +290,18 @@ As
 	Set @S = @S + ' INSERT INTO T_NET_Update_Task_Job_Map (Task_ID, Job)'
 	Set @S = @S + ' SELECT ' + Convert(varchar(9), @TaskID) + ' AS Task_ID, A.Job'
 	Set @S = @S + ' FROM ('
-	Set @S = @S + '   SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, COUNT(Pep.Peptide_ID) AS PeptideCount'
-	Set @S = @S + '   FROM T_Analysis_Description TAD WITH (HoldLock) INNER JOIN'
-	Set @S = @S + '     T_Peptides Pep ON TAD.Job = Pep.Analysis_ID'
-	Set @S = @S + '   WHERE TAD.Process_State = ' + Convert(varchar(9), @ProcessStateMatch)
-	Set @S = @S + '   GROUP BY TAD.Job'
-	Set @S = @S + '   ORDER BY TAD.Job'
-	Set @S = @S + '   ) A INNER JOIN ('
-	Set @S = @S + '   SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, COUNT(Pep.Peptide_ID) AS PeptideCount'
-	Set @S = @S + '   FROM T_Analysis_Description TAD INNER JOIN'
-	Set @S = @S + '     T_Peptides Pep ON TAD.Job = Pep.Analysis_ID'
-	Set @S = @S + '   WHERE TAD.Process_State =  ' + Convert(varchar(9), @ProcessStateMatch)
-	Set @S = @S + '   GROUP BY TAD.Job'
-	Set @S = @S + '   ORDER BY TAD.Job'
-	Set @S = @S + '   ) B ON B.Job <= A.Job'
+	Set @S = @S +   ' SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, IsNull(TAD.RowCount_Loaded,0) AS PeptideCount'
+	Set @S = @S +   ' FROM T_Analysis_Description TAD WITH (HoldLock) INNER JOIN'
+ 	Set @S = @S +        ' #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType'
+	Set @S = @S +   ' WHERE TAD.Process_State = ' + Convert(varchar(9), @ProcessStateMatch)
+	Set @S = @S +   ' ORDER BY TAD.Job'
+	Set @S = @S +   ' ) A INNER JOIN ('
+	Set @S = @S +   ' SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, IsNull(TAD.RowCount_Loaded,0) AS PeptideCount'
+	Set @S = @S +   ' FROM T_Analysis_Description TAD INNER JOIN'
+ 	Set @S = @S +        ' #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType'
+	Set @S = @S +   ' WHERE TAD.Process_State =  ' + Convert(varchar(9), @ProcessStateMatch)
+	Set @S = @S +   ' ORDER BY TAD.Job'
+	Set @S = @S +   ' ) B ON B.Job <= A.Job'
 	Set @S = @S + ' GROUP BY A.Job'
 	Set @S = @S + ' HAVING SUM(B.PeptideCount) < ' + Convert(varchar(12), @MaxPeptideCount)
 	Set @S = @S + ' ORDER BY A.Job ASC'
@@ -334,7 +346,7 @@ As
 	-- set state and last_affected for the selected jobs
 	---------------------------------------------------
 	--
-	UPDATE T_Analysis_Description 
+	UPDATE T_Analysis_Description
 	SET Process_State = @NextProcessState, Last_Affected = GETDATE()
 	FROM T_Analysis_Description TAD INNER JOIN 
 		 T_NET_Update_Task_Job_Map TJM ON TAD.Job = TJM.Job

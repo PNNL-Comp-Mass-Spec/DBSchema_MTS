@@ -8,14 +8,6 @@ drop procedure [dbo].[LoadGetOAErrorMessage]
 GO
 
 
-
-
-
-
-
-
-
-
 CREATE PROCedure LoadGetOAErrorMessage
 /****************************************************
 **
@@ -58,13 +50,9 @@ AS
 	Return
 
 
-
 GO
 SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[LoadGetOAErrorMessage]  TO [DMS_SP_User]
 GO
 

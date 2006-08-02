@@ -19,17 +19,23 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysis
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 08/07/2004
-**			  09/11/2004 mem - Switched to using T_Peptide_to_Protein_Map
-**			  01/22/2004 mem - Changed method of looking up the cleavage state value for a peptide
-**			  10/01/2005 mem - Updated to use Cleavage_State_Max in T_Sequence rather than polling T_Peptide_to_Protein_Map
-**			  10/02/2005 mem - Updated to copy the data to process into a temporary table to avoid long lasting locks on T_Score_Discriminant
+**	Auth:	mem
+**	Date:	08/07/2004
+**			09/11/2004 mem - Switched to using T_Peptide_to_Protein_Map
+**			01/22/2004 mem - Changed method of looking up the cleavage state value for a peptide
+**			10/01/2005 mem - Updated to use Cleavage_State_Max in T_Sequence rather than polling T_Peptide_to_Protein_Map
+**			10/02/2005 mem - Updated to copy the data to process into a temporary table to avoid long lasting locks on T_Score_Discriminant
+**			12/11/2005 mem - Updated to support XTandem results
+**			06/07/2006 mem - Now using GetOrganismDBFileInfo to lookup the ProteinCount and ResidueCount values for the given job
+**			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
 **    
 *****************************************************/
+(
 	@JobToProcess int,
-	@NextProcessState int = 60,
+	@NextProcessState int = 90,
+	@NextProcessStateSkipPeptideProphet int = 60,
 	@message varchar(255)='' OUTPUT
+)
 AS
 	Set NoCount On
 
@@ -46,22 +52,55 @@ AS
 	declare @jobStr varchar(128)
 	set @jobStr = cast(@JobToProcess as varchar(12))
 	
-	declare	@ORFCount int,
-			@ResidueCount int,
-			@result int
+	declare	@MatchFound tinyint
+	declare @ProteinCount int
+	declare @ResidueCount int
+	declare @result int
+	declare @ResultType varchar(32)
+	declare @JobAdvancedToNextState tinyint
 
-	Set @ORFCount = 0
+	declare @message2 varchar(256)
+	set @message2 = ''
+		
+	Set @ProteinCount = 0
 	Set @ResidueCount = 0
-
+	
 	------------------------------------------------------------------
-	-- Lookup the size of the Organism DB file (aka the FASTA file) for this job
+	-- Lookup the number of proteins and residues in Organism DB file (aka the FASTA file)
+	--  or Protein Collection used for this analysis job
+	-- Note that GetOrganismDBFileInfo will post an error to the log if the job
+	--  has an unknown Fasta file or Protein Collection List
 	------------------------------------------------------------------
 	--
-	Exec @result = GetOrganismDBFileStats @JobToProcess, @ORFCount OUTPUT, @ResidueCount OUTPUT
-
+	Exec @result = GetOrganismDBFileInfo @JobToProcess, 
+										 @ProteinCount = @ProteinCount OUTPUT, 
+										 @ResidueCount = @ResidueCount OUTPUT
+		
 	If IsNull(@ResidueCount, 0) < 1
 		Set @ResidueCount = 1
 
+	-----------------------------------------------
+	-- Lookup the ResultType for Job @JobToProcess
+	-----------------------------------------------
+	Set @ResultType = ''
+	SELECT @ResultType = ResultType
+	FROM T_Analysis_Description
+	WHERE Job = @JobToProcess
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	if @myError <> 0 
+	begin
+		set @message = 'Error retrieving ResultType for job ' + @jobStr
+		goto done
+	end
+	--
+	if @myRowCount = 0
+	begin
+		set @message = 'Job ' + @jobStr + ' not found in T_Analysis_Description'
+		set @myError = 50000
+		goto done
+	end
 
 	------------------------------------------------------------------
 	-- Create a temporary table to hold the data needed to compute the discriminant score
@@ -94,24 +133,58 @@ AS
 	------------------------------------------------------------------
 	-- Populate #TmpConfidenceScoreData
 	------------------------------------------------------------------
-	INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
-				 GANET_Predicted, RankSp, RankXc, XcRatio, Charge_State, 
-				 PeptideLength, Cleavage_State_Max, PassFilt, MScore)
-	SELECT	P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
-			Seq.GANET_Predicted, S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
-			LEN(Seq.Clean_Sequence) AS PeptideLength, Seq.Cleavage_State_Max, 
-			SD.PassFilt, SD.MScore
-	FROM T_Score_Discriminant AS SD INNER JOIN
-		 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
-		 T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
-		 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
-	WHERE P.Analysis_ID = @JobToProcess
 	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	-- Initially set @myError to a non-zero value in case @ResultType is invalid for this SP
+	-- Note that this error code is used below so update in both places if changing
+	set @myError = 50001
+
+	If @ResultType = 'Peptide_Hit'
+	Begin
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
+					GANET_Predicted, RankSp, RankXc, XcRatio, Charge_State, 
+					PeptideLength, Cleavage_State_Max, PassFilt, MScore)
+		SELECT	P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
+				Seq.GANET_Predicted, S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
+				LEN(Seq.Clean_Sequence) AS PeptideLength, Seq.Cleavage_State_Max, 
+				SD.PassFilt, SD.MScore
+		FROM T_Score_Discriminant AS SD INNER JOIN
+			T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
+			T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
+		WHERE P.Analysis_ID = @JobToProcess
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
+
+	If @ResultType = 'XT_Peptide_Hit'
+	Begin
+		-- Note that PassFilt and MScore are estimated for XTandem data
+		-- PassFilt was set to 1
+		-- MScore was set to 10.75
+		
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, 
+					DeltaCn2, DelM, GANET_Obs, GANET_Predicted, RankSp, RankXc, XcRatio, 
+					Charge_State, PeptideLength, Cleavage_State_Max, PassFilt, MScore)
+		SELECT	P.Peptide_ID, X.Normalized_Score, 
+				X.DeltaCn2, X.DelM, P.GANET_Obs, Seq.GANET_Predicted, 1 AS RankSp, 1 AS RankXc, 
+				1 AS XcRatio, P.Charge_State, LEN(Seq.Clean_Sequence) AS PeptideLength, 
+				Seq.Cleavage_State_Max, SD.PassFilt, SD.MScore
+		FROM T_Score_Discriminant AS SD INNER JOIN
+			T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			T_Score_XTandem AS X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
+			T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
+		WHERE P.Analysis_ID = @JobToProcess
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
+	
 	--
 	if @myError <> 0 
 	begin
-		set @message = 'Error while populating #TmpConfidenceScoreData for job ' + @jobStr
+		If @myError = 50001
+			set @message = 'Invalid ResultType ''' + @ResultType + ''' for job ' + @jobStr
+		Else
+			set @message = 'Error while populating #TmpConfidenceScoreData for job ' + @jobStr
 		goto done
 	end
 
@@ -169,14 +242,33 @@ AS
 	else
 		set @message = 'Discriminant scores computed for job ' + @jobStr + '; processed ' + convert(varchar(11), @myRowCount) + ' peptides'
 
-	exec @myError = SetProcessState @JobToProcess, @NextProcessState
-	--
+	
+	-- Advance the job state as appropriate
+	Set @JobAdvancedToNextState = 0
+	Exec @myError = CheckPeptideProphetUpdateRequired 0, @NextProcessStateSkipPeptideProphet, @message2 OUTPUT, @JobFilter = @JobToProcess, @JobAdvancedToNextState = @JobAdvancedToNextState OUTPUT
 	if @myError <> 0 
 	begin
-		set @message = 'Error setting next process state for job ' + @jobStr
+		set @message = 'Error calling CheckPeptideProphetUpdateRequired for job ' + @jobStr
+		If Len(IsNull(@message2, '')) > 0
+			Set @message = @message + '; ' + @message2
+			
 		Rollback Tran @DiscriminantTrans
 		goto done
 	end
+	
+	If @JobAdvancedToNextState = 0
+	Begin
+		-- Job state not advanced to @NextProcessStateSkipPeptideProphet
+		-- Therefore, advance to state @NextProcessState
+		exec @myError = SetProcessState @JobToProcess, @NextProcessState
+		--
+		if @myError <> 0 
+		begin
+			set @message = 'Error setting next process state for job ' + @jobStr
+			Rollback Tran @DiscriminantTrans
+			goto done
+		end
+	End
 	
 	------------------------------------------------------------------
 	-- Finalize the transaction

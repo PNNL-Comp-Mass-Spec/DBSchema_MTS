@@ -11,17 +11,15 @@ GO
 CREATE PROCEDURE dbo.CheckStaleJobs
 /****************************************************
 ** 
-**		Desc: 
-**			Looks for Jobs in T_Analysis_Description with a processing state between
+**	Desc: 	Looks for Jobs in T_Analysis_Description with a processing state between
 **			@JobProcessingStateMin and @JobProcessingStateMax and with Last_Affected
 **			over @maxHoursProcessing hours old; posts a log entry if any are found
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
-**
-**		Auth: mem
-**		Date: 10/31/2005
+**	Auth: 	mem
+**	Date: 	10/31/2005
+**			06/28/2006 mem - Updated call to PostLogEntry to include single quotes around CheckStaleJobs
 **    
 *****************************************************/
 (
@@ -97,7 +95,7 @@ As
 		Set @message = @message + ' last updated over ' + Convert(varchar(9), @maxHoursProcessing) + ' hours ago (' + Convert(varchar(30), @DateMax) + ')'
 	
 		-- Post this message at intervals of at least 24 hours
-		execute PostLogEntry 'Error', @message, CheckStaleJobs, 24
+		execute PostLogEntry 'Error', @message, 'CheckStaleJobs', 24
 	End
 
 	

@@ -7,6 +7,7 @@ CREATE TABLE [T_Peptide_to_Protein_Map] (
 	[Ref_ID] [int] NOT NULL ,
 	[Cleavage_State] [tinyint] NULL ,
 	[Terminus_State] [tinyint] NULL ,
+	[XTandem_Log_EValue] [real] NULL ,
 	CONSTRAINT [PK_T_Peptide_to_Protein_Map] PRIMARY KEY  CLUSTERED 
 	(
 		[Peptide_ID],

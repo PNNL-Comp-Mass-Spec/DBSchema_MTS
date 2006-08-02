@@ -31,10 +31,7 @@ CREATE TABLE [T_Dataset_Stats_Scans] (
 ) ON [PRIMARY]
 GO
 
- CREATE  INDEX [IX_T_Dataset_Stats_Scans_MZ] ON [T_Dataset_Stats_Scans]([Base_Peak_MZ]) WITH  FILLFACTOR = 90 ON [PRIMARY]
-GO
-
- CREATE  INDEX [T_Dataset_Stats_Scans_Job] ON [T_Dataset_Stats_Scans]([Job]) ON [PRIMARY]
+ CREATE  INDEX [IX_T_Dataset_Stats_Scans_MZ] ON [T_Dataset_Stats_Scans]([Base_Peak_MZ]) ON [PRIMARY]
 GO
 
 

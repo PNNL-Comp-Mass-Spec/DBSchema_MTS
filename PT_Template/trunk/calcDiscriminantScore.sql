@@ -18,13 +18,11 @@ CREATE FUNCTION dbo.calcDiscriminantScore
 **		 09/08/2004 mem - Added check for situation where both predicted and observed NET are 0
 **		 11/01/2004 mem - Updated value for @NETd to be 0.1 instead of 0.2 when @NETp and @NETo are 0
 **		 07/06/2005 mem - Updated to group all @chargeState values >= 3 together
-** 
-** @dbSize is the number of residues present in the peptide database (aka fasta file)
 **
 ***************************/
 (
 	@Xcorr float, 
-	@delCn float,
+	@delCn float,			-- deltaCn2
 	@delm float,
 	@NETo float, 
 	@NETp float, 

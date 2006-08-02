@@ -16,6 +16,7 @@ CREATE TABLE [T_Peptides] (
 	[Scan_Time_Peak_Apex] [real] NULL ,
 	[Peak_Area] [real] NULL ,
 	[Peak_SN_Ratio] [real] NULL ,
+	[Max_Obs_Area_In_Job] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job] DEFAULT (0),
 	CONSTRAINT [PK_T_Peptides] PRIMARY KEY  NONCLUSTERED 
 	(
 		[Peptide_ID]
@@ -39,9 +40,6 @@ GO
 GO
 
  CREATE  INDEX [IX_T_Peptides_Seq_ID] ON [T_Peptides]([Seq_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
-GO
-
- CREATE  INDEX [IX_T_Peptides_Analysis_ID] ON [T_Peptides]([Analysis_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
 GO
 
  CREATE  INDEX [IX_T_Peptides_Scan_Number] ON [T_Peptides]([Scan_Number]) ON [PRIMARY]

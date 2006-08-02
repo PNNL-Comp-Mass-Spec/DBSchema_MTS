@@ -15,26 +15,28 @@ CREATE Procedure dbo.LoadMASICSICStatsBulk
 **		Load SIC Stats for MASIC job into T_Dataset_Stats_SIC
 **		for given analysis job using bulk loading techniques
 **
-**	Return values: 0: success, otherwise, error code
+**	Parameters:	Returns 0 if no error, error code if an error
 **
-**	Parameters:
-**	
-**
-**		Auth: mem
-**		Date: 12/12/2004
-**			  11/01/2005 mem - Added new columns: Parent_Ion_Intensity, Peak_Baseline_Noise_Level, Peak_Baseline_Noise_StDev, 
-**							   Peak_Baseline_Points_Used, Peak_CenterOfMass_Scan, Peak_StDev, and Peak_Skew
-**							 - Total column count is now 22
-**							 - Added parameter @SICStatsColumnCount
-**							 - Increased size of @SICStatsFilePath from varchar(255) to varchar(512)
-**			  11/07/2005 mem - Switched alternate SICStats column count from 22 to 25 columns, adding columns StatMoments_Area, Peak_KSStat, and StatMoments_DataCount_Used
+**	Auth:	mem
+**	Date:	12/12/2004
+**			11/01/2005 mem - Added new columns: Parent_Ion_Intensity, Peak_Baseline_Noise_Level, Peak_Baseline_Noise_StDev, 
+**							 Peak_Baseline_Points_Used, Peak_CenterOfMass_Scan, Peak_StDev, and Peak_Skew
+**						   - Total column count is now 22
+**						   - Added parameter @SICStatsColumnCount
+**						   - Increased size of @SICStatsFilePath from varchar(255) to varchar(512)
+**			11/07/2005 mem - Switched alternate SICStats column count from 22 to 25 columns, adding columns StatMoments_Area, Peak_KSStat, and StatMoments_DataCount_Used
+**			06/04/2006 mem - Added parameter @SICStatsLineCountToSkip, which is used to skip the header line, if present in the input file
+**						   - Increased size of the @c variable (used for Bulk Insert)
 **    
 *****************************************************/
+(
 	@SICStatsFilePath varchar(512),
 	@Job int,
 	@SICStatsColumnCount smallint=0,		-- If this is 0, then this SP will call ValidateDelimitedFile; if non-zero, then assumes the calling procedure called ValidateDelimitedFile to get this value
+	@SICStatsLineCountToSkip int=0,
 	@numLoaded int=0 output,
 	@message varchar(512)='' output
+)
 As
 	set nocount on
 
@@ -91,7 +93,11 @@ As
 	-----------------------------------------------
 
 	If IsNull(@SICStatsColumnCount, 0) <= 0
-		Exec @result = ValidateDelimitedFile @SICStatsFilePath, 0, @fileExists OUTPUT, @SICStatsColumnCount OUTPUT, @message OUTPUT
+	Begin
+		-- Set @ScanStatsLineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
+		Set @SICStatsLineCountToSkip = -1
+		Exec @result = ValidateDelimitedFile @SICStatsFilePath, @SICStatsLineCountToSkip OUTPUT, @fileExists OUTPUT, @SICStatsColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 2
+	End
 	Else
 		Set @result = 0
 		
@@ -144,9 +150,9 @@ As
 	-- Bulk load contents of SIC stats file into temporary table
 	-----------------------------------------------
 	--
-	declare @c nvarchar(255)
+	declare @c nvarchar(2048)
 
-	Set @c = 'BULK INSERT #T_SICStats_Import FROM ' + '''' + @SICStatsFilePath + ''''
+	Set @c = 'BULK INSERT #T_SICStats_Import FROM ' + '''' + @SICStatsFilePath + ''' WITH (FIRSTROW = ' + Convert(varchar(9), @SICStatsLineCountToSkip+1) + ')'
 	exec @result = sp_executesql @c
 	--
 	if @result <> 0

@@ -20,13 +20,16 @@ CREATE Procedure dbo.ExportGANETData
 **
 **	Parameters:
 **
-**		Auth:	 mem
-**		Date:	04/08/2005
-**				05/28/2005 mem - Switched to using @TaskID and T_NET_Update_Task_Job_Map to define the jobs to process
-**							   - Added parameter @ResultsFolderPath
-**			    11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	04/08/2005
+**			05/28/2005 mem - Switched to using @TaskID and T_NET_Update_Task_Job_Map to define the jobs to process
+**						   - Added parameter @ResultsFolderPath
+**			11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
+**			07/03/2006 mem - Now using dbo.udfCombinePaths() to combine paths
+**			07/05/2006 mem - Now calling ValidateFolderExists to validate that the output and results folders exist
 **    
 *****************************************************/
+(
 	@TaskID int,											-- Corresponds to task in T_NET_Update_Task
 	@outFileFolderPath varchar(256) = '',					-- Path to folder containing source data; if blank, then will look up path in MT_Main
 	@ResultsFolderPath varchar(256) = '',					-- Path to folder containing the results; if blank, then will look up path in MT_Main
@@ -36,6 +39,7 @@ CREATE Procedure dbo.ExportGANETData
 	@jobStatsFileName varchar(256) = 'jobStats.txt',
 	@exportJobStatsFileOnly tinyint = 0,					-- When 1, then only creates the Job Stats file(s) and does not call ExportGANETPeptideFile
 	@message varchar(256)='' OUTPUT
+)
 As
 	Set nocount on
 	
@@ -82,8 +86,8 @@ As
 		if @myError <> 0
 			Goto Done
 
-		Set @outFileFolderPath = @outFileFolderPathBase + @DBName + '\'
-		Set @ResultsFolderPath = @inFileFolderPathBase + @DBName + '\'
+		Set @outFileFolderPath = dbo.udfCombinePaths(@outFileFolderPathBase, @DBName + '\')
+		Set @ResultsFolderPath = dbo.udfCombinePaths(@inFileFolderPathBase,  @DBName + '\')
 	End
 
 	---------------------------------------------------
@@ -103,7 +107,41 @@ As
 		Set @message = 'No jobs were found in T_NET_Update_Task_Job_Map for Task_ID ' + Convert(varchar(9), @TaskID) 
 		Goto Done
 	End
+
+	---------------------------------------------------
+	-- Assure that the output folder exists
+	-- Try to create it if it does not exist
+	---------------------------------------------------
+	exec @myError = ValidateFolderExists @outFileFolderPath, @CreateIfMissing = 1, @message = @message output
 	
+	If @myError <> 0
+	Begin
+		if Len(IsNull(@message, '')) = 0
+			Set @message = 'Error verifying that the NET Processing output folder exists: ' + IsNull(@outFileFolderPath, '??')
+		else
+			Set @message = @message + ' (NET Processing folder)'
+			
+		Set @myError = 60001
+		Goto Done
+	End
+
+	---------------------------------------------------
+	-- Assure that the results folder exists
+	-- Try to create it if it does not exist
+	---------------------------------------------------
+	exec @myError = ValidateFolderExists @ResultsFolderPath, @CreateIfMissing = 1, @message = @message output
+	
+	If @myError <> 0
+	Begin
+		if Len(IsNull(@message, '')) = 0
+			Set @message = 'Error verifying that the NET Processing results folder exists: ' + IsNull(@ResultsFolderPath, '??')
+		else
+			Set @message = @message + ' (NET Processing folder)'
+			
+		Set @myError = 60002
+		Goto Done
+	End
+		
 	---------------------------------------------------
 	-- Write the output files
 	-- Need to define @outFileName, @inFileName, and @predFileName based on @FirstJob and @Last Job
@@ -155,7 +193,7 @@ As
 	-- Write out the job stats file
 	--------------------------------------------------------------
 	--
-	Set @JobStatsFilePath = '"' + @outFileFolderPath + @jobStatsFileName + '"'
+	Set @JobStatsFilePath = '"' + dbo.udfCombinePaths(@outFileFolderPath, @jobStatsFileName) + '"'
 
 	-- Use a SQL query against a view linked to T_NET_Update_Task_Job_Map, along with a Where clause
 	Set @BcpSql = ''

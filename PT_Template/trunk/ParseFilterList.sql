@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -22,17 +22,20 @@ CREATE PROCEDURE dbo.ParseFilterList
 **	Parameters: 
 **
 **
-**		Auth: mem
-**		Date: 10/01/2004
-**			  03/07/2005 mem - Ported to the Peptide Database
-**			  04/07/2005 mem - Expanded @ValueMatchStr to varchar(128)
+**	Auth:	mem
+**	Date:	10/01/2004
+**			03/07/2005 mem - Ported to the Peptide Database
+**			04/07/2005 mem - Expanded @ValueMatchStr to varchar(128)
+**			02/23/2006 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
 **    
 *****************************************************/
+(
 	@filterValue varchar(128) = 'Experiment',
 	@filterValueLookupTableName varchar(256) = 'MT_Main.dbo.V_DMS_Analysis_Job_Import',
 	@filterValueLookupColumnName varchar(128) = 'Experiment',
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
 	@filterMatchCount int = 0 OUTPUT
+)
 As
 	set nocount on
 
@@ -81,7 +84,7 @@ As
 		-- Append items that do not contain a percent sign
 		--
 		INSERT INTO #TmpFilterList (Value)
-		SELECT [Value]
+		SELECT dbo.udfTrimToCRLF(Value)
 		FROM T_Process_Config
 		WHERE [Name] = @filterValue AND
 			Value Not Like '%[%]%' AND 
@@ -101,7 +104,7 @@ As
 
 		While @loopContinue = 1 And @myError = 0
 		Begin -- <b>
-			SELECT TOP 1 @ValueMatchStr = Value,
+			SELECT TOP 1 @ValueMatchStr = dbo.udfTrimToCRLF(Value),
 						 @ProcessConfigID = Process_Config_ID
 			FROM T_Process_Config
 			WHERE [Name] = @filterValue AND

@@ -4,7 +4,7 @@ GO
 
 CREATE TABLE [T_Process_State] (
 	[ID] [int] NOT NULL ,
-	[Name] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
+	[Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	CONSTRAINT [PK_T_Process_State] PRIMARY KEY  CLUSTERED 
 	(
 		[ID]

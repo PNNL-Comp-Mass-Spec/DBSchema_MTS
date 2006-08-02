@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -6,7 +6,6 @@ GO
 if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_SIC_Stats_for_PeptideHit_Job]') and OBJECTPROPERTY(id, N'IsView') = 1)
 drop view [dbo].[V_SIC_Stats_for_PeptideHit_Job]
 GO
-
 
 create VIEW dbo.V_SIC_Stats_for_PeptideHit_Job
 AS

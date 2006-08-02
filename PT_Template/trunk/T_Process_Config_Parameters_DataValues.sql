@@ -1,7 +1,13 @@
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Campaign', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that are associated with this campaign')
 INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Campaign_Exclusion', N'MS/MS analysis job import', 0, 99, N'Exclude MS/MS analysis jobs that are associated with this campaign name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character.')
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Dataset_DMS_Creation_Date_Minimum', N'MS/MS analysis job import, FTICR analysis job import', 0, 1, N'Earliest allowable dataset creation date in DMS')
+INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'DB_Schema_Version', N'Info only', 1, 1, N'Version of MTDB schema')
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Enzyme_ID', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that are associated with this Enzyme ID')
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Experiment', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that are associated with this experiment name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character.')
 INSERT INTO dbo.T_Process_Config_Parameters
@@ -19,8 +25,13 @@ INSERT INTO dbo.T_Process_Config_Parameters
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'NET_Update_Max_Peptide_Count', N'NET Regression', 1, 1, N'Maximum number of peptide results to include in the peptideGANET file; limits the number of jobs included to achieve this value')
 INSERT INTO dbo.T_Process_Config_Parameters
-  VALUES (N'Organism_DB_File_Name', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA)')
+  VALUES (N'Organism_DB_File_Name', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA); matches the OrganismDBName field in V_DMS_Analysis_Job_Import_Ex')
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Peptide_Import_Filter_ID', N'MS/MS analysis job import', 1, 1, N'Filter to apply when importing peptides from MS/MS synopsis ifles')
-
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Protein_Collection_and_Protein_Options_Combo', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were searched against this precise protein collection list and protein options list; separate the two items using a semicolon; the items can contain wildcards; will compare against the full ProteinCollectionList and ProteinOptionsList fields in V_DMS_Analysis_Job_Import_Ex')
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Protein_Collection_Filter', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were searched against this protein collection; matches the ProteinCollectionList field in V_DMS_Analysis_Job_Import_Ex (either an exact match or a match to one of the items in the list)')
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Seq_Direction_Filter', N'MS/MS analysis job import', 0, 99, N'Sequence direction values to allow; only used for jobs with a Protein_Collection_List defined')
 go

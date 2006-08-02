@@ -46,9 +46,6 @@ GO
  CREATE  INDEX [IX_T_Dataset_Stats_SIC_MZ] ON [T_Dataset_Stats_SIC]([MZ]) WITH  FILLFACTOR = 90 ON [PRIMARY]
 GO
 
- CREATE  INDEX [IX_T_Dataset_Stats_SIC_Job] ON [T_Dataset_Stats_SIC]([Job]) ON [PRIMARY]
-GO
-
  CREATE  INDEX [IX_T_Dataset_Stats_SIC_FragScan_Job_OptimalPeakApex] ON [T_Dataset_Stats_SIC]([Frag_Scan_Number], [Job], [Optimal_Peak_Apex_Scan_Number]) ON [PRIMARY]
 GO
 

@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -8,7 +8,7 @@ drop procedure [dbo].[MasterUpdateNETOneTask]
 GO
 
 
-create Procedure dbo.MasterUpdateNETOneTask
+CREATE Procedure dbo.MasterUpdateNETOneTask
 /****************************************************
 **
 **	Desc: 
@@ -18,13 +18,14 @@ create Procedure dbo.MasterUpdateNETOneTask
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 07/30/2004
-**			  01/22/2005 mem - Added @MinNETRSquared parameter
-**			  04/08/2005 mem - Renamed the filename and filepath parameters
-**			  05/28/2005 mem - Switched to use T_NET_Update_Task and T_NET_Update_Task_Job_Map
-**							 - Removed the filename and filepath parameters, since now obtaining that information from T_NET_Update_Task
-**							 - Removed the @MinNETFit parameter
+**	Auth:	mem
+**	Date:	07/30/2004
+**			01/22/2005 mem - Added @MinNETRSquared parameter
+**			04/08/2005 mem - Renamed the filename and filepath parameters
+**			05/28/2005 mem - Switched to use T_NET_Update_Task and T_NET_Update_Task_Job_Map
+**						   - Removed the filename and filepath parameters, since now obtaining that information from T_NET_Update_Task
+**						   - Removed the @MinNETFit parameter
+**			07/04/2006 mem - Switched to using DeleteFiles and changed error code from 8 to 7 call to SetGANETUpdateTaskState if ComputePeptideNETBulk fails
 **    
 *****************************************************/
 (
@@ -50,6 +51,7 @@ As
 
 	declare @outFolderPath varchar(256)
 	declare @outFileName varchar(256)
+	declare @jobStatsFileName varchar(256)
 	declare @ResultsFolderPath varchar(256)
 	declare @ResultsFileName varchar(256)
 	declare @predFileName varchar(256)
@@ -167,23 +169,25 @@ As
 		-- Delete the NET files if set to do so
 		--
 		if @myError = 0 AND @DeleteNETFiles = 1
-			Exec DeleteGANETFiles 	@outFileName,
-									@outFolderPath,
-									@ResultsFileName,
-									@ResultsFolderPath,
-									@predFileName,
-									@message  output
+		Begin
+			Set @jobStatsFileName = Replace(@outFileName , 'peptideGANET_', 'jobStats_')
+
+			Exec DeleteFiles @outFolderPath, @outFileName, @jobStatsFileName, @message = @message output
+			Exec DeleteFiles @ResultsFolderPath, @ResultsFileName, @predFileName, @message = @message output
+			
+		End
 	end
 	else
 	begin
 		-- Set state of NET update task to error
 		--
 		Set @myError = @Result
-		exec SetGANETUpdateTaskState @TaskID, 8, @GANETProcessingTimeoutState, @message
+		exec SetGANETUpdateTaskState @TaskID, 7, @GANETProcessingTimeoutState, @message
 	end
 
 Done:
 	return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

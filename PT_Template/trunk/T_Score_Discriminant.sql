@@ -8,6 +8,8 @@ CREATE TABLE [T_Score_Discriminant] (
 	[DiscriminantScore] [float] NULL ,
 	[DiscriminantScoreNorm] [real] NULL ,
 	[PassFilt] [int] NULL ,
+	[Peptide_Prophet_FScore] [real] NULL ,
+	[Peptide_Prophet_Probability] [real] NULL ,
 	CONSTRAINT [PK_T_Score_Discriminant] PRIMARY KEY  CLUSTERED 
 	(
 		[Peptide_ID]
@@ -21,7 +23,7 @@ CREATE TABLE [T_Score_Discriminant] (
 ) ON [PRIMARY]
 GO
 
- CREATE  INDEX [IX_T_Score_Discriminant] ON [T_Score_Discriminant]([DiscriminantScoreNorm]) WITH  FILLFACTOR = 90 ON [PRIMARY]
+ CREATE  INDEX [IX_T_Score_Discriminant] ON [T_Score_Discriminant]([DiscriminantScoreNorm]) ON [PRIMARY]
 GO
 
 

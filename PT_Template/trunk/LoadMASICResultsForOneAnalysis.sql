@@ -16,20 +16,25 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 12/13/2004
-**			  12/29/2004 mem - Now setting Process_State to 3 if an error occurs in LoadMASICScanStatsBulk or LoadMASICSICStatsBulk
-**			  01/25/2005 mem - Now checking for datasets associated with @job that already have a SIC_Job defined
-**			  10/31/2005 mem - Now passing @SICStatsColumnCount to LoadMASICSICStatsBulk
-**			  11/06/2005 mem - Switched alternate SICStats column count from 22 to 25 columns
-**			  11/10/2005 mem - Now looking for PeptideHit jobs with state > 25 for the dataset associated with this SIC Job; if any are found, then they are reset to state 25 or state 35
+**	Auth:	mem
+**	Date:	12/13/2004
+**			12/29/2004 mem - Now setting Process_State to 3 if an error occurs in LoadMASICScanStatsBulk or LoadMASICSICStatsBulk
+**			01/25/2005 mem - Now checking for datasets associated with @job that already have a SIC_Job defined
+**			10/31/2005 mem - Now passing @SICStatsColumnCount to LoadMASICSICStatsBulk
+**			11/06/2005 mem - Switched alternate SICStats column count from 22 to 25 columns
+**			11/10/2005 mem - Now looking for PeptideHit jobs with state > 25 for the dataset associated with this SIC Job; if any are found, then they are reset to state 25 or state 35
+**			12/13/2005 mem - Updated to support XTandem results
+**			06/04/2006 mem - Now passing @ScanStatsLineCountToSkip as an output parameter to let ValidateDelimitedFile determine whether or not a header row is present
+**			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
+(
 	@NextProcessState int = 75,
 	@job int,
 	@message varchar(255)='' OUTPUT,
 	@numLoaded int=0 OUTPUT,
 	@clientStoragePerspective tinyint = 1
+)
 AS
 	set nocount on
 
@@ -102,14 +107,14 @@ AS
  	DECLARE @ScanStatsFilePath varchar(512)
  	DECLARE @SICStatsFile varchar(255)
  	DECLARE @SICStatsFilePath varchar(512)
-
+	
 	set @RootFileName = @Dataset
-	set @ResultsPath = @StoragePath + '\' + @ResultsFolder
+	set @ResultsPath = dbo.udfCombinePaths(@StoragePath, @ResultsFolder)
     set @ScanStatsFile = @RootFileName + '_ScanStats.txt'
-	set @ScanStatsFilePath = @ResultsPath + '\' + @ScanStatsFile
+	set @ScanStatsFilePath = dbo.udfCombinePaths(@ResultsPath, @ScanStatsFile)
 
     set @SICStatsFile = @RootFileName + '_SICStats.txt'
-	set @SICStatsFilePath = @ResultsPath + '\' + @SICStatsFile
+	set @SICStatsFilePath = dbo.udfCombinePaths(@ResultsPath, @SICStatsFile)
 
 
 	Declare @ScanStatsFileExists tinyint
@@ -117,10 +122,15 @@ AS
 	Declare @ScanStatsColumnCount int
 	Declare @SICStatsColumnCount int
 	
+	Declare @ScanStatsLineCountToSkip int
+	Declare @SICStatsLineCountToSkip int
+	
 	-----------------------------------------------
 	-- Verify that the ScanStats file exists and count the number of columns
 	-----------------------------------------------
-	Exec @result = ValidateDelimitedFile @ScanStatsFilePath, 0, @ScanStatsFileExists OUTPUT, @ScanStatsColumnCount OUTPUT, @message OUTPUT
+	-- Set @ScanStatsLineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
+	Set @ScanStatsLineCountToSkip = -1
+	Exec @result = ValidateDelimitedFile @ScanStatsFilePath, @ScanStatsLineCountToSkip OUTPUT, @ScanStatsFileExists OUTPUT, @ScanStatsColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 2
 	
 	if @result <> 0
 	Begin
@@ -155,7 +165,9 @@ AS
 	-- See if the SICStats file exists and count the number of columns
 	-- The SICStats file is not required to exist to continue; but, if it does exist, it must have the required number of columns
 	-----------------------------------------------
-	Exec @result = ValidateDelimitedFile @SICStatsFilePath, 0, @SICStatsFileExists OUTPUT, @SICStatsColumnCount OUTPUT, @message OUTPUT
+	-- Set @SICStatsLineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
+	Set @SICStatsLineCountToSkip = -1
+	Exec @result = ValidateDelimitedFile @SICStatsFilePath, @SICStatsLineCountToSkip OUTPUT, @SICStatsFileExists OUTPUT, @SICStatsColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 2
 	
 	if @result <> 0
 	Begin
@@ -196,6 +208,7 @@ AS
 	exec @result = LoadMASICScanStatsBulk
 						@ScanStatsFilePath,
 						@job,
+						@ScanStatsLineCountToSkip,
 						@ScanStatsLoaded output,
 						@message output
 	--
@@ -241,6 +254,7 @@ AS
 							@SICStatsFilePath,
 							@job,
 							@SICStatsColumnCount,
+							@SICStatsLineCountToSkip,
 							@SICStatsLoaded output,
 							@messageAddnl output
 		--
@@ -324,7 +338,7 @@ AS
 
 	-----------------------------------------------
 	-- If @completionCode = @NextProcessState then need to see if this job's dataset
-	-- has any PeptideHit jobs with state > 25.  If there are, then need to reset
+	-- has any Peptide_Hit jobs with state > 25.  If there are, then need to reset
 	-- the state for those jobs back to 25 or 35
 	-----------------------------------------------
 	
@@ -338,7 +352,7 @@ AS
 					FROM T_Analysis_Description
 					WHERE Job = @Job) AS SIC_Job_Q ON 
 			TAD.Dataset_ID = SIC_Job_Q.Dataset_ID
-		WHERE TAD.ResultType = 'Peptide_Hit' AND 
+		WHERE TAD.ResultType LIKE '%Peptide_Hit' AND 
 			  TAD.Process_State > 25
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -359,7 +373,7 @@ AS
 	-----------------------------------------------
 	-- Exit
 	-----------------------------------------------
-Done:
+Done:
 
 	-- set load complete for this analysis
 	--

@@ -19,20 +19,25 @@ CREATE Procedure dbo.UpdatePeptideSICStats
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 10/01/2005
-**			  10/12/2005 mem - Fixed bug that processed a job even if a valid SIC Job was not present in the DB
-**							 - Now posting errors about missing SIC jobs only if the MS/MS job is at least 24 hours old
-**			  11/09/2005 mem - Added a holdoff time of 24 hours when posting log messages to prevent the same message from appearing twice in a 24 hour period
-**			  11/10/2005 mem - Added parameter @numJobsAdvanced
+**	Auth:	mem
+**	Date:	10/01/2005
+**			10/12/2005 mem - Fixed bug that processed a job even if a valid SIC Job was not present in the DB
+**						   - Now posting errors about missing SIC jobs only if the MS/MS job is at least 24 hours old
+**			11/09/2005 mem - Added a holdoff time of 24 hours when posting log messages to prevent the same message from appearing twice in a 24 hour period
+**			11/10/2005 mem - Added parameter @numJobsAdvanced
+**			03/01/2006 mem - Now calling ComputeMaxObsAreaByJob for each job processed
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			03/18/2006 mem - No longer calling ComputeMaxObsAreaByJob for each job processed since Seq_ID is required to call that SP
 **    
 *****************************************************/
+(
 	@ProcessStateMatch int = 20,
 	@NextProcessState int = 25,
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int=0 OUTPUT,
 	@numJobsAdvanced int=0 OUTPUT,
 	@UpdateAdditionalJobsWithNullSICStats tinyint = 0			-- Set to 1 to also look for and update jobs with Null SIC stat values in T_Peptides
+)
 As
 	Set NoCount On
 	
@@ -45,6 +50,7 @@ As
 	Set @jobAvailable = 0
 
 	Declare @result int
+	Declare @UpdateEnabled tinyint
 	Declare @message varchar(255)
 	Set @message = ''
 	
@@ -60,7 +66,8 @@ As
 	Declare @SICProcessState int
 	Declare @RowCountUpdated int
 	Declare @RowCountDefined int
-
+	Declare @JobFilterList varchar(128)
+	
 	----------------------------------------------
 	-- Loop through T_Analysis_Description, processing jobs with Process_State = @ProcessStatematch
 	-- If @UpdateAdditionalJobsWithNullSICStats = 1 then we'll also look 
@@ -252,10 +259,16 @@ As
 			Set @numJobsProcessed = @numJobsProcessed + 1
 			
 		end -- </b>
+
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled @CallingFunctionDescription = 'UpdatePeptideSICStats', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
+
 	end -- </a>
 
 	if @numJobsProcessed = 0
-		Set @message = 'no analyses were available'
+		set @message = 'no analyses were available'
 
 Done:
 	return @myError

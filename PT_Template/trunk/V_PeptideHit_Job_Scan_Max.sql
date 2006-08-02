@@ -17,7 +17,7 @@ FROM (SELECT TAD.Job, MAX(dbo.T_Peptides.Scan_Number)
       FROM dbo.T_Analysis_Description TAD INNER JOIN
           dbo.T_Peptides ON 
           TAD.Job = dbo.T_Peptides.Analysis_ID
-      WHERE TAD.REsultType = 'Peptide_Hit'
+      WHERE TAD.ResultType LIKE '%Peptide_Hit'
       GROUP BY TAD.Job) Q1 LEFT OUTER JOIN
         (SELECT TAD.Job, MAX(DSS.Scan_Number) 
            AS MaxScanNumberAllScans

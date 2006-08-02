@@ -17,7 +17,7 @@ FROM dbo.T_Analysis_Description AD_SIC INNER JOIN
     AD_SIC.Job = dbo.T_Datasets.SIC_Job INNER JOIN
     dbo.T_Analysis_Description AD_PeptideHit ON 
     dbo.T_Datasets.Dataset_ID = AD_PeptideHit.Dataset_ID
-WHERE (AD_PeptideHit.ResultType = 'Peptide_Hit')
+WHERE (AD_PeptideHit.ResultType LIKE '%Peptide_Hit')
 
 
 GO

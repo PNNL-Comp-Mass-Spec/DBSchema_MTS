@@ -11,19 +11,20 @@ GO
 CREATE PROCEDURE dbo.MasterUpdateProcessImport
 /****************************************************
 ** 
-**		Desc: 
-**		Imports newly completed LCQ analyses for
-**		organism and imports the peptides from them
+**	Desc: 
+**	Imports newly completed LCQ analyses for
+**	 organism and imports the peptides from them
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth: grk
-**		Date: 07/15/2004
-**			  07/21/2004 mem - Changed from @NextProcessState = 20 to @NextProcessState = 30 when calling LoadPeptidesForAvailableAnalyses
-**			  08/06/2004 mem - Added @numJobsToProcess parameter and use of @count
-**			  11/04/2004 mem - Removed @numJobsToProcess parameter and moved Load Peptides code to MasterUpdateProcessBackground
+**	Auth:	grk
+**	Date:	07/15/2004
+**			07/21/2004 mem - Changed from @NextProcessState = 20 to @NextProcessState = 30 when calling LoadPeptidesForAvailableAnalyses
+**			08/06/2004 mem - Added @numJobsToProcess parameter and use of @count
+**			11/04/2004 mem - Removed @numJobsToProcess parameter and moved Load Peptides code to MasterUpdateProcessBackground
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 As
@@ -36,6 +37,7 @@ As
 	declare @result int
 	declare @count int
 	declare @logLevel int
+	declare @UpdateEnabled tinyint
 	
 	declare @PeptideDatabase varchar(128)
 	set @PeptideDatabase = DB_Name()
@@ -46,6 +48,12 @@ As
 	declare @NextProcessState int
 	
 	declare @message varchar(255)
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessImport', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 	--------------------------------------------------------------
 	-- Lookup the LogLevel state
 	-- 0=Off, 1=Normal, 2=Verbose, 3=Debug
@@ -93,15 +101,17 @@ As
 		EXEC @result = ImportNewPeptideAnalyses @NextProcessState, @entriesAdded OUTPUT
 	end
 
-	
-Done:
-	
 	--------------------------------------------------------------
 	-- Normal Exit
 	--------------------------------------------------------------
-	set @message = 'Completed master update for ' + @PeptideDatabase + ': ' + convert(varchar(32), @myError)
 
-	If (@logLevel >=1 AND @myError <> 0) OR @logLevel >= 2
+	set @message = 'Completed master update for ' + @PeptideDatabase + ': ' + convert(varchar(32), @myError)
+	
+Done:
+	If (@logLevel >=1 AND @myError <> 0)
+		execute PostLogEntry 'Error', @message, 'MasterUpdateProcessImport'
+	Else
+	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessImport'
 		
 	return @myError

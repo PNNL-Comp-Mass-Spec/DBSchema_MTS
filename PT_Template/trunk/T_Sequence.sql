@@ -5,7 +5,7 @@ GO
 CREATE TABLE [T_Sequence] (
 	[Seq_ID] [int] NOT NULL ,
 	[Clean_Sequence] [varchar] (850) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	[Mod_Count] [int] NULL ,
+	[Mod_Count] [smallint] NULL ,
 	[Mod_Description] [varchar] (2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Monoisotopic_Mass] [float] NULL ,
 	[GANET_Predicted] [real] NULL ,
