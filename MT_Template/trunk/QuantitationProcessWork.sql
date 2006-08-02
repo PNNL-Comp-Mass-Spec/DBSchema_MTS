@@ -19,66 +19,70 @@ CREATE Procedure dbo.QuantitationProcessWork
 **
 **  Parameters: Quantitation_ID to Process
 **
-**  Auth: mem
-**	Date: 06/03/2003
-**
-**  Updated: 06/23/2003 mem
-**			 07/04/2003 mem
-**			 07/06/2003 mem
-**			 07/07/2003 mem
-**			 07/08/2003 mem
-**			 07/22/2003 mem
-**			 07/29/2003 mem
-**			 08/26/2003 mem - Changed Trial to Replicate where appropriate
-**							  Updated to roll-up by replicate, then by fraction, then by TopLevelFraction
-**			 09/14/2003 mem
-**			 09/17/2003 mem - Added inclusion of Expression_Ratio values in rollups
-**			 09/20/2003 mem - Added min/max scan number and avg mass error for each peptide in rollups
-**			 10/02/2003 mem - Now using median across replicates in addition to average across replicates when finding outliers
-**			 11/09/2003 mem - Added computation and storage of NET_Minimum and NET_Maximum
-**			 11/12/2003 mem - Added inclusion of Mass_Tag_Mods (from T_FTICR_UMC_ResultDetails)
-**			 11/18/2003 mem - Added option to filter mass tags by Minimum_High_Normalized_Score; in addition, added rollup of charge state info
-**			 11/19/2003 mem - Added use of T_FTICR_UMC_ResultDetails.Mass_Tag_Mod_Mass to correct the MassErrorPPMAvg calculation
-**			 11/26/2003 mem - Added option to filter out peptides not present in a minimum number of replicates
-**			 12/01/2003 mem - Added option to normalize replicates using linear regression of the peptides in common with the replicates
-**			 12/02/2003 mem - Added filter to only include the peak matching results having T_FTICR_UMC_ResultDetails.Match_State = 6 
-**			 12/03/2003 mem - Disabled the normalized replicates using linear regression code since not improving the statistics
-**			 02/21/2004 mem - Changed PK__UMCMatchResultsByJob and the various indices on the temporary tables to be temporary-type indices by adding the # symbol
-**			 04/04/2004 mem - Added ability to specify minimum peptide length and minimum PMT Quality Score
-**							- Now computing Mass_Error_PPM_Avg, ORF_Count_Avg, Full_Enzyme_Count, Full_Enzyme_No_Missed_Cleavage_Count, and Partial_Enzyme_Count and storing in T_Quantitation_Results
-**							- Added computation of ORF coverage (at the residue level), storing results in T_Quantitation_Results
-**			 04/08/2004 mem - Fixed bug with computation of minimum potential MT high normalized score and minimum potential PMT quality score
-**			 04/09/2004 mem - Added @ORFCoverageComputationLevel option (new field in T_Quantitation_Description); 0 = off, 1 = observed ORF coverage, 2 = observed and potential ORF coverage
-**			 04/12/2004 mem - Added support for @UMCAbundanceMode option (new field in T_Quantitation_Desccription); 0 = value in table (typically peak area), 1 = peak maximum
-**			 05/11/2004 mem - Fixed bug with minimum PMT quality score filter
-**			 06/06/2004 mem - Added ORF_Coverage_Fraction_High_Abundance
-**			 06/09/2004 mem - Now using CountCapitalLetters to count the number of capital letters in sequence
-**			 07/06/2004 mem - Moved computation of ER_WeightedAvg to a separate query due to need to check for ER values > 1E+100
-**			 07/10/2004 mem - Changed ER_WeightedAvg and ER_StDev computations to utilize the sum of the light and heavy UMC abundances rather than UMC member counts; note that heavy UMC abundance is computed from Light Abu and ER
-**							- Added columns Member_Count_Used_For_Abundance, ER_Charge_State_Basis_Count, and Match_Score_Avg
-**							- Added @MinimumMatchScore parameter
-**			 08/17/2004 mem - Added columns Del_Match_Score_Avg, NET_Error_Obs_Avg, and NET_Error_Pred_Avg
-**			 09/26/2004 mem - Updated to work with DB Schema Version 2
-**			 04/04/2005 mem - Added @MinimumMTHighDiscriminantScore parameter
-**			 04/07/2005 mem - Added @MinimumDelMatchScore parameter
-**			 05/25/2005 mem - Now summarizing Internal Standard (NET Locker) Matches
-**			 06/09/2005 mem - Fixed bug related to deleting low scoring matches (Match_Score < @MinimumMatchScore)
-**			 07/28/2005 mem - Now populating field FeatureCountWithMatchesAvg in T_Quantitation_Description
-**			 09/22/2005 mem - Moved removal of peptides that aren't present in the minimum number of replicates to occur before filtering out peptide abundance outliers
-**							  Fixed bug that failed to populate @FractionCrossReplicateAvgInRange with the value in T_Quantitation_Description and instead always used 0.8
+**  Auth:	mem
+**	Date:	06/03/2003
+**			06/23/2003 mem
+**			07/04/2003 mem
+**			07/06/2003 mem
+**			07/07/2003 mem
+**			07/08/2003 mem
+**			07/22/2003 mem
+**			07/29/2003 mem
+**			08/26/2003 mem - Changed Trial to Replicate where appropriate
+**						   - Updated to roll-up by replicate, then by fraction, then by TopLevelFraction
+**			09/14/2003 mem
+**			09/17/2003 mem - Added inclusion of Expression_Ratio values in rollups
+**			09/20/2003 mem - Added min/max scan number and avg mass error for each peptide in rollups
+**			10/02/2003 mem - Now using median across replicates in addition to average across replicates when finding outliers
+**			11/09/2003 mem - Added computation and storage of NET_Minimum and NET_Maximum
+**			11/12/2003 mem - Added inclusion of Mass_Tag_Mods (from T_FTICR_UMC_ResultDetails)
+**			11/18/2003 mem - Added option to filter mass tags by Minimum_High_Normalized_Score; in addition, added rollup of charge state info
+**			11/19/2003 mem - Added use of T_FTICR_UMC_ResultDetails.Mass_Tag_Mod_Mass to correct the MassErrorPPMAvg calculation
+**			11/26/2003 mem - Added option to filter out peptides not present in a minimum number of replicates
+**			12/01/2003 mem - Added option to normalize replicates using linear regression of the peptides in common with the replicates
+**			12/02/2003 mem - Added filter to only include the peak matching results having T_FTICR_UMC_ResultDetails.Match_State = 6 
+**			12/03/2003 mem - Disabled the normalized replicates using linear regression code since not improving the statistics
+**			02/21/2004 mem - Changed PK__UMCMatchResultsByJob and the various indices on the temporary tables to be temporary-type indices by adding the # symbol
+**			04/04/2004 mem - Added ability to specify minimum peptide length and minimum PMT Quality Score
+**						   - Now computing Mass_Error_PPM_Avg, ORF_Count_Avg, Full_Enzyme_Count, Full_Enzyme_No_Missed_Cleavage_Count, and Partial_Enzyme_Count and storing in T_Quantitation_Results
+**						   - Added computation of ORF coverage (at the residue level), storing results in T_Quantitation_Results
+**			04/08/2004 mem - Fixed bug with computation of minimum potential MT high normalized score and minimum potential PMT quality score
+**			04/09/2004 mem - Added @ORFCoverageComputationLevel option (new field in T_Quantitation_Description); 0 = off, 1 = observed ORF coverage, 2 = observed and potential ORF coverage
+**			04/12/2004 mem - Added support for @UMCAbundanceMode option (new field in T_Quantitation_Desccription); 0 = value in table (typically peak area), 1 = peak maximum
+**			05/11/2004 mem - Fixed bug with minimum PMT quality score filter
+**			06/06/2004 mem - Added ORF_Coverage_Fraction_High_Abundance
+**			06/09/2004 mem - Now using CountCapitalLetters to count the number of capital letters in sequence
+**			07/06/2004 mem - Moved computation of ER_WeightedAvg to a separate query due to need to check for ER values > 1E+100
+**			07/10/2004 mem - Changed ER_WeightedAvg and ER_StDev computations to utilize the sum of the light and heavy UMC abundances rather than UMC member counts; note that heavy UMC abundance is computed from Light Abu and ER
+**						   - Added columns Member_Count_Used_For_Abundance, ER_Charge_State_Basis_Count, and Match_Score_Avg
+**						   - Added @MinimumMatchScore parameter
+**			08/17/2004 mem - Added columns Del_Match_Score_Avg, NET_Error_Obs_Avg, and NET_Error_Pred_Avg
+**			09/26/2004 mem - Updated to work with DB Schema Version 2
+**			04/04/2005 mem - Added @MinimumMTHighDiscriminantScore parameter
+**			04/07/2005 mem - Added @MinimumDelMatchScore parameter
+**			05/25/2005 mem - Now summarizing Internal Standard (NET Locker) Matches
+**			06/09/2005 mem - Fixed bug related to deleting low scoring matches (Match_Score < @MinimumMatchScore)
+**			07/28/2005 mem - Now populating field FeatureCountWithMatchesAvg in T_Quantitation_Description
+**			09/22/2005 mem - Moved removal of peptides that aren't present in the minimum number of replicates to occur before filtering out peptide abundance outliers
+**						   - Fixed bug that failed to populate @FractionCrossReplicateAvgInRange with the value in T_Quantitation_Description and instead always used 0.8
+**			12/15/2005 mem - Switched from using T_GANET_Lockers to MT_Main..T_Internal_Std_Components
+**			12/29/2005 mem - Renamed T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
+**			03/23/2006 mem - Replaced all decimal data types with real data types to avoid overflow errors
 **
 ****************************************************/
 (
 	@QuantitationID int								-- Quantitation_ID to process 
 )
 AS
-
 	Set NoCount On
+	
+	declare @myRowCount int
+	declare @myError int
+	set @myRowCount = 0
+	set @myError = 0
 
 	
-	Declare	@myError int,
-			@myRowCount int,
-			@ResultsCount int,
+	Declare	@ResultsCount int,
 			@ReplicateCountEstimate int,
 			@FeatureCountWithMatchesAvg int,		-- The number of UMCs in UMCMatchResultsByJob with UseValue = 1
 			@MTMatchingUMCsCount int,				-- The number of Mass Tags in UMCMatchResultsByJob with UseValue = 1  (after outlier filtering)
@@ -88,8 +92,6 @@ AS
 			@UniqueInternalStdCount int,					-- The number of Internal Std peptides in UMCMatchResultsByJob with at least one MT in 1 replicate with UseValue = 1
 			@UniqueInternalStdCountFilteredOut int		-- The number of Internal Std peptides in UMCMatchResultsByJob with no MT's in any replicate with UseValue = 1
 
-	Set @myError = 0
-	Set @myRowCount = 0
 	set @ResultsCount = 0
 	Set @ReplicateCountEstimate = 0
 	Set @MTMatchingUMCsCount = 0
@@ -103,13 +105,13 @@ AS
 	Declare @MessageNoResults varchar(512)
 	
 	Declare @RemoveOutlierAbundancesForReplicates tinyint,		-- If 1, use a filter to remove outliers (only possible with replicate data)
-			@FractionCrossReplicateAvgInRange decimal(9,5),		-- Fraction plus or minus the average abundance across replicates for filtering out UMC's matching a given mass tag; it is allowable for this value to be greater than 1
+			@FractionCrossReplicateAvgInRange real,			-- Fraction plus or minus the average abundance across replicates for filtering out UMC's matching a given mass tag; it is allowable for this value to be greater than 1
 			@AddBackExcludedMassTags tinyint,				-- If 1, means to not allow mass tags to be completely filtered out using the outlier filter
 															-- As an example, if a mass tag was seen in 2 replicates, with an abundance of 10 and 500,
 															--  then the average across replicates is 255, now if @FractionCrossReplicateAvgInRange = 0.8,
 															--  the cutoff values are 51 and 459 (+-80% of 250).  These cutoff values will exlude both the
 															--  Abundance 10 and Abundance 500 values, which will completely exlude the given mass tag
-			@FractionHighestAbuToUse decimal(9,8),		-- Fraction of highest abundance mass tag for given ORF to use when computing ORF abundance (0.0 to 1.0)
+			@FractionHighestAbuToUse real,				-- Fraction of highest abundance mass tag for given ORF to use when computing ORF abundance (0.0 to 1.0)
 			@NormalizeAbundances tinyint,				-- 1 to normalize, 0 to not normalize
 			@NormalizeReplicateAbu tinyint,				-- 1 to normalize replicate abundances
 			@StandardAbundanceMin float,				-- Used with normalization: minimum abundance
@@ -121,7 +123,7 @@ AS
 			@MinimumMTHighDiscriminantScore real,		-- 0 to use all mass tags, > 0 to filter by Discriminant Score
 			@MinimumPMTQualityScore real,				-- 0 to use all mass tags, > 0 to filter by PMT Quality Score (as currently set in T_Mass_Tags)
 			@MinimumPeptideLength tinyint,				-- 0 to use all mass tags, > 0 to filter by peptide length
-			@MinimumMatchScore decimal(9,5),			-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
+			@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
 			@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score (aka Del SLiC Score); only used if @MinimumMatchScore is > 0
 			@MinimumPeptideReplicateCount tinyint,		-- 0 or 1 to filter out nothing; 2 or higher to filter out peptides not seen in the given number of replicates
 			@ORFCoverageComputationLevel tinyint,		-- 0 for no ORF coverage, 1 for observed ORF coverage, 2 for observed and potential ORF coverage; option 2 is very CPU intensive for large databases
@@ -348,20 +350,19 @@ AS
 		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind
 		FROM T_Quantitation_MDIDs TMDID INNER JOIN
 			 T_FTICR_UMC_Results R ON TMDID.MD_ID = R.MD_ID INNER JOIN
-			 T_FTICR_UMC_NETLockerDetails NLD ON R.UMC_Results_ID = NLD.UMC_Results_ID INNER JOIN
-			 T_GANET_Lockers GL ON NLD.Seq_ID = GL.Seq_ID INNER JOIN
-			 T_Mass_Tags MT ON GL.Seq_ID = MT.Mass_Tag_ID
+			 T_FTICR_UMC_InternalStdDetails ISD ON R.UMC_Results_ID = ISD.UMC_Results_ID INNER JOIN
+			 T_Mass_Tags MT ON ISD.Seq_ID = MT.Mass_Tag_ID
 		WHERE	TMDID.Quantitation_ID = @QuantitationID AND 
-				NLD.Match_State = 6 AND
-				ISNULL(NLD.Match_Score, -1) >= @MinimumMatchScore AND 
-				ISNULL(NLD.Del_Match_Score, 0) >= @MinimumDelMatchScore AND
+				ISD.Match_State = 6 AND
+				ISNULL(ISD.Match_Score, -1) >= @MinimumMatchScore AND 
+				ISNULL(ISD.Del_Match_Score, 0) >= @MinimumDelMatchScore AND
 				LEN(MT.Peptide) >= @MinimumPeptideLength
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 		--
 		If @myError <> 0 
 		Begin
-			Set @message =  'Error while populating the #MatchingUMCIndices temporary table from T_FTICR_UMC_NETLockerDetails'
+			Set @message =  'Error while populating the #MatchingUMCIndices temporary table from T_FTICR_UMC_InternalStdDetails'
 			Set @myError = 116
 			Goto Done
 		End
@@ -427,11 +428,11 @@ AS
 		[Member_Count] int NOT NULL ,
 		[Matching_Member_Count] int NOT NULL ,
 		[Match_Score] float NOT NULL ,
-		[Del_Match_Score] decimal(9, 5) NOT NULL ,
+		[Del_Match_Score] real NOT NULL ,
 		[MassTag_Hit_Count] int NOT NULL ,
 		[Scan_First] int NOT NULL ,
 		[Scan_Last] int NOT NULL ,
-		[ElutionTime] decimal(9,6) NOT NULL ,
+		[ElutionTime] real NOT NULL ,
 		[MT_Avg_GANET] float NULL ,
 		[MT_PNET] float NULL ,
 		[Expression_Ratio] float NOT NULL ,
@@ -538,7 +539,7 @@ AS
 				IsNull(R.Charge_State_Min, 0),
 				IsNull(R.Charge_State_Max, 0),
 				
-				CASE WHEN IsNull(Monoisotopic_Mass,0) > 0 
+				CASE WHEN IsNull(MT.Monoisotopic_Mass,0) > 0 
 				THEN 1E6 * ((R.Class_Mass - RD.Mass_Tag_Mod_Mass) - MT.Monoisotopic_Mass) / MT.Monoisotopic_Mass		-- Mass Error PPM; correcting for mass mods by subtracting Mass_Tag_Mod_Mass
 				ELSE 0 
 				END
@@ -569,7 +570,7 @@ AS
 	If @InternalStdInclusionMode = 1 OR @InternalStdInclusionMode = 2
 	Begin	
 		--
-		-- Step 5c - Populate the temporary table with the NET Locker Matches
+		-- Step 5c - Populate the temporary table with the Internal Standard Matches
 		--			 Do not add new matches for PMTs that are already present
 		--
 		INSERT INTO #UMCMatchResultsSource
@@ -607,7 +608,7 @@ AS
 				TMDID.Fraction, 
 				TMDID.[Replicate], 
 				1 AS InternalStdMatch,
-				NLD.Seq_ID,					-- Mass_Tag_ID
+				ISD.Seq_ID,					-- Mass_Tag_ID
 				IsNull(MT.High_Normalized_Score,0),
 				IsNull(MT.High_Discriminant_Score,0),
 				IsNull(MT.PMT_Quality_Score,0),
@@ -631,17 +632,17 @@ AS
 
 				R.UMC_Ind,
 				R.Member_Count,
-				IsNull(NLD.Matching_Member_Count, 0),
-				IsNull(NLD.Match_Score, -1),
-				IsNull(NLD.Del_Match_Score, 0),
+				IsNull(ISD.Matching_Member_Count, 0),
+				IsNull(ISD.Match_Score, -1),
+				IsNull(ISD.Del_Match_Score, 0),
 				
 				R.MassTag_Hit_Count,
 				R.Scan_First,
 				R.Scan_Last,
 				IsNull(R.ElutionTime, 0),										-- ElutionTime
 				
-				GL.AVG_GANET,		-- Average observed GANET for NET Locker
-				GL.PNET,			-- Predicted NET for mass_tag_ID
+				ISC.AVG_NET,		-- Average observed NET for the Internal Standard
+				ISC.PNET,			-- Predicted NET for the Internal Standard
 
 				CASE WHEN ABS(IsNull(R.Expression_Ratio,0)) < 1E+100 AND ABS(IsNull(R.Expression_Ratio,0)) > 1E-10
 				THEN R.Expression_Ratio
@@ -662,33 +663,33 @@ AS
 				IsNull(R.Charge_State_Min, 0),
 				IsNull(R.Charge_State_Max, 0),
 				
-				CASE WHEN IsNull(Monoisotopic_Mass,0) > 0 
+				CASE WHEN IsNull(MT.Monoisotopic_Mass,0) > 0 
 				THEN 1E6 * ((R.Class_Mass) - MT.Monoisotopic_Mass) / MT.Monoisotopic_Mass		-- Mass Error PPM; correcting for mass mods by subtracting Mass_Tag_Mod_Mass
 				ELSE 0 
 				END
 		FROM T_Quantitation_MDIDs AS TMDID
 	   		INNER JOIN T_FTICR_UMC_Results AS R
 				ON TMDID.MD_ID = R.MD_ID
-			INNER JOIN T_FTICR_UMC_NETLockerDetails AS NLD
-				ON R.UMC_Results_ID = NLD.UMC_Results_ID
-			INNER JOIN T_GANET_Lockers AS GL
-				ON NLD.Seq_ID = GL.Seq_ID
+			INNER JOIN T_FTICR_UMC_InternalStdDetails AS ISD
+				ON R.UMC_Results_ID = ISD.UMC_Results_ID
+			INNER JOIN MT_Main..T_Internal_Std_Components AS ISC 
+				ON ISD.Seq_ID = ISC.Seq_ID
 			INNER JOIN T_Mass_Tags AS MT
-				ON GL.Seq_ID = MT.Mass_Tag_ID
+				ON ISC.Seq_ID = MT.Mass_Tag_ID
 			LEFT OUTER JOIN #UMCMatchResultsSource AS UMRS ON
 				UMRS.TopLevelFraction = TMDID.TopLevelFraction AND
 				UMRS.Fraction = TMDID.Fraction AND
 				UMRS.[Replicate] = TMDID.[Replicate] AND
-				UMRS.Mass_Tag_ID = NLD.Seq_ID
-		WHERE TMDID.Quantitation_ID = @QuantitationID AND NLD.Match_State = 6			-- Only include matches with a state of 6 = Hit
+				UMRS.Mass_Tag_ID = ISD.Seq_ID
+		WHERE TMDID.Quantitation_ID = @QuantitationID AND ISD.Match_State = 6			-- Only include matches with a state of 6 = Hit
 			  AND UMRS.Mass_Tag_ID IS NULL
-		ORDER BY TMDID.TopLevelFraction, TMDID.Fraction, NLD.Seq_ID, TMDID.[Replicate]
+		ORDER BY TMDID.TopLevelFraction, TMDID.Fraction, ISD.Seq_ID, TMDID.[Replicate]
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 		--
 		If @myError <> 0 
 		Begin
-			Set @message = 'Error while populating the #UMCMatchResultsSource temporary table from T_FTICR_UMC_NETLockerDetails'
+			Set @message = 'Error while populating the #UMCMatchResultsSource temporary table from T_FTICR_UMC_InternalStdDetails'
 			Set @myError = 119
 			Goto Done
 		End
@@ -756,8 +757,8 @@ AS
 		[UMCIonCountTotal] int NULL ,
 		[UMCIonCountMatch] int NULL ,
 		[UMCIonCountMatchInUMCsWithSingleHit] int NULL ,
-		[FractionScansMatchingSingleMT] decimal(9, 8) NULL ,
-		[UMCMultipleMTHitCountAvg] decimal(9, 5) NULL ,
+		[FractionScansMatchingSingleMT] real NULL ,
+		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
 		[UMCMultipleMTHitCountMax] int NULL ,
@@ -769,16 +770,16 @@ AS
 		[NET_Error_Pred_Avg] float null ,
 		[ER_WeightedAvg] float NULL ,
 		[ER_StDev] float NULL ,
-		[ER_Charge_State_Basis_Count_Avg] decimal(9, 5) NOT NULL ,
+		[ER_Charge_State_Basis_Count_Avg] real NOT NULL ,
 		[MTAbundanceLight] float NOT NULL ,
 		[MTAbundanceHeavy] float NOT NULL ,
 		[ER_Recomputed] float NOT NULL ,
 		[ER_ToUse] float NOT NULL ,
 		[ScanMinimum] int NOT NULL ,
 		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] decimal(9,6) NOT NULL ,
-		[NET_Maximum] decimal(9,6) NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] decimal(9,5) NOT NULL ,
+		[NET_Minimum] real NOT NULL ,
+		[NET_Maximum] real NOT NULL ,
+		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
 		[Charge_State_Min] tinyint NOT NULL ,
 		[Charge_State_Max] tinyint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
@@ -855,9 +856,9 @@ AS
 					THEN Matching_Member_Count
 					ELSE 0
 					END),									-- UMCIonCountMatchInUMCsWithSingleHit
-			CONVERT(decimal(9, 8), 0),						-- FractionScansMatchingSingleMT
-			AVG(CONVERT(decimal(9, 5), MassTag_Hit_Count)),
-			STDEV(CONVERT(decimal(9, 5), MassTag_Hit_Count)),	-- UMCMultipleMTHitCountStDev; this will be Null if only one UMC matched this mass tag
+			CONVERT(real, 0),						-- FractionScansMatchingSingleMT
+			AVG(CONVERT(real, MassTag_Hit_Count)),
+			STDEV(CONVERT(real, MassTag_Hit_Count)),	-- UMCMultipleMTHitCountStDev; this will be Null if only one UMC matched this mass tag
 			MIN(MassTag_Hit_Count), 
 			MAX(MassTag_Hit_Count),		-- UMCMultipleMTHitCountMax
 			AVG(Match_Score),			-- Match_Score_Avg: Match_Score holds the likelihood of the match, a value between 0 and 1, or -1 if undefined
@@ -874,7 +875,7 @@ AS
 			ELSE 0
 			END,				-- ER_StDev; weighted average
 
-			Avg(Convert(decimal(9, 5),Expression_Ratio_Charge_State_Basis_Count)),		-- ER_Charge_State_Basis_Count_Avg
+			Avg(Convert(real, Expression_Ratio_Charge_State_Basis_Count)),		-- ER_Charge_State_Basis_Count_Avg
 
 			SUM(CASE WHEN ABS(Expression_Ratio) > 0
 				THEN MTAbundance						-- MTAbundanceLight: Sum of Light Abundance, but only if Expression_Ratio > 0
@@ -891,7 +892,7 @@ AS
 			Max(Scan_Last),
 			Min(ElutionTime),												-- NET_Minimum
 			Max(ElutionTime),												-- NET_Maximum
-			Avg(Convert(decimal(9, 5), Class_Stats_Charge_Basis)),			-- Class_Stats_Charge_Basis_Avg
+			Avg(Convert(real, Class_Stats_Charge_Basis)),					-- Class_Stats_Charge_Basis_Avg
 			Min(Charge_State_Min),
 			Max(Charge_State_Max),
 			AVG(MassErrorPPM),
@@ -918,9 +919,9 @@ AS
 	Else
 	Begin
 		If @InternalStdInclusionMode = 1
-			set @MessageNoResults = @MessageNoResults + 'T_FTICR_UMC_Results, T_FTICR_UMC_ResultDetails, and T_FTICR_UMC_NETLockerDetails'
+			set @MessageNoResults = @MessageNoResults + 'T_FTICR_UMC_Results, T_FTICR_UMC_ResultDetails, and T_FTICR_UMC_InternalStdDetails'
 		Else
-			set @MessageNoResults = @MessageNoResults + 'T_FTICR_UMC_Results and T_FTICR_UMC_NETLockerDetails'
+			set @MessageNoResults = @MessageNoResults + 'T_FTICR_UMC_Results and T_FTICR_UMC_InternalStdDetails'
 	End
 	
 	set @MessageNoResults = @MessageNoResults + ' corresponding to the MDID(s) for Quantitation_ID = ' + convert(varchar(19), @QuantitationID) + ' listed in T_Quantitation_MDIDs'
@@ -1267,7 +1268,7 @@ AS
 							Set @StatsAreValid = 0
 
 							-- See if enough data points are present for normalization using regression
-							If @StatDataCount - @NumSmallDataToDiscard - @NumLargeDataToDiscard >= @MinimumDataPointsForRegressionNormalization		-- <g>
+							If @StatDataCount - @NumSmallDataToDiscard - @NumLargeDataToDiscard >= @MinimumDataPointsForRegressionNormalization		-- <g>
 							Begin
 															
 								Set @StatSql = ''
@@ -1611,7 +1612,7 @@ AS
 		[MTAbundanceAvg] float NULL ,
 		[MTAbundanceStDev] float NULL ,
 		[MTAbundanceLightPlusHeavyAvg] float NULL ,
-		[Member_Count_Used_For_Abu_Avg] decimal(9, 5) NULL ,
+		[Member_Count_Used_For_Abu_Avg] real NULL ,
 		[Match_Score_Avg] float NULL ,
 		[Del_Match_Score_Avg] float NULL ,
 		[NET_Error_Obs_Avg] float NULL ,
@@ -1621,19 +1622,19 @@ AS
 		[ER_Charge_State_Basis_Count_Avg] float NULL ,
 		[ScanMinimum] int NOT NULL ,
 		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] decimal(9,6) NOT NULL ,
-		[NET_Maximum] decimal(9,6) NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] decimal(9,5) NOT NULL ,
+		[NET_Minimum] real NOT NULL ,
+		[NET_Maximum] real NOT NULL ,
+		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
 		[Charge_State_Min] tinyint NOT NULL ,
 		[Charge_State_Max] tinyint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
-		[UMCMatchCountAvg] decimal(9, 5) NULL ,
-		[UMCIonCountTotalAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchInUMCsWithSingleHitAvg] decimal(9, 5) NULL ,
-		[FractionScansMatchingSingleMTAvg] decimal(9, 8) NULL ,
-		[FractionScansMatchingSingleMTStDev] decimal(9, 5) NULL ,
-		[UMCMultipleMTHitCountAvg] decimal(9, 5) NULL ,
+		[UMCMatchCountAvg] real NULL ,
+		[UMCIonCountTotalAvg] real NULL ,
+		[UMCIonCountMatchAvg] real NULL ,
+		[UMCIonCountMatchInUMCsWithSingleHitAvg] real NULL ,
+		[FractionScansMatchingSingleMTAvg] real NULL ,
+		[FractionScansMatchingSingleMTStDev] real NULL ,
+		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
 		[UMCMultipleMTHitCountMax] int NULL ,
@@ -1682,7 +1683,7 @@ AS
 			IsNull(STDEV(MTAbundance), 0),						-- MTAbundanceStDev
 
 			AVG(MTAbundanceLightPlusHeavy),						-- MTAbundanceLightPlusHeavyAvg
-			AVG(CONVERT(decimal(9, 5), Member_Count_Used_For_Abu)),				-- Member_Count_Used_For_Abu_Avg; Avg, since we're averaging MTAbundance
+			AVG(CONVERT(real, Member_Count_Used_For_Abu)),		-- Member_Count_Used_For_Abu_Avg; Avg, since we're averaging MTAbundance
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
 			AVG(NET_Error_Obs_Avg),
@@ -1707,10 +1708,10 @@ AS
 			AVG(Class_Stats_Charge_Basis_Avg),
 			Min(Charge_State_Min), Max(Charge_State_Max),
 			AVG(MassErrorPPMAvg),
-			AVG(CONVERT(decimal(9, 5), UMCMatchCount)),			-- UMCMatchCountAvg
-			AVG(CONVERT(decimal(9, 5), UMCIonCountTotal)),		-- UMCIonCountTotalAvg
-			AVG(CONVERT(decimal(9, 5), UMCIonCountMatch)),		-- UMCIonCountMatchAvg
-			AVG(CONVERT(decimal(9, 5), UMCIonCountMatchInUMCsWithSingleHit)),	-- UMCIonCountMatchInUMCsWithSingleHitAvg
+			AVG(CONVERT(real, UMCMatchCount)),					-- UMCMatchCountAvg
+			AVG(CONVERT(real, UMCIonCountTotal)),				-- UMCIonCountTotalAvg
+			AVG(CONVERT(real, UMCIonCountMatch)),				-- UMCIonCountMatchAvg
+			AVG(CONVERT(real, UMCIonCountMatchInUMCsWithSingleHit)),	-- UMCIonCountMatchInUMCsWithSingleHitAvg
 			AVG(FractionScansMatchingSingleMT),					-- FractionScansMatchingSingleMTAvg
 			IsNull(STDEV(FractionScansMatchingSingleMT), 0),	-- FractionScansMatchingSingleMTStDev
 			AVG(UMCMultipleMTHitCountAvg),						-- UMCMultipleMTHitCountAvg
@@ -1718,7 +1719,7 @@ AS
 			MIN(UMCMultipleMTHitCountMin),						-- UMCMultipleMTHitCountMin
 			MAX(UMCMultipleMTHitCountMin),						-- UMCMultipleMTHitCountMax
 			Count([Replicate])									-- ReplicateCount
-	FROM  #UMCMatchResultsByJob
+	FROM #UMCMatchResultsByJob
 	WHERE UseValue = 1
 	GROUP BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
 	ORDER BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
@@ -1768,24 +1769,24 @@ AS
 		[ER_Charge_State_Basis_Count_Avg] float NULL ,
 		[ScanMinimum] int NOT NULL ,
 		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] decimal(9,6) NOT NULL ,
-		[NET_Maximum] decimal(9,6) NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] decimal(9,5) NOT NULL ,
+		[NET_Minimum] real NOT NULL ,
+		[NET_Maximum] real NOT NULL ,
+		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
 		[Charge_State_Min] tinyint NOT NULL ,
 		[Charge_State_Max] tinyint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
-		[UMCMatchCountAvg] decimal(9, 5) NULL ,
-		[UMCMatchCountStDev] decimal(9, 5) NULL ,
-		[UMCIonCountTotalAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchInUMCsWithSingleHitAvg] decimal(9, 5) NULL ,
-		[FractionScansMatchingSingleMTAvg] decimal(9, 8) NULL ,
-		[FractionScansMatchingSingleMTStDev] decimal(9, 5) NULL ,
-		[UMCMultipleMTHitCountAvg] decimal(9, 5) NULL ,
+		[UMCMatchCountAvg] real NULL ,
+		[UMCMatchCountStDev] real NULL ,
+		[UMCIonCountTotalAvg] real NULL ,
+		[UMCIonCountMatchAvg] real NULL ,
+		[UMCIonCountMatchInUMCsWithSingleHitAvg] real NULL ,
+		[FractionScansMatchingSingleMTAvg] real NULL ,
+		[FractionScansMatchingSingleMTStDev] real NULL ,
+		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
 		[UMCMultipleMTHitCountMax] int NULL ,
-		[ReplicateCountAvg] decimal(9, 5) NULL ,
+		[ReplicateCountAvg] real NULL ,
 		[ReplicateCountMin] smallint NULL ,
 		[ReplicateCountMax] smallint NULL ,
 		[FractionCount] smallint NULL ,
@@ -1864,7 +1865,7 @@ AS
 			AVG(FractionScansMatchingSingleMTAvg), AVG(FractionScansMatchingSingleMTStDev),
 			AVG(UMCMultipleMTHitCountAvg), AVG(UMCMultipleMTHitCountStDev),
 			MIN(UMCMultipleMTHitCountMin), MAX(UMCMultipleMTHitCountMax),
-			AVG(CONVERT(decimal(9, 5), ReplicateCount)), MIN(ReplicateCount), MAX(ReplicateCount),
+			AVG(CONVERT(real, ReplicateCount)), MIN(ReplicateCount), MAX(ReplicateCount),
 			COUNT(Fraction), MIN(Fraction), MAX(Fraction)
 	FROM  #UMCMatchResultsByFraction
 	GROUP BY TopLevelFraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
@@ -1908,7 +1909,7 @@ AS
 		[Mass_Tag_ID] int NOT NULL ,
 		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
 		[Protein_Count] int NOT NULL ,
-		[PMT_Quality_Score] decimal(9,5) NOT NULL ,
+		[PMT_Quality_Score] real NOT NULL ,
 		[Cleavage_State] tinyint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
 		[Fragment_Span] smallint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
 		[MTAbundanceAvg] float NULL ,						-- Sum of MT Abundance values across fractions
@@ -1924,27 +1925,27 @@ AS
 		[ER_Charge_State_Basis_Count_Avg] float NULL ,
 		[ScanMinimum] int NOT NULL ,
 		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] decimal(9,6) NOT NULL ,
-		[NET_Maximum] decimal(9,6) NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] decimal(9,5) NOT NULL ,
+		[NET_Minimum] real NOT NULL ,
+		[NET_Maximum] real NOT NULL ,
+		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
 		[Charge_State_Min] tinyint NOT NULL ,
 		[Charge_State_Max] tinyint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
-		[UMCMatchCountAvg] decimal(9, 5) NULL ,
-		[UMCMatchCountStDev] decimal(9, 5) NULL ,
-		[UMCIonCountTotalAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchAvg] decimal(9, 5) NULL ,
-		[UMCIonCountMatchInUMCsWithSingleHitAvg] decimal(9, 5) NULL ,
-		[FractionScansMatchingSingleMTAvg] decimal(9, 8) NULL ,
-		[FractionScansMatchingSingleMTStDev] decimal(9, 5) NULL ,
-		[UMCMultipleMTHitCountAvg] decimal(9, 5) NULL ,
+		[UMCMatchCountAvg] real NULL ,
+		[UMCMatchCountStDev] real NULL ,
+		[UMCIonCountTotalAvg] real NULL ,
+		[UMCIonCountMatchAvg] real NULL ,
+		[UMCIonCountMatchInUMCsWithSingleHitAvg] real NULL ,
+		[FractionScansMatchingSingleMTAvg] real NULL ,
+		[FractionScansMatchingSingleMTStDev] real NULL ,
+		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
 		[UMCMultipleMTHitCountMax] int NULL ,
-		[ReplicateCountAvg] decimal(9, 5) NULL ,
+		[ReplicateCountAvg] real NULL ,
 		[ReplicateCountMin] smallint NULL ,
 		[ReplicateCountMax] smallint NULL ,
-		[FractionCountAvg] decimal(9, 5) NULL ,
+		[FractionCountAvg] real NULL ,
 		[FractionMin] smallint NULL ,
 		[FractionMax] smallint NULL ,
 		[TopLevelFractionCount] smallint NULL ,
@@ -2032,7 +2033,7 @@ AS
 			AVG(UMCMultipleMTHitCountAvg), AVG(UMCMultipleMTHitCountStDev),
 			MIN(UMCMultipleMTHitCountMin), MAX(UMCMultipleMTHitCountMax),
 			AVG(ReplicateCountAvg), MIN(ReplicateCountMin), MAX(ReplicateCountMax),
-			AVG(CONVERT(decimal(9, 5), FractionCount)),	MIN(FractionMin), MAX(FractionMax),
+			AVG(CONVERT(real, FractionCount)),	MIN(FractionMin), MAX(FractionMax),
 			COUNT(TopLevelFraction), MIN(TopLevelFraction), MAX(TopLevelFraction),
 			CONVERT(float, 0)
 	FROM	#UMCMatchResultsByTopLevelFraction AS UMR INNER JOIN
@@ -2138,25 +2139,25 @@ AS
 
 	CREATE TABLE #ProteinAbundanceSummary (
 		[Ref_ID] int NOT NULL ,
-		[ReplicateCountAvg] decimal(9, 5) NULL ,
-		[ReplicateCountStDev] decimal(9, 5) NULL ,
+		[ReplicateCountAvg] real NULL ,
+		[ReplicateCountStDev] real NULL ,
 		[ReplicateCountMax] smallint NULL ,
-		[FractionCountAvg] decimal(9, 5) NULL ,
+		[FractionCountAvg] real NULL ,
 		[FractionCountMax] smallint NULL ,
-		[TopLevelFractionCountAvg] decimal(9, 5) NULL ,
+		[TopLevelFractionCountAvg] real NULL ,
 		[TopLevelFractionCountMax] smallint NULL ,
 		[ObservedMassTagCount] int NULL ,
 		[ObservedInternalStdCount] int NULL ,
 		[Mass_Error_PPM_Avg] float NULL ,
-		[Protein_Count_Avg] decimal(9, 5) NULL ,
+		[Protein_Count_Avg] real NULL ,
 		[Full_Enzyme_Count] int NULL ,
 		[Full_Enzyme_No_Missed_Cleavage_Count] int NULL ,
 		[Partial_Enzyme_Count] int NULL ,
 		[MassTagCountUsedForAbundanceAvg] int NULL ,
 		[MassTagMatchingIonCount] int NULL ,
 		[MassTagMatchingIonCountInUMCsWithSingleHitCount] int NULL ,
-		[FractionScansMatchingSingleMassTag] decimal(9, 8) NULL ,
-		[UMCMultipleMTHitCountAvg] decimal(9, 5) NULL ,
+		[FractionScansMatchingSingleMassTag] real NULL ,
+		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
 		[UMCMultipleMTHitCountMax] int NULL ,
@@ -2170,10 +2171,10 @@ AS
 		[ER_Maximum] float NULL ,
 		[ER_StDev] float NULL ,
 		[Protein_Coverage_Residue_Count] int NULL ,
-		[Protein_Coverage_Fraction] decimal(9, 5) NULL ,
-		[Protein_Coverage_Fraction_High_Abundance] decimal(9, 5) NULL ,
+		[Protein_Coverage_Fraction] real NULL ,
+		[Protein_Coverage_Fraction_High_Abundance] real NULL ,
 		[Potential_Protein_Coverage_Residue_Count] int NULL ,
-		[Potential_Protein_Coverage_Fraction] decimal(9, 5) NULL ,
+		[Potential_Protein_Coverage_Fraction] real NULL ,
 		[Potential_Full_Enzyme_Count] int NULL ,
 		[Potential_Partial_Enzyme_Count] int NULL
 	) ON [PRIMARY]
@@ -2220,7 +2221,7 @@ AS
 			MAX(ReplicateCountAvg),
 			AVG(FractionCountAvg),
 			MAX(FractionMax - FractionMin + 1),
-			AVG(CONVERT(decimal(9, 5), TopLevelFractionCount)),
+			AVG(CONVERT(real, TopLevelFractionCount)),
 			MAX(TopLevelFractionMax - TopLevelFractionMin + 1),
 			SUM(CASE WHEN InternalStdMatch = 0 THEN 1 ELSE 0 END),				-- ObservedMassTagCount
 			SUM(CASE WHEN InternalStdMatch = 1 THEN 1 ELSE 0 END),				-- ObservedInternalStdCount
@@ -2403,14 +2404,17 @@ AS
 	If @ORFCoverageComputationLevel > 0
 	Begin
 
+		if exists (select * from dbo.sysobjects where id = object_id(N'[#Protein_Coverage]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [#Protein_Coverage]
+
 		CREATE TABLE #Protein_Coverage (
 			[Ref_ID] int NOT NULL ,
 			[Protein_Sequence] varchar(8000) NOT NULL, 				-- Used to compute protein coverage
 			[Protein_Coverage_Residue_Count] int NULL,
-			[Protein_Coverage_Fraction] decimal(9, 5) NULL,
-			[Protein_Coverage_Fraction_High_Abundance] decimal(9, 5) NULL,
+			[Protein_Coverage_Fraction] real NULL,
+			[Protein_Coverage_Fraction_High_Abundance] real NULL,
 			[Potential_Protein_Coverage_Residue_Count] int NULL,
-			[Potential_Protein_Coverage_Fraction] decimal(9, 5) NULL
+			[Potential_Protein_Coverage_Fraction] real NULL
 		) ON [PRIMARY]
 
 		CREATE UNIQUE CLUSTERED INDEX #IX__TempTable__ProteinCoverage_Ref_ID ON #Protein_Coverage([Ref_ID]) ON [PRIMARY]

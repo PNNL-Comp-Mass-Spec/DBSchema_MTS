@@ -18,6 +18,7 @@ CREATE TABLE [T_Match_Making_Description] (
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_PMT_Quality_Score] DEFAULT (0),
 	[Experiment_Filter] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Filter] DEFAULT (''),
 	[Experiment_Exclusion_Filter] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Exclusion_Filter] DEFAULT (''),
+	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Limit_To_PMTs_From_Dataset] DEFAULT (0),
 	[MD_UMC_TolerancePPM] [numeric](9, 4) NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_TolerancePPM] DEFAULT (0),
 	[MD_UMC_Count] [int] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_Count] DEFAULT (0),
 	[MD_NetAdj_TolerancePPM] [numeric](9, 4) NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_TolerancePPM] DEFAULT (0),

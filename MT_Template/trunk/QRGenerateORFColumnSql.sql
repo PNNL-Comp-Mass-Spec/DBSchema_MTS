@@ -17,15 +17,15 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 **
 **  Parameters: @OrfColumnSql output parameter
 **
-**  Auth: mem
-**	Date: 04/09/2004
-**
-**	Updated: 06/06/2004 mem - Added ORF_Coverage_Fraction_High_Abundance column
-**			 07/10/2004 mem - Added Match_Score_Average column
-**			 10/05/2004 mem - Updated for new MTDB schema
-**			 11/09/2004 mem - Renamed the match score columns to SLiC Score, removed some of the legacy, less useful columns, and changed coverage values to be percents rather than fractions
-**			 05/24/2005 mem - Added column InternalStdCountUniqueObserved and updated protein description linking method
-**			 05/25/2005 mem - Added underscores at word boundaries in columns QD.SampleName, QR.MassTagCountUniqueObserved, and QR.MassTagCountUsedForAbundanceAvg
+**  Auth:	mem
+**	Date:	04/09/2004
+**			06/06/2004 mem - Added ORF_Coverage_Fraction_High_Abundance column
+**			07/10/2004 mem - Added Match_Score_Average column
+**			10/05/2004 mem - Updated for new MTDB schema
+**			11/09/2004 mem - Renamed the match score columns to SLiC Score, removed some of the legacy, less useful columns, and changed coverage values to be percents rather than fractions
+**			05/24/2005 mem - Added column InternalStdCountUniqueObserved and updated protein description linking method
+**			05/25/2005 mem - Added underscores at word boundaries in columns QD.SampleName, QR.MassTagCountUniqueObserved, and QR.MassTagCountUsedForAbundanceAvg
+**			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **
 ****************************************************/
 (
@@ -34,18 +34,13 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 )
 AS
 
-	Declare @sql varchar(2048),
-			@OrfDescriptionSqlJoin varchar(1024)
-
-	-- Generate the ORF DB Join SQL; returns '' if a valid ORF DB is not defined
-	Exec QRGenerateORFDBJoinSql @OrfDescriptionSqlJoin = @OrfDescriptionSqlJoin OUTPUT
+	Declare @sql varchar(2048)
 	
 	Set @sql = ''
 	Set @sql = @sql + 'SELECT QD.SampleName AS Sample_Name,'
 	Set @sql = @sql + 'QR.Ref_ID,'
 	Set @sql = @sql + 'T_Proteins.Reference,'
-	If Len(@OrfDescriptionSqlJoin) > 0
-		Set @sql = @sql + 'ORFInfo.Protein_Description,'
+	Set @sql = @sql + 'T_Proteins.Description AS Protein_Description,'
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
 	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) AS SLiC_Score_Avg,'
@@ -76,7 +71,6 @@ AS
 	Set @OrfColumnSql = @sql
 	
 	Return 0
-
 
 
 GO

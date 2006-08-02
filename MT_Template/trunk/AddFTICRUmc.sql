@@ -7,21 +7,25 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[AddFTICRUm
 drop procedure [dbo].[AddFTICRUmc]
 GO
 
+
 CREATE Procedure dbo.AddFTICRUmc
 /****************************************************	
-**	adds row to the T_FTICR_UMC_Results table
-**	returns 0 if success; error number on failure
-**
-**	Date: 05/22/2003 Author: mem
+**	Adds row to the T_FTICR_UMC_Results table
 **  Modelled after AddFTICRPeak
-**  
-**  Updated: 06/27/2003 mem
-**			 08/11/2003 mem
-**			 10/26/2003 mem
-**			 12/31/2003 mem - Added @GANETLockerCount
-**			 06/29/2004 mem - Added @ExpressionRatioStDev, @ExpressionRatioChargeStateBasisCount, 
-**								@ExpressionRatioMemberBasisCount, and @MemberCountUsedForAbu
-**			 09/21/2004 mem - Switched from FT_ID to FPR_Type_ID
+**
+**	Returns 0 if success; error number on failure
+**
+**	Auth:	mem
+**	Date:	05/22/2003
+**			06/27/2003 mem
+**			08/11/2003 mem
+**			10/26/2003 mem
+**			12/31/2003 mem - Added @GANETLockerCount
+**			06/29/2004 mem - Added @ExpressionRatioStDev, @ExpressionRatioChargeStateBasisCount, 
+**							 @ExpressionRatioMemberBasisCount, and @MemberCountUsedForAbu
+**			09/21/2004 mem - Switched from FT_ID to FPR_Type_ID
+**			12/20/2005 mem - Renamed column GANET_Locker_Count to InternalStd_Hit_Count
+**
 ****************************************************/
 (
 	@MDID INT,					--reference to T_Match_Making_Description table
@@ -58,9 +62,9 @@ CREATE Procedure dbo.AddFTICRUmc
 	@PeakFPRType INT,			--reference to T_FPR_Type_Name table (field FPR_Type_ID)
 	@MassTagHitCount INT,		--number of mass tag ID's matching this UMC
 	@PairUMCInd INT,			--pair index
-	@UMCResultsID INT OUTPUT,	--ID of the newly added row in T_FTICR_UMC_Results
+	@UMCResultsID INT OUTPUT,				--ID of the newly added row in T_FTICR_UMC_Results
 	@ClassStatsChargeBasis TINYINT=NULL,	-- Charge used to determine the class mass and abundance; 0 if all charges were used; if Null, then if @ChargeStateMin = @ChargeStateMax, then will set to @ChargeStateMin; otherwise, will leave Null
-	@GANETLockerCount INT=0,		--number of GANET lockers matching this UMC
+	@GANETLockerCount INT=0,				-- number of Internal Standards (aka GANET lockers) matching this UMC
 	@ExpressionRatioStDev FLOAT=Null,							-- Standard deviation for the pair's expression ratio
 	@ExpressionRatioChargeStateBasisCount SMALLINT=Null,		-- Number of charge states used to compute expression ratio
 	@ExpressionRatioMemberBasisCount INT=Null,					-- Number of members used to compute expression ratio
@@ -94,7 +98,7 @@ BEGIN
 		 Class_Stats_Charge_Basis, Charge_State_Min, Charge_State_Max, Charge_State_MaxAbu,
 		 Fit_Average, Fit_Min, Fit_Max, Fit_StDev, 
 		 ElutionTime, Expression_Ratio, FPR_Type_ID, 
-		 Pair_UMC_Ind, MassTag_Hit_Count, GANET_Locker_Count,
+		 Pair_UMC_Ind, MassTag_Hit_Count, InternalStd_Hit_Count,
 		 Expression_Ratio_StDev,
 		 Expression_Ratio_Charge_State_Basis_Count,
 		 Expression_Ratio_Member_Basis_Count,
@@ -120,6 +124,7 @@ BEGIN
 END
 	
 RETURN @returnvalue
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

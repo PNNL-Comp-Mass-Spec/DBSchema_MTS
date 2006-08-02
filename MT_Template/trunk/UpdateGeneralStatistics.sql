@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -20,16 +20,21 @@ CREATE Procedure dbo.UpdateGeneralStatistics
 **	Parameters:
 **	
 **
-**		Auth: grk
-**		Date: 6/28/2001
-**			  9/21/2004 mem - Updated for new MTDB schema
-**			  9/29/2004 mem - Added Previous_Value column to T_General_Statistics
-**			 10/08/2004 mem - Added PMT quality score-based statistics and more Order By statements
-**			 02/05/2005 mem - Switched to using V_Table_Row_Counts for row count stats
-**							- Removed count of peptides by State_ID in T_Peptides
-**							- Optimized the 'Total PMTs by Organism DB' query
-**			 05/20/2005 mem - Updated logic to only use entries from T_Mass_Tags with Internal_Standard_Only = 0
-**							- Now listing number of active NET_Locker entries in T_GANET_Lockers
+**	Auth:	grk
+**	Date:	06/28/2001
+**			09/21/2004 mem - Updated for new MTDB schema
+**			09/29/2004 mem - Added Previous_Value column to T_General_Statistics
+**			10/08/2004 mem - Added PMT quality score-based statistics and more Order By statements
+**			02/05/2005 mem - Switched to using V_Table_Row_Counts for row count stats
+**						   - Removed count of peptides by State_ID in T_Peptides
+**						   - Optimized the 'Total PMTs by Organism DB' query
+**			05/20/2005 mem - Updated logic to only use entries from T_Mass_Tags with Internal_Standard_Only = 0
+**						   - Now listing number of active NET_Locker entries in T_GANET_Lockers
+**			12/15/2005 mem - Removed reference to T_GANET_Lockers
+**			03/04/2006 mem - Now considering option GeneralStatisticsIncludesExtendedInfo in T_Process_Step_Control
+**			03/13/2006 mem - Switched to reporting stats by minimum PMT Quality Score rather than for each PMT Quality Score
+**						   - Added protein stats
+**			06/04/2006 mem - Now examining Protein_Collection_List and Protein_Options_List in T_Analysis_Description
 **    
 *****************************************************/
 As
@@ -42,7 +47,22 @@ As
 
 	declare @MTCount int
 	declare @MTCountConfirmed int
+	declare @result int
+	
+	Declare @GeneralStatisticsIncludesExtendedInfo tinyint
+	Set @GeneralStatisticsIncludesExtendedInfo = 0
 
+	Declare @MinimumPMTQS real
+	Declare @MinimumPMTQSStart real
+	Declare @continue tinyint
+
+	-- Lookup the value of GeneralStatisticsIncludesExtendedInfo in T_Process_Step_Control
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'GeneralStatisticsIncludesExtendedInfo')
+	if @result > 0
+		Set @GeneralStatisticsIncludesExtendedInfo = 1
+
+	
 	-- Create a temporary table to hold the current statistics
 	--
 	CREATE TABLE #StatsSaved (
@@ -85,80 +105,225 @@ As
 	VALUES ('Mass Tags', 'Confirmed PMTs', @MTCountConfirmed)
 
 
-	-- Count of PMTs by PMT Quality Score
-	--
-	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'Mass Tags' AS category, 
-			'PMTs With PMT Quality Score: ' + Convert(varchar(9), PMT_Quality_Score), 
-			COUNT(Mass_Tag_ID) AS Value
+	-- Stats by minimum PMT Quality Score
+	-- Create two temporary tables
+	CREATE TABLE #TmpPMTQualityScoreValues (
+		PMT_Quality_Score real
+	)
+
+	CREATE TABLE #TmpGeneralStatisticsData (
+		Stat_ID int,
+		PMT_Quality_Score_Minimum real,
+		Category varchar(128),
+		Label varchar(128),
+		Value int
+	)
+
+	-- Next, populate the temporary table
+	INSERT INTO #TmpPMTQualityScoreValues (PMT_Quality_Score)
+	SELECT DISTINCT PMT_Quality_Score
 	FROM T_Mass_Tags
-	WHERE Internal_Standard_Only = 0
-	GROUP BY PMT_Quality_Score
-	ORDER BY PMT_Quality_Score
+	WHERE NOT PMT_Quality_Score IS NULL
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
 
-	-- Count of Modified PMTs by PMT Quality Score
+	-- Determine the minimum PMT Quality Score value
+	Set @MinimumPMTQSStart = 0
+	SELECT @MinimumPMTQSStart = MIN(PMT_Quality_Score)
+	FROM #TmpPMTQualityScoreValues
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
+	
+	Set @MinimumPMTQS = @MinimumPMTQSStart
+	Set @Continue = 1
+	While @Continue = 1
+	Begin
+		-- Compute the peptides stats for each PMT Quality Score value
+
+		-- Count of PMTs by PMT Quality Score
+		--
+		INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+		SELECT	0 AS Stat_ID,
+				@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+				'Mass Tags' AS category, 
+				'PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
+				COUNT(Mass_Tag_ID) AS Value
+		FROM T_Mass_Tags
+		WHERE Internal_Standard_Only = 0 AND 
+			  PMT_Quality_Score >= @MinimumPMTQS
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+
+		-- Count of Modified PMTs by PMT Quality Score
+		--
+		INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+		SELECT	1 AS Stat_ID,
+				@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+				'Mass Tags' AS category, 
+				'Modified PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
+				COUNT(Mass_Tag_ID) AS Value
+		FROM T_Mass_Tags
+		WHERE Internal_Standard_Only = 0 AND Mod_Count > 0 AND 
+			  PMT_Quality_Score >= @MinimumPMTQS
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+
+		-- Strict filters peptide count
+		INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+		SELECT	2 AS Stat_ID,
+				@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+				'Mass Tags' AS category, 
+				'PMTs With Obs Count >=4 and PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
+				COUNT(Mass_Tag_ID) AS Value
+		FROM T_Mass_Tags
+		WHERE Internal_Standard_Only = 0 AND Peptide_Obs_Count_Passing_Filter >= 4 AND 
+			  PMT_Quality_Score >= @MinimumPMTQS
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+	      
+		If @GeneralStatisticsIncludesExtendedInfo = 1
+		Begin
+			-- Count of Tryptic PMTs by PMT Quality Score
+			--
+			INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+			SELECT	3 AS Stat_ID,
+					@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+					'Mass Tags' AS category, 
+					'Tryptic PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
+					COUNT(DISTINCT Mass_Tag_ID) AS Value
+			FROM (	SELECT T_Mass_Tags.Mass_Tag_ID, 
+						   MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
+					FROM T_Mass_Tags INNER JOIN
+						 T_Mass_Tag_to_Protein_Map ON 
+						 T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
+					WHERE Internal_Standard_Only = 0 AND PMT_Quality_Score >= @MinimumPMTQS
+					GROUP BY T_Mass_Tags.Mass_Tag_ID
+				) LookupQ
+			WHERE Cleavage_State_Max = 2 
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+
+			-- Count of Partially Tryptic PMTs by PMT Quality Score
+			--
+			INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+			SELECT	4 AS Stat_ID,
+					@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+					'Mass Tags' AS category, 
+					'Partially Tryptic PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label,
+					COUNT(DISTINCT Mass_Tag_ID) AS Value
+			FROM (	SELECT T_Mass_Tags.Mass_Tag_ID, 
+						   MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
+					FROM T_Mass_Tags INNER JOIN
+						 T_Mass_Tag_to_Protein_Map ON 
+						 T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
+					WHERE Internal_Standard_Only = 0 AND PMT_Quality_Score >= @MinimumPMTQS
+					GROUP BY T_Mass_Tags.Mass_Tag_ID
+				) LookupQ
+			WHERE Cleavage_State_Max = 1 
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+		End
+
+		-- Lookup next PMT_Quality_Score value		
+		SELECT TOP 1 @MinimumPMTQS = PMT_Quality_Score
+		FROM #TmpPMTQualityScoreValues
+		WHERE PMT_Quality_Score > @MinimumPMTQS
+		ORDER BY PMT_Quality_Score
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+		
+		If @myRowCount = 0
+			Set @Continue = 0
+	End
+	
+	-- Copy the new statistics from #TmpGeneralStatisticsData to T_General_Statistics
+	INSERT INTO T_General_Statistics (Category, Label, Value)
+	SELECT Category, Label, Value
+	FROM #TmpGeneralStatisticsData 
+	ORDER BY Stat_ID, PMT_Quality_Score_Minimum
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+	
+	-- Protein count with 1 or more PMT Tag (by MS/MS)
 	--
 	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'Mass Tags' AS category, 
-			'Modified PMTs With PMT Quality Score: ' + Convert(varchar(9), PMT_Quality_Score), 
-			COUNT(Mass_Tag_ID) AS Value
-	FROM T_Mass_Tags
-	WHERE Internal_Standard_Only = 0 AND Mod_Count > 0
-	GROUP BY PMT_Quality_Score
-	ORDER BY PMT_Quality_Score
-
-
-	-- Count of Tryptic PMTs by PMT Quality Score
+	SELECT	'Proteins' AS category, 
+			'Protein Count With at least 1 PMT Tag' AS label, 
+			COUNT(DISTINCT MTPM.Ref_ID) AS Value
+	FROM T_Mass_Tag_to_Protein_Map MTPM INNER JOIN
+		 T_Mass_Tags MT ON MTPM.Mass_Tag_ID = MT.Mass_Tag_ID
+	WHERE MT.Internal_Standard_Only = 0
 	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
+	
+	
+	-- Clear #TmpPMTQualityScoreValues
+	TRUNCATE Table #TmpGeneralStatisticsData
+	
+	Set @MinimumPMTQS = @MinimumPMTQSStart
+	Set @Continue = 1
+	While @Continue = 1
+	Begin
+		-- Compute the protein stats for each PMT Quality Score value
+		
+		-- Count of proteins by PMT Quality Score
+		--
+		INSERT INTO #TmpGeneralStatisticsData (Stat_ID, PMT_Quality_Score_Minimum, Category, Label, Value)
+		SELECT	0 AS Stat_ID,
+				@MinimumPMTQS AS PMT_Quality_Score_Minimum,
+				'Proteins' AS category, 
+				'Proteins with Peptide Obs Count >=4 and PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
+				COUNT(DISTINCT MTPM.Ref_ID) AS Value
+		FROM T_Mass_Tag_to_Protein_Map MTPM INNER JOIN
+			 T_Mass_Tags MT ON MTPM.Mass_Tag_ID = MT.Mass_Tag_ID
+		WHERE MT.Internal_Standard_Only = 0 AND
+			  MT.Peptide_Obs_Count_Passing_Filter >= 4 AND
+			  MT.PMT_Quality_Score >= @MinimumPMTQS
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+		
+		
+		SELECT TOP 1 @MinimumPMTQS = PMT_Quality_Score
+		FROM #TmpPMTQualityScoreValues
+		WHERE PMT_Quality_Score > @MinimumPMTQS
+		ORDER BY PMT_Quality_Score
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+		
+		If @myRowCount = 0
+			Set @Continue = 0
+	End
+
+	-- Copy the new statistics from #TmpGeneralStatisticsData to T_General_Statistics
 	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'Mass Tags' AS category, 
-			'Tryptic PMTs With PMT Quality Score: ' + Convert(varchar(9), PMT_Quality_Score), 
-			COUNT(Mass_Tag_ID) AS Value
-	FROM (	SELECT T_Mass_Tags.PMT_Quality_Score, 
-				T_Mass_Tags.Mass_Tag_ID, 
-				MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
-			FROM T_Mass_Tags INNER JOIN
-				T_Mass_Tag_to_Protein_Map ON 
-				T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
-			WHERE Internal_Standard_Only = 0
-			GROUP BY T_Mass_Tags.PMT_Quality_Score, T_Mass_Tags.Mass_Tag_ID
-		  ) LookupQ
-	WHERE (Cleavage_State_Max = 2)
-	GROUP BY PMT_Quality_Score
-	ORDER BY PMT_Quality_Score
-
-
-	-- Count of Partially Tryptic PMTs by PMT Quality Score
+	SELECT Category, Label, Value
+	FROM #TmpGeneralStatisticsData 
+	ORDER BY Stat_ID, PMT_Quality_Score_Minimum
 	--
-	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'Mass Tags' AS category, 
-			'Partially Tryptic PMTs With PMT Quality Score: ' + Convert(varchar(9), PMT_Quality_Score), 
-			COUNT(Mass_Tag_ID) AS Value
-	FROM (	SELECT T_Mass_Tags.PMT_Quality_Score, 
-				T_Mass_Tags.Mass_Tag_ID, 
-				MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
-			FROM T_Mass_Tags INNER JOIN
-				T_Mass_Tag_to_Protein_Map ON 
-				T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
-			WHERE Internal_Standard_Only = 0
-			GROUP BY T_Mass_Tags.PMT_Quality_Score, T_Mass_Tags.Mass_Tag_ID
-		  ) LookupQ
-	WHERE (Cleavage_State_Max = 1)
-	GROUP BY PMT_Quality_Score
-	ORDER BY PMT_Quality_Score
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
 
 
-	-- update counts for peaks by state
-	--
-	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'FTICR UMC Results by State' AS category, 
-			Convert(varchar(11), T_FPR_State_Name.Match_State) + ' - ' + T_FPR_State_Name.Match_State_Name AS label, 
-			COUNT(*) as value
-	FROM T_FTICR_UMC_ResultDetails INNER JOIN
-	   T_FPR_State_Name ON 
-	   T_FTICR_UMC_ResultDetails.Match_State = T_FPR_State_Name.Match_State
-	GROUP BY T_FPR_State_Name.Match_State_Name, T_FPR_State_Name.Match_State
-	ORDER BY T_FPR_State_Name.Match_State
+	If @GeneralStatisticsIncludesExtendedInfo = 1
+		Begin
+		-- update counts for peaks by state
+		--
+		INSERT INTO T_General_Statistics (Category, Label, Value)
+		SELECT	'FTICR UMC Results by State' AS category, 
+				Convert(varchar(11), T_FPR_State_Name.Match_State) + ' - ' + T_FPR_State_Name.Match_State_Name AS label, 
+				COUNT(*) as value
+		FROM T_FTICR_UMC_ResultDetails INNER JOIN
+		T_FPR_State_Name ON 
+		T_FTICR_UMC_ResultDetails.Match_State = T_FPR_State_Name.Match_State
+		GROUP BY T_FPR_State_Name.Match_State_Name, T_FPR_State_Name.Match_State
+		ORDER BY T_FPR_State_Name.Match_State
+	End
+
 
 	-- update analyses counts
 	--
@@ -223,24 +388,36 @@ As
 	INSERT INTO T_General_Statistics (Category, Label, Value)
 	SELECT 'Total Analyses by Organism DB' AS category, 
 		 Organism_DB_Name AS label, COUNT(*) AS value
-	FROM T_Analysis_Description 
+	FROM T_Analysis_Description
+	WHERE Organism_DB_Name <> 'na'
 	GROUP BY Organism_DB_Name
 	ORDER BY Organism_DB_Name
 
-	-- total PMTs by organism DB
-	--
 	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'Total PMTs by Organism DB' AS category, 
-			Organism_DB_Name AS label, 
-			PMTCount AS value
-	FROM (	SELECT	T_Analysis_Description.Organism_DB_Name, 
-					COUNT(DISTINCT T_Peptides.Mass_Tag_ID) AS PMTCount
-			FROM T_Peptides INNER JOIN
-				 T_Analysis_Description ON T_Peptides.Analysis_ID = T_Analysis_Description.Job
-			GROUP BY T_Analysis_Description.Organism_DB_Name
-		) As StatsQ
-	ORDER BY Label
+	SELECT 'Total Analyses by Organism DB' AS category, 
+		 Protein_Collection_List + '; ' + Protein_Options_List AS label, COUNT(*) AS value
+	FROM T_Analysis_Description
+	WHERE Protein_Collection_List <> 'na'
+	GROUP BY Protein_Collection_List, Protein_Options_List
+	ORDER BY Protein_Collection_List, Protein_Options_List
 
+
+	If @GeneralStatisticsIncludesExtendedInfo = 1
+	Begin
+		-- total PMTs by organism DB
+		--
+		INSERT INTO T_General_Statistics (Category, Label, Value)
+		SELECT	'Total PMTs by Organism DB' AS category, 
+				Organism_DB_Name AS label, 
+				PMTCount AS value
+		FROM (	SELECT	T_Analysis_Description.Organism_DB_Name, 
+						COUNT(DISTINCT T_Peptides.Mass_Tag_ID) AS PMTCount
+				FROM T_Peptides INNER JOIN
+					T_Analysis_Description ON T_Peptides.Analysis_ID = T_Analysis_Description.Job
+				GROUP BY T_Analysis_Description.Organism_DB_Name
+			) As StatsQ
+		ORDER BY Label
+	End
 
 	-- update parameter file counts
 	--
@@ -261,16 +438,6 @@ As
 		Match_Count AS value
 	FROM V_MassTags_GANETValueRange_Histogram
 	ORDER BY GANET_Bin
-
-
-	-- update active GANET Locker count
-	--
-	INSERT INTO T_General_Statistics (Category, Label, Value)
-	SELECT	'NET Lockers (internal standards)' AS category, 
-			'Active NET Locker Count' AS label, 
-			COUNT(Seq_ID)
-	FROM T_GANET_Lockers
-	WHERE GANET_Locker_State = 1
 
 
 	-- Process_Config entries
@@ -294,9 +461,9 @@ As
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount	
 
-
 Done:
 	Return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

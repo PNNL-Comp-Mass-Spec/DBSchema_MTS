@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -16,11 +16,12 @@ CREATE Procedure dbo.GetGANETLockers
 **
 **  Parameters: none
 **
-**  Auth: mem
-**	Date: 01/02/2004
-**		  03/03/2005 mem - Now only returning peptides with state = 1
-**		  05/16/2005 mem - Switched to always use the Avg_GANET column for the NET value; switched to using Seq_ID for the Locker ID
-**		  05/20/2005 mem - Switched to obtain Peptide sequence and mass from T_Mass_Tags
+**  Auth:	mem
+**	Date:	01/02/2004
+**			03/03/2005 mem - Now only returning peptides with state = 1
+**			05/16/2005 mem - Switched to always use the Avg_GANET column for the NET value; switched to using Seq_ID for the Locker ID
+**			05/20/2005 mem - Switched to obtain Peptide sequence and mass from T_Mass_Tags
+**			12/15/2005 mem - Updated to call GetInternalStandards
 **
 ****************************************************/
 As
@@ -30,6 +31,10 @@ As
 	Declare @ReturnCode int
 	Set @ReturnCode = 0
 
+	EXEC @ReturnCode = GetInternalStandards 0, 'PepChromeA'
+
+/*
+**	Old Code:
 	SELECT	GL.Seq_ID AS GANET_Locker_ID, 
 			GL.Description, 
 			MT.Peptide, 
@@ -44,8 +49,10 @@ As
 	ORDER BY MT.Monoisotopic_Mass
 	--
 	Set @ReturnCode = @@Error
+*/
 	
 	Return @ReturnCode
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

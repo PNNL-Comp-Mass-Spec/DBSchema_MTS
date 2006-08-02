@@ -8,6 +8,8 @@ CREATE TABLE [T_Score_Discriminant] (
 	[DiscriminantScore] [float] NULL ,
 	[DiscriminantScoreNorm] [real] NULL ,
 	[PassFilt] [int] NULL ,
+	[Peptide_Prophet_FScore] [real] NULL ,
+	[Peptide_Prophet_Probability] [real] NULL ,
 	CONSTRAINT [PK_T_Score_Discriminant] PRIMARY KEY  CLUSTERED 
 	(
 		[Peptide_ID]

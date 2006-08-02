@@ -15,13 +15,16 @@ SELECT TOP 100 PERCENT TAD.Job, TAD.State, TAD.Dataset,
     TAD.Campaign, TAD.Organism, TAD.Instrument, 
     TAD.Instrument_Class, TAD.Analysis_Tool, 
     TAD.Parameter_File_Name, TAD.Settings_File_Name, 
-    TAD.Organism_DB_Name, TAD.Completed, TAD.ResultType, 
-    TAD.Separation_Sys_Type, TAD.Internal_Standard, 
+    TAD.Organism_DB_Name, TAD.Protein_Collection_List, 
+    TAD.Protein_Options_List, TAD.Completed, TAD.ResultType, 
+    TAD.Separation_Sys_Type, TAD.PreDigest_Internal_Std, 
+    TAD.PostDigest_Internal_Std, TAD.Dataset_Internal_Std, 
     DMS_Enzymes.Enzyme_Name, TAD.Labelling, 
     ASN.AD_State_Name AS State_Name, 
     PDL.PDB_Name AS Peptide_DB_Name, 
-    TAD.Vol_Client + TAD.Storage_Path + TAD.Dataset_Folder + '\' + TAD.Results_Folder
-     + '\' AS Results_Folder_Path
+    dbo.udfCombinePaths(dbo.udfCombinePaths(dbo.udfCombinePaths(TAD.Vol_Client,
+     TAD.Storage_Path), TAD.Dataset_Folder), TAD.Results_Folder) 
+    + '\' AS Results_Folder_Path
 FROM dbo.T_Analysis_Description TAD INNER JOIN
     dbo.T_Analysis_State_Name ASN ON 
     TAD.State = ASN.AD_State_ID LEFT OUTER JOIN

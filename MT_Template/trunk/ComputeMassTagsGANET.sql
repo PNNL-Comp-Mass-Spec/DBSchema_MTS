@@ -8,7 +8,7 @@ drop procedure [dbo].[ComputeMassTagsGANET]
 GO
 
 
-CREATE Procedure dbo.ComputeMassTagsGANET 
+CREATE Procedure dbo.ComputeMassTagsGANET
 /********************************************************
 **	Synchronizes tables T_Mass_Tags_NET and T_Mass_Tags
 **
@@ -16,24 +16,25 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 **    ScanTime_NET_Slope and ScanTime_NET_Intercept from T_Analysis_Description
 **    and MIN(Scan_Time_Peak_Apex) from T_Peptides
 **
-**	Date: 6/27/2003 by mem
-**
-**  Updated: 07/01/2003 mem
-**			 01/07/2004 mem - Lowered default MinGANETFit from 0.9 to 0.8
-**			                  Increased random sampling size from 10000 to 500000
-**			 09/22/2004 mem - Updated to weight average GANET values on discriminant score values
-**			 11/27/2004 mem - Added use of GANET_RSquared
-**			 01/22/2005 mem - Added support for the ScanTime_NET columns
-**			 04/14/2005 mem - Now only counting peptides from the same dataset once, even if
+**	Date:	06/27/2003 mem
+**			07/01/2003 mem
+**			01/07/2004 mem - Lowered default MinGANETFit from 0.9 to 0.8
+**						   - Increased random sampling size from 10000 to 500000
+**			09/22/2004 mem - Updated to weight average GANET values on discriminant score values
+**			11/27/2004 mem - Added use of GANET_RSquared
+**			01/22/2005 mem - Added support for the ScanTime_NET columns
+**			04/14/2005 mem - Now only counting peptides from the same dataset once, even if
 **							  the dataset has several analysis jobs
-**			 04/18/2005 mem - Now excluding data from jobs with Slope values <= 0; also, assuring that NULL NET values are excluded from calculations
-**			 05/20/2005 mem - Updated logic to only use entries from T_Mass_Tags with Internal_Standard_Only = 0
-**			 07/06/2005 mem - Switched to storing the unbiased standard deviation in StD_GANET rather than the biased Standard Error
-**			 07/19/2005 mem - Switched back to storing the biased standard deviation in StD_GANET, but now making sure that we store 0 when NET_Cnt = 1
-**			 08/22/2005 mem - Updated formula for weighted standard error
-**			 10/09/2005 mem - Updated to only consider peptide entries with Max_Obs_Area_In_Job = 1 when computing the average NET value
-**							- Updated to use the GANET_Obs value in T_Peptides rather than recomputing the NET value using the Slope and Intercept defined in T_Analysis_Description; however, we're still filtering out peptides from jobs with Fit values below the given thresholds
-**			 12/01/2005 mem - Now considering option 'GANET_Avg_Use_Max_Obs_Area_In_Job_Enabled' in T_Process_Config
+**			04/18/2005 mem - Now excluding data from jobs with Slope values <= 0; also, assuring that NULL NET values are excluded from calculations
+**			05/20/2005 mem - Updated logic to only use entries from T_Mass_Tags with Internal_Standard_Only = 0
+**			07/06/2005 mem - Switched to storing the unbiased standard deviation in StD_GANET rather than the biased Standard Error
+**			07/19/2005 mem - Switched back to storing the biased standard deviation in StD_GANET, but now making sure that we store 0 when NET_Cnt = 1
+**			08/22/2005 mem - Updated formula for weighted standard error
+**			10/09/2005 mem - Updated to only consider peptide entries with Max_Obs_Area_In_Job = 1 when computing the average NET value
+**						   - Updated to use the GANET_Obs value in T_Peptides rather than recomputing the NET value using the Slope and Intercept defined in T_Analysis_Description; however, we're still filtering out peptides from jobs with Fit values below the given thresholds
+**			12/01/2005 mem - Now considering option 'GANET_Avg_Use_Max_Obs_Area_In_Job_Enabled' in T_Process_Config
+**			01/18/2006 mem - Now posting a message to T_Log_Entries on Success
+**			03/13/2006 mem - Now calling UpdateCachedHistograms
 **
 *********************************************************/
 (
@@ -686,6 +687,10 @@ AS
 		End
 
 
+	-----------------------------------------------------------
+	-- Invalidate any cached histograms with Mode 0 = NET Histogram
+	-----------------------------------------------------------
+	Exec UpdateCachedHistograms @HistogramModeFilter = 0, @InvalidateButDoNotProcess=1
 
 	-----------------------------------------------
 	-- Count the number of mass tags with Null GANET values
@@ -723,6 +728,12 @@ AS
 		Set @message = @message + '; Using first occurrence of each peptide'
 	Else
 		Set @message = @message + '; Using peptide obs with maximum area'
+
+
+	-----------------------------------------------
+	-- Post @message to the log
+	-----------------------------------------------
+	EXEC PostLogEntry 'Normal', @message, 'ComputeMassTagsGANET'
 	
 Done:
 	Select @message

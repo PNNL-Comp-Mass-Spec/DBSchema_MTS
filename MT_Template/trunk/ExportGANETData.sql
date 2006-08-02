@@ -16,14 +16,13 @@ CREATE Procedure dbo.ExportGANETData
 **		ExportGANETPeptideFile to create the Peptide file,
 **		  then creates the Job Stats file
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 **
-**		Parameters:
-**
-**		Auth:	mem
-**		Date:	04/08/2005
-**				12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
-**							   - Increased size of @DBName from 64 to 128 characters
+**	Auth:	mem
+**	Date:	04/08/2005
+**			12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**						   - Increased size of @DBName from 64 to 128 characters
+**			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
 (
@@ -84,7 +83,7 @@ As
 	-- Write out the job stats file
 	--------------------------------------------------------------
 	--
-	Set @JobStatsFilePath = '"' + @outFileFolderPath + @dbname + '\' + @jobStatsFileName + '"'
+	Set @JobStatsFilePath = '"' + dbo.udfCombinePaths(dbo.udfCombinePaths(@outFileFolderPath, @dbname), @jobStatsFileName) + '"'
 
 	--------------------------------------------------------------
 	-- dump the peptides into a temporary file

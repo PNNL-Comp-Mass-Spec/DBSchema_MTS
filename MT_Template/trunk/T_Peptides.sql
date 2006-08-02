@@ -46,19 +46,10 @@ GO
  CREATE  INDEX [IX_T_Peptides_Mass_Tag_ID] ON [T_Peptides]([Mass_Tag_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
 GO
 
- CREATE  INDEX [IX_T_Peptides_Analysis_ID] ON [T_Peptides]([Analysis_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
-GO
-
  CREATE  INDEX [IX_T_Peptides_Peptide] ON [T_Peptides]([Peptide]) WITH  FILLFACTOR = 90 ON [PRIMARY]
 GO
 
  CREATE  INDEX [IX_T_Peptides_Analysis_ID_Mass_Tag_ID] ON [T_Peptides]([Analysis_ID], [Mass_Tag_ID]) ON [PRIMARY]
-GO
-
-/****** The index created by the following statement is for internal use only. ******/
-/****** It is not a real index but exists as statistics only. ******/
-if (@@microsoftversion > 0x07000000 )
-EXEC ('CREATE STATISTICS [Statistic_Peak_Area] ON [T_Peptides] ([Peak_Area]) ')
 GO
 
 

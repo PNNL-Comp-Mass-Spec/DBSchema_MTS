@@ -22,26 +22,28 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 10/15/2004
-**			  11/28/2004 mem - Added column GANET_RSquared
-**			  01/23/2005 mem - Added ScanTime_NET columns and optional population of T_Peptides.Scan_Time_Peak_Apex
-**			  01/28/2005 mem - Now updating T_Score_Discriminant when any NET values are updated
-**			  02/12/2005 mem - Now setting ForceLCQProcessingOnNextUpdate to 1 in T_Process_Step_Control if any jobs are updated; this is needed to guarantee that ComputeMassTagsGANET will be updated
-**			  02/23/2005 mem - Fixed bug that skipped rows in T_Peptides with null GANET_Obs values and rows in T_Score_Discriminant with null discriminant score values
-**			  09/02/2005 mem - Now posting entry to T_Log_Entries if any jobs are updated
-**			  10/04/2005 mem - Removed parameter @UpdateScanTimeValues and switched to always update Scan_Time_Peak_Apex since this value is now available in T_Peptides in the peptide DB
-**			  10/12/2005 mem - Added parameter @PostLogEntryOnSuccess
-**			  12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
-**							 - Increased size of @peptideDBName from 64 to 128 characters
+**	Auth:	mem
+**	Date:	10/15/2004
+**			11/28/2004 mem - Added column GANET_RSquared
+**			01/23/2005 mem - Added ScanTime_NET columns and optional population of T_Peptides.Scan_Time_Peak_Apex
+**			01/28/2005 mem - Now updating T_Score_Discriminant when any NET values are updated
+**			02/12/2005 mem - Now setting ForceLCQProcessingOnNextUpdate to 1 in T_Process_Step_Control if any jobs are updated; this is needed to guarantee that ComputeMassTagsGANET will be updated
+**			02/23/2005 mem - Fixed bug that skipped rows in T_Peptides with null GANET_Obs values and rows in T_Score_Discriminant with null discriminant score values
+**			09/02/2005 mem - Now posting entry to T_Log_Entries if any jobs are updated
+**			10/04/2005 mem - Removed parameter @UpdateScanTimeValues and switched to always update Scan_Time_Peak_Apex since this value is now available in T_Peptides in the peptide DB
+**			10/12/2005 mem - Added parameter @PostLogEntryOnSuccess
+**			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
+**						   - Increased size of @peptideDBName from 64 to 128 characters
 **    
 *****************************************************/
+(
  	@jobsUpdated int = 0 output,
  	@peptideRowsUpdated int = 0 output,
  	@message varchar(255) = '' output,
- 	@JobFilterList as varchar(1024) = '',
+ 	@JobFilterList varchar(1024) = '',
  	@infoOnly tinyint = 0,
  	@PostLogEntryOnSuccess tinyint = 0
+)
 As
 	set nocount on
 

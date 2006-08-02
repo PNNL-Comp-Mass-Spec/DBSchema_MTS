@@ -8,68 +8,71 @@ drop procedure [dbo].[SetPeakMatchingTaskComplete]
 GO
 
 
-
 CREATE Procedure dbo.SetPeakMatchingTaskComplete
 /****************************************************
 **
-**	Desc: 
+**	Desc:	Sets the state of a peak matching task to
+**			3=Success or 4=Failure
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 4/16/2003   
-**
-**		Updated: 6/23/2003 by mem
-**				 8/06/2003 by mem
+**	Auth:	grk
+**	Date:	04/16/2003   
+**			06/23/2003 mem
+**			08/06/2003 mem
+**			06/14/2006 mem - Expanded error handling and removed parameter @mtdbName
 **
 *****************************************************/
+(
 	@taskID int,
-	@mtdbName varchar (128),
 	@errorCode int = 0,
 	@warningCode int = 0,
 	@MDID int = NULL,				-- MD_ID value in T_Match_Making_Description, if any
 	@message varchar(512) output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
 
 	declare @taskState int
 
+	declare @PMTaskText varchar(64)
+	Set @PMTaskText = 'Peak matching task ' + Convert(varchar(19), @taskID)
+
 	---------------------------------------------------
-	-- resolve task ID to state
+	-- Resolve task ID to state
 	---------------------------------------------------
 	--
 	set @taskState = 0
 	--
 	SELECT @taskState = Processing_State
 	FROM T_Peak_Matching_Task
-	WHERE (Task_ID = @taskID)
+	WHERE Task_ID = @taskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0 or @myRowCount <> 1
 	begin
 		set @myError = 51220
-		set @message = 'Could not get information for task'
+		set @message = 'Could not get information for ' + @PMTaskText
 		goto done
 	end
 
 	---------------------------------------------------
-	-- check task state for "in progress"
+	-- Check task state for "in progress"
 	---------------------------------------------------
 	if @taskState <> 2
 	begin
-		set @myError = 51250
-		set @message = 'State not correct'
+		set @myError = 51221
+		set @message = 'State not correct for ' + @PMTaskText + '; state is ' + convert(varchar(12), @taskState) + ' but expecting state 2'
 		goto done
 	end
 
@@ -78,32 +81,31 @@ As
 	---------------------------------------------------
 	
 	if @errorCode = 0
-			set @taskState = 3 -- success
+		set @taskState = 3 -- success
 	else
-			set @taskState = 4 -- failure
+		set @taskState = 4 -- failure
 
 	UPDATE T_Peak_Matching_Task
-	SET 
-		Processing_State = @taskState, 
+	SET Processing_State = @taskState, 
 		Processing_Error_Code = @errorCode, 
 		Processing_Warning_Code = @warningCode, 
 		PM_Finish = GETDATE(),
 		MD_ID = @MDID
-		WHERE     (Task_ID = @taskID)
+	WHERE Task_ID = @taskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0 or @myRowCount <> 1
 	begin
-		set @message = 'Update operation failed'
-		set @myError = 99
+		set @message = 'Update operation failed for ' + @PMTaskText
+		set @myError = 51222
 		goto done
 	end
 	
 	if @errorCode <> 0
 	Begin
-		Set @message = 'Peak matching task ' + convert(varchar(19), @taskID) + ' generated error code ' + convert(varchar(19), @errorCode)
-		Exec PostLogEntry 'Error', @message, 'PeakMatching'
+		Set @message = @PMTaskText + ' generated error code ' + convert(varchar(19), @errorCode)
+		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingTaskComplete'
 		Set @message = ''
 	End
 	
@@ -112,9 +114,13 @@ As
 	---------------------------------------------------
 	--
 Done:
+
+	If @myError <> 0
+	Begin
+		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingTaskComplete', 4
+	End
+
 	return @myError
-
-
 
 
 GO

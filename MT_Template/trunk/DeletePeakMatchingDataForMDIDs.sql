@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -6,6 +6,7 @@ GO
 if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[DeletePeakMatchingDataForMDIDs]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
 drop procedure [dbo].[DeletePeakMatchingDataForMDIDs]
 GO
+
 
 CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDs
 /****************************************************
@@ -22,22 +23,25 @@ CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDs
 **
 **	Parameters: 
 **
-**		Auth: mem
-**		Date: 8/23/2003
-**			  9/19/2003
-**			  01/02/2004 mem - added deletion of data in T_FTICR_UMC_NetLockerDetails
-**			  09/20/2004 mem - Removed reference to T_FTICR_Peak_Results
-**			  09/30/2004 mem - Added reference to T_FTICR_UMC_Members
-**			  05/07/2005 mem - Switched to using Between statements
+**	Auth:	mem
+**	Date:	08/23/2003
+**			09/19/2003
+**			01/02/2004 mem - added deletion of data in T_FTICR_UMC_NetLockerDetails
+**			09/20/2004 mem - Removed reference to T_FTICR_Peak_Results
+**			09/30/2004 mem - Added reference to T_FTICR_UMC_Members
+**			05/07/2005 mem - Switched to using Between statements
+**			12/20/2005 mem - Renamed T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
+**			01/19/2006 mem - Added parameter @ResetIdentityFieldSeed
 **
 *****************************************************/
 (
 	@MDIDStart int = -1,
-	@MDIDEnd int = -1
+	@MDIDEnd int = -1,
+	@ResetIdentityFieldSeed tinyint = 0		-- Set to 1 to call SP ResetIdentityFieldSeed if no errors occur
 )
 AS
 
-	Set NoCount ON
+	Set NoCount On
 
 	Declare @myError int,
 			@myRowCount int,
@@ -99,9 +103,9 @@ AS
 	SELECT @myError = @myError + @@Error
 
 
-	DELETE T_FTICR_UMC_NetLockerDetails
-	FROM T_FTICR_UMC_NetLockerDetails INNER JOIN T_FTICR_UMC_Results
-			ON T_FTICR_UMC_NetLockerDetails.UMC_Results_ID = T_FTICR_UMC_Results.UMC_Results_ID
+	DELETE T_FTICR_UMC_InternalStdDetails
+	FROM T_FTICR_UMC_InternalStdDetails INNER JOIN T_FTICR_UMC_Results
+			ON T_FTICR_UMC_InternalStdDetails.UMC_Results_ID = T_FTICR_UMC_Results.UMC_Results_ID
 	WHERE T_FTICR_UMC_Results.MD_ID BETWEEN @MDIDStart AND @MDIDEnd
 	--
 	SELECT @myError = @myError + @@Error
@@ -130,11 +134,15 @@ AS
 	WHERE MD_ID BETWEEN @MDIDStart AND @MDIDEnd
 	--
 	SELECT @myError = @myError + @@Error
-	
+
+	If @myError = 0 and @ResetIdentityFieldSeed <> 0
+		Exec ResetIdentityFieldSeed
+
 Done:
 	DROP TABLE #QIDsToDelete
 
 	Return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

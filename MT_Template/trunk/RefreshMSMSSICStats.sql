@@ -20,19 +20,21 @@ CREATE Procedure dbo.RefreshMSMSSICStats
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 09/02/2005 mem - This SP is modelled after RefreshMSMSJobNETs
-**			  10/02/2005 mem - Updated to obtain the data from T_Peptides in the Peptide DB since that table now contains the SIC related values
-**			  10/12/2005 mem - Now calling ComputeMaxObsAreaByJob to populate Max_Obs_Area_In_Job
-**			  12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
-**							 - Increased size of @peptideDBName from 64 to 128 characters
+**	Auth:	mem
+**	Date:	09/02/2005 mem - This SP is modelled after RefreshMSMSJobNETs
+**			10/02/2005 mem - Updated to obtain the data from T_Peptides in the Peptide DB since that table now contains the SIC related values
+**			10/12/2005 mem - Now calling ComputeMaxObsAreaByJob to populate Max_Obs_Area_In_Job
+**			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
+**						   - Increased size of @peptideDBName from 64 to 128 characters
 **    
 *****************************************************/
+(
  	@jobsUpdated int = 0 output,
  	@peptideRowsUpdated int = 0 output,
  	@message varchar(255) = '' output,
- 	@JobFilterList as varchar(1024) = '',
+ 	@JobFilterList varchar(1024) = '',
  	@infoOnly tinyint = 0
+)
 As
 	set nocount on
 

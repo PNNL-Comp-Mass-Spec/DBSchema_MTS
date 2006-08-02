@@ -19,12 +19,13 @@ CREATE Procedure dbo.ExportGANETPeptideFile
 **
 **	Parameters:
 **
-**		Auth:	grk
-**		Date:	04/03/2002
-**				09/22/2004 mem - Updated to use the T_Score tables and changed output filename from pep_temp to temp_peptides
-**				01/23/2005 mem - Moved the output file deletion command to occur after the bulk copy command finishes
-**				12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
-**							   - Increased size of @DBName from 64 to 128 characters
+**	Auth:	grk
+**	Date:	04/03/2002
+**			09/22/2004 mem - Updated to use the T_Score tables and changed output filename from pep_temp to temp_peptides
+**			01/23/2005 mem - Moved the output file deletion command to occur after the bulk copy command finishes
+**			12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**						   - Increased size of @DBName from 64 to 128 characters
+**			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
 (
@@ -46,7 +47,7 @@ As
 	set @DBName = DB_NAME()
 	
 	declare @pepFilePath varchar(512)
-	Set @pepFilePath = '"' + @outFileDir + @DBName + '\' + 'temp_peptides"'
+	Set @pepFilePath = '"' + dbo.udfCombinePaths(dbo.udfCombinePaths(@outFileDir, @DBName), 'temp_peptides') + '"'
 
 	declare @outFilePath varchar(512)
 
@@ -59,7 +60,7 @@ As
 	-- build output file path
 	--------------------------------------------------------------
 
-	Set @outFilePath = '"' + @outFileDir + @DBName + '\' + @outFileName + '"'
+	Set @outFilePath = '"' + dbo.udfCombinePaths(dbo.udfCombinePaths(@outFileDir, @DBName), @outFileName) + '"'
 	
 	--------------------------------------------------------------
 	-- get the count of peptide lockers

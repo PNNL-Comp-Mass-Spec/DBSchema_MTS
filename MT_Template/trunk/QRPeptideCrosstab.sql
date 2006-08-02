@@ -32,6 +32,7 @@ CREATE Procedure dbo.QRPeptideCrosstab
 **			 10/26/2004 mem - Updated dynamic SQL to fix ambiguous column name bug
 **			 05/24/2005 mem - Now returning "Internal_Std" in column Mass_Tag_Mods when Internal_Standard_Match = 1; and updated protein description linking method
 **			 09/22/2005 mem - Now limiting the data returned when @SeparateReplicateDataIDs=1 to only include those peptides that would be seen if @SeparateReplicateDataIDs=0
+**			 01/30/2006 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues
 **
 ****************************************************/
 (
@@ -39,7 +40,8 @@ CREATE Procedure dbo.QRPeptideCrosstab
 	@SeparateReplicateDataIDs tinyint = 1,				-- For quantitation ID's with replicates, separates the resultant crosstab table into a separate column for each replicate
 	@SourceColName varchar(128) = 'MT_Abundance',		-- Column to return; valid columns include MT_Abundance, UMC_Match_Count, SingleMT_MassTagMatchingIonCount
 	@AggregateColName varchar(128) = 'AvgAbu',
-	@AverageAcrossColumns tinyint = 0					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@IncludePrefixAndSuffixResidues tinyint = 0			-- The query is slower if this is enabled
 )
 AS
 
@@ -88,13 +90,29 @@ AS
 	Set @sql = @sql + ' SELECT ' + @ColumnListToShow + ', '
 	Set @sql = @sql + @CrossTabSql
 	Set @sql = @sql + ' FROM (SELECT QR.Quantitation_ID, QRD.Mass_Tag_ID,'
-	Set @sql = @sql +              ' T_Mass_Tags.Peptide, T_Mass_Tags.Mod_Description,'
+	If @IncludePrefixAndSuffixResidues <> 0
+		Set @sql = @sql + ' MIN(MTPM.Peptide_Sequence) AS Peptide,'
+	Else
+		Set @sql = @sql + ' MT.Peptide,'
+
+	Set @sql = @sql +              ' MT.Mod_Description,'
 	Set @sql = @sql +              ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 	Set @sql = @sql +              ' QRD.' + @SourceColName
 	Set @sql = @sql +       ' FROM T_Quantitation_Results AS QR INNER JOIN'
 	Set @sql = @sql +            ' T_Quantitation_ResultDetails AS QRD ON QR.QR_ID = QRD.QR_ID INNER JOIN'
-    Set @sql = @sql +            ' T_Mass_Tags ON QRD.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID'
+    Set @sql = @sql +            ' T_Mass_Tags AS MT ON QRD.Mass_Tag_ID = MT.Mass_Tag_ID'
+    If @IncludePrefixAndSuffixResidues <> 0
+	Begin
+		Set @sql = @sql +        ' INNER JOIN V_Mass_Tag_to_Protein_Map_Full_Sequence AS MTPM ON'
+		Set @sql = @sql +        ' MT.Mass_Tag_ID = MTPM.Mass_Tag_ID AND QR.Ref_ID = MTPM.Ref_ID'
+	End
+
 	Set @sql = @sql +       ' WHERE Quantitation_ID IN (' + @QuantitationIDListSql + ')'
+    If @IncludePrefixAndSuffixResidues <> 0
+	Begin
+		Set @sql = @sql +   ' GROUP BY QR.Quantitation_ID, QRD.Mass_Tag_ID, MT.Mod_Description, CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END, QRD.' + @SourceColName
+	End
+	
 	Set @sql = @sql +       ') AS SubQ'
 	
 	If @SeparateReplicateDataIDs <> 0 And Len(@QuantitationIDListClean) > 0

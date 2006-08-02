@@ -8,11 +8,10 @@ drop procedure [dbo].[NamePeptides]
 GO
 
 
-
 CREATE Procedure dbo.NamePeptides
 /****************************************************
 ** 
-**		Desc: 
+**	Desc: 
 **		Fills in the columns (Mass_Tag_Name, Cleavage_State,
 **			Fragment Number, Fragment_Start, Residue_Start, 
 **			Residue_End, Repeat_Count, Terminus_State) in 
@@ -20,22 +19,22 @@ CREATE Procedure dbo.NamePeptides
 **
 **		Return values: 0: success, otherwise, error code
 ** 
-**		Parameters: see below
+**	Parameters: see below
 **		
-**		Outputs: @message - description of error if one results,
+**	Outputs: @message - description of error if one results,
 **					 '' if none
-**				 @count - number of rows updated (should be the 
+**			 @count - number of rows updated (should be the 
 **						same as the number of rows in the table)
-**			
 ** 
-**		Auth: kal
-**		Date: 7/15/2003
-**
-**		Updated: 8/23/2003 mem - added RecomputeAll parameter
-**				 9/19/2004 mem - Changed references to reflect new MTDB schema and added optimization of determining @ProteinLength
-**				02/14/2005 mem - Now posting progress messages to the log every 5 minutes
+**	Auth:	kal
+**	Date:	07/15/2003
+**			08/23/2003 mem - added RecomputeAll parameter
+**			09/19/2004 mem - Changed references to reflect new MTDB schema and added optimization of determining @ProteinLength
+**			02/14/2005 mem - Now posting progress messages to the log every 5 minutes
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
+(
 	@count int = 0 output,						--number of rows updated
 	--@cleavageAminoAcids varchar(32) = 'RK-',	--list of amino acids that cleavages occur after
 	@message varchar(255) = '' output,
@@ -44,7 +43,7 @@ CREATE Procedure dbo.NamePeptides
 	@namingString varchar(10) = 't',			--string used in naming 'fully cleaved' peptides
 	@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all mass tags; when 0, only computes if the peptide name or peptide cleavage state is null
 	@logLevel tinyint = 1
-	
+)	
 AS
 	SET NOCOUNT ON
 
@@ -58,15 +57,17 @@ AS
 	
 	declare @done int
 	declare @LastUniqueRowID int
+	declare @UpdateEnabled tinyint
 	
 	--results extracted for each row are stored in these
 	declare @peptide varchar(850)
-	set @peptide = ''
 	declare @Mass_Tag_ID int
-	set @Mass_Tag_ID = -1
 	declare @Ref_ID int
-	set @Ref_ID = -1
 	declare @Reference varchar(128)
+
+	set @peptide = ''
+	set @Mass_Tag_ID = -1
+	set @Ref_ID = -1
 	set @Reference = ''
 	
 	declare @lastProgressUpdate datetime
@@ -280,7 +281,7 @@ AS
 					goto done
 			end
 				
-errorCleanup:
+	errorCleanup:
 			set @count = @count + 1
 
 			if @logLevel >= 1
@@ -294,21 +295,25 @@ errorCleanup:
 						set @message = ''
 						set @lastProgressUpdate = GetDate()
 					End
+
+					-- Validate that updating is enabled, abort if not enabled
+					exec VerifyUpdateEnabled @CallingFunctionDescription = 'NamePeptides', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+					If @UpdateEnabled = 0
+						Goto Done
 				End
 			End			
 			
 			set @myError = 0
 		End
+
 	end  -- end of while loop		
 
 
---------------------------------------------------
--- Exit
----------------------------------------------------
-done:
-
-	RETURN @myError
-
+	--------------------------------------------------
+	-- Exit
+	---------------------------------------------------
+Done:
+	return @myError
 
 
 GO

@@ -67,18 +67,6 @@ GO
  CREATE  CLUSTERED  INDEX [IX_T_Quantitation_ResultDetails] ON [T_Quantitation_ResultDetails]([QR_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
 GO
 
-/****** The index created by the following statement is for internal use only. ******/
-/****** It is not a real index but exists as statistics only. ******/
-if (@@microsoftversion > 0x07000000 )
-EXEC ('CREATE STATISTICS [Statistic_Mass_Tag_Mods] ON [T_Quantitation_ResultDetails] ([Mass_Tag_Mods]) ')
-GO
-
-/****** The index created by the following statement is for internal use only. ******/
-/****** It is not a real index but exists as statistics only. ******/
-if (@@microsoftversion > 0x07000000 )
-EXEC ('CREATE STATISTICS [Statistic_Internal_Standard_Match] ON [T_Quantitation_ResultDetails] ([Internal_Standard_Match]) ')
-GO
-
 GRANT  SELECT ,  UPDATE ,  INSERT ,  DELETE  ON [dbo].[T_Quantitation_ResultDetails]  TO [DMS_SP_User]
 GO
 

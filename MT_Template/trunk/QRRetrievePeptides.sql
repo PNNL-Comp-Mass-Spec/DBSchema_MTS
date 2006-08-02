@@ -17,34 +17,35 @@ CREATE PROCEDURE dbo.QRRetrievePeptides
 **
 **  Parameters: QuantitationID value to process
 **
-**  Auth: mem
-**	Date: 07/30/2003
-**
-**	Updated: 08/01/2003 by mem
-**			 08/15/2003
-**			 08/18/2003
-**			 08/27/2003
-**			 09/17/2003 mem - Now returns the ER_Average and ER_StDev columns if non-zero values are present in ER_Average for @QuantitationID
-**			 09/20/2003 mem - Added Scan_Minimum, Scan_Maximum, and Mass_Error_PPM_Avg columns, along with mass tag mass
-**			 11/09/2003 mem - Added NET_Minimum and NET_Maximum columns
-**			 11/13/2003 mem - Added Mass_Tag_Mods column
-**			 11/18/2003 mem - Added 3 charge columns and updated @ERValuesPresent test to use MAX(ABS(QRD.ER)) rather than simply MAX(QRD.ER)
-**			 11/19/2003 mem - Added High_Normalized_Score field
-**			 04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
-**						mem - Added the Cleavage_State of the peptide
-**						mem - Added ORF_Count for the peptide
-**						mem - Now calling QRGenerateORFColumnSql to generate the sql for the ORF columns
-**			 04/17/2004 mem - Added PMT_Quality_Score field
-**			 06/06/2004 mem - Now returning the Dynamic_Mod_List and/or Static_Mod_List columns if any of the peptides does not contain 'none' for the list value
-**			 07/10/2004 mem - Added Member_Count_Used_For_Abundance, ER_Charge_State_Basis_Count, and MT_Match_Score_Avg columns
-**							  Now looking up ORF_Count and PMT_Quality_Score from T_Quantitation_ResultDetails
-**			 10/05/2004 mem - Updated for new MTDB schema
-**			 11/09/2004 mem - Renamed the match score columns to SLiC Score and removed some of the legacy, less useful columns
-**			 01/06/2005 mem - Renamed the PMT ER columns to MT_ER, MT_ER_StDev, and MT_ER_Charge_State_Basis_Count
-**			 04/05/2005 mem - Added parameter @VerboseColumnOutput
-**			 05/24/2005 mem - Now returning "Internal_Std" in column Mass_Tag_Mods when Internal_Standard_Match = 1
-**			 05/25/2005 mem - Added underscores at word boundaries in column QD.SampleName
-**			 08/25/2005 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues (must also have @IncludeRefColumn = 1)
+**  Auth:	mem
+**	Date:	07/30/2003
+**			08/01/2003
+**			08/15/2003
+**			08/18/2003
+**			08/27/2003
+**			09/17/2003 mem - Now returns the ER_Average and ER_StDev columns if non-zero values are present in ER_Average for @QuantitationID
+**			09/20/2003 mem - Added Scan_Minimum, Scan_Maximum, and Mass_Error_PPM_Avg columns, along with mass tag mass
+**			11/09/2003 mem - Added NET_Minimum and NET_Maximum columns
+**			11/13/2003 mem - Added Mass_Tag_Mods column
+**			11/18/2003 mem - Added 3 charge columns and updated @ERValuesPresent test to use MAX(ABS(QRD.ER)) rather than simply MAX(QRD.ER)
+**			11/19/2003 mem - Added High_Normalized_Score field
+**			04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
+**						   - Added the Cleavage_State of the peptide
+**						   - Added ORF_Count for the peptide
+**						   - Now calling QRGenerateORFColumnSql to generate the sql for the ORF columns
+**			04/17/2004 mem - Added PMT_Quality_Score field
+**			06/06/2004 mem - Now returning the Dynamic_Mod_List and/or Static_Mod_List columns if any of the peptides does not contain 'none' for the list value
+**			07/10/2004 mem - Added Member_Count_Used_For_Abundance, ER_Charge_State_Basis_Count, and MT_Match_Score_Avg columns
+**						   - Now looking up ORF_Count and PMT_Quality_Score from T_Quantitation_ResultDetails
+**			10/05/2004 mem - Updated for new MTDB schema
+**			11/09/2004 mem - Renamed the match score columns to SLiC Score and removed some of the legacy, less useful columns
+**			01/06/2005 mem - Renamed the PMT ER columns to MT_ER, MT_ER_StDev, and MT_ER_Charge_State_Basis_Count
+**			04/05/2005 mem - Added parameter @VerboseColumnOutput
+**			05/24/2005 mem - Now returning "Internal_Std" in column Mass_Tag_Mods when Internal_Standard_Match = 1
+**			05/25/2005 mem - Added underscores at word boundaries in column QD.SampleName
+**			08/25/2005 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues (must also have @IncludeRefColumn = 1)
+**			01/31/2006 mem - Now returning 'Unknown' if the Cleavage_State value is null
+**			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **
 ****************************************************/
 (
@@ -61,7 +62,6 @@ AS
 	Declare @QRDsql varchar(2000),
 	        @sql varchar(4000),
 			@ORFColumnSql varchar(2048),
-			@OrfDescriptionSqlJoin varchar(1024),
 			@ReplicateAndFractionSql varchar(1024)
 
 	Declare	@ReplicateCount int,
@@ -135,7 +135,7 @@ AS
 	If @ModsPresent > 0
 		Set @QRDsql = @QRDsql + ' MT.Mod_Description,'
 
-	Set @QRDsql = @QRDsql + ' QRD.ORF_Count AS Protein_Count, CSN.Cleavage_State_Name,'
+	Set @QRDsql = @QRDsql + ' QRD.ORF_Count AS Protein_Count, IsNull(CSN.Cleavage_State_Name, ''Unknown'') AS Cleavage_State_Name,'
 
 	If @VerboseColumnOutput <> 0
 	Begin
@@ -173,16 +173,13 @@ AS
 		Set @QRDsql = @QRDsql + ' MT.Mass_Tag_ID = MTPM.Mass_Tag_ID AND QR.Ref_ID = MTPM.Ref_ID'
 	End
 
-	Set @QRDsql = @QRDsql + ' INNER JOIN T_Peptide_Cleavage_State_Name AS CSN ON'
+	Set @QRDsql = @QRDsql + ' LEFT OUTER JOIN T_Peptide_Cleavage_State_Name AS CSN ON'
 	Set @QRDsql = @QRDsql + ' MTPM.Cleavage_State = CSN.Cleavage_State'
 
 	-- Construct the sql to return the data
 	Set @sql = ''
 	If @IncludeRefColumn <> 0
 	  Begin	
-
-		-- Generate the ORF DB Join SQL; returns '' if a valid ORF DB is not defined
-		Exec QRGenerateORFDBJoinSql @OrfDescriptionSqlJoin = @OrfDescriptionSqlJoin OUTPUT
 
 		-- Generate the sql for the ORF columns in T_Quantitation_Results
 		Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT
@@ -196,8 +193,6 @@ AS
 		Set @sql = @sql + '   LEFT OUTER JOIN'
 		Set @sql = @sql + '  T_Proteins ON'
 		Set @sql = @sql + '  QR.Ref_ID = T_Proteins.Ref_ID'
-		If Len(@OrfDescriptionSqlJoin) > 0
-			Set @sql = @sql + @OrfDescriptionSqlJoin
 		Set @sql = @sql + ' WHERE QD.Quantitation_ID = ' + Convert(varchar(19), @QuantitationID)
 		Set @sql = @sql + ' ORDER BY T_Proteins.Reference, QRD.Mass_Tag_ID'
 	  End

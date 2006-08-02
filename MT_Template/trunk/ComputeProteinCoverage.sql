@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -7,7 +7,8 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ComputePro
 drop procedure [dbo].[ComputeProteinCoverage]
 GO
 
-CREATE PROCEDURE dbo.ComputeProteinCoverage
+
+CREATE Procedure dbo.ComputeProteinCoverage
 /****************************************************
 **
 **	Desc:
@@ -19,16 +20,17 @@ CREATE PROCEDURE dbo.ComputeProteinCoverage
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 2/19/2002
-**			  6/06/2004 mem - Added @ComputeORFResidueCoverage and switched from use of a cursor to a temporary table
-**			  6/12/2004 mem - Now checking whether ORF Residue Coverage is necessary for each ORF (by comparing PMT and AMT count stats before and after update)
-**								 Added @message output parameter
-**			  6/13/2004 mem - Now using temporary tables to hold the sequences associated with ORF, for the various filters
-**			  9/28/2004 mem - Updated references from ORF to Protein and added computation by @PMTQualityScoreMinimum
-**			  9/29/2004 mem - Added logic to increase the number of iterations if the maximum PMT_Quality_Score defined is > 1
-**			 05/11/2005 mem - Added parameter @PMTQualityScoreMinimumOverride
-**    
+**	Auth:	grk
+**	Date:	02/19/2002
+**			06/06/2004 mem - Added @ComputeORFResidueCoverage and switched from use of a cursor to a temporary table
+**			06/12/2004 mem - Now checking whether ORF Residue Coverage is necessary for each ORF (by comparing PMT and AMT count stats before and after update)
+**							 Added @message output parameter
+**			06/13/2004 mem - Now using temporary tables to hold the sequences associated with ORF, for the various filters
+**			09/28/2004 mem - Updated references from ORF to Protein and added computation by @PMTQualityScoreMinimum
+**			09/29/2004 mem - Added logic to increase the number of iterations if the maximum PMT_Quality_Score defined is > 1
+**			05/11/2005 mem - Added parameter @PMTQualityScoreMinimumOverride
+**			03/14/2006 mem - Now calling VerifyUpdateEnabled
+**		
 *****************************************************/
 (
 	@ComputeProteinResidueCoverage tinyint = 0,		-- When 1, then computes Protein coverage at the residue level; CPU intensive
@@ -45,6 +47,10 @@ As
 	set @myError = 0
 		
 	Set @message = ''
+	
+	declare @UpdateEnabled tinyint
+	declare @VerifyUpdateMessage varchar(255)
+	set @VerifyUpdateMessage = ''
 	
 	------------------------------------------
 	-- Copy the current values from T_Protein_Coverage to #ProteinCoverageSaved
@@ -135,10 +141,23 @@ As
 		Exec @myError = ComputeProteinCoverageWork @PMTQualityScoreMinimum, @ComputeProteinResidueCoverage, @numProteinsToProcess, @message OUTPUT
 
 		Set @Iteration = @Iteration + 1
+
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled @CallingFunctionDescription = 'ComputeProteinCoverage', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @VerifyUpdateMessage output
+		If @UpdateEnabled = 0
+		Begin
+			If CharIndex('aborted', @VerifyUpdateMessage) = 0
+				Set @VerifyUpdateMessage = @VerifyUpdateMessage + ' (aborted mid-processing since PMT_Tag_DB_Update is disabled in MT_Main)'
+			
+			Set @message = @VerifyUpdateMessage
+			Goto Done
+		End
+
 	End
 
 Done:	
 	return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

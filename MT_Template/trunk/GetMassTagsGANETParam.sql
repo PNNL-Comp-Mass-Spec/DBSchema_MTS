@@ -16,17 +16,17 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **
 **  Parameters: See comments below
 **
-**  Auth: mem
-**	Date: 01/06/2004
-**
-**  Updated: 02/02/2004 mem - Now returning High_Normalized_Score in the 6th column of the output
-**			 07/27/2004 mem - Now returning StD_GANET in the 7th column of the output
-**			 09/21/2004 mem - Changed format of @MassCorrectionIDFilterList and removed parameters @AmtsOnly and @LockersOnly
-**			 01/12/2004 mem - Now returning High_Discriminant_Score in the 8th column of the output
-**			 02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter
-**			 09/08/2005 mem - Now returning Number_of_Peptides in the 9th column of the output
-**			 09/28/2005 mem - Switched to using Peptide_Obs_Count_Passing_Filter
- instead of Number_of_Peptides for the 9th column of data
+**  Auth:	mem
+**	Date:	01/06/2004
+**			02/02/2004 mem - Now returning High_Normalized_Score in the 6th column of the output
+**			07/27/2004 mem - Now returning StD_GANET in the 7th column of the output
+**			09/21/2004 mem - Changed format of @MassCorrectionIDFilterList and removed parameters @AmtsOnly and @LockersOnly
+**			01/12/2004 mem - Now returning High_Discriminant_Score in the 8th column of the output
+**			02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter
+**			09/08/2005 mem - Now returning Number_of_Peptides in the 9th column of the output
+**			09/28/2005 mem - Switched to using Peptide_Obs_Count_Passing_Filter instead of Number_of_Peptides for the 9th column of data
+**			12/22/2005 mem - Added parameter @JobToFilterOnByDataset
+**			06/08/2006 mem - Now returning Mod_Count and Mod_Description as the 10th and 11th columns
 **  
 ****************************************************************/
 (
@@ -47,8 +47,9 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 	@MinimumPMTQualityScore decimal(9,5) = 0,	-- The minimum PMT_Quality_Score to allow; 0 to allow all
 	@NETValueType tinyint = 0,					-- 0 to use GANET values, 1 to use PNET values
 	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
-	@ExperimentFilter varchar(64) = '',
-	@ExperimentExclusionFilter varchar(64) = ''
+	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
+	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
+	@JobToFilterOnByDataset int = 0					-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
 )
 As
 	Set NoCount On
@@ -60,7 +61,6 @@ As
 
 	Declare @BaseSql varchar(1024),
 			@FullSql nvarchar(2048),
-			@IsCriteriaSQL varchar(1024),
 			@ScoreFilteringSQL varchar(256),
 			@ExperimentFilteringSQL varchar(256)
 			
@@ -78,6 +78,22 @@ As
 			@IsAny tinyint,				-- 1 if the ID is text text ANY
 			@ModWhereString varchar(128)
 
+	Declare @Dataset varchar(128)
+	Set @Dataset = ''
+	
+	---------------------------------------------------	
+	-- Validate the input parameters
+	---------------------------------------------------	
+	-- @MassCorrectionIDFilterList is validated below
+	Set @ConfirmedOnly = IsNull(@ConfirmedOnly, 0)
+	Set @MinimumHighNormalizedScore = IsNull(@MinimumHighNormalizedScore, 0)
+	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
+	Set @NETValueType = IsNull(@NETValueType, 0)
+	Set @MinimumHighDiscriminantScore = IsNull(@MinimumHighDiscriminantScore, 0)
+	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
+	Set @ExperimentExclusionFilter = IsNull(@ExperimentExclusionFilter, '')
+	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
+
 
 	---------------------------------------------------	
 	-- Create a temporary table to hold the list of mass tags that match the 
@@ -89,65 +105,89 @@ As
 
 	CREATE CLUSTERED INDEX #IX_TmpMassTags ON #TmpMassTags (Mass_Tag_ID ASC)
 
-	
 	---------------------------------------------------	
-	-- Build criteria based on Is_* columns
-	---------------------------------------------------	
-	Set @IsCriteriaSQL = ''
-	If @ConfirmedOnly <> 0
-		Set @IsCriteriaSQL = ' (Is_Confirmed=1) '
-
-	---------------------------------------------------	
-	-- Build critera for High_Normalized_Score
+	-- Define the score filtering SQL
 	---------------------------------------------------	
 
 	Set @ScoreFilteringSQL = ''
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' (IsNull(High_Discriminant_Score, 0) >= ' + CAST(@MinimumHighDiscriminantScore as varchar(11)) + ') '
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(PMT_Quality_Score, 0) >= ' + CAST(@MinimumPMTQualityScore as varchar(11)) + ') '
-
+	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' (IsNull(MT.High_Discriminant_Score, 0) >= ' + Convert(varchar(11), @MinimumHighDiscriminantScore) + ') '
+	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.PMT_Quality_Score, 0) >= ' +  Convert(varchar(11), @MinimumPMTQualityScore) + ') '
+	If @ConfirmedOnly <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
 
 	---------------------------------------------------	
 	-- Possibly add High Normalized Score
 	-- It isn't indexed; thus only add it to @ScoreFilteringSQL if it is non-zero
 	---------------------------------------------------	
 	If @MinimumHighNormalizedScore <> 0
-		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(High_Normalized_Score, 0) >= ' + CAST(@MinimumHighNormalizedScore as varchar(11)) + ') '
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Normalized_Score, 0) >= ' +  Convert(varchar(11), @MinimumHighNormalizedScore) + ') '
 
 
 	---------------------------------------------------	
 	-- Possibly add an experiment filter
 	---------------------------------------------------	
 	Set @ExperimentFilteringSQL = ''
-	If Len(IsNull(@ExperimentFilter, '')) > 0
-		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (T_Analysis_Description.Experiment LIKE ''%' + @ExperimentFilter + '%'')'
+	If Len(@ExperimentFilter) > 0
+		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment LIKE ''%' + @ExperimentFilter + '%'')'
 
 
-	If Len(IsNull(@ExperimentExclusionFilter, '')) > 0
-		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (T_Analysis_Description.Experiment NOT LIKE ''%' + @ExperimentExclusionFilter + '%'')'
+	If Len(@ExperimentExclusionFilter) > 0
+		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment NOT LIKE ''%' + @ExperimentExclusionFilter + '%'')'
 
+
+	---------------------------------------------------	
+	-- If @JobToFilterOnByDataset is non-zero, then lookup the details in T_FTICR_Analysis_Description
+	---------------------------------------------------	
+	If @JobToFilterOnByDataset <> 0
+	Begin
+		-- Lookup the dataset for @JobToFilterOnByDataset
+		SELECT @Dataset = Dataset
+		FROM T_FTICR_Analysis_Description
+		WHERE Job = @JobToFilterOnByDataset
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		If @myRowCount = 0
+		Begin
+			-- Limiting to a job, but the job wasn't found; return an error
+			-- Note that error 50002 is used by external software to recognize an invalid job, so do not change the error code
+			Set @myError = 50002
+			Goto Done
+		End
+	End
+	
 
 	---------------------------------------------------	
 	-- Construct the Base Sql
 	---------------------------------------------------	
 	Set @BaseSql = ''
-	Set @BaseSql = @BaseSql + 'INSERT INTO #TmpMassTags '
-	If @ExperimentFilteringSQL = ''
+	Set @BaseSql = @BaseSql + 'INSERT INTO #TmpMassTags (Mass_Tag_ID)'
+
+	If @JobToFilterOnByDataset <> 0
 	Begin
-		Set @BaseSql = @BaseSql + 'SELECT Mass_Tag_ID '
-		Set @BaseSql = @BaseSql + 'FROM T_Mass_Tags '
-		Set @BaseSql = @BaseSql + 'WHERE ' + @ScoreFilteringSQL
+		Set @BaseSql = @BaseSql + ' SELECT DISTINCT MT.Mass_Tag_ID'
+		Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
+		Set @BaseSql = @BaseSql +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
+		Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+		Set @BaseSql = @BaseSql + ' WHERE TAD.Dataset = ''' + @Dataset + ''' AND ' + @ScoreFilteringSQL
 	End
 	Else
 	Begin
-		Set @BaseSql = @BaseSql + 'SELECT DISTINCT T_Mass_Tags.Mass_Tag_ID '
-		Set @BaseSql = @BaseSql + 'FROM T_Mass_Tags INNER JOIN T_Peptides ON T_Mass_Tags.Mass_Tag_ID = T_Peptides.Mass_Tag_ID INNER JOIN T_Analysis_Description ON T_Peptides.Analysis_ID = T_Analysis_Description.Job '
-		Set @BaseSql = @BaseSql + 'WHERE ' + @ScoreFilteringSQL + @ExperimentFilteringSQL
+		If @ExperimentFilteringSQL = ''
+		Begin
+			Set @BaseSql = @BaseSql + ' SELECT Mass_Tag_ID'
+			Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT'
+			Set @BaseSql = @BaseSql + ' WHERE ' + @ScoreFilteringSQL
+		End
+		Else
+		Begin
+			Set @BaseSql = @BaseSql + ' SELECT DISTINCT MT.Mass_Tag_ID'
+			Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
+			Set @BaseSql = @BaseSql +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
+			Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @BaseSql = @BaseSql + ' WHERE ' + @ScoreFilteringSQL + @ExperimentFilteringSQL
+		End
 	End
-		
-	-- Possibly narrow down the listing using Is Criteria
-	If Len(@IsCriteriaSQL) > 0
-		Set @BaseSql = @BaseSql + ' AND ' + @IsCriteriaSQL    
-
 
 	---------------------------------------------------	
 	-- Clean up @MassCorrectionIDFilterList
@@ -303,49 +343,63 @@ As
 		If @MyError <> 0
 			Goto Done
 	  End   
-
+    
 	---------------------------------------------------
 	-- Join the data in #TmpMassTags with T_Mass_Tags
 	-- and T_Mass_Tags_NET
 	---------------------------------------------------
-	
+
 	If @NETValueType < 0 or @NETValueType > 1
 		Set @NETValueType = 0
-	  
-	If @NETValueType = 0
+
+	If @JobToFilterOnByDataset <> 0
+		SELECT	MT.Mass_Tag_ID, 
+				MT.Peptide, 
+				MT.Monoisotopic_Mass, 
+				CASE WHEN @NETValueType = 1
+				THEN MTN.PNET
+				ELSE MIN(P.GANET_Obs) 
+				END As Net_Value_to_Use, 
+				MTN.PNET,
+				MT.High_Normalized_Score, 
+				0 AS StD_GANET,
+				MT.High_Discriminant_Score, 
+				MT.Peptide_Obs_Count_Passing_Filter,
+				MT.Mod_Count,
+				MT.Mod_Description
+		FROM #TmpMassTags
+			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
+			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
+			 INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID 
+			 INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+		WHERE TAD.Dataset = @Dataset AND
+				P.Max_Obs_Area_In_Job = 1
+		GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, 
+					MT.High_Normalized_Score, MT.High_Discriminant_Score, 
+					MT.Peptide_Obs_Count_Passing_Filter, MT.Mod_Count, MT.Mod_Description, MTN.PNET
+		ORDER BY MT.Monoisotopic_Mass
+	Else
 		-- Return Avg_GANET as Net_Value_To_Use
 		SELECT DISTINCT
 			MT.Mass_Tag_ID, 
 			MT.Peptide, 
 			MT.Monoisotopic_Mass, 
-			MTN.Avg_GANET As Net_Value_to_Use, 
+			CASE WHEN @NETValueType = 1 
+			THEN MTN.PNET
+			ELSE MTN.Avg_GANET 
+			END As Net_Value_to_Use, 
 			MTN.PNET, 
 			MT.High_Normalized_Score, 
 			MTN.StD_GANET,
 			MT.High_Discriminant_Score,
-			MT.Peptide_Obs_Count_Passing_Filter
-
+			MT.Peptide_Obs_Count_Passing_Filter,
+			MT.Mod_Count,
+			MT.Mod_Description
 		FROM #TmpMassTags 
-			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
+			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
 		ORDER BY MT.Monoisotopic_Mass
-	Else
-		-- Return PNET as Net_Value_To_Use
-		SELECT DISTINCT
-			MT.Mass_Tag_ID, 
-			MT.Peptide, 
-			MT.Monoisotopic_Mass, 
-			MTN.Avg_GANET As Net_Value_to_Use, 
-			MTN.PNET, 
-			MT.High_Normalized_Score, 
-			MTN.StD_GANET,
-			MT.High_Discriminant_Score,
-			MT.Peptide_Obs_Count_Passing_Filter
 
-		FROM #TmpMassTags 
-			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
-			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
-		ORDER BY MT.Monoisotopic_Mass
 
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount

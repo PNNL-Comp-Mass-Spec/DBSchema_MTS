@@ -3,45 +3,51 @@ GO
 SET ANSI_NULLS ON 
 GO
 
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ImportNewFTICRAnalyses]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ImportNewFTICRAnalyses]
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ImportNewMSAnalyses]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
+drop procedure [dbo].[ImportNewMSAnalyses]
 GO
 
 
-CREATE Procedure dbo.ImportNewFTICRAnalyses
+CREATE Procedure dbo.ImportNewMSAnalyses
 /****************************************************
 **
-**	Desc: Imports FTICR job entries from the analysis job table
+**	Desc: Imports LC-MS job entries from the analysis job table
 **        in the linked DMS database and inserts them
-**        into the local FTICR analysis description table
+**        into the local MS analysis description table
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters: 
 **
-**		Auth: grk
-**		Date: 12/4/2001
-**			  09/16/2003 grk - Added table lookup for allowed instruments
-**			  11/05/2003 grk - Modified dynamic SQL to use new import criteria tables
-**			  03/05/2004 mem - Added ability to specify job numbers to force for import, regardless of other criteria
-**			  09/20/2004 mem - Modified to use T_Process_Config and additional import criteria
-**			  09/22/2004 mem - Added ability to handle Experiment filter parameters in T_Process_Config that contain a wildcard character (percent sign)
-**			  09/24/2004 mem - Added ability to handle Experiment_Exclusion filter parameters in T_Process_Config
-**			  10/01/2004 mem - Added ability to handle Dataset and Dataset_Exclusion filter parameters in T_Process_Config
-**			  03/07/2005 mem - Now checking for no matching Experiments if an experiment inclusion filter is defined; also checking for no matching datasets if a dataset inclusion filter is defined
-**			  04/06/2005 mem - Added ability to handle Campaign_and_Experiment filter parameter in T_Process_Config
-**			  07/07/2005 mem - Now populating column Instrument
-**			  07/08/2005 mem - Now populating column Internal_Standard
-**			  07/18/2005 mem - Now populating column Labelling
-**			  11/13/2005 mem - Now populating columns Dataset_Acq_Time_Start, Dataset_Acq_Time_End, and Dataset_Scan_Count
-**			  11/30/2005 mem - Added parameter @PreviewSql
+**	Auth:	grk
+**	Date:	12/04/2001
+**			09/16/2003 grk - Added table lookup for allowed instruments
+**			11/05/2003 grk - Modified dynamic SQL to use new import criteria tables
+**			03/05/2004 mem - Added ability to specify job numbers to force for import, regardless of other criteria
+**			09/20/2004 mem - Modified to use T_Process_Config and additional import criteria
+**			09/22/2004 mem - Added ability to handle Experiment filter parameters in T_Process_Config that contain a wildcard character (percent sign)
+**			09/24/2004 mem - Added ability to handle Experiment_Exclusion filter parameters in T_Process_Config
+**			10/01/2004 mem - Added ability to handle Dataset and Dataset_Exclusion filter parameters in T_Process_Config
+**			03/07/2005 mem - Now checking for no matching Experiments if an experiment inclusion filter is defined; also checking for no matching datasets if a dataset inclusion filter is defined
+**			04/06/2005 mem - Added ability to handle Campaign_and_Experiment filter parameter in T_Process_Config
+**			07/07/2005 mem - Now populating column Instrument
+**			07/08/2005 mem - Now populating column Internal_Standard
+**			07/18/2005 mem - Now populating column Labelling
+**			11/13/2005 mem - Now populating columns Dataset_Acq_Time_Start, Dataset_Acq_Time_End, and Dataset_Scan_Count
+**			11/30/2005 mem - Added parameter @PreviewSql
+**			12/15/2005 mem - Now populating T_FTICR_Analysis_Description with PreDigest_Internal_Std, PostDigest_Internal_Std, and Dataset_Internal_Std (previously named Internal_Standard)
+**			02/23/2006 mem - Updated this SP to post a message to the log if new entries are added rather than having the calling procedure do so
+**			02/24/2006 mem - Updated to only consider the jobs in @JobListOverride if defined; previously, would still add jobs passing the default filters even if @JobListOverride contained one or more jobs
+**			03/02/2006 mem - Fixed bug that was posting a log entry when @infoOnly = 1 rather than when @infoOnly = 0
+**			06/04/2006 mem - Now populating T_Analysis_Description with Protein_Collection_List and Protein_Options_List
+**			08/01/2006 mem - Increased size of @JobListOverride and switched to use udfParseDelimitedList to parse the list
 **    
 *****************************************************/
 (
 	@entriesAdded int = 0 output,
 	@message varchar(512) = '' output,
 	@infoOnly int = 0,
-	@JobListOverride varchar(1024) = '',		-- Note: jobs passing the default filters will be added, even if values are provided for @JobListOverride.  To prevent this, define a fake Experiment filter in T_Process_Config
+	@JobListOverride varchar(4096) = '',
 	@PreviewSql tinyint = 0						-- Set to 1 to display the table population Sql statements
 )
 As
@@ -57,9 +63,6 @@ As
 
 	declare @startingSize int
 	declare @endingSize int
-	
-	set @message = ''
-	set @entriesAdded = 0
 
 	declare @SCampaign varchar(255)
 	declare @SAddnl varchar(2000)
@@ -69,6 +72,9 @@ As
 
 	declare @filterValueLookupTableName varchar(256)
 	declare @filterMatchCount int
+
+	declare @UsingJobListOverride tinyint
+	set @UsingJobListOverride =0
 	
 	declare @JobsByDualKeyFilters int
 	
@@ -80,6 +86,18 @@ As
 
 	declare @CrLf char(2)
 	Set @CrLf = char(10) + char(13)
+
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------
+	--
+	set @entriesAdded = 0
+	set @message = ''
+	Set @JobListOverride = LTrim(RTrim(IsNull(@JobListOverride, '')))
+
+	Set @PreviewSql = IsNull(@PreviewSql, 0)
+	If @PreviewSql <> 0
+		Set @infoOnly = 1
 
 	---------------------------------------------------
 	-- Make sure at least one campaign is defined for this mass tag database
@@ -133,7 +151,37 @@ As
 			Filter_Type varchar(128), 
 			Value varchar(128) NULL
 		)
+	
+	If Len(@JobListOverride) > 0
+	Begin
+		---------------------------------------------------
+		-- Populate a temporary table with the jobs in @JobListOverride
+		---------------------------------------------------
+		--
+		CREATE TABLE #T_Tmp_JobListOverride (
+			JobOverride int
+		)
+		
+		INSERT INTO #T_Tmp_JobListOverride (JobOverride)
+		SELECT Convert(int, Value)
+		FROM dbo.udfParseDelimitedList(@JobListOverride, ',')
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Error parsing Job Override list'
+			goto Done
+		end
 
+		Set @UsingJobListOverride = 1
+		
+		If @InfoOnly <> 0
+			SELECT JobOverride
+			FROM #T_Tmp_JobListOverride
+			ORDER BY JobOverride
+	End
+	
 	---------------------------------------------------
 	-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
 	---------------------------------------------------
@@ -376,7 +424,7 @@ As
 
 
 	---------------------------------------------------
-	-- Import analyses for valid FTICR instrument classes
+	-- Import analyses for valid MS instrument classes
 	---------------------------------------------------
 	--
 	-- get entries from the analysis job table 
@@ -384,7 +432,7 @@ As
 	-- given criteria and have not already been imported
 	--
 
-	-- remember size of FTICR analysis description table
+	-- remember size of MS analysis description table
 	--
 	SELECT @startingSize = COUNT(*) FROM T_FTICR_Analysis_Description
 
@@ -396,11 +444,12 @@ As
 		set @S = @S + '	Job, Dataset, Dataset_ID, Dataset_Created_DMS,'
 		set @S = @S + ' Experiment, Campaign, Organism,'
 		set @S = @S + '	Instrument_Class, Instrument, Analysis_Tool,'
-		set @S = @S + '	Parameter_File_Name, Settings_File_Name, Organism_DB_Name,'
+		set @S = @S + '	Parameter_File_Name, Settings_File_Name,'
+		set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
 		set @S = @S + '	Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder,'
 		set @S = @S + '	Completed, ResultType, Separation_Sys_Type,'
-		set @S = @S + '	Internal_Standard, Labelling,'
-		set @S = @S + ' Created, Auto_Addition, State'
+		set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
+		set @S = @S + ' Labelling, Created, Auto_Addition, State'
 		set @S = @S + ') '
 	End
 	set @S = @S + 'SELECT DISTINCT * '
@@ -409,63 +458,65 @@ As
 	set @S = @S +   ' Job, Dataset, DatasetID, DS_Created,'
 	set @S = @S +   ' Experiment, Campaign, Organism,'
 	set @S = @S +   ' InstrumentClass, InstrumentName, AnalysisTool,'
-	set @S = @S +   ' ParameterFileName, SettingsFileName, OrganismDBName,'
+	set @S = @S +   ' ParameterFileName, SettingsFileName,'
+	set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions,'
 	set @S = @S +   ' VolClient, VolServer, StoragePath, DatasetFolder, ResultsFolder,'
-	set @S = @S +   ' Completed, ResultType, SeparationSysType,'
-	set @S = @S +   ' [Internal Standard], Labelling, '
-	set @S = @S +   ' GetDate() As Created, 1 As Auto_Addition, 1 As StateNew '
-	set @S = @S +   'FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex '
-	set @S = @S +   'WHERE ('
-		set @S = @S +   @SCampaignAndAddnl
+	set @S = @S +   ' Completed, ResultType, SeparationSysType,'
+	set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std],'
+	set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew '
+	set @S = @S +   'FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI '
+
+	If @UsingJobListOverride = 1
+	Begin
+		set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride'
+	End
+	Else			
+	Begin
+		set @S = @S +   ' WHERE ('
+			set @S = @S +   @SCampaignAndAddnl
+			
+			if @expListCount > 0
+			begin
+				set @S = @S + 'AND Experiment IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
+				set @S = @S + ') '
+			end
+			
+			if @expListCountExcluded > 0
+			begin
+				set @S = @S + 'AND NOT Experiment IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
+				set @S = @S + ') '
+			End
+
+			if @datasetListCount > 0
+			begin
+				set @S = @S + 'AND Dataset IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
+				set @S = @S + ') '
+			end
+
+			if @datasetListCountExcluded > 0
+			begin
+				set @S = @S + 'AND NOT Dataset IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
+				set @S = @S + ') '
+			end
+		set @S = @S + ')'
 		
-		if @expListCount > 0
-		begin
-			set @S = @S + 'AND Experiment IN '
-			set @S = @S + '( '
-			set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-			set @S = @S + ') '
-		end
-		
-		if @expListCountExcluded > 0
-		begin
-			set @S = @S + 'AND NOT Experiment IN '
-			set @S = @S + '( '
-			set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-			set @S = @S + ') '
+		-- Now add jobs found using the alternate job selection method
+		If @JobsByDualKeyFilters > 0
+		Begin
+			set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) '
 		End
-
-		if @datasetListCount > 0
-		begin
-			set @S = @S + 'AND Dataset IN '
-			set @S = @S + '( '
-			set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
-			set @S = @S + ') '
-		end
-
-		if @datasetListCountExcluded > 0
-		begin
-			set @S = @S + 'AND NOT Dataset IN '
-			set @S = @S + '( '
-			set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
-			set @S = @S + ') '
-		end
-	set @S = @S + ')'
-	
-	-- Now add jobs found using the alternate job selection method
-	If @JobsByDualKeyFilters > 0
-	Begin
-		set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) '
 	End
 	
-	-- Now add jobs in @JobListOverride
-	If Len(@JobListOverride) > 0
-	Begin
-		set @S = @S + ' OR (Job IN (' + @JobListOverride + '))'
-	End
-
 	set @S = @S + ') As LookupQ'
-	set @S = @S + ' WHERE Job NOT IN '
-	set @S = @S + ' (SELECT Job FROM T_FTICR_Analysis_Description)'
+	set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_FTICR_Analysis_Description)'
 	set @S = @S + ' ORDER BY Job'
 
 	If @PreviewSql <> 0
@@ -538,7 +589,7 @@ As
 			Begin
 				Set @message = 'Error updating the Dataset stat columns in T_FTICR_Analysis_Description'
 				Set @myError = 40008
-				execute PostLogEntry 'Error', @message, 'ImportNewFTICRAnalyses'
+				execute PostLogEntry 'Error', @message, 'ImportNewMSAnalyses'
 			End
 		End		
 	end
@@ -547,7 +598,10 @@ As
 		SELECT @entriesAdded = @myRowCount
 	end 
 	
-	set @message = 'ImportNewAnalyses - FTICR: ' + convert(varchar(32), @entriesAdded)
+	set @message = 'ImportNewAnalyses - MS: ' + convert(varchar(32), @entriesAdded)
+
+	if @infoOnly = 0 and @entriesAdded > 0
+		execute PostLogEntry 'Normal', @message, 'ImportNewMSAnalyses'
 
 Done:
 	return @myError

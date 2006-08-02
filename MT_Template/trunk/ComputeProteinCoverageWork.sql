@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -8,21 +8,21 @@ drop procedure [dbo].[ComputeProteinCoverageWork]
 GO
 
 
-CREATE PROCEDURE dbo.ComputeProteinCoverageWork
+CREATE Procedure dbo.ComputeProteinCoverageWork
 /****************************************************
 **
-**	Desc:
-**		Populates the T_Protein_Coverage table with
-**		protein coverage stats for a given @PMTQualityScoreMinimum value
+**	Desc:	Populates the T_Protein_Coverage table with
+**			protein coverage stats for a given @PMTQualityScoreMinimum value
 **
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date:	09/22/2004
-**				05/20/2005 mem - Updated logic to exclude proteins whose only entries in T_Mass_Tags have Internal_Standard_Only <> 0
+**	Auth:	mem
+**	Date:	09/22/2004
+**			05/20/2005 mem - Updated logic to exclude proteins whose only entries in T_Mass_Tags have Internal_Standard_Only <> 0
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 (
@@ -48,10 +48,14 @@ As
 			@ProteinCoverageResidueCount int,
 			@ProteinCoverageResidueCountConfirmed int,
 			@ProcessCount int
-			
+
+	declare @UpdateEnabled tinyint
 
 	declare @ProteinSequence varchar(8000),
 			@ProteinSequenceConfirmed varchar(8000)
+
+	declare @VerifyUpdateMessage varchar(255)
+	set @VerifyUpdateMessage = ''
 
 	
 	------------------------------------------
@@ -182,7 +186,7 @@ As
 	-- compute Protein Coverage at the residue level
 	------------------------------------------
 	If @ComputeProteinResidueCoverage <> 0
-	Begin
+	Begin -- <a>
 
 		-- Step through each of the Proteins in T_Protein_Coverage for this 
 		--  @ComputeProteinResidueCoverage level and compute the Protein coverage 
@@ -277,7 +281,7 @@ As
 			Set @numProteinsToProcess = 1E8
 			
 		While @Continue = 1 AND @ProcessCount < @numProteinsToProcess
-		Begin
+		Begin -- <b>
 			-- Get next protein
 			SELECT TOP 1 @RefID = Ref_ID
 			FROM T_Protein_Coverage
@@ -290,7 +294,7 @@ As
 			If @myRowCount < 1
 				Set @Continue = 0
 			Else
-			Begin
+			Begin -- <c>
 				-- Get protein sequence for given Protein
 				--
 				SELECT	@ProteinSequence = IsNull(Protein_Sequence, '')
@@ -302,7 +306,7 @@ As
 				Set @ProteinSequenceLength = Len(@ProteinSequence)
 				
 				If @myRowCount = 1 And @ProteinSequenceLength > 0
-				Begin
+				Begin -- <d>
 					Set @ProteinSequence = Lower(@ProteinSequence)
 					Set @ProteinSequenceConfirmed = @ProteinSequence
 					
@@ -344,18 +348,30 @@ As
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 					--
 					Set @ProcessCount = @ProcessCount + 1			
+				End -- </d>
+			End -- </c>
+
+			If @ProcessCount % 100 = 0
+			Begin
+				-- Validate that updating is enabled, abort if not enabled
+				exec VerifyUpdateEnabled @CallingFunctionDescription = 'ComputeProteinCoverageWork', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @VerifyUpdateMessage output
+				If @UpdateEnabled = 0
+				Begin
+					Set @message = @message + ' and coverage fractions for ' + convert(varchar(11), @ProcessCount) + ' Proteins (aborted mid-processing since PMT_Tag_DB_Update is disabled in MT_Main)'
+					Goto Done
 				End
+
 			End
-		End
+		End -- </b>
 
 		Set @message = @message + ' and coverage fractions for ' + convert(varchar(11), @ProcessCount) + ' Proteins'
-	End
+	End -- </a>
 	Else
 		Set @message = @message + ' (skipped coverage fraction computation)'
 
-
 Done:	
 	return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

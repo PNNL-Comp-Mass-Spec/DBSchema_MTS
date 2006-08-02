@@ -8,7 +8,7 @@ drop procedure [dbo].[CalculateMonoisotopicMass]
 GO
 
 
-CREATE PROCEDURE dbo.CalculateMonoisotopicMass
+CREATE Procedure dbo.CalculateMonoisotopicMass
 /****************************************************
 **
 **	Desc: Calculates the monoisotopic mass for the peptides in T_Mass_Tags
@@ -20,15 +20,15 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 **  Output:
 **		@message - '' if successful, otherwise a message about what went wrong
 **
-**		Auth: mem (modified version of CalculateMonoisotopicMass written by kal)
-**		Date: 03/25/2004
-**
-**		Updated: 03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
-**				 07/20/2004 mem - Added the @SequencesToProcess parameter and changed the @done variable to @continue
-**				 08/01/2004 mem - Changed T_Peptide_Mod_Global_List reference from MT_Main to a temporary table
-**								  version of V_DMS_Peptide_Mod_Global_List_Import
-**				 08/26/2004 mem - Updated to use consolidated mod descriptions and mass info views from DMS
-**				 10/19/2004 mem - Modified for use with DB Schema Version 2
+**	Auth:	mem (modified version of CalculateMonoisotopicMass written by kal)
+**	Date:	03/25/2004
+**			03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
+**			07/20/2004 mem - Added the @SequencesToProcess parameter and changed the @done variable to @continue
+**			08/01/2004 mem - Changed T_Peptide_Mod_Global_List reference from MT_Main to a temporary table
+**							 version of V_DMS_Peptide_Mod_Global_List_Import
+**			08/26/2004 mem - Updated to use consolidated mod descriptions and mass info views from DMS
+**			10/19/2004 mem - Modified for use with DB Schema Version 2
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 (
@@ -51,6 +51,7 @@ AS
 	
 	Declare @Progress varchar(255)
 	Declare @result int
+	Declare @UpdateEnabled tinyint
 	
 	--used for storing information from each table row
 	Declare @Mass_Tag_ID int
@@ -244,7 +245,8 @@ AS
 		End
 		Set @continue = @myRowCount
 		
-
+
+
 		If @MassCorrectionTableInitialized = 0
 		Begin
 			-- Create a temporary table version of V_DMS_Monoisotopic_Masss
@@ -487,12 +489,20 @@ UpdateMass:
 		Set @PeptidesProcessedCount = @PeptidesProcessedCount + 1
 		
 		-- Since mass computation can take awhile, post an entry to T_Log_Entries every 25,000 peptides
-		If @PeptidesProcessedCount % 25000 = 0
+		if @PeptidesProcessedCount % 2500 = 0
 		Begin
-			Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
-			Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
-		End
+			If @PeptidesProcessedCount % 25000 = 0
+			Begin
+				Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
+				Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
+			End
 
+			-- Validate that updating is enabled, abort if not enabled
+			exec VerifyUpdateEnabled @CallingFunctionDescription = 'CalculateMonoisotopicMass', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+			If @UpdateEnabled = 0
+				Goto Done
+		End
+		
 		If @SequencesToProcess > 0
 		Begin
 			If @PeptidesProcessedCount >= @SequencesToProcess
@@ -501,14 +511,14 @@ UpdateMass:
 		
 	End		--End of main While loop
 
-done:
+Done:
 	DROP INDEX #TModDescriptors.#IX_ModDescriptors_UniqueModID
 	DROP TABLE #TModDescriptors
 	
 	DROP INDEX #TMP_AA.#IX_TMP_AA_Symbol
 	DROP TABLE #TMP_AA
 	
-	RETURN @myError
+	return @myError
 
 
 GO

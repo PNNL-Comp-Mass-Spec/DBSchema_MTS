@@ -20,28 +20,29 @@ CREATE PROCEDURE dbo.QRRetrieveProteinsMultiQID
 **
 **  Parameters: QuantitationID List to process
 **
-**  Auth: mem
-**	Date: 11/14/2003
+**  Auth:	mem
+**	Date:	11/14/2003
 **
-**	Updated: 11/18/2003 mem - Updated @ERValuesPresent test to use MAX(ABS(ER_Average)) rather than simply MAX(ER_Average)
-**			 12/01/2003 mem - Fixed bug in link to ExtendedStatsLookup table to Join on Quantitation_ID in addition to Ref_ID
-**			 04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
-**							- Added Average ORF Count for each protein (based on MT.Multiple_ORF+1 for each peptide)
-**							- Removed ExtendedStatsLookup code since values are now stored in T_Quantitation_Results
-**							- Added 11 new output columns:
+**			11/18/2003 mem - Updated @ERValuesPresent test to use MAX(ABS(ER_Average)) rather than simply MAX(ER_Average)
+**			12/01/2003 mem - Fixed bug in link to ExtendedStatsLookup table to Join on Quantitation_ID in addition to Ref_ID
+**			04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
+**						   - Added Average ORF Count for each protein (based on MT.Multiple_ORF+1 for each peptide)
+**						   - Removed ExtendedStatsLookup code since values are now stored in T_Quantitation_Results
+**						   - Added 11 new output columns:
 **							  Mass_Error_PPM_Avg, ORF_Count_Avg, 
 **							  Full_Enzyme_Count, Potential_Full_Enzyme_Count, 
 **							  Full_Enzyme_No_Missed_Cleavage_Count, 
 **							  Partial_Enzyme_Count, Potential_Partial_Enzyme_Count, 
 **							  ORF_Coverage_Residue_Count, Potential_ORF_Coverage_Residue_Count, 
 **							  ORF_Coverage_Fraction, Potential_ORF_Coverage_Fraction
-**							- Now calling QRGenerateORFColumnSql to generate the sql for the ORF columns
-**			 06/06/2004 mem - Removed the Meets_Minimum_Criteria column from the output
-**			 07/10/2004 mem - Changed default for @SeparateReplicateDataIDs to 0
-**			 10/05/2004 mem - Updated for new MTDB schema
-**			 11/09/2004 mem - Now rounding protein mass to 2 decimal places
-**			 04/05/2005 mem - Added parameter @VerboseColumnOutput
-**			 05/25/2005 mem - Renamed output column MonoMassKDa to Mono_Mass_KDa
+**						   - Now calling QRGenerateORFColumnSql to generate the sql for the ORF columns
+**			06/06/2004 mem - Removed the Meets_Minimum_Criteria column from the output
+**			07/10/2004 mem - Changed default for @SeparateReplicateDataIDs to 0
+**			10/05/2004 mem - Updated for new MTDB schema
+**			11/09/2004 mem - Now rounding protein mass to 2 decimal places
+**			04/05/2005 mem - Added parameter @VerboseColumnOutput
+**			05/25/2005 mem - Renamed output column MonoMassKDa to Mono_Mass_KDa
+**			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **
 ****************************************************/
 (
@@ -56,7 +57,6 @@ AS
 	Set NoCount On
 
 	Declare @sql varchar(8000),
-			@OrfDescriptionSqlJoin varchar(1024),
 			@ORFColumnSql varchar(2048),
 			@ReplicateAndFractionSql varchar(1024)
 
@@ -194,9 +194,6 @@ AS
 		Exec QRGenerateDescription @QuantitationID, 'Pro', @Description = @Description OUTPUT
 	 End
 	
-	-- Generate the ORF DB Join SQL; returns '' if a valid ORF DB is not defined
-	Exec QRGenerateORFDBJoinSql @OrfDescriptionSqlJoin = @OrfDescriptionSqlJoin OUTPUT
-	
 	-- Generate the sql for the ORF columns in T_Quantitation_Results
 	Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
 	
@@ -209,8 +206,6 @@ AS
 	Set @sql = @sql + '  T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
 	Set @sql = @sql + ' INNER JOIN'
 	Set @sql = @sql + '  T_Quantitation_Description AS QD ON QR.Quantitation_ID = QD.Quantitation_ID'
-	If Len(@OrfDescriptionSqlJoin) > 0
-		Set @sql = @sql + @OrfDescriptionSqlJoin
 	Set @sql = @sql + ' WHERE   QD.Quantitation_ID IN (' + @QuantitationIDListSql + ') AND '
 	Set @sql = @sql + '			QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
 	Set @sql = @sql + ' ORDER BY QD.SampleName, QR.Abundance_Average DESC, T_Proteins.Reference'
@@ -218,6 +213,7 @@ AS
 	Exec (@sql)
 	--
 	Return @@Error
+
 
 
 GO

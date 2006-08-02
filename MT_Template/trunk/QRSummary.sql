@@ -17,34 +17,37 @@ CREATE Procedure dbo.QRSummary
 **
 **  Parameters: QuantitationID List to process
 **
-**  Auth: mem
-**	Date: 07/30/2003
-**
-**	Updated: 08/01/2003 mem
-**			 08/15/2003 mem
-**			 08/22/2003 mem
-**			 08/26/2003 mem
-**			 09/22/2003 mem - Now returns Minimum_Criteria columns and looks up the Peak Matching Results path from MT_Main
-**			 11/19/2003 mem - Added the [Feature Count With Hits] column directly after the [Feature (UMC) Count] column
-**			 12/01/2003 mem - Now returns ReplicateNormalizationStats column
-**			 12/03/2003 mem - Added MassTag_Hit_Count > 0 to Where clause in query that computes @UMCCountWithHits
-**			 12/31/2003 mem - Now returns Total_Scans, Scan_Start, and Scan_End from T_FTICR_Analysis_Description
-**							  For replicates or other rolled-up data, returns the Average of Total_Scans, the Minimum of Scan_Start, and the Maximum of Scan_End
-**			 02/12/2004 mem - Now returns MD_Comparison_Mass_Tag_Count from T_Match_Making_Description
-**			 05/12/2004 mem - Updated to use udfPeakMatchingPathForMDID to construct the full path to the results folder
-**			 05/19/2004 mem - Moved location of the Results Folder Path folder to be directly after the jobs column
-**			 12/29/2004 mem - Removed Minimum_Criteria columns
-**			 04/13/2005 mem - Added parameter @VerboseColumnOutput and renamed some of the output columns
-**			 05/25/2005 mem - Now examining column GANET_Locker_Count, in addition to MassTag_Hit_Count
-**							- Now returning column UniqueInternalStdCount, in addition to UniqueMassTagCount; renamed column SampleName to [Sample Name]
-**			 06/16/2005 mem - Now returning list of MDIDs for each QID
-**			 07/28/2005 mem - Now obtaining Feature Count With Hits value from T_Quantitation_Description
-**			 08/25/2005 mem - Now returning Percent Features With Hits when @VerboseColumnOutput = 1
+**  Auth:	mem
+**	Date:	07/30/2003
+**			08/01/2003 mem
+**			08/15/2003 mem
+**			08/22/2003 mem
+**			08/26/2003 mem
+**			09/22/2003 mem - Now returns Minimum_Criteria columns and looks up the Peak Matching Results path from MT_Main
+**			11/19/2003 mem - Added the [Feature Count With Hits] column directly after the [Feature (UMC) Count] column
+**			12/01/2003 mem - Now returns ReplicateNormalizationStats column
+**			12/03/2003 mem - Added MassTag_Hit_Count > 0 to Where clause in query that computes @UMCCountWithHits
+**			12/31/2003 mem - Now returns Total_Scans, Scan_Start, and Scan_End from T_FTICR_Analysis_Description
+**						   - For replicates or other rolled-up data, returns the Average of Total_Scans, the Minimum of Scan_Start, and the Maximum of Scan_End
+**			02/12/2004 mem - Now returns MD_Comparison_Mass_Tag_Count from T_Match_Making_Description
+**			05/12/2004 mem - Updated to use udfPeakMatchingPathForMDID to construct the full path to the results folder
+**			05/19/2004 mem - Moved location of the Results Folder Path folder to be directly after the jobs column
+**			12/29/2004 mem - Removed Minimum_Criteria columns
+**			04/13/2005 mem - Added parameter @VerboseColumnOutput and renamed some of the output columns
+**			05/25/2005 mem - Now examining column GANET_Locker_Count, in addition to MassTag_Hit_Count
+**						   - Now returning column UniqueInternalStdCount, in addition to UniqueMassTagCount; renamed column SampleName to [Sample Name]
+**			06/16/2005 mem - Now returning list of MDIDs for each QID
+**			07/28/2005 mem - Now obtaining Feature Count With Hits value from T_Quantitation_Description
+**			08/25/2005 mem - Now returning Percent Features With Hits when @VerboseColumnOutput = 1
+**			12/20/2005 mem - Renamed table T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
+**			03/13/2006 mem - Now sorting on Sample Name rather than QID
+**			07/11/2006 mem - Now displaying the list of QIDs in the same order as defined in @QuantitationIDList (by default); set parameter @SortBySampleName to 1 to sort the list by sample name
 **
 ****************************************************/
 (
 	@QuantitationIDList varchar(1024),			-- Comma separated list of Quantitation ID's
-	@VerboseColumnOutput tinyint = 1			-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
+	@VerboseColumnOutput tinyint = 1,			-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
+	@SortBySampleName tinyint = 0				-- Set to 1 to sort by sample name; otherwise, retains order given in @QuantitationIDList
 )
 AS 
 
@@ -63,7 +66,8 @@ AS
 	Declare @TotalScanAvg int,
 			@ScanStartMin int,
 			@ScanEndMax int
-				
+	
+	Declare @Sql varchar(2048)	
 
 	-- For each QuantitationID in @QuantitationIDList, determine the number of MDID's that were used
 	-- If the MDID count is 1, then use a simple Select query
@@ -73,6 +77,7 @@ AS
 
 
 	CREATE TABLE #QIDSummary (
+		[UniqueRowID] [int] identity(1,1) NOT NULL,
 		[Quantitation ID] [int] NOT NULL ,
 		[Sample Name] [varchar] (255) NOT NULL ,
 		[Comment] [varchar] (255) NOT NULL ,
@@ -303,14 +308,14 @@ AS
 									RD.Match_State = 6
 								UNION
 								SELECT	QMDID.Quantitation_ID, MMD.MD_ID, 
-										FUR.UMC_Ind, NLD.Seq_ID, 
-										NLD.Match_Score, NLD.Del_Match_Score
+										FUR.UMC_Ind, ISD.Seq_ID, 
+										ISD.Match_Score, ISD.Del_Match_Score
 								FROM T_Match_Making_Description AS MMD INNER JOIN
 									T_Quantitation_MDIDs AS QMDID ON MMD.MD_ID = QMDID.MD_ID INNER JOIN
 									T_FTICR_UMC_Results AS FUR ON MMD.MD_ID = FUR.MD_ID INNER JOIN
-									T_FTICR_UMC_NETLockerDetails AS NLD ON FUR.UMC_Results_ID = NLD.UMC_Results_ID
+									T_FTICR_UMC_InternalStdDetails AS ISD ON FUR.UMC_Results_ID = ISD.UMC_Results_ID
 								WHERE QMDID.Quantitation_ID = Convert(int, @QuantitationID) AND
-									NLD.Match_State = 6 
+									ISD.Match_State = 6 
 							) LookupQ INNER JOIN T_Quantitation_Description AS QD ON 
 							LookupQ.Quantitation_ID = QD.Quantitation_ID AND 
 							LookupQ.Match_Score >= QD.Minimum_Match_Score AND
@@ -336,7 +341,7 @@ AS
 								T_FTICR_UMC_Results ON 
 								T_Match_Making_Description.MD_ID = T_FTICR_UMC_Results.MD_ID
 							WHERE T_Quantitation_MDIDs.Quantitation_ID = Convert(int, @QuantitationID) AND
-								(T_FTICR_UMC_Results.MassTag_Hit_Count > 0 OR T_FTICR_UMC_Results.GANET_Locker_Count > 0)
+								(T_FTICR_UMC_Results.MassTag_Hit_Count > 0 OR T_FTICR_UMC_Results.InternalStd_Hit_Count > 0)
 							GROUP BY T_Match_Making_Description.MD_ID, T_Quantitation_MDIDs.Quantitation_ID
 						) AS CountsByMDID
 				*/
@@ -357,27 +362,35 @@ AS
 		Set @CommaLoc = CharIndex(',', @WorkingList)
 	END
 
+	Set @Sql = ''
 	If @VerboseColumnOutput <> 0
-		SELECT *
-		FROM #QIDSummary
-		ORDER BY [Quantitation ID]
+	Begin
+		Set @Sql = @Sql + ' SELECT *'
+		Set @Sql = @Sql + ' FROM #QIDSummary'
+	End
 	Else
-		SELECT 	[Quantitation ID],
-				[Sample Name],
-				[Experiments],
-				[Jobs],
-				[MDIDs],
-				[Feature (UMC) Count],
-				[Feature Count With Hits],
-				[Unique PMT Tag Count Matched],
-				[Unique Internal Std Count Matched],
-				[Comparison PMT Tag Count],
-				[Total_Scans_Avg],
-				[MD NetAdj NET Min], [MD NetAdj NET Max],
-				[Refine Mass Cal PPMShift]				
-		FROM #QIDSummary
-		ORDER BY [Quantitation ID]
-
+	Begin
+		Set @Sql = @Sql + ' SELECT 	[Quantitation ID],'
+		Set @Sql = @Sql +   ' [Sample Name], [Experiments],'
+		Set @Sql = @Sql +   ' [Jobs], [MDIDs],'
+		Set @Sql = @Sql +   ' [Feature (UMC) Count],'
+		Set @Sql = @Sql +   ' [Feature Count With Hits],'
+		Set @Sql = @Sql +   ' [Unique PMT Tag Count Matched],'
+		Set @Sql = @Sql +   ' [Unique Internal Std Count Matched],'
+		Set @Sql = @Sql +   ' [Comparison PMT Tag Count],'
+		Set @Sql = @Sql +   ' [Total_Scans_Avg],'
+		Set @Sql = @Sql +   ' [MD NetAdj NET Min], [MD NetAdj NET Max],'
+		Set @Sql = @Sql +   ' [Refine Mass Cal PPMShift]'
+		Set @Sql = @Sql + ' FROM #QIDSummary'
+	End
+	
+	If IsNull(@SortBySampleName, 0) = 0
+		Set @Sql = @Sql + ' ORDER BY UniqueRowID'
+	Else
+		Set @Sql = @Sql + ' ORDER BY [Sample Name] + '' '' + Convert(varchar(12), [Quantitation ID])'
+	
+	Exec (@Sql)
+	
 	--
 	Return @@Error
 

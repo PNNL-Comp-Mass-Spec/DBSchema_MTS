@@ -8,6 +8,7 @@ drop view [dbo].[V_Index_List_Overlapping]
 GO
 
 
+
 CREATE VIEW dbo.V_Index_List_Overlapping
 AS
 SELECT TOP 100 PERCENT l1.TableName, l1.IndexName, 
@@ -28,6 +29,7 @@ FROM dbo.V_Index_List l1 INNER JOIN
     l2.col6 IS NULL OR
     l1.col6 = l2.col6)
 ORDER BY l1.TableName, l1.IndexName
+
 
 
 GO

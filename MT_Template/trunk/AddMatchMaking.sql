@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -30,6 +30,7 @@ CREATE Procedure dbo.AddMatchMaking
 **			10/05/2004 mem - now extracting the Ini File Name from @Parameters; added @IniFileName
 **			02/05/2005 mem - added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter
 **			05/06/2005 mem - Added parameters @RefineMassCalPeakWidthPPM, @RefineMassCalPeakCenterPPM, @RefineNETTolPeakHeightCounts, @RefineNETTolPeakWidthNET, & @RefineNETTolPeakCenterNET
+**			12/20/2005 mem - Added parameter @LimitToPMTsFromDataset
 *******************************************************/
 (
 	@Reference_Job int,
@@ -68,7 +69,8 @@ CREATE Procedure dbo.AddMatchMaking
 	@RefineMassCalPeakCenterPPM real = NULL,
 	@RefineNETTolPeakHeightCounts int=NULL,
 	@RefineNETTolPeakWidthNET real=NULL,
-	@RefineNETTolPeakCenterNET real = NULL
+	@RefineNETTolPeakCenterNET real = NULL,
+	@LimitToPMTsFromDataset tinyint = 0
 )
 As
 Set NoCount On
@@ -120,7 +122,7 @@ BEGIN
 		Refine_NET_Tol_PeakHeightCounts, Refine_NET_Tol_PeakWidth, 
 		Refine_NET_Tol_PeakCenter, Refine_NET_Tol_Used,
 		Minimum_High_Normalized_Score, Minimum_High_Discriminant_Score, Minimum_PMT_Quality_Score,
-		Ini_File_Name, Experiment_Filter, Experiment_Exclusion_Filter
+		Ini_File_Name, Experiment_Filter, Experiment_Exclusion_Filter, Limit_To_PMTs_From_Dataset
 		)
 	VALUES (@Reference_Job, @File, @Type, @Parameters, 
 			@Date, @State, @PeaksCount, 
@@ -137,7 +139,7 @@ BEGIN
 			@RefineNETTolPeakHeightCounts, @RefineNETTolPeakWidthNET, 
 			@RefineNETTolPeakCenterNET, @RefineNETTolUsed,
 			@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, @MinimumPMTQualityScore,
-			@IniFileName, @ExperimentFilter, @ExperimentExclusionFilter
+			@IniFileName, @ExperimentFilter, @ExperimentExclusionFilter, @LimitToPMTsFromDataset
 			)
 
 	SET @MatchMakingID=@@IDENTITY	--return ID	

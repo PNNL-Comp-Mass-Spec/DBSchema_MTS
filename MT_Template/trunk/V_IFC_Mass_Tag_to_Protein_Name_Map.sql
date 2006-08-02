@@ -10,11 +10,11 @@ GO
 
 CREATE VIEW dbo.V_IFC_Mass_Tag_to_Protein_Name_Map
 AS
-SELECT dbo.T_Mass_Tag_to_Protein_Map.Mass_Tag_ID, 
-    dbo.T_Proteins.Protein_ID, dbo.T_Proteins.Reference
-FROM dbo.T_Mass_Tag_to_Protein_Map INNER JOIN
-    dbo.T_Proteins ON 
-    dbo.T_Mass_Tag_to_Protein_Map.Ref_ID = dbo.T_Proteins.Ref_ID
+SELECT MTPM.Mass_Tag_ID, Prot.Ref_ID AS Internal_Ref_ID, 
+    Prot.Protein_DB_ID, Prot.External_Reference_ID, 
+    Prot.External_Protein_ID, Prot.Reference
+FROM dbo.T_Mass_Tag_to_Protein_Map MTPM INNER JOIN
+    dbo.T_Proteins Prot ON MTPM.Ref_ID = Prot.Ref_ID
 
 
 GO

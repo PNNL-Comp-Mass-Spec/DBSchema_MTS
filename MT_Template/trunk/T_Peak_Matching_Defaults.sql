@@ -7,7 +7,7 @@ CREATE TABLE [T_Peak_Matching_Defaults] (
 	[Instrument_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[Dataset_Name_Filter] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Labelling_Filter] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
-	[IniFile_Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
+	[IniFile_Name] [varchar] (185) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Confirmed_Only] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Confirmed_Only] DEFAULT (0),
 	[Mod_List] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Mod_List] DEFAULT (''),
 	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Normalized_Score] DEFAULT (1.0),

@@ -26,29 +26,33 @@ CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
 ** 
 **		Parameters:
 **
-**		Auth: grk
-**		Date: 11/16/2001
-**		Mod:  09/16/2003 grk - Added table lookup for allowed filters
-**			  01/27/2004 mem - Added code to delete peptides from #Imported_Peptides that already exist in T_Peptides
-**			  07/21/2004 mem - Added check for empty T_Import_Cleavage_Filter_List table; if empty, then imports all peptides for given jobs
-**			  09/28/2004 mem - Updated to use @PeptideDBName and to populate additional tables
-**			  01/23/2005 mem - Now populating T_Peptides.Scan_Time_Peak_Apex
-**							   Now raising an error if no peptides are imported for a job
-**							   Now validating that the maximum peptide_hit scan number is less than the maximum SIC scan number
-**			  01/30/2005 mem - Updated population of #ImportedMassTags to be tolerant of conflicting Multiple_ORF or GANET_Predicted values
-**			  03/26/2005 mem - Now populating Terminus_State in Mass_Tag_to_Protein_Map
-**							   Now checking for conflicting Cleavage_State or Terminus_State values when importing values into Mass_Tag_to_Protein_Map
-**			  05/09/2005 mem - Added checking that given job has been tested in the Peptide DB against at least one of the peptide import filter IDs in T_Process_Config
-**			  05/20/2005 mem - Now updating field Internal_Standard_Only to 0 for any new mass tags
-**			  09/02/2005 mem - Now populating columns Peak_Area and Peak_SN_Ratio in T_Peptides
-**			  10/09/2005 mem - Now calling ComputeMaxObsAreaByJob to populate Max_Obs_Area_In_Job in T_Peptides
-**			  12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
-**    
+**	Auth:	grk
+**	Date:	11/16/2001
+**			09/16/2003 grk - Added table lookup for allowed filters
+**			01/27/2004 mem - Added code to delete peptides from #Imported_Peptides that already exist in T_Peptides
+**			07/21/2004 mem - Added check for empty T_Import_Cleavage_Filter_List table; if empty, then imports all peptides for given jobs
+**			09/28/2004 mem - Updated to use @PeptideDBName and to populate additional tables
+**			01/23/2005 mem - Now populating T_Peptides.Scan_Time_Peak_Apex
+**						   - Now raising an error if no peptides are imported for a job
+**						   - Now validating that the maximum peptide_hit scan number is less than the maximum SIC scan number
+**			01/30/2005 mem - Updated population of #ImportedMassTags to be tolerant of conflicting Multiple_ORF or GANET_Predicted values
+**			03/26/2005 mem - Now populating Terminus_State in Mass_Tag_to_Protein_Map
+**						   - Now checking for conflicting Cleavage_State or Terminus_State values when importing values into Mass_Tag_to_Protein_Map
+**			05/09/2005 mem - Added checking that given job has been tested in the Peptide DB against at least one of the peptide import filter IDs in T_Process_Config
+**			05/20/2005 mem - Now updating field Internal_Standard_Only to 0 for any new mass tags
+**			09/02/2005 mem - Now populating columns Peak_Area and Peak_SN_Ratio in T_Peptides
+**			10/09/2005 mem - Now calling ComputeMaxObsAreaByJob to populate Max_Obs_Area_In_Job in T_Peptides
+**			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
+**			12/11/2005 mem - Updated to support XTandem results
+**			07/10/2006 mem - Updated to support Peptide Prophet values
+**
 *****************************************************/
+(
 	@job int,
 	@PeptideDBName varchar(128),				-- Peptide Database Name
 	@numAddedPeptides int = 0 output,
 	@message varchar(512) = '' output 
+)
 As
 	set nocount on
 	
@@ -61,7 +65,7 @@ As
 	set @numAddedPeptides = 0
 	
 	declare @result int
-	declare @numAddedSeqScores int
+	declare @numAddedPeptideHitScores int
 	declare @numAddedDiscScores int
 	declare @errorReturn int
 	declare @matchCount int
@@ -73,6 +77,8 @@ As
 
 	declare @transName varchar(32)
 	declare @jobStr varchar(19)
+	declare @ResultType varchar(64)
+
 	set @jobStr = Convert(varchar(19), @job)
 
 
@@ -130,6 +136,31 @@ As
 	End
 	
 	-----------------------------------------------------------
+	-- Lookup the ResultType for this job
+	-----------------------------------------------------------
+	Set @ResultType = ''
+	SELECT @ResultType = IsNull(ResultType, '')
+	FROM T_Analysis_Description
+	WHERE Job = @Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	If @myError <> 0
+	Begin
+		set @message = 'Error looking up ResultType for Job ' + @jobStr + ' (Error = ' + Convert(varchar(19), @myError) + ')'
+		set @myError = 50002
+		goto Done
+	End
+	
+	If @myRowCount = 0
+	Begin
+		set @message = 'Job ' + @jobStr + ' not found in T_Analysis_Description'
+		set @myError = 50003
+		goto Done
+	End
+	
+	
+	-----------------------------------------------------------
 	-- create temporary table for import of peptides
 	-----------------------------------------------------------
 	--
@@ -160,7 +191,7 @@ As
 	if @myError <> 0 
 	begin
 		set @message = 'Could not create #Imported_Peptides temporary table'
-		set @myError = 50002
+		set @myError = 50004
 		goto Done
 	end
 
@@ -169,8 +200,8 @@ As
 	-- on column Peptide_ID_Original
 	-----------------------------------------------
 	--
-	CREATE UNIQUE CLUSTERED INDEX IX_TempTable_Imported_Peptides_ID_Original ON #Imported_Peptides (Peptide_ID_Original)
-	CREATE INDEX IX_TempTable_Imported_Peptides_ID_New ON #Imported_Peptides (Peptide_ID_New)
+	CREATE UNIQUE CLUSTERED INDEX #IX_TempTable_Imported_Peptides_ID_Original ON #Imported_Peptides (Peptide_ID_Original)
+	CREATE INDEX #IX_TempTable_Imported_Peptides_ID_New ON #Imported_Peptides (Peptide_ID_New)
 
 
 	-----------------------------------------------------------
@@ -190,7 +221,7 @@ As
 	if @myError <> 0 
 	begin
 		set @message = 'Could not create #PeptideToProteinMapImported temporary table'
-		set @myError = 50003
+		set @myError = 50005
 		goto Done
 	end
 
@@ -199,7 +230,7 @@ As
 	-- on column Reference
 	-----------------------------------------------
 	--
-	CREATE INDEX IX_TempTable_PeptideToProteinMapImported ON #PeptideToProteinMapImported (Reference)
+	CREATE INDEX #IX_TempTable_PeptideToProteinMapImported ON #PeptideToProteinMapImported (Reference)
     
 	-----------------------------------------------------------
 	-- create temporary table to hold unique Mass Tag ID stats
@@ -220,7 +251,7 @@ As
 	if @myError <> 0 
 	begin
 		set @message = 'Could not create #ImportedMassTags temporary table'
-		set @myError = 50004
+		set @myError = 50006
 		goto Done
 	end
 
@@ -229,9 +260,35 @@ As
 	-- duplicate Mass_Tag_ID rows are present
 	-----------------------------------------------
 	--
-	CREATE UNIQUE CLUSTERED INDEX IX_TempTable_ImportedMassTags ON #ImportedMassTags (Mass_Tag_ID)
+	CREATE UNIQUE CLUSTERED INDEX #IX_TempTable_ImportedMassTags ON #ImportedMassTags (Mass_Tag_ID)
 
+	-----------------------------------------------------------
+	-- create temporary table to hold peptide hit stats
+	-----------------------------------------------------------
+	--
+	CREATE TABLE #PeptideHitStats (
+		Mass_Tag_ID int NOT NULL,
+		Observation_Count int NOT NULL, 
+		Normalized_Score_Max real NULL
+	)   
+	--
+	SELECT @myError = @@error
+	--
+	if @myError <> 0 
+	begin
+		set @message = 'Could not create #PeptideHitStats temporary table'
+		set @myError = 50006
+		goto Done
+	end
 
+	-----------------------------------------------
+	-- Add index to #PeptideHitStats to assure no 
+	-- duplicate Mass_Tag_ID rows are present
+	-----------------------------------------------
+	--
+	CREATE UNIQUE CLUSTERED INDEX #IX_TempTable_PeptideHitStats ON #PeptideHitStats (Mass_Tag_ID)
+	
+	
 	-----------------------------------------------------------
 	-- build dynamic SQL and execute it to populate
 	-- #Imported_Peptides from @PeptideDBName
@@ -275,7 +332,7 @@ As
 	if @result <> 0 
 	begin
 		set @message = 'Error executing dynamic SQL for peptide import for job ' + @jobStr
-		set @myError = 50005
+		set @myError = 50007
 		goto Done
 	end
 
@@ -319,7 +376,7 @@ As
 	If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberSICs, 0)
 	Begin
 		-- Invalid SIC data
-		set @message = 'Missing or invalid SIC data found for job ' + @jobStr + '; max peptide hit scan number is greater than maximum SIC scan number'
+		set @message = 'Missing or invalid SIC data found for job ' + @jobStr + '; max Peptide_Hit scan number is greater than maximum SIC scan number'
 		set @myError = 60001
 		goto Done
 	End
@@ -327,11 +384,11 @@ As
 	If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberAllScans, 0)
 	Begin
 		-- Invalid SIC data
-		set @message = 'Missing or invalid SIC data found for job ' + @jobStr + '; max peptide hit scan number is greater than maximum scan stats scan number'
+		set @message = 'Missing or invalid SIC data found for job ' + @jobStr + '; max Peptide_Hit scan number is greater than maximum scan stats scan number'
 		set @myError = 60002
 		goto Done
 	End
-	
+
 
 	-----------------------------------------------------------
 	-- Populate #ImportedMassTags
@@ -350,7 +407,7 @@ As
 	if @myError <> 0
 	begin
 		set @message = 'Error populating #ImportedMassTags temporary table job ' + @jobStr
-		set @myError = 50006
+		set @myError = 50008
 		goto Done
 	end	
 
@@ -381,7 +438,7 @@ As
 	if @result <> 0 
 	begin
 		set @message = 'Error executing dynamic SQL for peptide to protein map import'
-		set @myError = 50007
+		set @myError = 50009
 		goto Done
 	end
     
@@ -403,6 +460,8 @@ As
 
 	-----------------------------------------------
 	-- Get base value for peptide ID calculation
+	-- Note that @base will get added to #Imported_Peptides.Unique_Row_ID, 
+	--  which will always start at 1
 	-----------------------------------------------
 	--
 	declare @base int
@@ -418,7 +477,7 @@ As
 		rollback transaction @transName
 		set @message = 'Problem getting base for peptide ID for job ' + @jobStr
 		If @myError = 0
-			Set @myError = 50008
+			Set @myError = 50010
 		goto Done
 	end
 
@@ -435,7 +494,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem populating Peptide_ID_New column in temporary table for job ' + @jobStr
-		Set @myError = 50009
+		Set @myError = 50011
 		goto Done
 	end
 
@@ -456,7 +515,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem updating Multiple_Proteins values in T_Mass_Tags for job ' + @jobStr
-		Set @myError = 50010
+		Set @myError = 50012
 		goto Done
 	end
 
@@ -468,7 +527,7 @@ As
 	UPDATE T_Mass_Tags
 	SET Internal_Standard_Only = 0
 	FROM #ImportedMassTags AS IMT INNER JOIN
-	    T_Mass_Tags ON IMT.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID
+	     T_Mass_Tags ON IMT.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID
 	WHERE Internal_Standard_Only <> 0
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -499,7 +558,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem appending new entries to T_Mass_Tags for job ' + @jobStr
-		Set @myError = 50011
+		Set @myError = 50013
 		goto Done
 	end
 
@@ -521,7 +580,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem updating PNET entries in T_Mass_Tags_NET for job ' + @jobStr
-		Set @myError = 50012
+		Set @myError = 50014
 		goto Done
 	end
 
@@ -544,7 +603,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem appending new entries to T_Mass_Tags_NET for job ' + @jobStr
-		Set @myError = 50013
+		Set @myError = 50015
 		goto Done
 	end
 
@@ -568,7 +627,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem appending new entries to T_Proteins for job ' + @jobStr
-		Set @myError = 50014
+		Set @myError = 50016
 		goto Done
 	end
 
@@ -588,7 +647,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem populating Ref_ID_New column in #PeptideToProteinMapImported for job ' + @jobStr
-		Set @myError = 50015
+		Set @myError = 50017
 		goto Done
 	end
 
@@ -618,8 +677,9 @@ As
 	--
 	if @myError <> 0
 	begin
+		rollback transaction @transName
 		set @message = 'Error looking for conflicting entries in #PeptideToProteinMapImported for job ' + @jobStr
-		set @myError = 50016
+		set @myError = 50018
 		goto Done
 	end	
     
@@ -645,7 +705,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem appending new entries to T_Mass_Tag_to_Protein_Map for job ' + @jobStr
-		Set @myError = 50017
+		Set @myError = 50019
 		goto Done
 	end
 
@@ -671,51 +731,140 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem appending new entries to T_Peptides for job ' + @jobStr
-		Set @myError = 50018
+		Set @myError = 50020
 		goto Done
 	end
 	--
 	Set @numAddedPeptides = @myRowCount
 
-	-----------------------------------------------------------
-	-- Add new entries to T_Score_Sequest
-	-----------------------------------------------------------
-	--
-	set @S = ''
-	set @S = @S + 'INSERT INTO T_Score_Sequest ('
-	set @S = @S + ' Peptide_ID, XCorr, DeltaCn, DeltaCn2, SP, RankSp, RankXc, DelM, XcRatio '
-	set @S = @S + ') '
-	set @S = @S + 'SELECT IP.Peptide_ID_New, XCorr, DeltaCn, DeltaCn2, SP, RankSp, RankXc, DelM, XcRatio '
-	set @S = @S + 'FROM #Imported_Peptides AS IP INNER JOIN '
-	set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Sequest AS SS ON IP.Peptide_ID_Original = SS.Peptide_ID '
-	set @S = @S + 'ORDER BY IP.Peptide_ID_New'
-	--
-	exec @result = sp_executesql @S
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @result <> 0 
-	begin
+	Declare @ResultTypeValid tinyint
+	Set @ResultTypeValid = 0
+	
+	If @ResultType = 'Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_Sequest
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + ' INSERT INTO T_Score_Sequest ('
+		set @S = @S +   ' Peptide_ID, XCorr, DeltaCn, DeltaCn2, SP, RankSp, RankXc, DelM, XcRatio'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, SS.XCorr, SS.DeltaCn, SS.DeltaCn2, SS.SP, SS.RankSp, SS.RankXc, SS.DelM, SS.XcRatio'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Sequest AS SS ON IP.Peptide_ID_Original = SS.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @result <> 0 
+		begin
+			rollback transaction @transName
+			set @message = 'Error executing dynamic SQL for T_Score_Sequest for job ' + @jobStr
+			set @myError = 50021
+			goto Done
+		end
+		--
+		Set @numAddedPeptideHitScores = @myRowCount
+
+		-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+		--
+		INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+		SELECT	Mass_Tag_ID, 
+				COUNT(*) AS Observation_Count, 
+				MAX(XCorr_Max) AS Normalized_Score_Max
+		FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+						IP.Scan_Number, 
+						MAX(ISNULL(SS.XCorr, 0)) AS XCorr_Max
+				FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					 T_Score_Sequest AS SS ON IP.Peptide_ID_New = SS.Peptide_ID
+				GROUP BY IP.Seq_ID, IP.Scan_Number
+				) AS SubQ
+		GROUP BY SubQ.Mass_Tag_ID	
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		Set @ResultTypeValid = 1
+	End
+
+	If @ResultType = 'XT_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_XTandem
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_XTandem ('
+		set @S = @S +  ' Peptide_ID, Hyperscore, Log_EValue, DeltaCn2,'
+		set @S = @S +  ' Y_Score, Y_Ions, B_Score, B_Ions, DelM, Intensity, Normalized_Score'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, X.Hyperscore, X.Log_EValue, X.DeltaCn2,'
+		set @S = @S +        ' X.Y_Score, X.Y_Ions, X.B_Score, X.B_Ions, X.DelM, X.Intensity, X.Normalized_Score'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_XTandem AS X ON IP.Peptide_ID_Original = X.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @result <> 0 
+		begin
+			rollback transaction @transName
+			set @message = 'Error executing dynamic SQL for T_Score_XTandem for job ' + @jobStr
+			set @myError = 50022
+			goto Done
+		end
+		--
+		Set @numAddedPeptideHitScores = @myRowCount
+		
+		-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+		--
+		INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+		SELECT	Mass_Tag_ID, 
+				COUNT(*) AS Observation_Count, 
+				MAX(Normalized_Score_Max) AS Normalized_Score_Max
+		FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+						IP.Scan_Number, 
+						MAX(ISNULL(X.Normalized_Score, 0)) AS Normalized_Score_Max
+				FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					 T_Score_XTandem AS X ON IP.Peptide_ID_New = X.Peptide_ID
+				GROUP BY IP.Seq_ID, IP.Scan_Number
+				) AS SubQ
+		GROUP BY SubQ.Mass_Tag_ID	
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		Set @ResultTypeValid = 1
+	End
+
+	If @ResultTypeValid = 0
+	Begin
 		rollback transaction @transName
-		set @message = 'Error executing dynamic SQL for T_Score_Sequest for job ' + @jobStr
-		set @myError = 50019
-		goto Done
-	end
-	--
-	Set @numAddedSeqScores = @myRowCount
+		set @message = 'Job ' + @jobStr + ' does not have a valid ResultType (' + @ResultType + ')'
+		set @myError = 50023
+		goto Done	
+	End
 
 	-----------------------------------------------------------
 	-- Add new entries to T_Score_Discriminant
+	-- Note that PassFilt and MScore are estimated for XTandem data
+	--  PassFilt was set to 1
+	--  MScore was set to 10.75
 	-----------------------------------------------------------
 	--
 	set @S = ''
-	set @S = @S + 'INSERT INTO T_Score_Discriminant ('
-	set @S = @S + ' Peptide_ID, MScore, DiscriminantScore, DiscriminantScoreNorm, PassFilt'
-	set @S = @S + ') '
-	set @S = @S + 'SELECT IP.Peptide_ID_New, MScore, DiscriminantScore, DiscriminantScoreNorm, PassFilt '
-	set @S = @S + 'FROM #Imported_Peptides AS IP INNER JOIN '
-	set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID '
-	set @S = @S + 'ORDER BY IP.Peptide_ID_New'
+	set @S = @S + ' INSERT INTO T_Score_Discriminant ('
+	set @S = @S +  ' Peptide_ID, MScore, DiscriminantScore, DiscriminantScoreNorm,'
+	set @S = @S +  ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability'
+	set @S = @S + ' )'
+	set @S = @S + ' SELECT IP.Peptide_ID_New, MScore, DiscriminantScore, DiscriminantScoreNorm,'
+	set @S = @S +        ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability'
+	set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+	set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
+	set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 	--
 	exec @result = sp_executesql @S
 	--
@@ -725,17 +874,17 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Error executing dynamic SQL for T_Score_Discriminant for job ' + @jobStr
-		set @myError = 50020
+		set @myError = 50024
 		goto Done
 	end
 	--
 	Set @numAddedDiscScores = @myRowCount
 
-	If @numAddedSeqScores <> @numAddedPeptides OR @numAddedDiscScores <> @numAddedPeptides
+	If @numAddedPeptideHitScores <> @numAddedPeptides OR @numAddedDiscScores <> @numAddedPeptides
 	Begin
 		rollback transaction @transName
-		set @message = 'Analysis counts not identical for job ' + @jobStr + '; ' + convert(varchar(11), @numAddedPeptides) + ' vs. ' + convert(varchar(11), @numAddedSeqScores) + ' vs. ' + convert(varchar(11), @numAddedDiscScores)
-		set @myError = 50021
+		set @message = 'Analysis counts not identical for job ' + @jobStr + '; ' + convert(varchar(11), @numAddedPeptides) + ' vs. ' + convert(varchar(11), @numAddedPeptideHitScores) + ' vs. ' + convert(varchar(11), @numAddedDiscScores)
+		set @myError = 50025
 		goto Done
 	End
 
@@ -752,29 +901,18 @@ As
 	-- Note that these are approximations and will get computed properly
 	--  using ComputeMassTagsAnalysisCounts, which is called at the
 	--  completion of UpdateMassTagsFromAvailableAnalyses
+	-- This operation uses #PeptideHitStats, which was populated above
 	-----------------------------------------------------------
 	--
 	UPDATE T_Mass_Tags
 	SET Last_Affected = GetDate(), 
-		Number_Of_Peptides = Number_Of_Peptides + StatsQ.ObservationCount, 
-		High_Normalized_Score = CASE WHEN StatsQ.MaxXCorr > High_Normalized_Score
-								THEN StatsQ.MaxXCorr
+		Number_Of_Peptides = Number_Of_Peptides + StatsQ.Observation_Count, 
+		High_Normalized_Score = CASE WHEN StatsQ.Normalized_Score_Max > High_Normalized_Score
+								THEN StatsQ.Normalized_Score_Max
 								ELSE High_Normalized_Score
 								END
 	FROM T_Mass_Tags INNER JOIN 
-		(	SELECT	Mass_Tag_ID, 
-					COUNT(*) AS ObservationCount, 
-					MAX(MaxXCorr) AS MaxXCorr
-			FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
-							IP.Scan_Number, 
-							MAX(ISNULL(T_Score_Sequest.XCorr, 0)) AS MaxXCorr
-					FROM #Imported_Peptides AS IP LEFT OUTER JOIN
-						 T_Score_Sequest ON IP.Peptide_ID_New = T_Score_Sequest.Peptide_ID
-					GROUP BY IP.Seq_ID,
-							 IP.Scan_Number
-					) AS SubQ
-			GROUP BY SubQ.Mass_Tag_ID			
-		) AS StatsQ ON T_Mass_Tags.Mass_Tag_ID = StatsQ.Mass_Tag_ID
+		#PeptideHitStats AS StatsQ ON T_Mass_Tags.Mass_Tag_ID = StatsQ.Mass_Tag_ID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -782,7 +920,7 @@ As
 	begin
 		rollback transaction @transName
 		set @message = 'Problem updating stats in T_Mass_Tags for job ' + @jobStr
-		Set @myError = 50022
+		Set @myError = 50026
 		goto Done
 	end
 
@@ -798,14 +936,14 @@ As
 	if @myError <> 0
 	begin
 		set @message = 'Error committing transaction for for job ' + @jobStr
-		Set @myError = 50023
+		Set @myError = 50027
 		goto Done
 	end
 
 
 Done:
 	-----------------------------------------------------------
-	-- Update state of analysis job
+	-- Update state of the analysis job
 	-----------------------------------------------------------
 	--
 
@@ -835,10 +973,8 @@ Done:
 	WHERE Job = @job
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
-	
-		
-	return @errorReturn
 
+	return @errorReturn
 
 
 GO

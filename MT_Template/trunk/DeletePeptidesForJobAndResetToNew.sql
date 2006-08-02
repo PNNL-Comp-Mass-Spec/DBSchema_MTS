@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER OFF 
+SET QUOTED_IDENTIFIER ON 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -6,6 +6,7 @@ GO
 if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[DeletePeptidesForJobAndResetToNew]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
 drop procedure [dbo].[DeletePeptidesForJobAndResetToNew]
 GO
+
 
 CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 /****************************************************
@@ -19,13 +20,17 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 09/21/2004
-**			  12/14/2004 mem - Now accepts a list of jobs to delete and reset
+**	Auth:	mem
+**	Date:	09/21/2004
+**			12/14/2004 mem - Now accepts a list of jobs to delete and reset
+**			12/11/2005 mem - Updated to support XTandem results
+**			03/13/2006 mem - Now calling UpdateCachedHistograms if any data is deleted from T_Peptides
 **    
 *****************************************************/
+(
 	@JobListToDelete varchar(4096),
 	@ResetStateToNew tinyint = 0
+)
 AS
 	set nocount on
 
@@ -84,6 +89,15 @@ AS
 	--
 	If @myError <> 0 Goto Done
 
+	DELETE T_Score_XTandem
+	FROM T_Peptides INNER JOIN T_Score_XTandem 
+		 ON T_Peptides.Peptide_ID = T_Score_XTandem.Peptide_ID
+		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto Done
+
 	DELETE T_Peptides 
 	FROM T_Peptides
 		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
@@ -94,7 +108,10 @@ AS
 
 	-- Update T_Mass_Tags.Number_of_Peptides and .High_Normalized_Score, if necessary
 	If @myRowCount > 0
+	Begin
+		Exec UpdateCachedHistograms @InvalidateButDoNotProcess=1
 		Exec ComputeMassTagsAnalysisCounts
+	End
 
 
 	If @ResetStateToNew <> 0
@@ -112,6 +129,7 @@ AS
 
 Done:
 	Return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

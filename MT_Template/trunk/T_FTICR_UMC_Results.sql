@@ -33,7 +33,7 @@ CREATE TABLE [T_FTICR_UMC_Results] (
 	[FPR_Type_ID] [int] NOT NULL ,
 	[MassTag_Hit_Count] [int] NOT NULL ,
 	[Pair_UMC_Ind] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_Pair_UMC_Ind] DEFAULT ((-1)),
-	[GANET_Locker_Count] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_GANET_Locker_Count] DEFAULT (0),
+	[InternalStd_Hit_Count] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_GANET_Locker_Count] DEFAULT (0),
 	[Expression_Ratio_StDev] [float] NULL ,
 	[Expression_Ratio_Charge_State_Basis_Count] [smallint] NULL ,
 	[Expression_Ratio_Member_Basis_Count] [int] NULL ,

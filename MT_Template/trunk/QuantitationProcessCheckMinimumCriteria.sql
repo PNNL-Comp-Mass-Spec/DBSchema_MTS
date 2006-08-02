@@ -7,8 +7,6 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[Quantitati
 drop procedure [dbo].[QuantitationProcessCheckMinimumCriteria]
 GO
 
-
-
 CREATE Procedure dbo.QuantitationProcessCheckMinimumCriteria 
 /****************************************************	
 **
@@ -111,8 +109,6 @@ AS
 		End
 			
 	Return @myError
-
-
 
 GO
 SET QUOTED_IDENTIFIER OFF 

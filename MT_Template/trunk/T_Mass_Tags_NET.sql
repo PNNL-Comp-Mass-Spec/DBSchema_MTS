@@ -12,7 +12,6 @@ CREATE TABLE [T_Mass_Tags_NET] (
 	[StdError_GANET] [real] NULL ,
 	[PNET] [real] NULL ,
 	[PNET_Variance] [real] NULL ,
-	[Avg_GANET_Old_2005Oct] [real] NULL ,
 	CONSTRAINT [PK_T_Mass_Tags_NET] PRIMARY KEY  CLUSTERED 
 	(
 		[Mass_Tag_ID]

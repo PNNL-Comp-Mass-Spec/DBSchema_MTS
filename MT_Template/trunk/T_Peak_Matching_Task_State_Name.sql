@@ -8,10 +8,6 @@ CREATE TABLE [T_Peak_Matching_Task_State_Name] (
 	CONSTRAINT [PK_T_Peak_Matching_Task_State_Name] PRIMARY KEY  CLUSTERED 
 	(
 		[Processing_State]
-	) WITH  FILLFACTOR = 90  ON [PRIMARY] ,
-	CONSTRAINT [IX_T_Peak_Matching_Task_State_Name] UNIQUE  NONCLUSTERED 
-	(
-		[Processing_State]
 	) WITH  FILLFACTOR = 90  ON [PRIMARY] 
 ) ON [PRIMARY]
 GO

@@ -15,6 +15,7 @@ CREATE TABLE [T_Mass_Tags] (
 	[Peptide_Obs_Count_Passing_Filter] [int] NULL CONSTRAINT [DF_T_Mass_Tags_Peptide_Obs_Count_Passing_Filter] DEFAULT (0),
 	[High_Normalized_Score] [real] NULL ,
 	[High_Discriminant_Score] [real] NULL ,
+	[High_Peptide_Prophet_Probability] [real] NULL ,
 	[Number_Of_FTICR] [int] NULL ,
 	[Mod_Count] [int] NOT NULL ,
 	[Mod_Description] [varchar] (2048) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,

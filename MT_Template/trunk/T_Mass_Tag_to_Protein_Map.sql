@@ -45,9 +45,6 @@ CREATE TABLE [T_Mass_Tag_to_Protein_Map] (
 ) ON [PRIMARY]
 GO
 
- CREATE  INDEX [IX_T_Mass_Tag_to_Protein_Map] ON [T_Mass_Tag_to_Protein_Map]([Mass_Tag_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
-GO
-
  CREATE  INDEX [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ON [T_Mass_Tag_to_Protein_Map]([Cleavage_State]) ON [PRIMARY]
 GO
 

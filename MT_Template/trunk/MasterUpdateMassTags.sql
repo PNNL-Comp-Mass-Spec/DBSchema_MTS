@@ -8,7 +8,6 @@ drop procedure [dbo].[MasterUpdateMassTags]
 GO
 
 
-
 CREATE PROCEDURE dbo.MasterUpdateMassTags
 /****************************************************
 ** 
@@ -23,30 +22,37 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 ** 
 **		Parameters:
 **
-**		Auth: grk
-**		Date: 11/20/2003
-**			  11/26/2003 grk - modified to add peak matching tasks from FTICR import count
-**			  04/08/2003 mem - Added ForceLCQProcessingOnNextUpdate option
-**							 - Added call to ComputePMTQualityScore
-**							 - Enabled optional call to CalculateMonoisotopicMass
-**							 - Removed call to AddDefaultPeakMatchingTasks (now in MasterUpdateNET)
-**							 - Changed instances of AddGANETUpateTask to AddGANETUpdateTask
-**			  04/09/2004 mem - Added support for LogLevel
-**							 - Limiting call to UpdateGeneralStatistics to be every @GeneralStatsUpdateInterval hours
-**			  06/12/2004 mem - Added call to SynchronizeCoverageTable
-**			  09/29/2004 mem - Updated to new MTDB schema and added @numJobsToProcess and @skipImport parameters
-**			  10/15/2004 mem - Added call to RefreshMSMSJobNETs
-**			  10/17/2004 mem - Now updating general statistics if any new MS/MS jobs are loaded
-**			  10/18/2004 mem - Re-enabled optional call to CalculateMonoisotopicMass
-**			  03/14/2005 mem - Added optional call to RunCustomSPs
-**			  04/08/2005 mem - Changed GANET export call to use ExportGANETData
-**			  04/10/2005 mem - Now calling CheckStaleTasks to look for tasks stuck in processing
-**			  07/08/2005 mem - Added call to RefreshAnalysisDescriptionInfo
-**							 - Now looking up General_Statistics_Update_Interval and Job_Info_DMS_Update_Interval in T_Process_Config
-**			  08/13/2005 mem - Fixed logic bug involving determining whether general statistics should be updated
-**			  10/12/2005 mem - Added call to RefreshMSMSSICJobs (which will cascade into RefreshMSMSSICStats for any updated jobs)
-**							 - When performing LCQ Processing, now assuring Enabled = 0 for 'ForceLCQProcessingOnNextUpdate' in T_Process_Step_Control
-**			  11/27/2005 mem - Now checking the return value of ExportGANETData and storing the message as an error if non-zero
+**	Auth:	grk
+**	Date:	11/20/2003
+**			11/26/2003 grk - modified to add peak matching tasks from FTICR import count
+**			04/08/2003 mem - Added ForceLCQProcessingOnNextUpdate option
+**						   - Added call to ComputePMTQualityScore
+**						   - Enabled optional call to CalculateMonoisotopicMass
+**						   - Removed call to AddDefaultPeakMatchingTasks (now in MasterUpdateNET)
+**						   - Changed instances of AddGANETUpateTask to AddGANETUpdateTask
+**			04/09/2004 mem - Added support for LogLevel
+**						   - Limiting call to UpdateGeneralStatistics to be every @GeneralStatsUpdateInterval hours
+**			06/12/2004 mem - Added call to SynchronizeCoverageTable
+**			09/29/2004 mem - Updated to new MTDB schema and added @numJobsToProcess and @skipImport parameters
+**			10/15/2004 mem - Added call to RefreshMSMSJobNETs
+**			10/17/2004 mem - Now updating general statistics if any new MS/MS jobs are loaded
+**			10/18/2004 mem - Re-enabled optional call to CalculateMonoisotopicMass
+**			03/14/2005 mem - Added optional call to RunCustomSPs
+**			04/08/2005 mem - Changed GANET export call to use ExportGANETData
+**			04/10/2005 mem - Now calling CheckStaleTasks to look for tasks stuck in processing
+**			07/08/2005 mem - Added call to RefreshAnalysisDescriptionInfo
+**						   - Now looking up General_Statistics_Update_Interval and Job_Info_DMS_Update_Interval in T_Process_Config
+**			08/13/2005 mem - Fixed logic bug involving determining whether general statistics should be updated
+**			10/12/2005 mem - Added call to RefreshMSMSSICJobs (which will cascade into RefreshMSMSSICStats for any updated jobs)
+**						   - When performing LCQ Processing, now assuring Enabled = 0 for 'ForceLCQProcessingOnNextUpdate' in T_Process_Step_Control
+**			11/27/2005 mem - Now checking the return value of ExportGANETData and storing the message as an error if non-zero
+**			12/15/2005 mem - Renamed ImportNewLCQAnalyses to ImportNewMSMSAnalyses; renamed ImportNewFTICRAnalyses to ImportNewMSAnalyses
+**						   - Replaced instances of LCQ with MSMS and FTICR with MS, including updating references to T_Process_Step_Control
+**			01/18/2006 mem - No longer posting the message returned by ComputeMassTagsGANET to the log since ComputeMassTagsGANET is now doing that itself
+**			01/23/2006 mem - No longer posting the message returned by ComputePMTQualityScore to the log since ComputePMTQualityScore is now doing that itself
+**			02/23/2006 mem - No longer posting the message returned by ImportNewMSMSAnalyses or ImportNewMSAnalyses to the log since those SPs are now doing that themselves
+**			03/04/2006 mem - Now calling UpdateGeneralStatisticsIfRequired to possibly update the general statistics
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 (
@@ -65,6 +71,7 @@ As
 
 	declare @result int
 	declare @logLevel int
+	declare @UpdateEnabled tinyint
 	
 	set @result = 0
 	set @logLevel = 1		-- Default to normal logging
@@ -76,6 +83,11 @@ As
 	set @ForceGeneralStatisticsUpdate = 0
 	set @ComputeProteinCoverage = 0
 	set @ProteinCoverageComputed = 0
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	--------------------------------------------------------------
 	-- Lookup the LogLevel state
@@ -93,28 +105,33 @@ As
 
 	-- < A >
 	--------------------------------------------------------------
-	-- import new LCQ analyses
+	-- import new MS/MS analyses
 	--------------------------------------------------------------
 	--
 	declare @entriesAdded int
 	set @entriesAdded = 0
-	--
 	set @result = 0
-	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportLCQJobs')
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportMSMSJobs')
 	if @result > 0 And @skipImport <> 1
 	begin
 		-- Import new analyses for peptide identification from peptide database
 		--
 		If @logLevel >= 2
-			execute PostLogEntry 'Normal', 'Begin ImportLCQJobs', 'MasterUpdateMassTags'
-		EXEC @result = ImportNewLCQAnalyses @entriesAdded OUTPUT, @message OUTPUT
+			execute PostLogEntry 'Normal', 'Begin ImportNewMSMSAnalyses', 'MasterUpdateMassTags'
+		EXEC @result = ImportNewMSMSAnalyses @entriesAdded OUTPUT, @message OUTPUT
 		set @message = 'Complete ' + @message
 	end
 	else
-		set @message = 'Skipped ImportLCQJobs'
-
-	If @logLevel > 1 Or (@entriesAdded > 0 And @logLevel >= 1)
+		set @message = 'Skipped ImportMSMSJobs'
+	--
+	-- Note: ImportNewMSMSAnalyses will post an entry to the log if @entriesAdded is greater than 0
+	If @entriesAdded = 0 And @logLevel > 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
 	-- < B >
@@ -145,6 +162,11 @@ As
 	If @logLevel > 1 Or ((@jobNETsUpdated + @peptideRowsUpdated) > 0 And @logLevel >= 1)
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < C >
 	--------------------------------------------------------------
@@ -171,11 +193,16 @@ As
 
 	If @logLevel > 1 Or (@jobsUpdated > 0 And @logLevel >= 1)
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
-		
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	--------------------------------------------------------------
-	-- Skip any LCQ related processing if no new LCQ jobs found, no jobs in state 1 = New, and no Job NETs were updated
-	-- However, force the updating if ForceLCQProcessingOnNextUpdate = 1 in T_Process_Step_Control
+	-- Skip any MS/MS related processing if no new MS/MS jobs found, no jobs in state 1 = New, and no Job NETs were updated
+	-- However, force the updating if ForceMSMSProcessingOnNextUpdate = 1 in T_Process_Step_Control
 	--------------------------------------------------------------
 	--
 	if (@entriesAdded > 0) OR (@jobNETsUpdated + @peptideRowsUpdated) > 0 OR (@jobsUpdated > 0)
@@ -192,26 +219,26 @@ As
 		else
 		Begin
 			set @result = 0
-			SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate')
+			SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate')
 			if @result = 0
 			begin
-				-- Skipping is not enabled; jump to DoFTICR
-				Set @message = 'No new LCQ jobs were loaded; skipping LCQ related processing'
+				-- Skipping is not enabled; jump to DoMSJobs
+				Set @message = 'No new MS/MS jobs were loaded; skipping MS/MS related processing'
 				If @logLevel >= 2
 					execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
-				goto DoFTICR
+				goto DoMSJobs
 			end
 
-			Set @message = 'No new LCQ jobs were loaded; proceeding with LCQ related processing since ForceLCQProcessingOnNextUpdate = 1'
+			Set @message = 'No new MS/MS jobs were loaded; proceeding with MS/MS related processing since ForceMSMSProcessingOnNextUpdate = 1'
 			If @logLevel >= 2
 				execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 		End
 	end
 
-	-- Update T_Process_Step_Control to make sure ForceLCQProcessingOnNextUpdate has enabled = 0
+	-- Update T_Process_Step_Control to make sure ForceMSMSProcessingOnNextUpdate has enabled = 0
 	UPDATE T_Process_Step_Control 
 	SET enabled = 0
-	WHERE (Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate')
+	WHERE (Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate')
 
 
 		
@@ -236,6 +263,11 @@ As
 	--
 	If @logLevel >= 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	-- < E >
 	--------------------------------------------------------------
@@ -257,10 +289,14 @@ As
 	If @logLevel >= 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < F >
 	--------------------------------------------------------------
-
 	-- Update Mass Tag Names
 	--------------------------------------------------------------
 	--
@@ -283,6 +319,11 @@ As
 	--
 	If @logLevel >= 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
 	-- < G >
@@ -313,6 +354,11 @@ As
 		If @logLevel >= 3
 			execute PostLogEntry 'Normal', 'Skipped CalculateMonoisotopicMass', 'MasterUpdateMassTags'
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < H >
 	--------------------------------------------------------------
@@ -330,8 +376,9 @@ As
 
 		if @result = 0
 		begin
-			set @message = 'Complete ComputeMassTagsGANET: ' + @message
-			If @logLevel >= 1
+			-- Note that ComputeMassTagsGANET calls PostLogEntry with @message
+			set @message = 'Complete ComputeMassTagsGANET'
+			If @logLevel >= 2
 				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 		end
 		else
@@ -345,6 +392,11 @@ As
 		If @logLevel >= 3
 			execute PostLogEntry 'Normal', 'Skipped ComputeMassTagsGANET', 'MasterUpdateMassTags'
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < I >
 	--------------------------------------------------------------
@@ -357,17 +409,31 @@ As
 	begin
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin ComputePMTQualityScore', 'MasterUpdateMassTags'
+		
 		EXEC @result = ComputePMTQualityScore @message output
+		
 		if @result = 0
-			set @message = 'Complete ComputePMTQualityScore: ' + @message
+		Begin
+			-- Note that ComputePMTQualityScore calls PostLogEntry with @message
+			set @message = 'Complete ComputePMTQualityScore'
+			If @logLevel >= 2
+				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		End
 		else
+		Begin
 			set @message = 'Complete ComputePMTQualityScore: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+			If @logLevel >= 1
+				EXEC PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+		End
 	end
 	else
-		set @message = 'Skipped ComputePMTQualityScore'
-	--
-	If @logLevel >= 1
-		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		If @logLevel >= 3
+			execute PostLogEntry 'Normal', 'Skipped ComputePMTQualityScore', 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
 	-- < J >
@@ -396,6 +462,11 @@ As
 	--
 	If @logLevel > 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
 	-- < K >
@@ -431,6 +502,11 @@ As
 			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 	end
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < L >
 	--------------------------------------------------------------
@@ -438,7 +514,8 @@ As
 	--------------------------------------------------------------
 	--
 	set @result = 0
-	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'AddGANETUpdateTask')
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'AddGANETUpdateTask')
+
 	if @result > 0
 	begin
 		If @logLevel >= 2
@@ -453,41 +530,86 @@ As
 	If @logLevel >= 1
 		EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
+	-- < M >
+	--------------------------------------------------------------
+	-- Refresh the Auto_Update histograms if necessary
+	--------------------------------------------------------------
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'AutoComputeHistograms')
+
+	if @result > 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Begin UpdateCachedHistograms', 'MasterUpdateMassTags'
+		
+		EXEC @result = UpdateCachedHistograms @UpdateIfRequired = 1, @UpdateCount = @count output, @message = @message output
+		
+		if @result = 0
+		Begin
+			set @message = 'Complete UpdateCachedHistograms: ' + @message
+			If @logLevel > 1 Or (@count > 0 And @logLevel >= 1)
+				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		End
+		else
+		Begin
+			set @message = 'Complete UpdateCachedHistograms: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+			If @logLevel >= 1
+				EXEC PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+		End
+	end
+	else
+	Begin
+		set @message = 'Skipped UpdateCachedHistograms'
+		If @logLevel >= 2
+			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+	End
+
 
 	--------------------------------------------------------------
 	-- Mark that we need to compute protein coverage (if enabled)
 	--------------------------------------------------------------
 	--
 	Set @ComputeProteinCoverage = 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	
-DoFTICR:
-	-- < M >
+DoMSJobs:
+	-- < N >
 	--------------------------------------------------------------
-	-- import new FTICR analyses
+	-- import new LC-MS analyses
 	--------------------------------------------------------------
 	--
 	set @entriesAdded = 0
 	set @result = 0
-	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportFTICRJobs')
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportMSJobs')
 	if @result > 0 And @skipImport <> 1
 	begin
 		-- Import new analyses for peak results from DMS
 		--
 		If @logLevel >= 2
-			execute PostLogEntry 'Normal', 'Begin ImportNewFTICRAnalyses', 'MasterUpdateMassTags'
-		EXEC @result = ImportNewFTICRAnalyses  @entriesAdded OUTPUT, @message OUTPUT
+			execute PostLogEntry 'Normal', 'Begin ImportNewMSAnalyses', 'MasterUpdateMassTags'
+		EXEC @result = ImportNewMSAnalyses  @entriesAdded OUTPUT, @message OUTPUT
 		set @message = 'Complete ' + @message
 	end
 	else
-		set @message = 'Skipped ImportNewFTICRAnalyses'
+		set @message = 'Skipped ImportNewMSAnalyses'
 	--
-	If @logLevel > 1 Or (@entriesAdded > 0 And @logLevel >= 1)
+	-- Note: ImportNewMSAnalyses will post an entry to the log if @entriesAdded is greater than 0
+	If @entriesAdded = 0 And @logLevel > 1
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
-	
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
-	-- < N >
+	-- < O >
 	--------------------------------------------------------------
 	-- Check for GANET update task with results ready
 	-- We don't actually load the results into the database, but we
@@ -523,60 +645,30 @@ DoFTICR:
 			execute PostLogEntry 'Normal', 'Complete SetGANETUpdateTaskComplete', 'MasterUpdateMassTags'
 	end
 
-
-	-- < O >
-	--------------------------------------------------------------
-	-- Update general statistics
-	--------------------------------------------------------------
-	--
-	-- Look up the Last Update date stored in T_General_Statistics
-	
-	Declare @ValueText varchar(64)
-	Declare @ValueDifference int
-	Declare @UpdateInterval int				-- Interval is in hours
-	
-	Declare @LastUpdated varchar(64)
-	Set @LastUpdated = '1/1/1900'
-	
-	SELECT @LastUpdated = Value
-	FROM T_General_Statistics
-	WHERE Category = 'General' AND Label = 'Last Updated'
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0 
-	Begin
-		Set @message = 'Error looking up Last Updated time from T_General_Statistics'
-		Set @myError = 100
-		execute PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
 		Goto Done
-	End
-	-- Force an update if no statistics are present
-	If @myRowcount = 0
-		Set @ForceGeneralStatisticsUpdate = 1
-		
-	-- Lookup the value for General_Statistics_Update_Interval in T_Process_Config
-	-- If present, then this value overrides @GeneralStatsUpdateInterval
-	SELECT @ValueText = Value
-	FROM T_Process_Config
-	WHERE [Name] = 'General_Statistics_Update_Interval'
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--	
-	If IsNumeric(@ValueText) <> 0
-		Set @UpdateInterval = Convert(int, @ValueText)
-	Else
-		Set @UpdateInterval = @GeneralStatsUpdateInterval
 
-	If GetDate() > DateAdd(hour, @UpdateInterval, @LastUpdated) OR @ForceGeneralStatisticsUpdate = 1
+
+	-- < P >
+	--------------------------------------------------------------
+	-- Possibly update the general statistics
+	--------------------------------------------------------------
+	--
+	Declare @ValueDifference int
+	Declare @ValueText varchar(64)
+	Declare @UpdateInterval int				-- Interval is in hours
+
+	Declare @StatsUpdated tinyint
+	Declare @HoursSinceLastUpdate int
+	Set @StatsUpdated = 0
+	Set @HoursSinceLastUpdate = 0
+	
+	Exec @myError = UpdateGeneralStatisticsIfRequired @GeneralStatsUpdateInterval, @ForceGeneralStatisticsUpdate, @LogLevel, @StatsUpdated = @StatsUpdated Output, @HoursSinceLastUpdate = @HoursSinceLastUpdate Output
+
+	If @StatsUpdated <> 0 OR @ForceGeneralStatisticsUpdate = 1
 	Begin
-		If @logLevel >= 2
-			execute PostLogEntry 'Normal', 'Begin UpdateGeneralStatistics', 'MasterUpdateMassTags'
-		EXEC @result = UpdateGeneralStatistics
-		--
-		set @message = 'Complete UpdateGeneralStatistics: ' + convert(varchar(32), @result)
-		If @logLevel >= 1
-			execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 			
 		--------------------------------------------------------------
 		-- Compare 'PMTs' and 'Confirmed PMTs' values to their previous values to see if we should compute protein coverage
@@ -592,7 +684,7 @@ DoFTICR:
 		
 		If @myRowCount = 0
 			Set @ValueDifference = 1
-			
+
 
 		SELECT @ValueDifference = @ValueDifference + Abs(Convert(int, Value) - Convert(int, Previous_Value))
 		FROM T_General_Statistics
@@ -619,15 +711,14 @@ DoFTICR:
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 		
 	End
-	else
-		If @logLevel >= 3
-		begin
-			set @message = 'Skipping UpdateGeneralStatistics since ' + Convert(varchar(32), @UpdateInterval) + ' hours have not yet elapsed'
-			execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
-		end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 
-	-- < P >
+	-- < Q >
 	-------------------------------------------------------------
 	-- Synchronize the analysis description information with DMS
 	-------------------------------------------------------------
@@ -659,9 +750,14 @@ DoFTICR:
 	--
 	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
-	
 
-	-- < Q >
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+
+	-- < R >
 	--------------------------------------------------------------
 	-- Update the Protein Coverage table (if necessary)
 	--------------------------------------------------------------
@@ -698,8 +794,13 @@ DoFTICR:
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 	End
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
-	-- < R >
+
+	-- < S >
 	--------------------------------------------------------------
 	-- Add default peak matching tasks
 	--------------------------------------------------------------
@@ -728,17 +829,21 @@ DoFTICR:
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Skipped AddDefaultPeakMatchingTasks', 'MasterUpdateMassTags'
 
+
 	--------------------------------------------------------------
-	-- Exit
+	-- Normal Exit
 	--------------------------------------------------------------
 
 	set @message = 'End Master Update Mass Tags for ' + DB_NAME() + ': ' + convert(varchar(32), @myError)
-	If @logLevel >= 2 Or (@myError <> 0 And @logLevel >= 1)
-		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 Done:
-	return @myError
+	If (@logLevel >=1 AND @myError <> 0)
+		execute PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+	Else
+	If @logLevel >= 2
+		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
+	return @myError
 
 
 GO

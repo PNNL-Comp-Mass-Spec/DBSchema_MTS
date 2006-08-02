@@ -7,7 +7,7 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Peptides
 drop view [dbo].[V_Peptides_DiscriminantScoreRange_Histogram]
 GO
 
-CREATE VIEW dbo.V_Peptides_DiscriminantScoreRange_Histogram
+create VIEW dbo.V_Peptides_DiscriminantScoreRange_Histogram
 AS
 SELECT TOP 100 PERCENT DiscriminantScore_Bin, COUNT(*) 
     AS Match_Count

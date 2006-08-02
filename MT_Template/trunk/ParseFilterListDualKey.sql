@@ -22,9 +22,10 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 **	Parameters: 
 **
 **
-**		Auth:	mem
-**		Date:	04/6/2005
-**				11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**	Auth:	mem
+**	Date:	04/6/2005
+**			11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**			06/08/2005 mem - Added parameter @Delimiter
 **    
 *****************************************************/
 	@filterValue varchar(128) = 'Campaign_and_Experiment',
@@ -33,7 +34,8 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 	@filterValueLookupColumn2Name varchar(128) = 'Experiment',		-- Look for data in this column
 	@targetValueColumnName varchar(128) = 'Job',					-- Store values from this column
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
-	@filterMatchCount int = 0 OUTPUT
+	@filterMatchCount int = 0 OUTPUT,
+	@Delimiter varchar(2) = ','
 As
 	set nocount on
 
@@ -46,7 +48,7 @@ As
 	declare @ProcessConfigID int
 	declare @result int
 
-	declare @commaLoc int
+	declare @DelimiterLoc int
 	declare @ComparisonOperator1 varchar(8)
 	declare @ComparisonOperator2 varchar(8)
 	
@@ -85,7 +87,7 @@ As
 	
 		---------------------------------------------------
 		-- Loop through the rows in T_Process_Config matching @filterValue
-		-- Only process the rows containing a comma, which is required for dual key entries
+		-- Only process the rows containing @Delimiter, which is required for dual key entries
 		---------------------------------------------------
 				
 		Set @loopContinue = 1
@@ -97,7 +99,7 @@ As
 						 @ProcessConfigID = Process_Config_ID
 			FROM T_Process_Config
 			WHERE [Name] = @filterValue AND
-				Value Like '%,%' AND 
+				Value Like '%' + @Delimiter + '%' AND 
 				Process_Config_ID > @ProcessConfigID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -107,11 +109,11 @@ As
 			Else
 			Begin -- <c>
 				
-				-- Split @ValueMatchStr at the comma
-				Set @commaLoc = CharIndex(',', @ValueMatchStr)
+				-- Split @ValueMatchStr at the @Delimiter
+				Set @DelimiterLoc = CharIndex(@Delimiter, @ValueMatchStr)
 				
-				Set @Key1Value = LTrim(RTrim(SubString(@ValueMatchStr, 1, @commaLoc-1)))
-				Set @Key2Value = LTrim(RTrim(SubString(@ValueMatchStr, @commaLoc+1, Len(@ValueMatchStr) - @commaLoc)))
+				Set @Key1Value = LTrim(RTrim(SubString(@ValueMatchStr, 1, @DelimiterLoc-1)))
+				Set @Key2Value = LTrim(RTrim(SubString(@ValueMatchStr, @DelimiterLoc+1, Len(@ValueMatchStr) - @DelimiterLoc)))
 
 				-- If the Key string contains a percent sign, then use LIKE, otherwise use equals
 				If @Key1Value Like '%[%]%'

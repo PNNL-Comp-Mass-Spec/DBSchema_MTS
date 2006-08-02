@@ -18,14 +18,17 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 08/24/2004
-**		 8/28/2004 grk - accounted for V_DMS_Filter_Sets_Import moving to MT_Main
-**		 9/10/2004 mem - Added @DiscriminantInitialFilter criteria
-**		 9/19/2004 mem - Added @ProteinCount criteria
-**		 3/26/2005 mem - Added @TerminusState criteria
+**	Auth:	mem
+**	Date:	08/24/2004
+**			08/28/2004 grk - accounted for V_DMS_Filter_Sets_Import moving to MT_Main
+**			09/10/2004 mem - Added @DiscriminantInitialFilter criteria
+**			09/19/2004 mem - Added @ProteinCount criteria
+**			03/26/2005 mem - Added @TerminusState criteria
+**			12/11/2005 mem - Added @XTandemHyperscore and @XTandemLogEValue criteria
+**			07/10/2006 mem - Added @PeptideProphetComparison and @PeptideProphetThreshold
 **    
 *****************************************************/
+(
 	@FilterSetID int,
 	@CriteriaGroupStart int=0,								-- If > 0, then will return the entries for this Filter Set having Filter_Criteria_Group >= @CriterionOrderStart
 
@@ -69,8 +72,17 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@ProteinCountThreshold int=0 output,
 	
 	@TerminusStateComparison varchar(2)='>=' output,
-	@TerminusStateThreshold tinyint=0 output
+	@TerminusStateThreshold tinyint=0 output,
 
+	@XTandemHyperscoreComparison varchar(2)='>=' output,
+	@XTandemHyperscoreThreshold real=0 output,
+
+	@XTandemLogEValueComparison varchar(2)='<=' output,
+	@XTandemLogEValueThreshold real=0 output,
+	
+	@PeptideProphetComparison varchar(2)='>=' output,
+	@PeptideProphetThreshold float=0 output
+)
 As
 	set nocount on
 	
@@ -126,6 +138,15 @@ As
 
 	Set @TerminusStateComparison = '>='
 	Set @TerminusStateThreshold = 0
+
+	Set @XTandemHyperscoreComparison = '>='
+	Set @XTandemHyperscoreThreshold = 0
+
+	Set @XTandemLogEValueComparison = '<='
+	Set @XTandemLogEValueThreshold = 0
+	
+	Set @PeptideProphetComparison = '>='
+	Set @PeptideProphetThreshold = 0
 	
 	--------------------------------	
 	-- Validate @FilterSetID
@@ -258,12 +279,28 @@ As
 		FROM MT_Main..V_DMS_Filter_Sets_Import
 		WHERE Filter_Set_ID = @FilterSetID AND
 				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 13	-- Terminus_State
-					 
+
+		SELECT TOP 1 @XTandemHyperscoreComparison = Criterion_Comparison,
+					 @XTandemHyperscoreThreshold = Criterion_Value
+		FROM MT_Main..V_DMS_Filter_Sets_Import
+		WHERE Filter_Set_ID = @FilterSetID AND
+				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 14	-- XTandem_Hyperscore
+
+		SELECT TOP 1 @XTandemLogEValueComparison = Criterion_Comparison,
+					 @XTandemLogEValueThreshold = Criterion_Value
+		FROM MT_Main..V_DMS_Filter_Sets_Import
+		WHERE Filter_Set_ID = @FilterSetID AND
+				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 15	-- XTandem_LogEValue
+
+		SELECT TOP 1 @PeptideProphetComparison = Criterion_Comparison,
+					 @PeptideProphetThreshold = Criterion_Value
+		FROM MT_Main..V_DMS_Filter_Sets_Import
+		WHERE Filter_Set_ID = @FilterSetID AND
+				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 16	-- Peptide_Prophet_Probability
+
 	End
 
-
 Done:
-	
 	Return @myError
 
 

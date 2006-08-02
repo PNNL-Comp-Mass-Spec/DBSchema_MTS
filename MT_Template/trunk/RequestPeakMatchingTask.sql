@@ -20,24 +20,28 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **      If not found or error, then @message will contain
 **      explanatory text.
 **
-**		Auth: grk
-**		Date: 5/21/2003
-**
-**		Updated: 06/20/2003 mem - 
-**				 06/23/2003 mem - 
-**				 07/01/2003 mem - 
-**				 07/07/2003 mem - 
-**				 07/22/2003 mem - 
-**				 10/06/2003 mem - Now checking if Ini_File_Name contains a UNC path (begins with \\)
-**				 11/26/2003 mem - Assignment logic includes GANET task queue
-**				 12/29/2003 mem - Added NetValueType parameter and check for existence of T_GANET_Update_Task
-**				 01/06/2004 mem - Added support for Minimum_PMT_Quality_Score
-**				 05/20/2004 mem - Added state 7 as a T_GANET_Update_Task.Processing_State value that will prevent a peak matching task from being returned
-**				 09/20/2004 mem - Updated for new MTDB schema
-**				 12/31/2004 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_FT intact
-**				 02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter and switched from using data type decimal(9,5) to real
+**	Auth:	grk
+**	Date:	5/21/2003
+**			06/20/2003 mem - 
+**			06/23/2003 mem - 
+**			07/01/2003 mem - 
+**			07/07/2003 mem - 
+**			07/22/2003 mem - 
+**			10/06/2003 mem - Now checking if Ini_File_Name contains a UNC path (begins with \\)
+**			11/26/2003 mem - Assignment logic includes GANET task queue
+**			12/29/2003 mem - Added NetValueType parameter and check for existence of T_GANET_Update_Task
+**			01/06/2004 mem - Added support for Minimum_PMT_Quality_Score
+**			05/20/2004 mem - Added state 7 as a T_GANET_Update_Task.Processing_State value that will prevent a peak matching task from being returned
+**			09/20/2004 mem - Updated for new MTDB schema
+**			12/31/2004 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_FT intact
+**			02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter and switched from using data type decimal(9,5) to real
+**			12/20/2005 mem - Added parameters @LimitToPMTsFromDataset and @InternalStdExplicit
+**			01/14/2006 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_Orb intact
+**			07/01/2007 mem - Removed check for jobs in T_GANET_Update_Task since NET alignment now occurs in the Peptide DB
+**			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
+(
 	@processorName varchar(128),
 	@clientPerspective tinyint = 1,				-- 0 means running SP from local server; 1 means running SP from client
 	@priorityMin tinyint = 1,					-- only tasks with a priority >= to this value will get returned
@@ -54,12 +58,15 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 	@MinimumPMTQualityScore real=0 output,
 	@ExperimentFilter varchar(64)='' output,
 	@ExperimentExclusionFilter varchar(64)='' output,
+	@LimitToPMTsFromDataset tinyint = 0 output,
+	@InternalStdExplicit varchar(255) = '' output,
 	@NETValueType tinyint=0 output,
 	@iniFilePath varchar(255)='' output,
 	@outputFolderPath varchar(255)='' output,
 	@logFilePath varchar(255)='' output,
 	@taskAvailable tinyint=0 output,
 	@message varchar(512)='' output
+)
 As
 	set nocount on
 
@@ -88,6 +95,8 @@ As
 	set @MinimumPMTQualityScore = 0
 	set @ExperimentFilter = ''
 	set @ExperimentExclusionFilter = ''
+	set @LimitToPMTsFromDataset = 0
+	set @InternalStdExplicit = ''
 	set @NETValueType = 0
 	
 	set @iniFilePath = ''
@@ -97,33 +106,28 @@ As
 	set @message = ''
 
 	---------------------------------------------------
-	-- Can't assign task unless no pending GANET updates
-	-- Legacy databases will not have a T_GANET_Update_Task table;
-	--  need to check for this
+	-- Do not assign a task if any jobs in T_Analysis_Description have a state of 1
 	---------------------------------------------------
 	
-	If Exists (select * from dbo.sysobjects where Name = 'T_GANET_Update_Task')
-	Begin
-		SELECT @myRowCount = count(*)
-		FROM T_GANET_Update_Task
-		WHERE (Processing_State IN (1, 2, 3, 7))
-		--
-		set @myError = @@error
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error trying to check for pending GANET tasks'
-			goto done
-		end
+	SELECT @myRowCount = count(*)
+	FROM T_Analysis_Description
+	WHERE State = 1
+	--
+	set @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Error trying to check for new jobs in T_Analysis_Description'
+		goto done
+	end
 
-		-- bail if there are any pending states
-		--
-		if @myRowCount > 0
-		begin
-			set @message = 'GANET update task pending'
-			goto done
-		end
-	End
+	-- bail if there are any new jobs
+	--
+	if @myRowCount > 0
+	begin
+		set @message = 'New jobs present in T_Analysis_Description; no task assigned'
+		goto done
+	end
 
 	---------------------------------------------------
 	-- temporary table to hold candidate requests
@@ -290,25 +294,28 @@ As
 		Set @OutputFolderPrefix = 'Unknown'
 		
 	-- Truncate @OutputFolderPrefix following the _ (if present)
-	-- If @OutputFolderPrefix contains LTQ_FT, then start after the first underscore
+	-- If @OutputFolderPrefix contains LTQ_FT, then skip the first underscore
 	Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
 	If @StartPos >= 1
 		Set @StartPos = @StartPos + 5
 	Else
-		Set @StartPos = 0
+	Begin
+		Set @StartPos = CharIndex('LTQ_Orb', Upper(@OutputFolderPrefix))
+		If @StartPos >= 1
+			Set @StartPos = @StartPos + 5
+		Else
+			Set @StartPos = 0
+	End
 		
 	Set @UnderscoreLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
 	If @UnderscoreLoc > 2
 		Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @UnderscoreLoc-1)
 	
-	-- Make sure @OutputFolderPrefix ends in \
-	If Left(Reverse(@OutputFolderPrefix), 1) <> '\'
-		Set @OutputFolderPrefix = @OutputFolderPrefix + '\'
-
 	declare @Output_Folder_Name varchar (255)
-	set @Output_Folder_Name = @OutputFolderPrefix + db_name() + '_Job' + cast(@analysisJob as varchar(12)) + '_auto_pm_' + cast(@taskID as varchar(12))
+	set @Output_Folder_Name = DB_Name() + '_Job' + cast(@analysisJob as varchar(12)) + '_auto_pm_' + cast(@taskID as varchar(12))
+	set @Output_Folder_Name = dbo.udfCombinePaths(@OutputFolderPrefix, @Output_Folder_Name)
 
-	set @outputFolderPath = @outputFolderPath + db_name() + '\' + @Output_Folder_Name 
+	set @outputFolderPath = dbo.udfCombinePaths(dbo.udfCombinePaths(@outputFolderPath, DB_Name()), @Output_Folder_Name)
 	
 	---------------------------------------------------
 	-- set state and path for task
@@ -348,6 +355,8 @@ As
 		@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
 		@ExperimentFilter = Experiment_Filter,
 		@ExperimentExclusionFilter = Experiment_Exclusion_Filter,
+		@LimitToPMTsFromDataset = Limit_To_PMTs_From_Dataset,
+		@InternalStdExplicit = Internal_Std_Explicit,
 		@NetValueType = NET_Value_Type,
  		@IniFileName = LTrim(RTrim(Ini_File_Name)), 
 		@taskPriority = Priority
@@ -370,14 +379,16 @@ As
 		If SubString(@IniFileName, 1, 2) = '\\'
 			Set @iniFilePath = @IniFileName
 		Else
-			Set @inifilepath = @iniFilePath + @IniFileName
+			Set @iniFilePath = dbo.udfCombinePaths(@iniFilePath, @IniFileName)
 	End
 	
 	---------------------------------------------------
 	-- get path to analysis job results folder
 	---------------------------------------------------
 	
-	SELECT @analysisResultsFolderPath = Vol_Client + Storage_Path + Dataset_Folder + '\' + Results_Folder
+	SELECT @analysisResultsFolderPath = dbo.udfCombinePaths(
+										dbo.udfCombinePaths(
+										dbo.udfCombinePaths(Vol_Client, Storage_Path), Dataset_Folder), Results_Folder)
 	FROM T_FTICR_Analysis_Description
 	WHERE (Job = @analysisJob)
 	--
@@ -395,7 +406,7 @@ As
 	-- Define the log file path
 	---------------------------------------------------
 
-	set @logFilePath = @outputFolderPath + '\Job' + cast(@analysisJob as varchar(9)) + '_log.txt'
+	set @logFilePath = dbo.udfCombinePaths(@outputFolderPath, 'Job' + cast(@analysisJob as varchar(9)) + '_log.txt')
 
 	---------------------------------------------------
 	-- If we get to this point, then all went fine

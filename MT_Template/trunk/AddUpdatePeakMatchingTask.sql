@@ -17,18 +17,19 @@ CREATE Procedure dbo.AddUpdatePeakMatchingTask
 **
 **	Parameters: 
 **
-**		Auth: grk
-**		Date: 5/21/2003
-**
-**		Updated: 07/01/2003 mem
-**				 07/22/2003 mem
-**				 09/11/2003 mem
-**				 01/06/2004 mem - Added support for Minimum_PMT_Quality_Score 
-**				 09/20/2004 mem - Updated to new MTDB schema
-**				 02/05/2005 mem - Added parameter @MinimumHighDiscriminantScore
-**				 06/28/2005 mem - Increased size of @IniFileName to 255 characters
+**	Auth:	grk
+**	Date:	5/21/2003
+**			07/01/2003 mem
+**			07/22/2003 mem
+**			09/11/2003 mem
+**			01/06/2004 mem - Added support for Minimum_PMT_Quality_Score 
+**			09/20/2004 mem - Updated to new MTDB schema
+**			02/05/2005 mem - Added parameter @MinimumHighDiscriminantScore
+**			06/28/2005 mem - Increased size of @IniFileName to 255 characters
+**			07/05/2006 mem - Updated behavior of @SetStateToHolding so that non-zero values result in Processing_State = 5
 **      
 *****************************************************/
+(
 	@job int,
 	@iniFileName varchar(255),
 	@confirmedOnly tinyint = 0,
@@ -40,7 +41,8 @@ CREATE Procedure dbo.AddUpdatePeakMatchingTask
 	@taskID int output,
 	@mode varchar(12) = 'add', -- or 'update'
 	@message varchar(512) output,
-	@SetStateToHolding tinyint = 0		-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
+	@SetStateToHolding tinyint = 0		-- If non-zero, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
+)
 As
 	set nocount on
 
@@ -115,7 +117,7 @@ As
 		return 51010
 	end
 	
-	If @SetStateToHolding = 1
+	If IsNull(@SetStateToHolding, 0) <> 0
 		Set @ProcessingState = 5
 	Else
 		Set @ProcessingState = 1

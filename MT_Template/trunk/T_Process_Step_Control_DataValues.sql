@@ -3,6 +3,8 @@ INSERT INTO dbo.T_Process_Step_Control
 INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'AddGANETUpdateTask', 1)
 INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'AutoComputeHistograms', 1)
+INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'CalculateMonoisotopicMass', 0)
 INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'ComputeMassTagsGANET', 1)
@@ -15,11 +17,13 @@ INSERT INTO dbo.T_Process_Step_Control
 INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'ExportGANET', 1)
 INSERT INTO dbo.T_Process_Step_Control
-  VALUES (N'ForceLCQProcessingOnNextUpdate', 0)
+  VALUES (N'ForceMSMSProcessingOnNextUpdate', 0)
 INSERT INTO dbo.T_Process_Step_Control
-  VALUES (N'ImportFTICRJobs', 1)
+  VALUES (N'GeneralStatisticsIncludesExtendedInfo', 0)
 INSERT INTO dbo.T_Process_Step_Control
-  VALUES (N'ImportLCQJobs', 1)
+  VALUES (N'ImportMSJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ImportMSMSJobs', 1)
 INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'LogLevel', 1)
 INSERT INTO dbo.T_Process_Step_Control
@@ -38,5 +42,6 @@ INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'UpdateMassTagNames', 1)
 INSERT INTO dbo.T_Process_Step_Control
   VALUES (N'UpdateMassTags', 1)
-
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'UseProteinSequencesDB', 0)
 go

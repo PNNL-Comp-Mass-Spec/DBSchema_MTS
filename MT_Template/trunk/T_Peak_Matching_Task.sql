@@ -12,6 +12,8 @@ CREATE TABLE [T_Peak_Matching_Task] (
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score] DEFAULT (0),
 	[Experiment_Filter] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter] DEFAULT (''),
 	[Experiment_Exclusion_Filter] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter] DEFAULT (''),
+	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Only_Use_PMTs_From_Dataset] DEFAULT (0),
+	[Internal_Std_Explicit] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Internal_Std_Explicit] DEFAULT (''),
 	[NET_Value_Type] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_NET_Value_Type] DEFAULT (0),
 	[Ini_File_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Ini_File_Name] DEFAULT (''),
 	[Output_Folder_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Output_Folder_Name] DEFAULT (''),
@@ -51,7 +53,8 @@ CREATE TABLE [T_Peak_Matching_Task] (
 		[Processing_State]
 	) REFERENCES [T_Peak_Matching_Task_State_Name] (
 		[Processing_State]
-	) ON UPDATE CASCADE 
+	) ON UPDATE CASCADE ,
+	CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF] CHECK (charindex(char(10),isnull([Ini_File_Name],'')) = 0 and charindex(char(13),isnull([Ini_File_Name],'')) = 0)
 ) ON [PRIMARY]
 GO
 

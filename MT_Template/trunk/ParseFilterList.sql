@@ -22,16 +22,19 @@ CREATE PROCEDURE dbo.ParseFilterList
 **	Parameters: 
 **
 **
-**		Auth:	mem
-**		Date:	10/01/2004
-**				11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**	Auth:	mem
+**	Date:	10/01/2004
+**			11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**			02/23/2006 mem - Expanded @ValueMatchStr to varchar(128)
 **    
 *****************************************************/
+(
 	@filterValue varchar(128) = 'Experiment',
 	@filterValueLookupTableName varchar(256) = 'PT_Software_Q49..T_Analysis_Description',
 	@filterValueLookupColumnName varchar(128) = 'Experiment',
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
 	@filterMatchCount int = 0 OUTPUT
+)
 As
 	set nocount on
 
@@ -44,7 +47,7 @@ As
 	declare @ProcessConfigID int
 	declare @result int
 
-	declare @ValueMatchStr varchar(64)
+	declare @ValueMatchStr varchar(128)
 
 	declare @S nvarchar(4000)
 
@@ -80,7 +83,7 @@ As
 		-- Append items that do not contain a percent sign
 		--
 		INSERT INTO #TmpFilterList (Value)
-		SELECT [Value]
+		SELECT dbo.udfTrimToCRLF(Value)
 		FROM T_Process_Config
 		WHERE [Name] = @filterValue AND
 			Value Not Like '%[%]%' AND 

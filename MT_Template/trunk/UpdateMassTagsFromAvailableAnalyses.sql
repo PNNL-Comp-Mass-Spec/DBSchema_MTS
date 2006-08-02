@@ -11,25 +11,29 @@ GO
 CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 /****************************************************
 ** 
-**		Desc: 
-**			Gets list of LCQ analyses that are available
-**			to have their peptides processed for mass tags,
-**			and processes them.
+**	Desc: 
+**		Gets list of LCQ analyses that are available
+**		 to have their peptides processed for mass tags,
+**		 and processes them.
 **
-**			Caller must assure that peptides satisfy
-**			a minimum score threshold 
+**		Caller must assure that peptides satisfy
+**		 a minimum score threshold 
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
 **
-**		Auth: grk
-**		Date: 10/09/2001
-**			  09/21/2004 mem - Updated to utilize the PDB_ID field in T_Analysis_Description
-**			  09/23/2005 mem - Updated to handle PDB_ID values of 0 or Null
+**	Auth:	grk
+**	Date:	10/09/2001
+**			09/21/2004 mem - Updated to utilize the PDB_ID field in T_Analysis_Description
+**			09/23/2005 mem - Updated to handle PDB_ID values of 0 or Null
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			03/13/2006 mem - Now calling UpdateCachedHistograms if any data is loaded
 **    
 *****************************************************/
+(
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int=0 OUTPUT
+)
 As
 	set nocount on
 	
@@ -50,6 +54,10 @@ As
 	declare @result int
 	declare @job int
 	declare @PDB_ID int
+	declare @UpdateEnabled tinyint
+	
+	declare @NumAddedPeptides int
+	set @NumAddedPeptides = 0
 	
 	declare @PeptideDBName varchar(128)
 	declare @PeptideDBIDCached int
@@ -149,6 +157,8 @@ As
 					--
 					exec @result = UpdateMassTagsFromOneAnalysis @job, @PeptideDBName, @count output, @message output
 
+					Set @NumAddedPeptides = @NumAddedPeptides + @count
+					
 					-- make log entry
 					--
 					if @result = 0
@@ -164,14 +174,22 @@ As
 			set @numJobsProcessed = @numJobsProcessed + 1
 
 		end -- </b>
+
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled @CallingFunctionDescription = 'UpdateMassTagsFromAvailableAnalyses', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
 		
 	End -- </a>
 
 	-----------------------------------------------------------
 	-- Update the Analysis counts and High_Normalized_Score values in T_Mass_Tags
 	-----------------------------------------------------------
-	If @numJobsProcessed > 0
-		execute ComputeMassTagsAnalysisCounts
+	If @NumAddedPeptides > 0
+	Begin
+		Exec UpdateCachedHistograms @InvalidateButDoNotProcess=1
+		Exec ComputeMassTagsAnalysisCounts
+	End
 
 Done:
 	return @myError
@@ -181,8 +199,5 @@ GO
 SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[UpdateMassTagsFromAvailableAnalyses]  TO [DMS_SP_User]
 GO
 

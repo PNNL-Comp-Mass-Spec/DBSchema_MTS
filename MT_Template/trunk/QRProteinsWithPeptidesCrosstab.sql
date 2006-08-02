@@ -20,22 +20,23 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 **
 **  Parameters: QuantitationID List to process
 **
-**  Auth: mem
-**	Date: 08/05/2003
-**
-**	Updated: 08/15/2003
-**			 08/19/2003
-**			 08/26/2003
-**           10/02/2003 mem - Changed Order By from Ref_ID to Reference
-**			 11/13/2003 mem - Added Mass_Tag_Mods column
-**			 11/14/2003 mem - Added Peptide column
-**           12/13/2003 mem - Increased size of the @CrossTabSqlGroupBy variable
-**			 04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
-**			 06/06/2004 mem - Now returning the Dynamic_Mod_List and/or Static_Mod_List columns if any of the peptides does not contain 'none' for the list value
-**			 10/05/2004 mem - Updated for new MTDB schema
-**			 10/26/2004 mem - Updated dynamic SQL to fix ambiguous column name bug
-**			 05/24/2005 mem - Now returning "Internal_Std" in column Mass_Tag_Mods when Internal_Standard_Match = 1; and updated protein description linking method
-**			 09/22/2005 mem - Now limiting the data returned when @SeparateReplicateDataIDs=1 to only include those proteins and peptides that would be seen if @SeparateReplicateDataIDs=0
+**  Auth:	mem
+**	Date:	08/05/2003
+**			08/15/2003
+**			08/19/2003
+**			08/26/2003
+**          10/02/2003 mem - Changed Order By from Ref_ID to Reference
+**			11/13/2003 mem - Added Mass_Tag_Mods column
+**			11/14/2003 mem - Added Peptide column
+**          12/13/2003 mem - Increased size of the @CrossTabSqlGroupBy variable
+**			04/09/2004 mem - Added ORF description to output (obtained from ORF DB defined in T_External_Databases)
+**			06/06/2004 mem - Now returning the Dynamic_Mod_List and/or Static_Mod_List columns if any of the peptides does not contain 'none' for the list value
+**			10/05/2004 mem - Updated for new MTDB schema
+**			10/26/2004 mem - Updated dynamic SQL to fix ambiguous column name bug
+**			05/24/2005 mem - Now returning "Internal_Std" in column Mass_Tag_Mods when Internal_Standard_Match = 1; and updated protein description linking method
+**			09/22/2005 mem - Now limiting the data returned when @SeparateReplicateDataIDs=1 to only include those proteins and peptides that would be seen if @SeparateReplicateDataIDs=0
+**			01/30/2006 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues
+**			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **
 ****************************************************/
 (
@@ -43,7 +44,8 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 	@SeparateReplicateDataIDs tinyint = 1,				-- For quantitation ID's with replicates, separates the resultant crosstab table into a separate column for each replicate
 	@SourceColName varchar(128) = 'MT_Abundance',		-- Column to return; valid columns include MT_Abundance, UMC_Match_Count, SingleMT_MassTagMatchingIonCount
 	@AggregateColName varchar(128) = 'AvgAbu',
-	@AverageAcrossColumns tinyint = 0					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@IncludePrefixAndSuffixResidues tinyint = 0			-- The query is slower if this is enabled
 )
 AS 
 
@@ -54,7 +56,6 @@ AS
 	Declare @CrossTabSql varchar(7000),			-- Note: This cannot be any larger than 7000 since we add it plus some other text to @sql
 			@CrossTabSqlGroupBy varchar(8000),
 			@QuantitationIDListSql varchar(1024),
-			@OrfDescriptionSqlJoin varchar(1024),
 			@ColumnListToShow varchar(900),
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
@@ -81,31 +82,35 @@ AS
 								@QuantitationIDListClean = @QuantitationIDListClean output
 
 	--------------------------------------------------------------
-	-- Call QRGenerateORFDBJoinSql to populate @OrfDescriptionSqlJoin
-	--------------------------------------------------------------
-	Exec QRGenerateORFDBJoinSql @OrfDescriptionSqlJoin = @OrfDescriptionSqlJoin OUTPUT
-
-	--------------------------------------------------------------
 	-- Create dynamic SQL to generate resultset containing summary matrix
 	--------------------------------------------------------------
 	
 	Set @sql = ''
 	Set @sql = @sql + ' SELECT SubQ.Ref_ID,T_Proteins.Reference,'
-	If Len(@OrfDescriptionSqlJoin) > 0
-		Set @sql = @sql + ' ORFInfo.Protein_Description,'
-
-	Set @sql = @sql + 'SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods,'
+	Set @sql = @sql +   'T_Proteins.Description As Protein_Description,'
+	Set @sql = @sql +   'SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods,'
 	If @ModsPresent > 0
 		Set @sql = @sql + 'SubQ.Mod_Description,'
 
 	Set @sql = @sql + @CrossTabSql
 	Set @sql = @sql + ' FROM ( SELECT QR.Quantitation_ID,QR.Ref_ID,QRD.Mass_Tag_ID,'
-	Set @sql = @sql +               ' T_Mass_Tags.Peptide,T_Mass_Tags.Mod_Description,'
+	If @IncludePrefixAndSuffixResidues <> 0
+		Set @sql = @sql + ' MTPM.Peptide_Sequence AS Peptide,'
+	Else
+		Set @sql = @sql + ' MT.Peptide,'
+
+	Set @sql = @sql +               ' MT.Mod_Description,'
 	Set @sql = @sql +               ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 	Set @sql = @sql +               ' QRD.' + @SourceColName
 	Set @sql = @sql +        ' FROM T_Quantitation_Results AS QR INNER JOIN'
     Set @sql = @sql +             ' T_Quantitation_ResultDetails AS QRD ON QR.QR_ID = QRD.QR_ID INNER JOIN'
-    Set @sql = @sql +             ' T_Mass_Tags ON QRD.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID'
+    Set @sql = @sql +             ' T_Mass_Tags AS MT ON QRD.Mass_Tag_ID = MT.Mass_Tag_ID'
+    If @IncludePrefixAndSuffixResidues <> 0
+	Begin
+		Set @sql = @sql +         ' INNER JOIN V_Mass_Tag_to_Protein_Map_Full_Sequence AS MTPM ON'
+		Set @sql = @sql +         ' MT.Mass_Tag_ID = MTPM.Mass_Tag_ID AND QR.Ref_ID = MTPM.Ref_ID'
+	End
+	    
 	Set @sql = @sql +        ' WHERE QR.Quantitation_ID IN (' + @QuantitationIDListSql + ')'
 	Set @sql = @sql +        ' ) AS SubQ'
 
@@ -118,15 +123,9 @@ AS
 	End
 
 	Set @sql = @sql + ' LEFT OUTER JOIN T_Proteins ON SubQ.Ref_ID = T_Proteins.Ref_ID'
-	If Len(@OrfDescriptionSqlJoin) > 0
-		Set @sql = @sql + @OrfDescriptionSqlJoin
-		
-	Set @sql = @sql + ' GROUP BY SubQ.Ref_ID,T_Proteins.Reference,SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods'
+	Set @sql = @sql + ' GROUP BY SubQ.Ref_ID,T_Proteins.Reference,SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods,T_Proteins.Description'
 	If @ModsPresent > 0
 		Set @sql = @sql + ',SubQ.Mod_Description'
-
-	If Len(@OrfDescriptionSqlJoin) > 0
-		Set @sql = @sql + ', ORFInfo.Protein_Description'
 
 	If @AverageAcrossColumns = 0
 	  Begin
@@ -135,12 +134,7 @@ AS
 	  End
 	Else
 	  Begin
-		Set @ColumnListToShow = 'Ref_ID,Reference'
-		If Len(@OrfDescriptionSqlJoin) > 0
-		Begin
-			Set @ColumnListToShow = @ColumnListToShow + ',Protein_Description'
-		End
-		Set @ColumnListToShow = @ColumnListToShow + ',Mass_Tag_ID,Peptide,Mass_Tag_Mods'
+		Set @ColumnListToShow = 'Ref_ID,Reference,Protein_Description,Mass_Tag_ID,Peptide,Mass_Tag_Mods'
 		If @ModsPresent > 0
 			Set @ColumnListToShow = @ColumnListToShow + ',Mod_Description'
 		

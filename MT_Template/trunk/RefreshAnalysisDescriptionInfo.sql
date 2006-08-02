@@ -20,14 +20,18 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 07/08/2005 mem
-**			  07/18/2005 mem - Now updating column Labelling
-**			  11/13/2005 mem - Now updating Dataset_Created_DMS, Dataset_Acq_Time_Start, Dataset_Acq_Time_End, and Dataset_Scan_Count in both T_Analysis_Description and T_FTICR_Analysis_Description
+**	Auth:	mem
+**	Date:	07/08/2005 mem
+**			07/18/2005 mem - Now updating column Labelling
+**			11/13/2005 mem - Now updating Dataset_Created_DMS, Dataset_Acq_Time_Start, Dataset_Acq_Time_End, and Dataset_Scan_Count in both T_Analysis_Description and T_FTICR_Analysis_Description
+**			12/15/2005 mem - Now updating PreDigest_Internal_Std, PostDigest_Internal_Std, & Dataset_Internal_Std (previously named Internal_Standard)
+**			03/08/2006 mem - Now updating column Campaign
 **    
 *****************************************************/
+(
 	@UpdateInterval int = 96,			-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
  	@message varchar(255) = '' output
+)
 As
 	set nocount on
 
@@ -71,6 +75,7 @@ As
 		--
 		UPDATE T_Analysis_Description
 		SET 
+			Campaign = P.Campaign,
 			Vol_Client = P.VolClient, 
 			Vol_Server = P.VolServer, 
 			Storage_Path = P.StoragePath, 
@@ -78,16 +83,20 @@ As
 			Results_Folder = P.ResultsFolder,
 			Completed = P.Completed,
 			Separation_Sys_Type = P.SeparationSysType,
-			Internal_Standard = P.[Internal Standard],
+			PreDigest_Internal_Std = P.[PreDigest Int Std],
+			PostDigest_Internal_Std = P.[PostDigest Int Std],
+			Dataset_Internal_Std = P.[Dataset Int Std],
 			Enzyme_ID = P.EnzymeID,
 			Labelling = P.Labelling
 		FROM T_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.VolClient, R.VolServer, R.StoragePath, 
+			SELECT L.Job, R.Campaign, R.VolClient, R.VolServer, R.StoragePath, 
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
-				R.SeparationSysType, R.[Internal Standard], R.EnzymeID, R.Labelling
+				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
+				R.EnzymeID, R.Labelling
 			FROM T_Analysis_Description AS L INNER JOIN
 				MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex AS R ON 
 				L.Job = R.Job AND (
+					L.Campaign <> R.Campaign OR
 					L.Vol_Client <> R.VolClient OR 
 					L.Vol_Server <> R.VolServer OR 
 					L.Storage_Path <> R.StoragePath OR 
@@ -95,9 +104,11 @@ As
 					L.Results_Folder <> R.ResultsFolder OR
 					L.Completed <> R.Completed OR
 					IsNull(L.Separation_Sys_Type,0) <> IsNull(R.SeparationSysType,0) OR
-					IsNull(L.Internal_Standard,0) <> IsNull(R.[Internal Standard],0) OR
+					IsNull(L.PreDigest_Internal_Std,'') <> IsNull(R.[PreDigest Int Std], '') OR
+					IsNull(L.PostDigest_Internal_Std,'') <> IsNull(R.[PostDigest Int Std], '') OR
+					IsNull(L.Dataset_Internal_Std,'') <> IsNull(R.[Dataset Int Std], '') OR
 					IsNull(L.Enzyme_ID,0) <> IsNull(R.EnzymeID,0) OR
-					IsNull(L.Labelling,0) <> IsNull(R.Labelling,0)
+					IsNull(L.Labelling,'') <> IsNull(R.Labelling,'')
 				) 
 			) AS P on P.Job = TAD.Job
 		--
@@ -165,6 +176,7 @@ As
 		--
 		UPDATE T_FTICR_Analysis_Description
 		SET 
+			Campaign = P.Campaign,
 			Vol_Client = P.VolClient, 
 			Vol_Server = P.VolServer, 
 			Storage_Path = P.StoragePath, 
@@ -172,15 +184,19 @@ As
 			Results_Folder = P.ResultsFolder,
 			Completed = P.Completed,
 			Separation_Sys_Type = P.SeparationSysType,
-			Internal_Standard = P.[Internal Standard],
+			PreDigest_Internal_Std = P.[PreDigest Int Std],
+			PostDigest_Internal_Std = P.[PostDigest Int Std],
+			Dataset_Internal_Std = P.[Dataset Int Std],
 			Labelling = P.Labelling
 		FROM T_FTICR_Analysis_Description AS TAD JOIN (
-			SELECT L.Job, R.VolClient, R.VolServer, R.StoragePath, 
+			SELECT L.Job, R.Campaign, R.VolClient, R.VolServer, R.StoragePath, 
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
-				R.SeparationSysType, R.[Internal Standard], R.Labelling
+				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
+				R.Labelling
 			FROM T_FTICR_Analysis_Description AS L INNER JOIN
 				MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex AS R ON 
 				L.Job = R.Job AND (
+					L.Campaign <> R.Campaign OR
 					L.Vol_Client <> R.VolClient OR 
 					L.Vol_Server <> R.VolServer OR 
 					L.Storage_Path <> R.StoragePath OR 
@@ -188,8 +204,10 @@ As
 					L.Results_Folder <> R.ResultsFolder OR
 					L.Completed <> R.Completed OR
 					IsNull(L.Separation_Sys_Type,0) <> IsNull(R.SeparationSysType,0) OR
-					IsNull(L.Internal_Standard,0) <> IsNull(R.[Internal Standard],0) OR
-					IsNull(L.Labelling,0) <> IsNull(R.Labelling,0)
+					IsNull(L.PreDigest_Internal_Std,'') <> IsNull(R.[PreDigest Int Std], '') OR
+					IsNull(L.PostDigest_Internal_Std,'') <> IsNull(R.[PostDigest Int Std], '') OR
+					IsNull(L.Dataset_Internal_Std,'') <> IsNull(R.[Dataset Int Std], '') OR
+					IsNull(L.Labelling,'') <> IsNull(R.Labelling,'')
 				)
 			) AS P on P.Job = TAD.Job
 		--

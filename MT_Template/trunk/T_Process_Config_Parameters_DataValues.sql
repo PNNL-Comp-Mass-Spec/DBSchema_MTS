@@ -13,6 +13,8 @@ INSERT INTO dbo.T_Process_Config_Parameters
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'DB_Schema_Version', N'Info only', 1, 1, N'Version of MTDB schema')
 INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Enzyme_ID', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that are associated with this Enzyme ID')
+INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Experiment', N'MS/MS analysis job import, FTICR analysis job import', 1, 99, N'Allow MS/MS and FTICR analysis jobs that are associated with this experiment name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character')
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Experiment_Exclusion', N'MS/MS analysis job import, FTICR analysis job import', 1, 99, N'Exclude MS/MS and FTICR analysis jobs that are associated with this experiment name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character')
@@ -37,9 +39,11 @@ INSERT INTO dbo.T_Process_Config_Parameters
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'MS_Result_Type', N'FTICR analysis job import', 1, 99, N'Allow FTICR analysis jobs that produce this type of result')
 INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'MSMS_Result_Type', N'MS/MS analysis job import', 1, 99, N'Allow MS/MS analysis jobs that produce this type of result')
+INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Organism', N'Info only', 1, 99, N'Not used for filtering - information only')
 INSERT INTO dbo.T_Process_Config_Parameters
-  VALUES (N'Organism_DB_File_Name', N'MS/MS analysis job import', 1, 99, N'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA)')
+  VALUES (N'Organism_DB_File_Name', N'MS/MS analysis job import', 1, 99, N'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA); will match the Organism_DB_Name field or the Protein_Collection_List field in the source database')
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Parameter_File_Name', N'MS/MS analysis job import', 1, 99, N'Allow MS/MS analysis jobs that were performed with this parameter file')
 INSERT INTO dbo.T_Process_Config_Parameters
@@ -53,10 +57,15 @@ INSERT INTO dbo.T_Process_Config_Parameters
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'PMT_Quality_Score_Uses_Filtered_Peptide_Obs_Count', N'PMT Quality Score Computation', 1, 1, N'If 0, then column Number_of_Peptides is used for PMT QS calculations.  If 1 then column Peptide_Obs_Count_Passing_Filter is used')
 INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Protein_Collection_and_Protein_Options_Combo', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were searched against this precise protein collection list and protein options list; separate the two items using a semicolon; the items can contain wildcards; will compare against the full Protein_Collection_List and Protein_Options_List fields in the source DB')
+INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Protein_Collection_Filter', N'MS/MS analysis job import', 0, 99, N'Allow MS/MS analysis jobs that were searched against this protein collection; matches the Protein_Collection_List field in the peptide DB (either an exact match or a match to one of the items in the list)')
+INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Protein_DB_Name', N'Protein Import', 1, 99, N'Import protein definitions from this database')
 INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Separation_Type', N'MS/MS analysis job import, FTICR analysis job import', 1, 99, N'Allow MS/MS and FTICR analysis jobs that are associated with datasets that use this separation method')
 INSERT INTO dbo.T_Process_Config_Parameters
+  VALUES (N'Seq_Direction_Filter', N'MS/MS analysis job import', 0, 99, N'Sequence direction values to allow; only used for jobs with a Protein_Collection_List defined')
+INSERT INTO dbo.T_Process_Config_Parameters
   VALUES (N'Settings_File_Name', N'MS/MS analysis job import', 1, 99, N'Allow MS/MS analysis jobs that were performed with this settings file')
-
 go

@@ -17,8 +17,10 @@ SELECT TOP 100 PERCENT CASE WHEN DCC.CellCulture IS NULL
     FAD.Organism, FAD.Instrument, FAD.Instrument_Class, 
     FAD.Analysis_Tool, FAD.Parameter_File_Name, 
     FAD.Settings_File_Name, FAD.Organism_DB_Name, 
+    FAD.Protein_Collection_List, FAD.Protein_Options_List, 
     FAD.Completed, FAD.ResultType, FAD.Separation_Sys_Type, 
-    FAD.Internal_Standard, FAD.Labelling, 
+    FAD.PreDigest_Internal_Std, FAD.PostDigest_Internal_Std, 
+    FAD.Dataset_Internal_Std, FAD.Labelling, 
     ASN.AD_State_Name AS State_Name, 
     FAD.Vol_Client + FAD.Storage_Path + FAD.Dataset_Folder + '\' + FAD.Results_Folder
      + '\' AS Results_Folder_Path

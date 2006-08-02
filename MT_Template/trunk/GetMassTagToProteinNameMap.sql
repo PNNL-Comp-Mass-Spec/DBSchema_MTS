@@ -8,7 +8,6 @@ drop procedure [dbo].[GetMassTagToProteinNameMap]
 GO
 
 
-
 CREATE PROCEDURE dbo.GetMassTagToProteinNameMap
 /****************************************************************
 **  Desc: Returns mass tags and protein names, optionally filtering
@@ -18,9 +17,10 @@ CREATE PROCEDURE dbo.GetMassTagToProteinNameMap
 **
 **  Parameters: See comments below
 **
-**  Auth: mem
-**	Date: 12/31/2004
-**		  02/05/2005 mem - Added @MinimumHighDiscriminantScore
+**  Auth:	mem
+**	Date:	12/31/2004
+**			02/05/2005 mem - Added @MinimumHighDiscriminantScore
+**			07/25/2006 mem - Updated to utilize new columns in V_IFC_Mass_Tag_to_Protein_Name_Map
 **  
 ****************************************************************/
 (
@@ -67,7 +67,12 @@ As
 	-- Construct the Base Sql
 	---------------------------------------------------	
 	Set @S = ''
-	Set @S = @S + ' SELECT PNM.Mass_Tag_ID, PNM.Protein_ID, PNM.Reference'
+	Set @S = @S + ' SELECT PNM.Mass_Tag_ID,'
+	Set @S = @S +        ' CASE WHEN IsNull(PNM.Protein_DB_ID, -1) = 0'
+	Set @S = @S +        ' THEN PNM.External_Protein_ID'
+	Set @S = @S +        ' ELSE PNM.External_Reference_ID'
+	Set @S = @S +        ' END AS Protein_ID,'
+	Set @S = @S +        ' PNM.Reference'
 	Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN'
     Set @S = @S + ' V_IFC_Mass_Tag_to_Protein_Name_Map PNM ON '
     Set @S = @S + ' MT.Mass_Tag_ID = PNM.Mass_Tag_ID'
@@ -84,8 +89,6 @@ As
 
 Done:
 	Return @myError
-
-
 
 
 GO
