@@ -18,4 +18,7 @@ GO
  CREATE  INDEX [IX_T_Log_Entries_Type] ON [T_Log_Entries]([type]) ON [PRIMARY]
 GO
 
+GRANT  INSERT  ON [dbo].[T_Log_Entries]  TO [DMS_SP_User]
+GO
+
 

@@ -10,25 +10,26 @@ GO
 CREATE PROCEDURE dbo.NormalizeSequenceWithMods
 /****************************************************
 ** 
-**		Desc:  
-**			Normalize peptide sequence (remove prefix
+**	Desc:	Normalize peptide sequence (remove prefix
 **			and suffix and modification notations),
 **			and generate modification description
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **		  @rawSequence		  raw peptide sequence from analysis
 **
-**		Auth: grk
-**       08/20/2004 grk - Initial version
-**       08/26/2004 grk - position value of terminus mod descriptor changed to negative integer
-**		 09/09/2004 mem - Updated method of storing non-positional tag in @modDescription
-**		 02/24/2005 mem - Switched from using the ASCII() function to using a LIKE clause to test for the current character being a letter
-**		 02/26/2005 mem - Improved execution speed by separating out terminus checks from mod symbol checks
-**		 04/23/2005 mem - Added checking for clean sequences containing invalid characters (!@#$%&*<>.)
+**	Auth:	grk
+**			08/20/2004 grk - Initial version
+**			08/26/2004 grk - position value of terminus mod descriptor changed to negative integer
+**			09/09/2004 mem - Updated method of storing non-positional tag in @modDescription
+**			02/24/2005 mem - Switched from using the ASCII() function to using a LIKE clause to test for the current character being a letter
+**			02/26/2005 mem - Improved execution speed by separating out terminus checks from mod symbol checks
+**			04/23/2005 mem - Added checking for clean sequences containing invalid characters (!@#$%&*<>.)
+**			06/26/2006 mem - No longer using negative integers for the positional value of terminus mods; instead, now using 1 for N-terminal mods and Len(Clean_Sequence) for C-terminal mods; however, Isotopic mods still have a position of 0
 **    
 *****************************************************/
+(
 	@rawSequence varchar(900) = '-.abc*defghij#klmnopqrst@uvwxyz.r',
 	@PM_TargetSymbolList varchar(128) = '@,#,*,b,[,>,',
 	@PM_MassCorrectionTagList varchar(512) = 'IodoAcet,OxDy_Met,OxDy16_M,IodoAcet,ProTermN,PepTermC,',
@@ -37,6 +38,7 @@ CREATE PROCEDURE dbo.NormalizeSequenceWithMods
 	@modDescription varchar(2048) output,
 	@modCount int output,
 	@message varchar(256) output
+)
 As
 	set nocount on
 	
@@ -124,6 +126,11 @@ As
 
 	-----------------------------------------------------------
 	-- Handle positional modifications, including terminus mods
+	-- Note that terminus mods indicated by <, >, [, or ] are
+	--  always treated as static mods
+	-- Dynamic terminus mods have a local symbol associated with them
+	--  and should appear in the sequence like this:
+	-- '-.M!BCDEFGHIJK.F'  or  'R.M!BCDEFGHIJK.F'  or  'R.MBCDEFGHIJK!.F'
 	-----------------------------------------------------------
 	
 	declare @targetIdx int
@@ -141,13 +148,14 @@ As
 	set @PM_TargetSymbolList = replace(@PM_TargetSymbolList, ',', '')
 	set @PM_MassCorrectionTagList = replace(@PM_MassCorrectionTagList, ',', '')
 
+
+	declare @terminusChecks varchar(8)
+	
 	If @PM_TargetSymbolList LIKE '%]%' OR @PM_TargetSymbolList LIKE '%[<>[]%'
 	Begin
 		-----------------------------------------------------------
 		-- Handle terminus mods
 		-----------------------------------------------------------
-
-		declare @terminusChecks varchar(8)
 
 		-- N terminus
 		-- if N terminus of peptide is also N terminus of protein
@@ -166,46 +174,33 @@ As
 		else
 			set @terminusChecks = @terminusChecks + '>'
 		
-		-- define terminus target position order
-		--
-		declare @terminusPosOrder char(4)
-		set @terminusPosOrder = '<>[]'
-
 		-----------------------------------------------------------
-		-- Check for terminus mods
+		-- Check for N terminus mods
 		-----------------------------------------------------------
-		set @seqPos = 1
+		-- Position of N-terminal mods is 1
+		set @modPos = 1
 
-		-- Note: this loop always runs twice
-		while @seqPos <= 2
-		begin
-			set @ch = SUBSTRING(@terminusChecks, @seqPos, 1)
+		set @ch = SUBSTRING(@terminusChecks, 1, 1)
 
-			-- is the given terminus (in @ch) a modification target?
-			set @targetIdx = charindex(@ch, @PM_TargetSymbolList)
-			if @targetIdx > 0
-			begin -- Yes
-				-- increment mod count
-				set @modCount = @modCount + 1
-				
-				-- get position of modification in terminus order
-				set @modPos = -1 * charindex(@ch, @terminusPosOrder)
-				
-				-- add mod descriptor to mod description
-				--
-				-- calculate index of MCF tag
-				set @symIndx = ((@targetIdx - 1) * @globalSymbolSize) + 1
-					
-				-- get MCF tag from index
-				set @MCFTag = rtrim(SUBSTRING(@PM_MassCorrectionTagList, @symIndx, @globalSymbolSize)) 
-				
-				-- build mod descriptor from mass correction tag and mod position 
-				-- and add it to mod description
-				--
-				set @modDescription = @modDescription + @MCFTag + ':' + cast(@modPos as varchar(12)) + ',' 
-			end
+		-- is the given terminus (in @ch) a modification target?
+		set @targetIdx = charindex(@ch, @PM_TargetSymbolList)
+		if @targetIdx > 0
+		begin -- Yes
+			-- increment mod count
+			set @modCount = @modCount + 1
 			
-			set @seqPos = @seqPos + 1
+			-- add mod descriptor to mod description
+			--
+			-- calculate index of MCF tag
+			set @symIndx = ((@targetIdx - 1) * @globalSymbolSize) + 1
+				
+			-- get MCF tag from index
+			set @MCFTag = rtrim(SUBSTRING(@PM_MassCorrectionTagList, @symIndx, @globalSymbolSize)) 
+			
+			-- build mod descriptor from mass correction tag and mod position 
+			-- and add it to mod description
+			--
+			set @modDescription = @modDescription + @MCFTag + ':' + cast(@modPos as varchar(12)) + ',' 
 		end
 	End
 		
@@ -282,6 +277,38 @@ As
 		set @seqPos = @seqPos + 1
 	end
 
+	If @PM_TargetSymbolList LIKE '%]%' OR @PM_TargetSymbolList LIKE '%>%'
+	Begin
+		-----------------------------------------------------------
+		-- Check for C terminus mods
+		-----------------------------------------------------------
+		-- Position of C-terminal mods is Len(@cleanSequence)
+		set @modPos = Len(@cleanSequence)
+
+		set @ch = SUBSTRING(@terminusChecks, 2, 1)
+
+		-- is the given terminus (in @ch) a modification target?
+		set @targetIdx = charindex(@ch, @PM_TargetSymbolList)
+		if @targetIdx > 0
+		begin -- Yes
+			-- increment mod count
+			set @modCount = @modCount + 1
+			
+			-- add mod descriptor to mod description
+			--
+			-- calculate index of MCF tag
+			set @symIndx = ((@targetIdx - 1) * @globalSymbolSize) + 1
+				
+			-- get MCF tag from index
+			set @MCFTag = rtrim(SUBSTRING(@PM_MassCorrectionTagList, @symIndx, @globalSymbolSize)) 
+			
+			-- build mod descriptor from mass correction tag and mod position 
+			-- and add it to mod description
+			--
+			set @modDescription = @modDescription + @MCFTag + ':' + cast(@modPos as varchar(12)) + ',' 
+		end
+	End
+	
 	-----------------------------------------------------------
 	-- remove trailing comma from modification description string
 	-----------------------------------------------------------

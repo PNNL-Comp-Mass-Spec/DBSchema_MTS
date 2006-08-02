@@ -19,41 +19,40 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 **	Parameters:
 **	
 **  Output:
-**		@message - '' if successful, otherwise a message about
-**			what went wrong
+**		@message - '' if successful, otherwise a message about what went wrong
 **
-**		Auth: mem (modified version of CalculateMonoisotopicMass written by kal)
-**		Date: 03/25/2004
-**
-**		Updated: 03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
-**				 07/20/2004 mem - Added the @SequencesToProcess parameter and changed the @done variable to @continue
-**				 08/01/2004 mem - Changed T_Peptide_Mod_Global_List reference from MT_Main to a temporary table
+**	Auth:	mem (modified version of CalculateMonoisotopicMass written by kal)
+**	Date:	03/25/2004
+**			03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
+**			07/20/2004 mem - Added the @SequencesToProcess parameter and changed the @done variable to @continue
+**			08/01/2004 mem - Changed T_Peptide_Mod_Global_List reference from MT_Main to a temporary table
 **									version of V_DMS_Peptide_Mod_Global_List_Import
-**				 08/26/2004 mem - Updated to use consolidated mod descriptions and mass info views from DMS
-**				 07/01/2005 mem - Now updating column Last_Affected in T_Sequence
-**
+**			08/26/2004 mem - Updated to use consolidated mod descriptions and mass info views from DMS
+**			07/01/2005 mem - Now updating column Last_Affected in T_Sequence
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
-	(
-		@message varchar(255) = '' output,
-		@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all peptides; when 0, only computes if the mass is currently Null
-		@AbortOnUnknownSymbolError tinyint = 0,		-- When 1, then aborts calculations if an unknown symbol is found
-		@SequencesToProcess int = 0					-- When greater than 0, then only processes the given number of sequences
-	)
+(
+	@message varchar(255) = '' output,
+	@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all peptides; when 0, only computes if the mass is currently Null
+	@AbortOnUnknownSymbolError tinyint = 0,		-- When 1, then aborts calculations if an unknown symbol is found
+	@SequencesToProcess int = 0					-- When greater than 0, then only processes the given number of sequences
+)
 AS
-	Set NOCOUNT ON
+	set nocount on
+	
+	declare @myError int
+	declare @myRowCount int
+	set @myError = 0
+	set @myRowCount = 0
 
 	Set @message = ''
 
 	Declare @PeptidesProcessedCount int
-	Declare @myRowCount int
-	Declare @myError int
-	
 	Set @PeptidesProcessedCount = 0
-	Set @myRowCount = 0
-	Set @myError = 0
 
 	Declare @Progress varchar(255)
+	Declare @UpdateEnabled tinyint
 	
 	--used for storing information from each table row
 	Declare @Seq_ID int
@@ -497,12 +496,20 @@ UpdateMass:
 		Set @PeptidesProcessedCount = @PeptidesProcessedCount + 1
 		
 		-- Since mass computation can take awhile, post an entry to T_Log_Entries every 25,000 peptides
-		If @PeptidesProcessedCount % 25000 = 0
+		If @PeptidesProcessedCount % 2500 = 0
 		Begin
-			Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
-			Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
+			If @PeptidesProcessedCount % 25000 = 0
+			Begin
+				Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
+				Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
+			End
+			
+			-- Validate that updating is enabled, abort if not enabled
+			exec VerifyUpdateEnabled @CallingFunctionDescription = 'CalculateMonoisotopicMass', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+			If @UpdateEnabled = 0
+				Goto Done
 		End
-
+		
 		If @SequencesToProcess > 0
 		Begin
 			If @PeptidesProcessedCount >= @SequencesToProcess
@@ -511,7 +518,7 @@ UpdateMass:
 		
 	End		--End of main While loop
 
-done:
+Done:
 	DROP INDEX #PeptideModList.#IX_PeptideModList_UniqueModID
 	DROP TABLE #PeptideModList
 	

@@ -16,4 +16,7 @@ CREATE TABLE [T_Param_File_Mods_Cache] (
 ) ON [PRIMARY]
 GO
 
+GRANT  UPDATE ,  INSERT  ON [dbo].[T_Param_File_Mods_Cache]  TO [DMS_SP_User]
+GO
+
 

@@ -22,4 +22,7 @@ GO
  CREATE  INDEX [IX_T_Seq_Map_Map_ID] ON [T_Seq_Map]([Map_ID]) ON [PRIMARY]
 GO
 
+GRANT  INSERT  ON [dbo].[T_Seq_Map]  TO [DMS_SP_User]
+GO
+
 

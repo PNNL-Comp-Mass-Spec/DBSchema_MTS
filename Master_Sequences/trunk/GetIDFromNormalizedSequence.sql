@@ -10,7 +10,7 @@ GO
 CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
 /****************************************************
 ** 
-**		Desc:
+**	Desc:
 **		Returns the unique sequence ID for the
 **      given clean sequence and static and dynamic
 **      mod descriptions.
@@ -19,38 +19,42 @@ CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
 **      table, the mod sets tables, and the mod set
 **      members table.
 ** 
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Updates: 
-**        07/24/2004 grk - Initial version
-**		  08/06/2004 mem - Added population of @seqID when adding a new sequence
-**        08/22/2004 grk - modified to work with consolidated mod description
-**		  08/24/2004 mem - Updated population of T_Seq_Map to check for existing values
-**		  02/26/2005 mem - Now only updating T_Seq_Map if @mapID is > 0
-**		  07/01/2005 mem - Now updating column Last_Affected in T_Sequence
+**	Auth:	grk
+**	Date:	07/24/2004
+**			08/06/2004 mem - Added population of @seqID when adding a new sequence
+**			08/22/2004 grk - modified to work with consolidated mod description
+**			08/24/2004 mem - Updated population of T_Seq_Map to check for existing values
+**			02/26/2005 mem - Now only updating T_Seq_Map if @mapID is > 0
+**			07/01/2005 mem - Now updating column Last_Affected in T_Sequence
+**			06/07/2006 mem - Added support for Protein Collection File IDs and removed input parameter @mapID
 **    
 *****************************************************/
+(
 	@cleanSequence varchar(1024),
 	@modDescription varchar(2048) = 'Iso_N15 :0,Sam:0,PepTermN:0,ProTermC:0,IodoAcet:2,OxDy16_M:3,OxDy_Met:10,IodoAcet:20',
 	@modCount int = 8,
-	@mapID int,						-- Fasta file ID for the sequence; will be added to T_Seq_Map if needed. Set this to 0 to not update T_Seq_Map
+	@OrganismDBFileID int=0,				-- Organism DB file ID; if @OrganismDBFileID is non-zero, then @ProteinCollectionFileID is ignored; adds SeqID and MapID to T_Seq_Map if non-zero and not yet present
+	@ProteinCollectionFileID int=0,			-- Protein collection file ID; adds SeqID and MapID to T_Seq_Map if non-zero and not yet present
 	@seqID int output,
 	@message varchar(256) output
+)
 As
-	set nocount on
+	Set NoCount On
 	
-	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 	
 	set @message = ''
 	set @seqID = 0
 	
 	declare @result int
+	declare @matchCount int
 
 	-----------------------------------------------------------
 	-- Try to find existing sequence and mod patterns
@@ -192,28 +196,47 @@ As
 	-----------------------------------------------------------
 Done:
 
-	if IsNull(@mapID, 0) > 0
+	-----------------------------------------------------------
+	-- Add entries to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map 
+	-- for the updated sequences
+	-----------------------------------------------------------
+	--
+	If @myError = 0
 	Begin
-		-----------------------------------------------------------
-		-- track association between the mapping ID and sequence
-		----------------------------------------------------------- 
-		Declare @matchCount int
-		
-		Set @matchCount = 0
-		SELECT @matchCount = COUNT(*)
-		FROM T_Seq_Map
-		WHERE Seq_ID = @seqID AND Map_ID = @mapID 
-		
-		If @matchCount = 0
+		If IsNull(@OrganismDBFileID, 0) > 0
 		Begin
-			INSERT INTO T_Seq_Map (Seq_ID, Map_ID)
-			VALUES (@seqID, @mapID)
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
+			Set @matchCount = 0
+			SELECT @matchCount = COUNT(*)
+			FROM T_Seq_Map
+			WHERE Seq_ID = @seqID AND Map_ID = @OrganismDBFileID 
+			
+			If @matchCount = 0
+			Begin
+				INSERT INTO T_Seq_Map (Seq_ID, Map_ID)
+				VALUES (@seqID, @OrganismDBFileID)
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+			End
+		End
+		Else
+		If IsNull(@ProteinCollectionFileID, 0) > 0
+		Begin
+			Set @matchCount = 0
+			SELECT @matchCount = COUNT(*)
+			FROM T_Seq_to_Archived_Protein_Collection_File_Map
+			WHERE Seq_ID = @seqID AND [File_ID] = @ProteinCollectionFileID 
+			
+			If @matchCount = 0
+			Begin
+				INSERT INTO T_Seq_to_Archived_Protein_Collection_File_Map (Seq_ID, [File_ID])
+				VALUES (@seqID, @ProteinCollectionFileID)
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+			End
 		End
 	End
 	
-	return @myError
+	Return @myError
 
 GO
 SET QUOTED_IDENTIFIER OFF 

@@ -10,74 +10,84 @@ GO
 CREATE PROCEDURE dbo.DropTempSequenceTables
 /****************************************************
 ** 
-**		Desc:  
-**        Drops the tables given by @PeptideSequencesTableName and @UniqueSequencesTableName
-**		  These tables would have originally been created using CreateTempSequenceTables
+**	Desc:	Drops the tables given by @TempTable1 and @TempTable2
+**			These tables would have originally been created using CreateTempSequenceTables
 **
-**		Auth:	mem
-**		Date:	02/10/2005
+**	Auth:	mem
+**	Date:	02/10/2005
+**			01/15/2006 mem - Renamed input parameters to generic names
+**			05/13/2006 mem - Added ability to only delete one table since deletion will be skipped if @TempTable1 or @TempTable2 are blank
 **    
 *****************************************************/
-	@PeptideSequencesTableName varchar(256)='' output,
-	@UniqueSequencesTableName varchar(256)='' output,
+(
+	@TempTable1 varchar(256)='',
+	@TempTable2 varchar(256)='',
 	@message varchar(256) = '' output
+)
 As
-	set nocount on
+	Set NoCount On
 	
+	declare @myRowCount int
 	declare @myError int
+	set @myRowCount = 0
 	set @myError = 0
 
-	declare @myRowCount int
-	set @myRowCount = 0
-
-	declare @GUID varchar(64)
 	declare @Sql varchar(1024)
 
 	-----------------------------------------------------------
-	-- Possibly add square brackets
+	-- Check for null table names
+	-----------------------------------------------------------
+	Set @TempTable1 = IsNull(@TempTable1, '')
+	Set @TempTable2 = IsNull(@TempTable2, '')
+	
+	-----------------------------------------------------------
+	-- Drop table 1
 	-----------------------------------------------------------
 	--
-	If CharIndex('[', @PeptideSequencesTableName) <= 0
-		Set @PeptideSequencesTableName = '[' + @PeptideSequencesTableName + ']'
+	If Len(@TempTable1) > 0
+	Begin
+		-- Possibly add square brackets
+		If CharIndex('[', @TempTable1) <= 0
+			Set @TempTable1 = '[' + @TempTable1 + ']'
 
-	If CharIndex('[', @UniqueSequencesTableName) <= 0
-		Set @UniqueSequencesTableName = '[' + @UniqueSequencesTableName + ']'
-
+		set @Sql = ' DROP TABLE ' + @TempTable1
+		--
+		Exec (@Sql)
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Problem dropping temporary table ' + @TempTable1
+			goto Done
+		end
+	End
 
 	-----------------------------------------------------------
-	-- Drop the tables
+	-- Drop table 2
 	-----------------------------------------------------------
 	--
-	set @Sql = ' DROP TABLE ' + @PeptideSequencesTableName
-	--
-	Exec (@Sql)
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		set @message = 'Problem dropping temporary table ' + @PeptideSequencesTableName
-		goto Done
-	end
+	If Len(@TempTable2) > 0
+	Begin
+		-- Possibly add square brackets
+		If CharIndex('[', @TempTable2) <= 0
+			Set @TempTable2 = '[' + @TempTable2 + ']'
 
-	set @Sql = ' DROP TABLE ' + @UniqueSequencesTableName
-	--
-	Exec (@Sql)
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		set @message = 'Problem dropping temporary table ' + @PeptideSequencesTableName
-		goto Done
-	end
-
-
+		set @Sql = ' DROP TABLE ' + @TempTable2
+		--
+		Exec (@Sql)
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Problem dropping temporary table ' + @TempTable2
+			goto Done
+		end
+	End
 
 Done:
 	return @myError
-
-
 
 GO
 SET QUOTED_IDENTIFIER OFF 

@@ -7,26 +7,25 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetParamFi
 drop procedure [dbo].[GetParamFileModInfo]
 GO
 
-CREATE PROCedure dbo.GetParamFileModInfo
+CREATE PROCEDURE dbo.GetParamFileModInfo
 /****************************************************
-** 
-**		Desc:
-**		For given analysis parameter file, look up
-**		potential dynamic and actual static modifications 
-**		and return description of them as set of strings 
 **
-**		Return values: 0: success, otherwise, error code
-** 
-**		Parameters:
-**		  @parameterFileName	name of analysis parameter file
+**	Desc:
+**	For given analysis parameter file, look up
+**	potential dynamic and actual static modifications 
+**	and return description of them as set of strings 
 **
-**		Updates: 
-**        7/27/2004 grk - Initial version
-**		  8/06/2004 mem - Added @paramFileFound parameter and logging of errors to T_Log_Entries (limiting repeated logging to every 15 minutes)
-**        8/22/2004 grk - Changed to use consolidated mod description design
-**		  2/25/2005 mem - Increased parameter file re-caching frequency from 15 minutes to 90 minutes
+**	Return values: 0: success, otherwise, error code
+** 
+**	Auth:	grk
+**	Date:	07/27/2004
+**			08/06/2004 mem - Added @paramFileFound parameter and logging of errors to T_Log_Entries (limiting repeated logging to every 15 minutes)
+**			08/22/2004 grk - Changed to use consolidated mod description design
+**			02/25/2005 mem - Increased parameter file re-caching frequency from 15 minutes to 90 minutes
+**			02/12/2006 mem - Updated call to PostLogEntry to set @duplicateEntryHoldoffHours to 1
 **    
 *****************************************************/
+(
 	@parameterFileName varchar(128) = 'sequest_N14_NE_STY_Phos_Stat_Deut_Met.params',
 	@paramFileID int output,
 	@paramFileFound tinyint=0 output,
@@ -34,14 +33,14 @@ CREATE PROCedure dbo.GetParamFileModInfo
 	@PM_MassCorrectionTagList varchar(512) output,
 	@NP_MassCorrectionTagList varchar(512) output,
 	@message varchar(256) output
+)
 As
-	set nocount on
+	Set NoCount On
 	
-	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 	
 	set @paramFileFound = 0
 	set @message = ''
@@ -118,16 +117,8 @@ As
 			-- Param file is completely unknown
 			set @message = 'Unknown parameter file name: ' + @parameterFileName
 
-		-- Post an error to T_Log_Entries once every 15 minutes
-
-		SELECT @myRowCount = Count(*) 
-		FROM T_Log_Entries
-		WHERE Type = 'Error' AND 
-				message = @message AND
-				DATEDIFF ( minute , ISNULL(posting_time, '1/1/2000') , getdate() ) < 15
-		
-		If @myRowCount = 0
-			Exec PostLogEntry 'Error',  @message, 'GetParamFileModInfo'
+		-- Post an error to T_Log_Entries, limiting to one entry every hour
+		Exec PostLogEntry 'Error',  @message, 'GetParamFileModInfo', 1
 		
 		if @foundCopy = 0
 			Goto Done

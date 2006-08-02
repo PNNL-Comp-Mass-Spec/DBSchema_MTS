@@ -10,40 +10,42 @@ GO
 CREATE PROCEDURE dbo.GetIDsForRawSequences
 /****************************************************
 ** 
-**		Desc:  
-**        Processes each of the peptide sequences in the given table (typically located in TempDB)
-**		  Calls GetIDFromRawSequence for each, and updates the table with the appropriate information
-**		  The sequences should be in the form A.BCDEFGHIJK.L
+**	Desc:  
+**		Processes each of the peptide sequences in the given table (typically located in TempDB)
+**		Calls GetIDFromRawSequence for each, and updates the table with the appropriate information
+**		The sequences should be in the form A.BCDEFGHIJK.L
 **
-**		  The peptide sequences table must contain the columns Peptide_ID, Peptide, and Seq_ID
-**		  A second table must also be provided to store the unique sequence information
-**		  This table must contain the columns Seq_ID, Clean_Sequence, Mod_Count, and Mod_Description
+**		The peptide sequences table must contain the columns Peptide_ID, Peptide, and Seq_ID
+**		A second table must also be provided to store the unique sequence information
+**		This table must contain the columns Seq_ID, Clean_Sequence, Mod_Count, and Mod_Description
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 **
-**		Auth:	mem
-**		Date:	02/10/2005
-**				02/16/2005 mem - Removed hard-coding of the database containing SP GetIDFromRawSequence
-**				02/26/2005 dj/mem - Added bulk updating of the Seq_ID values for known, unmodified sequences in @PeptideSequencesTableName
+**	Auth:	mem
+**	Date:	02/10/2005
+**			02/16/2005 mem - Removed hard-coding of the database containing SP GetIDFromRawSequence
+**			02/26/2005 dj/mem - Added bulk updating of the Seq_ID values for known, unmodified sequences in @PeptideSequencesTableName
+**			06/09/2006 mem - Added support for Protein Collection File IDs and removed input parameter @organismDBName
 **    
 *****************************************************/
+(
 	@parameterFileName varchar(128),					-- Parameter file name associated with the given sequences
-	@organismDBName varchar(128),						-- Organism DB name associated with the given sequences (not used)
-	@orgDBFileID int,									-- Organism DB file ID
+	@OrganismDBFileID int=0,							-- Organism DB file ID; if @OrganismDBFileID is non-zero, then @ProteinCollectionFileID is ignored; adds SeqID and MapID to T_Seq_Map if non-zero and not yet present
+	@ProteinCollectionFileID int=0,						-- Protein collection file ID; adds SeqID and MapID to T_Seq_Map if non-zero and not yet present
 	@PeptideSequencesTableName varchar(256),			-- Table with peptide sequences to read, populates the Seq_ID column in this table
 	@UniqueSequencesTableName varchar(256),				-- Table to store the unique sequence information
 	@count int=0 output,								-- Number of peptides processed
 	@message varchar(256) = '' output
+)
 As
-	set nocount on
-
+	Set NoCount On
+	
+	declare @myRowCount int
 	declare @myError int
+	set @myRowCount = 0
 	set @myError = 0
 
-	declare @myRowCount int
-	set @myRowCount = 0
-
-	declare @S nvarchar(1024)
+	declare @S nvarchar(2048)
 	declare @result int
 
 	declare @SqlGetNext nvarchar(1024)
@@ -310,7 +312,8 @@ As
 				exec @myError = GetIDFromRawSequence
 											@Peptide,
 											@parameterFileName,
-											0,								-- Pass 0 for @orgDBFileID so that T_Seq_Map is not updated
+											0,								-- Pass 0 for @OrganismDBFileID so that T_Seq_Map is not updated
+											0,								-- Pass 0 for @ProteinCollectionFileID so that T_Seq_to_Archived_Protein_Collection_File_Map is not updated
 											@paramFileFound output,
 											@seqID output,
 											@PM_TargetSymbolList  output,
@@ -373,25 +376,11 @@ As
 
 
 	-----------------------------------------------------------
-	-- Add entries to T_Seq_Map for the updated sequences
+	-- Add entries to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map 
+	-- for the updated sequences
 	-----------------------------------------------------------
-	
-	set @S = ''		
-	set @S = @S + ' INSERT INTO T_Seq_Map (Seq_ID, Map_ID)'
-	set @S = @S + ' SELECT Seq_ID, ' + Convert(Varchar(9), @orgDBFileID) + ' AS Map_ID'
-	set @S = @S + ' FROM ' + @UniqueSequencesTableName
-	set @S = @S + ' WHERE Seq_ID NOT IN'
-	set @S = @S +     ' (SELECT Pep.Seq_ID'
-	set @S = @S +      ' FROM T_Seq_Map INNER JOIN '
-	set @S = @S +        @UniqueSequencesTableName + ' AS Pep ON '
-	set @S = @S +      ' T_Seq_Map.Seq_ID = Pep.Seq_ID'
-	set @S = @S +      ' WHERE T_Seq_Map.Map_ID = ' + Convert(varchar(9), @orgDBFileID)
-	set @S = @S +      ' GROUP BY Pep.Seq_ID)'
-	set @S = @S + 'GROUP BY Seq_ID'
-
-	exec @result = sp_executesql @S
 	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	Exec StoreSeqIDMapInfo @OrganismDBFileID, @ProteinCollectionFileID, @UniqueSequencesTableName
 
 	
 Done:

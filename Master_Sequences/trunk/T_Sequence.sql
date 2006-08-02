@@ -26,4 +26,24 @@ GO
  CREATE  INDEX [IX_T_Sequence_Mod_Count] ON [T_Sequence]([Mod_Count]) ON [PRIMARY]
 GO
 
+GRANT  INSERT  ON [dbo].[T_Sequence]  TO [DMS_SP_User]
+GO
+
+GRANT  UPDATE  ON [dbo].[T_Sequence] (
+	[Seq_ID], 
+	[GANET_Predicted], 
+	[Last_Affected]
+	) TO [DMS_SP_User]
+GO
+
+GRANT  INSERT  ON [dbo].[T_Sequence]  TO [MTUser]
+GO
+
+GRANT  UPDATE  ON [dbo].[T_Sequence] (
+	[Seq_ID], 
+	[GANET_Predicted], 
+	[Last_Affected]
+	) TO [MTUser]
+GO
+
 

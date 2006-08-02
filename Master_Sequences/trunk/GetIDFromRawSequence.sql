@@ -10,8 +10,8 @@ GO
 CREATE PROCEDURE dbo.GetIDFromRawSequence
 /****************************************************
 ** 
-**		Desc:  
-**        Returns the unique ID for the given peptide raw sequence
+**	Desc:  
+**		Returns the unique ID for the given peptide raw sequence
 **
 **      The raw sequence is first normalized and then
 **      looked for in the main sequence table.
@@ -22,20 +22,23 @@ CREATE PROCEDURE dbo.GetIDFromRawSequence
 **      is blank, the values in the arguments will be used
 **      otherwise they will be looked up
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 **
-**		Auth: grk
-**        7/24/2004 grk - Initial version
-**        7/27/2004 grk - moved mod parameters to argument list
-**		  8/06/2004 mem - Added @paramFileFound parameter
-**		  8/23/2004 grk - changed to consolidated mod description parameters
-**		  8/24/2004 mem - Added @cleanSequence, @modCount, and @modDescription outputs
-**		  2/26/2005 mem - Consolidated the code a bit and updated the comment for the @mapID parameter
+**	Auth:	grk
+**	Date:	07/24/2004
+**			07/27/2004 grk - moved mod parameters to argument list
+**			08/06/2004 mem - Added @paramFileFound parameter
+**			08/23/2004 grk - changed to consolidated mod description parameters
+**			08/24/2004 mem - Added @cleanSequence, @modCount, and @modDescription outputs
+**			02/26/2005 mem - Consolidated the code a bit and updated the comment for the @mapID parameter
+**			06/07/2006 mem - Added support for Protein Collection File IDs and removed input parameter @mapID
 **    
 *****************************************************/
+(
 	@rawSequence varchar(128) = 'k.abcdefghijklmnopqrs*tuvwxy*z.r', --'R.RHPYFYAPELLYYANK.Y', --'k.abc*defghij#klmnopqrst@uvwxyz.r',
 	@parameterFileName varchar(512) = 'sequest_N14_NE_STY_Phos_Stat_Deut_Met.params', -- 'sequest_N14_NE_Dyn_M1_M2_Ox_C_Iodo.params',
-	@mapID int,									-- Fasta file ID for the sequence; will be added to T_Seq_Map if needed. Set this to 0 to not update T_Seq_Map
+	@OrganismDBFileID int=0,				-- Organism DB file ID; if @OrganismDBFileID is non-zero, then @ProteinCollectionFileID is ignored; adds SeqID and MapID to T_Seq_Map if non-zero and not yet present
+	@ProteinCollectionFileID int=0,			-- Protein collection file ID; adds SeqID and MapID to T_Seq_to_Archived_Protein_Collection_File_Map if non-zero and not yet present
 	@paramFileFound tinyint=0 output,
 	@seqID int output,
 	@PM_TargetSymbolList varchar(128)='' output,
@@ -45,14 +48,14 @@ CREATE PROCEDURE dbo.GetIDFromRawSequence
 	@modCount int=0 output,
 	@modDescription varchar(2048)='' output,
 	@message varchar(256) = '' output
+)
 As
-	set nocount on
+	Set NoCount On
 	
-	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 
 	set @cleanSequence = ''
 	set @modCount = 0
@@ -107,7 +110,8 @@ As
 						@cleanSequence,
 						@modDescription,
 						@modCount,
-						@mapID,
+						@OrganismDBFileID,
+						@ProteinCollectionFileID,
 						@seqID output,
 						@message output
 
@@ -125,8 +129,5 @@ SET ANSI_NULLS ON
 GO
 
 GRANT  EXECUTE  ON [dbo].[GetIDFromRawSequence]  TO [DMS_SP_User]
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetIDFromRawSequence]  TO [mtuser]
 GO
 
