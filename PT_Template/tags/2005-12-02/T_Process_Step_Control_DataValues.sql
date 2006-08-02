@@ -1,0 +1,40 @@
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'AssignMasterSequenceIDs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'CalculateCleavageState', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'CalculateConfidenceScore', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'CalculateFilterResults', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'CheckStaleJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'DeleteGANETFiles', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'GANETJobRegression', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'IgnoreGANETJobRegressionFailure', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'IgnoreSynopsisFileFilterErrorsOnImport', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ImportNewAnalyses', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'LoadAnalysisResults', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'LogLevel', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RefreshAnalysisDescriptionInfo', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RequireExistingDatasetForNewSICJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ResetChangedAnalysisJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'SkipConfidenceScoreRecalculation', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'UpdateDatasetToSICMapping', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'UpdatePeptideSICStats', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'VerifySequenceInfo', 1)
+
+go
