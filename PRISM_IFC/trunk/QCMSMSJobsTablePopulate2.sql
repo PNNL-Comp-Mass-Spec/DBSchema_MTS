@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS ON 
 GO
 
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QCMSMSJobsTablePopulate]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QCMSMSJobsTablePopulate]
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QCMSMSJobsTablePopulate2]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
+drop procedure [dbo].[QCMSMSJobsTablePopulate2]
 GO
 
-CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
+CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate2
 /****************************************************
 **
 **	Desc: 
@@ -20,12 +20,11 @@ CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
 **	  @DBName				-- Peptide or PMT Tag database name
 **	  @message				-- Status/error message output
 **
-**	Auth:	mem
-**	Date:	08/26/2005
-**			11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
-**			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
-**			06/21/2006 mem - Added support for Protein_Collection_List
-**							 Now auto-adding % sign wildcards to the beginning and end of @CampaignFilter, @CampaignFilter, @ExperimentFilter, and @OrganismDBFilter (provided they don't already contain a % sign)
+**		Auth:	mem
+**		Date:	08/26/2005
+**				11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
+**			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**				06/21/2006 mem - Added support for Protein_Collection_List
 **
 *****************************************************/
 (
@@ -33,10 +32,10 @@ CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
 	@message varchar(512) = '' output,
 	
 	@InstrumentFilter varchar(1024) = '',			-- Single instrument name or instrument name match strings; use SP GetInstrumentNamesForDB to see the instruments for the jobs in a given DB
-	@CampaignFilter varchar(1024) = '',				-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @CampaignFilter
-	@ExperimentFilter varchar(1024) = '',			-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @ExperimentFilter
-	@DatasetFilter varchar(1024) = '',				-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @DatasetFilter
-	@OrganismDBFilter varchar(1024) = '',			-- Matches field Organism_DB_Name or field Protein_Collection_List; If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @OrganismDBFilter
+	@CampaignFilter varchar(1024) = '',
+	@ExperimentFilter varchar(1024) = '',
+	@DatasetFilter varchar(1024) = '',
+	@OrganismDBFilter varchar(1024) = '',			-- Matches field Organism_DB_Name or field Protein_Collection_List
 
 	@DatasetDateMinimum varchar(32) = '',			-- Ignored if blank; note that this will be compared against the Dataset's Acquisition Start Time, if possible
 	@DatasetDateMaximum varchar(32) = '',			-- Ignored if blank; note that this will be compared against the Dataset's Acquisition End Time, if possible
@@ -55,42 +54,6 @@ As
 	set @myRowCount = 0
 	
 	set @message = ''
-
-	---------------------------------------------------
-	-- Check for NULLs
-	---------------------------------------------------
-	
-	Set @DBName = IsNull(@DBName, '')
-	Set @InstrumentFilter = IsNull(@InstrumentFilter, '')
-	Set @CampaignFilter = IsNull(@CampaignFilter, '')
-	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
-	Set @DatasetFilter = IsNull(@DatasetFilter, '')
-	Set @OrganismDBFilter = IsNull(@OrganismDBFilter, '')
-
-
-	---------------------------------------------------
-	-- Auto add percent signs (wildcards) to the filter names
-	---------------------------------------------------
-	
-	If CharIndex('%', @CampaignFilter) < 1
-		Set @CampaignFilter = '%' + @CampaignFilter + '%'
-
-	If CharIndex('%', @ExperimentFilter) < 1
-		Set @ExperimentFilter = '%' + @ExperimentFilter + '%'
-
-	If CharIndex('%', @DatasetFilter) < 1
-		Set @DatasetFilter = '%' + @DatasetFilter + '%'
-	
-	-- Note: @OrganismDBFilter can apply to field Organism_DB_Name or field Protein_Collection_List
-	-- Additionally, if @OrganismDBFilter does not end in .fasta and does not contain a % sign, then we'll auto add a % sign to the end
-	If CharIndex('%', @OrganismDBFilter) < 1
-	Begin
-		If CharIndex('.fasta', @OrganismDBFilter) > 1
-			Set @OrganismDBFilter = Replace(@OrganismDBFilter, '.fasta', '')
-
-		Set @OrganismDBFilter = '%' + @OrganismDBFilter + '%'
-	End
-
 	
 	---------------------------------------------------
 	-- Validate that DB exists on this server, determine its type,
@@ -234,7 +197,7 @@ As
 	---------------------------------------------------
 
 	set @sqlFromA = replace(@sqlFromA, 'DATABASE..', '[' + @DBName + ']..')
-
+	
 
 	---------------------------------------------------
 	-- Parse filter parameters to create a proper
@@ -260,7 +223,8 @@ As
 	Exec ConvertListToWhereClause @CampaignFilter, 'JobTable.Campaign', @entryListWhereClause = @CampaignWhere OUTPUT
 	Exec ConvertListToWhereClause @ExperimentFilter, 'JobTable.Experiment', @entryListWhereClause = @ExperimentWhere OUTPUT
 	Exec ConvertListToWhereClause @DatasetFilter, 'JobTable.Dataset', @entryListWhereClause = @DatasetWhere OUTPUT
-		
+	
+	-- Note: @OrganismDBFilter can apply to field Organism_DB_Name or field Protein_Collection_List
 	Exec ConvertListToWhereClause @OrganismDBFilter, 'JobTable.Organism_DB_Name', @entryListWhereClause = @OrganismDBWhere OUTPUT
 	Exec ConvertListToWhereClause @OrganismDBFilter, 'JobTable.Protein_Collection_List', @entryListWhereClause = @ProteinCollectionWhere OUTPUT
 
@@ -302,8 +266,5 @@ GO
 SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QCMSMSJobsTablePopulate]  TO [DMS_SP_User]
 GO
 

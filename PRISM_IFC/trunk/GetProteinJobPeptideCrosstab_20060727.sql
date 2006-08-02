@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS ON 
 GO
 
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetProteinJobPeptideCrosstab]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetProteinJobPeptideCrosstab]
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetProteinJobPeptideCrosstab_20060727]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
+drop procedure [dbo].[GetProteinJobPeptideCrosstab_20060727]
 GO
 
-CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
+CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab_20060727
 /****************************************************
 **	Desc:  
 **  Generates a crosstab report of proteins against jobs
@@ -50,6 +50,9 @@ AS
 	set @myRowCount = 0
 
 	declare @sql nvarchar(4000)
+	
+	DROP TABLE T_Tmp_XPD
+	DROP TABLE T_Tmp_ORF
 	
 	---------------------------------------------------
 	-- validate mass tag DB name
@@ -100,8 +103,8 @@ AS
 	-- and jobs and populate it
 	---------------------------------------------------
 
-	--CREATE TABLE #XPD ( 
-	CREATE TABLE #XPD ( 
+	--CREATE TABLE T_Tmp_XPD ( 
+	CREATE TABLE T_Tmp_XPD ( 
 		Ref_ID int,
 		Experiment varchar(128),
 		Dataset varchar(128),
@@ -120,7 +123,7 @@ AS
 	end
 
 	set @sql = ''
-	set @sql = @sql + 'INSERT INTO #XPD '+ CHAR(10)
+	set @sql = @sql + 'INSERT INTO T_Tmp_XPD '+ CHAR(10)
 	set @sql = @sql + 'SELECT Ref_ID, Experiment, Dataset, Job, Count(Ref_ID) as NP, Sum(XCorr) as SX, Sum(Peak_Area) as PA '+ CHAR(10)
 	set @sql = @sql + 'FROM '+ CHAR(10)
 	set @sql = @sql + '( '+ CHAR(10)
@@ -172,7 +175,7 @@ AS
 
 	if @mode = 'Preview_Data_Analysis_Jobs'
 	begin
-		select distinct Job, Dataset, Experiment from #XPD
+		select distinct Job, Dataset, Experiment from T_Tmp_XPD
 		goto Done
 	end
 
@@ -181,7 +184,7 @@ AS
 		select Experiment, count(Job) as [Data Analysis Jobs] 
 		from 
 		(
-			Select distinct Job, Experiment from #XPD
+			Select distinct Job, Experiment from T_Tmp_XPD
 		) M
 		group by Experiment
 		goto Done
@@ -192,7 +195,7 @@ AS
 	-- for selected results and populate it
 	---------------------------------------------------
 
-	CREATE TABLE #ORF ( 
+	CREATE TABLE T_Tmp_ORF ( 
 		S char(1) Null,
 		Reference varchar (128) NULL,
 		Ref_ID int NULL,
@@ -213,7 +216,7 @@ AS
 	
 
 	set @sql = ''
-	set @sql = @sql + 'INSERT INTO #ORF (S, Reference, Ref_ID, ORF_ID, Monoisotopic_Mass, Description, Reference_Notes) '+ CHAR(10)
+	set @sql = @sql + 'INSERT INTO T_Tmp_ORF (S, Reference, Ref_ID, ORF_ID, Monoisotopic_Mass, Description, Reference_Notes) '+ CHAR(10)
 	if @dbVer > 1
 		begin
 			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, External_Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
@@ -226,7 +229,7 @@ AS
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_ORF_Reference '+ CHAR(10)
 		end
-	set @sql = @sql + 'WHERE Ref_ID IN (SELECT DISTINCT Ref_ID FROM #XPD)'+ CHAR(10)
+	set @sql = @sql + 'WHERE Ref_ID IN (SELECT DISTINCT Ref_ID FROM T_Tmp_XPD)'+ CHAR(10)
 	--
 	EXEC @myError = sp_executesql @sql
 	--
@@ -248,7 +251,7 @@ AS
 		set @sql = ''
 		set @sql = @sql + 'update X '
 		set @sql = @sql + 'set X.Description = T.Description, X.Reference_Notes = T.Reference + '' '' + cast(T.Description as varchar(512)) '
-		set @sql = @sql + 'from #ORF X INNER JOIN '
+		set @sql = @sql + 'from T_Tmp_ORF X INNER JOIN '
 		set @sql = @sql + '( '
 		set @sql = @sql + 'SELECT Reference, Description_From_FASTA AS Description '
 		set @sql = @sql + 'FROM ' + @proteinDBName + '.dbo.T_ORF '
@@ -270,18 +273,18 @@ AS
 	if @mode = 'Interaction_Report'
 	begin
 		SELECT 
-			#XPD.Experiment, 
-			#XPD.Dataset, 
-			#XPD.Job, 
+			T_Tmp_XPD.Experiment, 
+			T_Tmp_XPD.Dataset, 
+			T_Tmp_XPD.Job, 
 			CBM.Bait_Protein_Name AS Bait, 
-			#ORF.Reference as Interactor, 
-			#XPD.NP as Peptide_Count, 
-			CONVERT(decimal(8,2) , #XPD.SX ) as XCorr_Sum,
-			#ORF.Description
+			T_Tmp_ORF.Reference as Interactor, 
+			T_Tmp_XPD.NP as Peptide_Count, 
+			CONVERT(decimal(8,2) , T_Tmp_XPD.SX ) as XCorr_Sum,
+			T_Tmp_ORF.Description
 		FROM
-			#XPD INNER JOIN #ORF ON #XPD.Ref_ID = #ORF.Ref_ID INNER JOIN
-			GtL_Protein_Complexes.dbo.T_Code_to_Bait_Map CBM ON #XPD.Job = CBM.Job
-		ORDER BY #XPD.Dataset, #ORF.Reference
+			T_Tmp_XPD INNER JOIN T_Tmp_ORF ON T_Tmp_XPD.Ref_ID = T_Tmp_ORF.Ref_ID INNER JOIN
+			GtL_Protein_Complexes.dbo.T_Code_to_Bait_Map CBM ON T_Tmp_XPD.Job = CBM.Job
+		ORDER BY T_Tmp_XPD.Dataset, T_Tmp_ORF.Reference
 		goto Done
 	end
 
@@ -289,11 +292,11 @@ AS
 	begin
 		SELECT 
 			CBM.Bait_Protein_Name AS Bait,
-			#ORF.Reference as Interactor,
+			T_Tmp_ORF.Reference as Interactor,
 			count(M.Job) as Num_Jobs,
 			sum(NP_Sum) as Aggregate_Total_Peptides,
 			CONVERT(decimal(8,2), sum(SX_Sum)) as Aggregate_Sum_XCorr,
-			#ORF.Description
+			T_Tmp_ORF.Description
 		FROM
 		(
 			SELECT 
@@ -301,11 +304,11 @@ AS
 				Job,
 				Sum(NP) as NP_Sum,
 				Sum(SX) as SX_Sum
-			FROM #XPD
+			FROM T_Tmp_XPD
 			GROUP BY Ref_ID, Job
-		) M INNER JOIN #ORF ON M.Ref_ID = #ORF.Ref_ID INNER JOIN
+		) M INNER JOIN T_Tmp_ORF ON M.Ref_ID = T_Tmp_ORF.Ref_ID INNER JOIN
 			GtL_Protein_Complexes.dbo.T_Code_to_Bait_Map CBM ON M.Job = CBM.Job
-		GROUP BY CBM.Bait_Protein_Name, #ORF.Reference, #ORF.Description
+		GROUP BY CBM.Bait_Protein_Name, T_Tmp_ORF.Reference, T_Tmp_ORF.Description
 
 		goto Done
 	end
@@ -314,25 +317,25 @@ AS
 	-- Add protein standards entries as markers
 	---------------------------------------------------
 /**/
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '200kDa', '200kDa', 200000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '150kDa', '150kDa', 150000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '100kDa', '100kDa', 100000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '90kDa', '90kDa', 90000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '80kDa', '80kDa', 80000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '70kDa', '70kDa', 70000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '60kDa', '60kDa', 60000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '50kDa', '50kDa', 50000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '40kDa', '40kDa', 40000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '30kDa', '30kDa', 30000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '20kDa', '20kDa', 20000, '10')
-	INSERT INTO #ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '10kDa', '10kDa', 10000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '200kDa', '200kDa', 200000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '150kDa', '150kDa', 150000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '100kDa', '100kDa', 100000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '90kDa', '90kDa', 90000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '80kDa', '80kDa', 80000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '70kDa', '70kDa', 70000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '60kDa', '60kDa', 60000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '50kDa', '50kDa', 50000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '40kDa', '40kDa', 40000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '30kDa', '30kDa', 30000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '20kDa', '20kDa', 20000, '10')
+	INSERT INTO T_Tmp_ORF (S, Reference, Reference_Notes, Monoisotopic_Mass, Standard) VALUES ('S', '10kDa', '10kDa', 10000, '10')
 
 	---------------------------------------------------
 	-- 
 	---------------------------------------------------
 	if @mode = 'Preview_Proteins'
 	begin
-		select Reference, Monoisotopic_Mass, Description from #ORF
+		select Reference, Monoisotopic_Mass, Description from T_Tmp_ORF
 		goto Done
 	end
 
@@ -368,7 +371,7 @@ AS
 	FROM 
 	(
 	SELECT DISTINCT Job, Experiment
-	FROM #XPD 
+	FROM T_Tmp_XPD 
 	) J
 	ORDER BY Experiment
 	--
@@ -385,8 +388,8 @@ AS
 	set @sql = 'SELECT S, Reference, Monoisotopic_Mass, Reference_Notes, Standard, ' + CHAR(10)
 	set @sql = @sql + @crossTabCols + CHAR(10)
 	set @sql = @sql + 'FROM ' + CHAR(10)
-	set @sql = @sql + '#XPD RIGHT OUTER JOIN ' + CHAR(10)
-	set @sql = @sql + '#ORF ON #XPD.Ref_ID = #ORF.Ref_ID ' + CHAR(10)
+	set @sql = @sql + 'T_Tmp_XPD RIGHT OUTER JOIN ' + CHAR(10)
+	set @sql = @sql + 'T_Tmp_ORF ON T_Tmp_XPD.Ref_ID = T_Tmp_ORF.Ref_ID ' + CHAR(10)
 	set @sql = @sql + 'GROUP BY S, Reference, Monoisotopic_Mass, Reference_Notes, Standard ' + CHAR(10)
 	set @sql = @sql + 'ORDER BY Monoisotopic_Mass DESC ' + CHAR(10)
 
@@ -431,8 +434,5 @@ GO
 SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetProteinJobPeptideCrosstab]  TO [DMS_SP_User]
 GO
 

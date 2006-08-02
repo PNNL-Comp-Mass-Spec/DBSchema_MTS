@@ -7,18 +7,18 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetDBSchem
 drop procedure [dbo].[GetDBSchemaVersionByDBName]
 GO
 
+
 CREATE PROCEDURE dbo.GetDBSchemaVersionByDBName
 /****************************************************
 ** 
-**		Desc: 
-**		Calls GetDBSchemaVersion in the given database
+**	Desc: Calls GetDBSchemaVersion in the given database
 **
-**		Return value: integer portion of the DB schema version
+**	Return value: integer portion of the DB schema version
 ** 
 ** 
-**		Auth: mem
-**		Date: 8/20/2004
-**			 12/06/2004 mem - Updated to call Pogo.MTS_Master..GetDBSchemaVersionByDBName
+**	Auth:	mem
+**	Date:	08/20/2004
+**			12/06/2004 mem - Updated to call Pogo.MTS_Master.dbo.GetDBSchemaVersionByDBName
 **    
 *****************************************************/
 (
@@ -46,6 +46,7 @@ AS
 	
 	-- Note that the following will get truncated to an int
 	Return IsNull(@DBSchemaVersion, 1)
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

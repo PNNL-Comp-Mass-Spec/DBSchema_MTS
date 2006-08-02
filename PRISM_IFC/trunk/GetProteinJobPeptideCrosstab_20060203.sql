@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS ON 
 GO
 
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetProteinJobPeptideCrosstab]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetProteinJobPeptideCrosstab]
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetProteinJobPeptideCrosstab_20060203]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
+drop procedure [dbo].[GetProteinJobPeptideCrosstab_20060203]
 GO
 
-CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
+CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab_20060203
 /****************************************************
 **	Desc:  
 **  Generates a crosstab report of proteins against jobs
@@ -24,29 +24,27 @@ CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 **							--   Names do not need single quotes around them; see @Proteins parameter for examples
 **	  @message				-- Status/error message output
 **
-**	Auth:	grk
-**	Date:	11/21/2004
-**			12/01/2004 grk - Added Dataset column to output and now accommodating for a blank @experiments input parameter
-**			03/15/2005 grk - Added new columns
-**			05/25/2005 grk - Added protein interaction mode
-**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
-**			02/06/2006 mem - Added brackets around the experiment name when building @crossTabCols to allow for experiments with spaces in the name
-**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**		Auth: grk
+**		Date: 11/21/2004
+**			  12/01/2004 grk - Added Dataset column to output and now accommodating for a blank @experiments input parameter
+**			  03/15/2005 grk - Added new columns
+**			  05/25/2005 grk - Added protein interaction mode
+**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			  02/06/2006 mem - Added brackets around the experiment name when building @crossTabCols to allow for experiments with spaces in the name
 **    
 *****************************************************/
-(
 	@MTDBName varchar(128) = 'MT_Shewanella_P198',
 	@experiments varchar(7000) = '%050113',
 	@aggregation varchar(24) = 'Sum_XCorr', -- 'Count_Peptide_Hits'
 	@mode varchar(32) = 'Interaction_Rollup_Report', -- 'Crosstab_Report', 'Interaction_Report', 'Preview_Data_Analysis_Jobs', 'Preview_Experiments', 'Preview_Proteins'
 	@message varchar(512) output
-)
 AS
 	set nocount on
 
 	declare @myError int
-	declare @myRowCount int
 	set @myError = 0
+
+	declare @myRowCount int
 	set @myRowCount = 0
 
 	declare @sql nvarchar(4000)
@@ -58,7 +56,7 @@ AS
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
+	WHERE (MTL_Name = @MTDBName)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -100,7 +98,6 @@ AS
 	-- and jobs and populate it
 	---------------------------------------------------
 
-	--CREATE TABLE #XPD ( 
 	CREATE TABLE #XPD ( 
 		Ref_ID int,
 		Experiment varchar(128),
@@ -108,7 +105,6 @@ AS
 		Job int,
 		NP int,
 		SX float,
-		PA float,
 	)
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -121,12 +117,12 @@ AS
 
 	set @sql = ''
 	set @sql = @sql + 'INSERT INTO #XPD '+ CHAR(10)
-	set @sql = @sql + 'SELECT Ref_ID, Experiment, Dataset, Job, Count(Ref_ID) as NP, Sum(XCorr) as SX, Sum(Peak_Area) as PA '+ CHAR(10)
+	set @sql = @sql + 'SELECT Ref_ID, Experiment, Dataset, Job, Count(Ref_ID) as NP, Sum(XCorr) as SX '+ CHAR(10)
 	set @sql = @sql + 'FROM '+ CHAR(10)
 	set @sql = @sql + '( '+ CHAR(10)
 	if @dbVer > 1
 		begin
-			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID as Job, P.Mass_Tag_ID as MT, S.XCorr, P.Peak_Area '+ CHAR(10)
+			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID as Job, P.Mass_Tag_ID as MT, S.XCorr '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.V_GtL_Filtered_Peptides_KJA P ON A.Job = P.Analysis_ID INNER JOIN'+ CHAR(10)
@@ -216,7 +212,7 @@ AS
 	set @sql = @sql + 'INSERT INTO #ORF (S, Reference, Ref_ID, ORF_ID, Monoisotopic_Mass, Description, Reference_Notes) '+ CHAR(10)
 	if @dbVer > 1
 		begin
-			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, External_Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
+			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins'+ CHAR(10)
 		end
@@ -347,13 +343,7 @@ AS
 
 	If @aggregation = 'Count_Peptide_Hits' -- '''Sum_XCorr'
 	begin
-		set @colname = 'NP'
-		set @funcName = 'SUM'
-	end
-	
-	If @aggregation = 'Sum_Peak_Areas'
-	begin
-		set @colname = 'PA'
+		set @colname = '1'
 		set @funcName = 'SUM'
 	end
 	
@@ -431,8 +421,5 @@ GO
 SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetProteinJobPeptideCrosstab]  TO [DMS_SP_User]
 GO
 

@@ -23,25 +23,27 @@ CREATE PROCEDURE dbo.GetQRollupsForEntityFilter
 **		@ShowSuperseded			-- set to 1 to show superseded rollups, in addition to those with State = 3 (Success)
 **		@message				-- explanation of any error that occurred
 **
-**		Auth: mem
-**		Date: 12/27/2004
-**			  02/17/2005 mem - Added @RequiredQuantitationID parameter
-**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	12/27/2004
+**			02/17/2005 mem - Added @RequiredQuantitationID parameter
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **    
 *****************************************************/
+(
 	@MTDBName varchar(128) = '',
 	@DatasetFilter varchar(1024) = '',			-- For example: Kolker%
 	@ExperimentFilter varchar(1024) = '',		-- For example: QC%
 	@RequiredQuantitationID int = 0,			-- If greater than 0, then requires that this QID be present
 	@ShowSuperseded tinyint = 1,
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -53,7 +55,7 @@ As
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName)
+	WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--

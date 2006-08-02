@@ -44,16 +44,19 @@ CREATE PROCEDURE dbo.GetAllProteins
 **							--      or: 'Protein1003, Protein100%, Protein1005'
 **	  @ProteinDBDefined			-- Output parameter: set to True if an Protein database is defined for this mass tag database, False if not
 **
-**		Auth: mem
-**		Date: 04/7/2004
-**            04/12/2004 mem - added validation logic for @MTDBName
-**            09/23/2004 grk - changed ORF to Protein
-**            09/24/2004 grk - changed T_External_Databases to V_External_Databases
-**			  10/23/2004 mem - Added PostUsageLogEntry and call to CleanupTrueFalseParameter
-**			  05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
-**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	04/7/2004
+**			04/12/2004 mem - added validation logic for @MTDBName
+**          09/23/2004 grk - changed ORF to Protein
+**          09/24/2004 grk - changed T_External_Databases to V_External_Databases
+**			10/23/2004 mem - Added PostUsageLogEntry and call to CleanupTrueFalseParameter
+**			05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**			07/25/2006 mem - No longer using legacy ORF Databases
 **    
 *****************************************************/
+(
 	@MTDBName varchar(128) = '',
 	@outputColumnNameList varchar(2048) = '',
 	@criteriaSql varchar(6000) = '',
@@ -61,13 +64,13 @@ CREATE PROCEDURE dbo.GetAllProteins
 	@message varchar(512) = '' output,
 	@Proteins varchar(7000) = '',
 	@ProteinDBDefined varchar(32) = '' output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -79,7 +82,7 @@ As
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName)
+	WHERE (MTL_Name = @MTDBName) AND MTL_State NOT IN (15, 100)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -106,6 +109,12 @@ As
 		Set @outputColumnNameList = @outputColumnNameList + 'Protein_Location_Start, Protein_Location_Stop, '
 		Set @outputColumnNameList = @outputColumnNameList + 'Protein_Monoisotopic_Mass, Protein_Sequence'
 	End
+
+/*
+**
+** No longer used
+** ToDo: Update to use the Protein_Sequences DB to obtain Protein_Location_Start & Protein_Location_Stop
+**
 
 	---------------------------------------------------
 	-- Determine if a valid Protein database is defined
@@ -160,6 +169,7 @@ As
 			WHERE SD.NAME = @ProteinDBName
 		End
 	End
+*/
 
 	---------------------------------------------------
 	-- build the sql query to get the Protein data, either
@@ -169,6 +179,7 @@ As
 	Declare @sqlProteinInfo varchar(1024)
 	
 	Set @sqlProteinInfo = 'SELECT'
+/*
 	If @ProteinDBExists > 0
 	 Begin
 		Set @ProteinDBDefined = 'True'
@@ -183,16 +194,17 @@ As
 	 End
 	Else
 	 Begin
+*/
 		Set @ProteinDBDefined = 'False'
 		
 		Set @sqlProteinInfo = @sqlProteinInfo + ' Reference AS Protein_Name,'
-		Set @sqlProteinInfo = @sqlProteinInfo + ' Reference AS Protein_Description,'
+		Set @sqlProteinInfo = @sqlProteinInfo + ' Description AS Protein_Description,'
 		Set @sqlProteinInfo = @sqlProteinInfo + ' 0 AS Protein_Location_Start,'
 		Set @sqlProteinInfo = @sqlProteinInfo + ' 0 AS Protein_Location_Stop,'
 		Set @sqlProteinInfo = @sqlProteinInfo + ' IsNull(Monoisotopic_Mass, 0) AS Protein_Monoisotopic_Mass,'
 		Set @sqlProteinInfo = @sqlProteinInfo + ' IsNull(Protein_Sequence, '''') AS Protein_Sequence'
 		Set @sqlProteinInfo = @sqlProteinInfo + ' FROM [' + @MTDBName + '].dbo.V_IFC_Proteins'
-	 End
+--	 End
 
 	---------------------------------------------------
 	-- now build the sql wrapper to only return the 
@@ -298,7 +310,6 @@ As
 
 Done:
 	return @myError
-
 
 
 GO

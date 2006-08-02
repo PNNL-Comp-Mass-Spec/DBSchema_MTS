@@ -1,4 +1,4 @@
-SET QUOTED_IDENTIFIER ON 
+SET QUOTED_IDENTIFIER OFF 
 GO
 SET ANSI_NULLS ON 
 GO
@@ -17,7 +17,7 @@ CREATE PROCEDURE WebGetMassTags
 **		Date: 10/16/2004 grk - initial release
 **    
 *****************************************************/
-	@MTDBName varchar(128) = 'MT_BSA_P140',
+	@MTDBName varchar(128) = 'MT_BSA_P171',
 	@outputColumnNameList varchar(2048) = 'All',
 	@criteriaSql varchar(6000) = 'na',
 	@returnRowCount varchar(32) = 'False',
@@ -75,6 +75,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

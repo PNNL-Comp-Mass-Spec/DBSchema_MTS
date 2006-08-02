@@ -23,29 +23,31 @@ CREATE PROCEDURE dbo.GetQRollupsSummary
 **      @outputColumnNameList -- list of output columns to include in result set (ignored at present)
 **		@message        -- explanation of any error that occurred
 **
-**		Auth: mem
-**		Date: 04/14/2004
-**			  05/12/2004 mem - Now returns [Results Folder Path] for each Q Rollup
-**			  05/19/2004 mem - Moved placement of the Results Folder Path field to be after the Comment field
-**			  10/22/2004 mem - Added PostUsageLogEntry
-**			  04/05/2005 mem - Now returns [Min High Discriminant Score] and [Min SLiC Score]
-**			  04/07/2005 mem - Now returns [Min Del SLiC Score]
-**			  05/25/2005 mem - Removed redundant entries for [Unique Mass Tag Count] and [Comparison Mass Tag Count]
-**							 - Fixed logic bug involving @ShowSuperseded
-**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	04/14/2004
+**			05/12/2004 mem - Now returns [Results Folder Path] for each Q Rollup
+**			05/19/2004 mem - Moved placement of the Results Folder Path field to be after the Comment field
+**			10/22/2004 mem - Added PostUsageLogEntry
+**			04/05/2005 mem - Now returns [Min High Discriminant Score] and [Min SLiC Score]
+**			04/07/2005 mem - Now returns [Min Del SLiC Score]
+**			05/25/2005 mem - Removed redundant entries for [Unique Mass Tag Count] and [Comparison Mass Tag Count]
+**						   - Fixed logic bug involving @ShowSuperseded
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **    
 *****************************************************/
-	@MTDBName varchar(128) = '',
+(
+	@MTDBName varchar(128) = '',					-- name of mass tag database to use
 	@ShowSuperseded tinyint = 1,
-	@outputColumnNameList varchar(1024) = '', -- ignored at present
+	@outputColumnNameList varchar(1024) = '',		-- ignored at present
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -57,7 +59,7 @@ As
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName)
+	WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -109,7 +111,7 @@ As
 	
 	exec @result = sp_executesql @s
 	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'

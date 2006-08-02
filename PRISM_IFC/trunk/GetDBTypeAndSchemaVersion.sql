@@ -7,23 +7,24 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetDBTypeA
 drop procedure [dbo].[GetDBTypeAndSchemaVersion]
 GO
 
+
 CREATE PROCEDURE dbo.GetDBTypeAndSchemaVersion
 /****************************************************
 ** 
-**		Desc: 
-**		Looks for the database named @DBName in MT_Main on this server.
-**		Returns the database type code (0 if not found) and DB schema version
+**	Desc:	Looks for the database named @DBName in MT_Main on this server.
+**			Returns the database type code (0 if not found) and DB schema version
 **
 **		Note that GetDBLocation in MTS_Master is similar to this SP, but that procedure
 **		uses the information from MTS_Master rather than MT_Main on this server.  Also,
 **		this procedure polls the database directly to obtain the schema version, rather
 **		than using GetDBSchemaVersionByDBName, which uses MTS_Master..GetDBSchemaVersionByDBName
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Auth: mem
-**		Date: 07/16/2005
-**			  11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	07/16/2005
+**			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**			07/25/2006 mem - Now excluding databases in state 15 or state 100
 **    
 *****************************************************/
 (
@@ -35,7 +36,8 @@ CREATE PROCEDURE dbo.GetDBTypeAndSchemaVersion
 									-- 4 If a UMC DB (UMC_)
 	@DBSchemaVersion real = 1.0 output,
 	@DBID int = 0 output,
-	@message varchar(256) = '' output)
+	@message varchar(256) = '' output
+)
 AS
 
 	Set NOCOUNT ON
@@ -67,7 +69,8 @@ AS
 			-- Look for @DBName in T_MT_Database_List
 			SELECT @DBID = MTL_ID
 			FROM MT_Main.dbo.T_MT_Database_List
-			WHERE MTL_Name = @DBName
+			WHERE MTL_Name = @DBName AND
+				  MTL_State NOT IN (15, 100)
 		End
 		Else
 		  If @DBTypeCurrent = 2
@@ -75,7 +78,8 @@ AS
 			-- Look for @DBName in T_Peptide_Database_List
 			SELECT @DBID = PDB_ID
 			FROM MT_Main.dbo.T_Peptide_Database_List
-			WHERE PDB_Name = @DBName
+			WHERE PDB_Name = @DBName AND
+				  PDB_State NOT IN (15, 100)
 		End
 		Else
 		  If @DBTypeCurrent = 3
@@ -83,7 +87,8 @@ AS
 			-- Look for @DBName in T_ORF_Database_List
 			SELECT @DBID = ODB_ID
 			FROM MT_Main.dbo.T_ORF_Database_List
-			WHERE ODB_Name = @DBName
+			WHERE ODB_Name = @DBName AND
+				  ODB_State NOT IN (15, 100)
 		End
 		Else
 		  If @DBTypeCurrent = 4
@@ -91,7 +96,8 @@ AS
 			-- Look for @DBName in T_UMC_Database_List
 			SELECT @DBID = UDB_ID
 			FROM MT_Main.dbo.T_UMC_Database_List
-			WHERE UDB_Name = @DBName
+			WHERE UDB_Name = @DBName AND
+				  UDB_State NOT IN (15, 100)
 		End
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -139,6 +145,7 @@ AS
 	
 Done:
 	Return @myError
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

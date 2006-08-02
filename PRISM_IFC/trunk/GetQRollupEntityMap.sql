@@ -24,24 +24,26 @@ CREATE PROCEDURE dbo.GetQRollupEntityMap
 **		@QuantitationIDList		-- comma separated list of Quantitation ID values (optional)
 **		@message        -- explanation of any error that occurred
 **
-**		Auth: mem
-**		Date: 10/05/2004
-**			  10/22/2004 mem - Added PostUsageLogEntry
-**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	10/05/2004
+**			10/22/2004 mem - Added PostUsageLogEntry
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **    
 *****************************************************/
+(
 	@MTDBName varchar(128) = '',
 	@ShowSuperseded tinyint = 1,
 	@outputColumnNameList varchar(1024) = '',	-- ignored at present
 	@QuantitationIDList varchar(1024) = '',		-- Optional: comma separated list of Quantitation ID's
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -53,7 +55,7 @@ As
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName)
+	WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--

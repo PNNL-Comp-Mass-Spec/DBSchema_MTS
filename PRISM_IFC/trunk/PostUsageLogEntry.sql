@@ -10,21 +10,25 @@ GO
 CREATE PROCEDURE dbo.PostUsageLogEntry
 /****************************************************
 **
-**	Desc: Put new entry into T_Usage_Log
+**	Desc: Put new entry into T_Usage_Log and update T_Usage_Stats
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters: 
 **
-**		Auth:	mem
-**		Date:	10/22/2004
-**				07/29/2005 mem - Added parameter @MinimumUpdateInterval
+**	Auth:	mem
+**	Date:	10/22/2004
+**			07/29/2005 mem - Added parameter @MinimumUpdateInterval
+**			03/16/2006 mem - Now updating T_Usage_Stats
+**			03/17/2006 mem - Now populating Usage_Count in T_Usage_Log and changed @MinimumUpdateInterval from 6 hours to 1 hour
 **    
 *****************************************************/
+(
 	@postedBy varchar(255),
 	@DBName varchar(128) = '',
 	@message varchar(500) = '',
-	@MinimumUpdateInterval int = 6			-- Set to a value greater than 0 to limit the entries to occur at most every @MinimumUpdateInterval hours
+	@MinimumUpdateInterval int = 1			-- Set to a value greater than 0 to limit the entries to occur at most every @MinimumUpdateInterval hours
+)
 As
 	set nocount on
 	
@@ -40,7 +44,17 @@ As
 	Set @PostEntry = 1
 
 	Declare @LastUpdated varchar(64)
-		
+	
+	-- Update entry for @postedBy in T_Usage_Stats
+	If Not Exists (SELECT Posted_By FROM T_Usage_Stats WHERE Posted_By = @postedBy)
+		INSERT INTO T_Usage_Stats (Posted_By, Last_Posting_Time, Usage_Count)
+		VALUES (@postedBy, GetDate(), 1)
+	Else
+		UPDATE T_Usage_Stats 
+		SET Last_Posting_Time = GetDate(), Usage_Count = Usage_Count + 1
+		WHERE Posted_By = @postedBy
+
+	
 	if @MinimumUpdateInterval > 0
 	Begin
 		-- See if the last update was less than @MinimumUpdateInterval hours ago
@@ -64,15 +78,17 @@ As
     If @PostEntry = 1
     Begin  
 		INSERT INTO T_Usage_Log
-				(Posted_By, Posting_Time, Target_DB_Name, Message, Calling_User) 
-		VALUES	(@postedBy, GetDate(), @DBName, @message, @CallingUser)
+				(Posted_By, Posting_Time, Target_DB_Name, Message, Calling_User, Usage_Count) 
+		SELECT @postedBy, GetDate(), @DBName, @message, @CallingUser, S.Usage_Count
+		FROM T_Usage_Stats S
+		WHERE S.Posted_By = @postedBy
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
-		if @myRowCount <> 1
+		if @myRowCount <> 1 Or @myError <> 0
 		begin
-			RAISERROR ('Update was unsuccessful for T_Log_Entries table', 10, 1)
-			return 51191
+			Set @message = 'Update was unsuccessful for T_Usage_Log table: @myRowCount = ' + Convert(varchar(19), @myRowCount) + '; @myError = ' + Convert(varchar(19), @myError)
+			execute PostLogEntry 'Error', @message, 'PostUsageLogEntry'
 		end
 	End
 	

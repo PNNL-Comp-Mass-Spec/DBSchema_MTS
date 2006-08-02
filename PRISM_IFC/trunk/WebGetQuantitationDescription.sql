@@ -29,8 +29,9 @@ AS
 	SET NOCOUNT ON
 	
 	declare @result int
-	declare @stmt nvarchar(200)
-	declare @params nvarchar(100)
+	declare @stmt nvarchar(1024)
+	declare @params nvarchar(1024)
+	
 	set @message = ''
 	
 	set @stmt = N'SELECT * FROM [' + @MTDBName + N'].dbo.T_Quantitation_Description '

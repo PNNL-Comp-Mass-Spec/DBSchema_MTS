@@ -9,6 +9,7 @@ CREATE TABLE [T_Usage_Log] (
 	[Target_DB_Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Message] [varchar] (4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Calling_User] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
+	[Usage_Count] [int] NULL ,
 	CONSTRAINT [PK_T_Usage_Log] PRIMARY KEY  CLUSTERED 
 	(
 		[Entry_ID]

@@ -44,16 +44,18 @@ CREATE PROCEDURE dbo.GetProteinsIdentified
 **	  @includeSupersededData	-- Set to True to include Proteins from "Superseded" peak matching tasks; only applicable for method UMCPeakMatch(MS-FTICR)
 **	  @minimumPMTQualityScore	-- Set to 0 to include all Proteins, including those with low quality mass tags
 **
-**		Auth: mem, grk
-**		Date: 09/20/2004 grk - cloned from GetORFsIdentified and modified to use V_IFC_* views for protein tables
-**			  10/18/2004 mem - Now returning complete row count if @returnRowCount is true
-**			  10/23/2004 mem - Added PostUsageLogEntry and call to CleanupTrueFalseParameter
-**			  10/28/2004 mem - Fixed computation of Mass_Tag_Count, added two columns (High_Discriminant_Score_Avg and Mod_Count_Avg), and changed the Dataset_Count and Job_Count columns to Dataset_Count_Avg and Job_Count_Avg
-**			  02/09/2005 mem - Now rounding High Normalized Score to 3 decimal places and High Discriminant Score to 4 decimal places
-**			  05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
-**			  11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem, grk
+**	Date:	09/20/2004 grk - cloned from GetORFsIdentified and modified to use V_IFC_* views for protein tables
+**			10/18/2004 mem - Now returning complete row count if @returnRowCount is true
+**			10/23/2004 mem - Added PostUsageLogEntry and call to CleanupTrueFalseParameter
+**			10/28/2004 mem - Fixed computation of Mass_Tag_Count, added two columns (High_Discriminant_Score_Avg and Mod_Count_Avg), and changed the Dataset_Count and Job_Count columns to Dataset_Count_Avg and Job_Count_Avg
+**			02/09/2005 mem - Now rounding High Normalized Score to 3 decimal places and High Discriminant Score to 4 decimal places
+**			05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **    
 *****************************************************/
+(
 	@MTDBName varchar(128) = '',
 	@outputColumnNameList varchar(2048) = '',
 	@criteriaSql varchar(6000) = '',
@@ -65,13 +67,13 @@ CREATE PROCEDURE dbo.GetProteinsIdentified
 	@maximumRowCount int = 100000,
 	@includeSupersededData varchar(32) = 'False',
 	@minimumPMTQualityScore float = 1.0
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -83,7 +85,7 @@ As
 	Declare @DBNameLookup varchar(256)
 	SELECT  @DBNameLookup = MTL_ID
 	FROM MT_Main.dbo.T_MT_Database_List
-	WHERE (MTL_Name = @MTDBName)
+	WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--

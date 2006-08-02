@@ -24,19 +24,19 @@ CREATE PROCEDURE dbo.WebQRProteinCrosstab
 ****************************************************/
 (
 	@MTDBName varchar(128) = '',
-	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return
+	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return; use SP QRProteinCrosstabOutputColumns to see available column names
 	@QuantitationIDList varchar(1024),					-- Comma separated list of Quantitation ID's
 	@message varchar(512) = '' output,
 	@SeparateReplicateDataIDs tinyint=1,
 	@AggregateColName varchar(128) = '',
-	@AverageAcrossColumns tinyint=1
+	@AverageAcrossColumns tinyint=1						-- The query is slower if this is enabled
 )
 AS
 	SET NOCOUNT ON
 	
 	declare @result int
-	declare @stmt nvarchar(300)
-	declare @params nvarchar(300)
+	declare @stmt nvarchar(1024)
+	declare @params nvarchar(1024)
 	
 	If Len(IsNull(@AggregateColName, '')) = 0
 		set @AggregateColName = @SourceColName + '_Avg'

@@ -15,24 +15,26 @@ CREATE PROCEDURE dbo.WebGetPickerList
 **
 **	Return values: 0: success, otherwise, error code
 **
-**		Auth: grk
-**		Date: 10/16/2004
-**			  05/12/2005 mem - Added item 'OutputColumnsForIdentifiedProteins'
-**			  05/13/2005 mem - Updated calls to GetAllMassTagDatabases and GetAllPeptideDatabases to pass 0 to @VerboseColumnOutput
-**							 - Added validation of @MTDBName when @PickerName = 'ExperimentList' or 'ProteinList'
+**	Auth:	grk
+**	Date:	10/16/2004
+**			05/12/2005 mem - Added item 'OutputColumnsForIdentifiedProteins'
+**			05/13/2005 mem - Updated calls to GetAllMassTagDatabases and GetAllPeptideDatabases to pass 0 to @VerboseColumnOutput
+**						   - Added validation of @MTDBName when @PickerName = 'ExperimentList' or 'ProteinList'
+**			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **    
 *****************************************************/
+(
 	@MTDBName varchar(128) = 'MT_BSA_P171',
 	@PickerName varchar(128) = 'ProteinList',
 	@pepIdentMethod varchar(32) = 'DBSearch(MS/MS-LCQ)',
 	@message varchar(512) = '' output
-As
+)
+As	
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -47,7 +49,7 @@ As
 		Declare @DBNameLookup varchar(256)
 		SELECT  @DBNameLookup = MTL_ID
 		FROM MT_Main.dbo.T_MT_Database_List
-		WHERE (MTL_Name = @MTDBName)
+		WHERE (MTL_Name = @MTDBName) AND MTL_State < 100
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -151,7 +153,7 @@ As
 	---------------------------------------------------
 	-- 
 	---------------------------------------------------
-
+
 	if @PickerName = 'OutputColumnsForGetAllProteins'
 	begin
 		exec @result = GetAllProteinsOutputColumns

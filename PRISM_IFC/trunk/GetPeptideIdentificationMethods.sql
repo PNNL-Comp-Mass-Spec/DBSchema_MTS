@@ -23,11 +23,14 @@ CREATE PROCEDURE dbo.GetPeptideIdentificationMethods
 **	Parameters:
 **		@message  -- explanation of any error that occurred
 **
-**		Auth: grk
-**		Date: 4/7/2004
+**	Auth:	grk
+**	Date:	04/07/2004
+**			04/06/2006 mem - Now sorting the identification methods on column Match_Method_ID
 **    
 *****************************************************/
+(
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 
@@ -39,8 +42,10 @@ As
 	
 	set @message = ''
 
-SELECT     [Name], Internal_Code as Code
-FROM         T_Match_Methods
+	SELECT [Name], Internal_Code as Code
+	FROM T_Match_Methods
+	ORDER BY Match_Method_ID
+
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------
