@@ -10,20 +10,26 @@ GO
 CREATE Procedure UpdateAnalysisJobToMTDBMap
 /****************************************************
 ** 
-**		Desc: Updates T_Analysis_Job_to_MT_DB_Map
+**	Desc: Updates T_Analysis_Job_to_MT_DB_Map
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	mem
-**		Date:	07/6/2005
-**				11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	07/06/2005
+**			11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
+**			12/12/2005 mem - Now populating Created and Last_Affected with the date/time listed in T_Analysis_Description
+**						   - Added support for PMT Tag DBs with @DBSchemaVersion < 2
+**			03/10/2006 mem - Changed from T_Analysis_Description.Created to T_Analysis_Description.Created_PMT_Tag_DB
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
+(
 	@MTDBNameFilter varchar(128) = '',				-- If supplied, then only examines the Jobs in database @MTDBNameFilter
 	@RowCountAdded int = 0 OUTPUT,
 	@message varchar(255) = '' OUTPUT
+)
 As	
 	set nocount on
 	
@@ -38,9 +44,10 @@ As
 	Set @RowCountAdded = 0
 
 	declare @result int
+	declare @UpdateEnabled tinyint
 	declare @ProcessSingleDB tinyint
-	declare @RowsDeleted int
-	declare @RowsAdded int
+	declare @RowCountUpdated int
+	declare @RowCountDeleted int
 	
 	If Len(@MTDBNameFilter) > 0
 		Set @ProcessSingleDB = 1
@@ -49,7 +56,7 @@ As
 
 	declare @MTL_Name varchar(128)
 	declare @MTL_ID int
-	declare @MTL_ID_Text nvarchar(11)
+	declare @MTL_ID_Text nvarchar(24)
 	declare @UniqueRowID int
 
 	declare @DBSchemaVersion real
@@ -57,22 +64,15 @@ As
 
 	declare @Continue int
 	declare @processCount int			-- Count of MT databases processed
-	declare @RowCountStart int
-	declare @RowCountEnd int
-
-	Set @RowCountStart = 0
-	SELECT @RowCountStart = COUNT(*)
-	FROM T_Analysis_Job_to_MT_DB_Map
 	
-	set @RowsDeleted = 0
-	set @RowsAdded = 0
+	set @RowCountUpdated = 0
+	set @RowCountDeleted = 0
 	
-	declare @SQL nvarchar(1024)
+	declare @SQL nvarchar(3500)
 
 	-----------------------------------------------------------
 	-- Process each entry in T_MT_Database_List, using the
 	--  jobs in T_Analysis_Description to populate T_Analysis_Job_to_MT_DB_Map
-	-- Only use MT DB's with schema version 2 or higher
 	--
 	-- Alternatively, if @MTDBNameFilter is supplied, then only process it
 	-----------------------------------------------------------
@@ -118,6 +118,14 @@ As
 		End
 	End
 
+	-- Create a temporary table to hold the job details for each database processed
+	CREATE TABLE #Temp_PMTTagDB_Jobs (
+		[Job] [int] NOT NULL ,
+		[ResultType] varchar(32) NULL ,
+		[Created] [datetime] NOT NULL ,
+		[Last_Affected] [datetime] NOT NULL 
+	)
+
 	-----------------------------------------------------------
 	-- Process each entry in #Temp_MTL_List
 	-----------------------------------------------------------
@@ -150,64 +158,137 @@ As
 		If @continue > 0
 		Begin -- <B>
 
+			-- Clear #Temp_PMTTagDB_Jobs
+			TRUNCATE TABLE #Temp_PMTTagDB_Jobs
+
+			-- Lookup the Schema Version
 			Exec GetDBSchemaVersionByDBName @MTL_Name, @DBSchemaVersion OUTPUT
-			
-			If @DBSchemaVersion >= 2
+
+			-- Populate #TTmpJobInfo with the job stats for this DB	
+			If @DBSchemaVersion < 2
 			Begin
-				Set @MTL_ID_Text = Convert(nvarchar(11), @MTL_ID)
+				Set @sql = ''
+				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected)'
+				Set @sql = @sql + ' SELECT TAD.Job, ''Peptide_Hit'' AS ResultType, TAD.Created,'
+				Set @sql = @sql +        ' ISNULL(LookupQ.Last_Affected, TAD.Created) AS Last_Affected'
+				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_Analysis_Description TAD LEFT OUTER JOIN'
+				Set @sql = @sql +   ' ( SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
+				Set @sql = @sql +     ' FROM [' + @MTL_Name + '].dbo.T_Mass_Tags MT INNER JOIN'
+				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
+				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @sql = @sql +     ' GROUP BY TAD.Job'
+				Set @sql = @sql +   ' ) LookupQ ON TAD.Job = LookupQ.Job'
+				Set @sql = @sql + ' WHERE TAD.Analysis_Tool LIKE ''%sequest%'' AND NOT Created IS NULL'
+				Set @sql = @sql + ' UNION '
+				Set @sql = @sql + ' SELECT FAD.Job, FAD.ResultType, FAD.Created,'
+				Set @sql = @sql +        ' MAX(ISNULL(PM.PM_Start, FAD.Created)) AS Last_Affected'
+				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description FAD LEFT OUTER JOIN'
+				Set @sql = @sql +      ' [' + @MTL_Name + '].dbo.T_Peak_Matching_Task PM ON FAD.Job = PM.Job'
+				Set @sql = @sql + ' WHERE FAD.Analysis_Tool NOT LIKE ''%TIC%'' AND NOT Created IS NULL'
+				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created'
+			End
+			Else
+			Begin
+				Set @sql = ''
+				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected)'
+				Set @sql = @sql + ' SELECT TAD.Job, TAD.ResultType, TAD.Created_PMT_Tag_DB AS Created, '
+				Set @sql = @sql +        ' ISNULL(LookupQ.Last_Affected, TAD.Created_PMT_Tag_DB) AS Last_Affected'
+				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_Analysis_Description TAD LEFT OUTER JOIN'
+				Set @sql = @sql +   ' ( SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
+				Set @sql = @sql +     ' FROM [' + @MTL_Name + '].dbo.T_Mass_Tags MT INNER JOIN'
+				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
+				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @sql = @sql +     ' GROUP BY TAD.Job'
+				Set @sql = @sql +   ' ) LookupQ ON TAD.Job = LookupQ.Job'
+				Set @sql = @sql + ' UNION '
+				Set @sql = @sql + ' SELECT FAD.Job, FAD.ResultType, FAD.Created,'
+				Set @sql = @sql +        ' MAX(ISNULL(PM.PM_Start, FAD.Created)) AS Last_Affected'
+				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description FAD LEFT OUTER JOIN'
+				Set @sql = @sql +      ' [' + @MTL_Name + '].dbo.T_Peak_Matching_Task PM ON FAD.Job = PM.Job'
+				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created'
+			End
+			--
+			EXEC @result = sp_executesql @sql
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			
+			If @result <> 0 OR @myError <> 0
+			 Begin
+				Set @message = 'Error looking up job info in ' + @MTL_Name
+				execute PostLogEntry 'Error', @message, 'UpdateAnalysisJobToMTDBMap'
+				set @message = ''
+			 End
+			Else
+			 Begin -- <C>
+				Set @MTL_ID_Text = Convert(nvarchar(24), @MTL_ID)
 				
-				-- Find jobs in @MTL_Name that are in AJMDM, but do not have the correct MTL_ID
+				-- Find jobs in #Temp_PMTTagDB_Jobs that are in AJMDM, but do not have the correct MTL_ID
 				-- If any jobs match, delete them
 				--
 				Set @sql = ''
 				Set @sql = @sql + ' DELETE AJMDM'
 				Set @sql = @sql + ' FROM T_Analysis_Job_to_MT_DB_Map AS AJMDM LEFT OUTER JOIN'
-				Set @sql = @sql +   ' (SELECT Job FROM [' + @MTL_Name + '].dbo.T_Analysis_Description UNION'
-				Set @sql = @sql +   '  SELECT Job FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description) AS MTDB'
-				Set @sql = @sql +   ' ON AJMDM.Job = MTDB.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
+				Set @sql = @sql +      ' #Temp_PMTTagDB_Jobs AS MTDB ON'
+				Set @sql = @sql +      ' AJMDM.Job = MTDB.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
 				Set @sql = @sql + ' WHERE AJMDM.MTL_ID = ' + @MTL_ID_Text + ' AND MTDB.Job IS NULL'
 
 				EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
-				Set @RowsDeleted = @RowsDeleted + @myRowCount
+				Set @RowCountDeleted = @RowCountDeleted + @myRowCount
 
-				-- Insert missing jobs from @MTL_Name into AJMDM
+				-- Insert missing jobs from #Temp_PMTTagDB_Jobs into AJMDM
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_MT_DB_Map (Job, MTL_ID, ResultType, Last_Affected)'
-				Set @sql = @sql + ' SELECT MTDB.Job, ' + @MTL_ID_Text + ' AS MTL_ID, MTDB.ResultType, GetDate()'
-				Set @sql = @sql +   ' FROM (SELECT Job, ResultType FROM [' + @MTL_Name + '].dbo.T_Analysis_Description UNION'
-				Set @sql = @sql +        '  SELECT Job, ResultType FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description) AS MTDB'
-				Set @sql = @sql +   ' LEFT OUTER JOIN T_Analysis_Job_to_MT_DB_Map AS AJMDM ON'
-				Set @sql = @sql +   ' MTDB.Job = AJMDM.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
+				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_MT_DB_Map (Job, MTL_ID, ResultType, Created, Last_Affected)'
+				Set @sql = @sql + ' SELECT MTDB.Job, ' + @MTL_ID_Text + ' AS MTL_ID, MTDB.ResultType, MTDB.Created, MTDB.Last_Affected'
+				Set @sql = @sql + ' FROM #Temp_PMTTagDB_Jobs AS MTDB LEFT OUTER JOIN'
+				Set @sql = @sql +      ' T_Analysis_Job_to_MT_DB_Map AS AJMDM ON'
+				Set @sql = @sql +      ' MTDB.Job = AJMDM.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
 				Set @sql = @sql + ' WHERE AJMDM.Job IS NULL'
 
 				EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
-				Set @RowsAdded = @RowsAdded + @myRowCount
+				Set @RowCountAdded = @RowCountAdded + @myRowCount
 
+				-- Update jobs in #Temp_PMTTagDB_Jobs with differing Created or Last_Affected times
+				--
+				Set @sql = ''
+				Set @sql = @sql + ' UPDATE T_Analysis_Job_to_MT_DB_Map'
+				Set @sql = @sql + ' SET Created = MTDB.Created, Last_Affected = MTDB.Last_Affected'
+				Set @sql = @sql + ' FROM #Temp_PMTTagDB_Jobs AS MTDB INNER JOIN'
+				Set @sql = @sql +      ' T_Analysis_Job_to_MT_DB_Map AS AJMDM ON'
+				Set @sql = @sql +      ' MTDB.Job = AJMDM.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
+				Set @sql = @sql + ' WHERE AJMDM.Created <> MTDB.Created OR '
+				Set @sql = @sql +       ' AJMDM.Last_Affected <> MTDB.Last_Affected'
+
+				EXEC @result = sp_executesql @sql
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				Set @RowCountUpdated = @RowCountUpdated + @myRowCount
+				
 				Set @processCount = @processCount + 1
-
-			End
-			
+			 End -- </C>
 		End -- </B>
+
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled 'PMT_Tag_DB_Update', 'UpdateAnalysisJobToMTDBMap', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
+
 	End -- </A>
 
-	Set @RowCountEnd = 0
-	SELECT @RowCountEnd = COUNT(*)
-	FROM T_Analysis_Job_to_MT_DB_Map
-	--
-	Set @RowCountAdded = @RowCountEnd - @RowCountStart
-
-	Set @message = 'Total rows added: ' + Convert(varchar(9), @RowCountAdded)
-	
-	If @RowsDeleted <> 0 Or @RowsAdded <> 0
-		Set @message = @message + ' (deleted ' + Convert(varchar(9), @RowsDeleted) + ' and added ' + Convert(varchar(9), @RowsAdded) + ')'
+	If @RowCountAdded <> 0 Or @RowCountUpdated <> 0 Or @RowCountDeleted <> 0
+	Begin
+		Set @message = ''
+		Set @message = @message + 'Rows added: ' + Convert(varchar(9), @RowCountAdded) + '; '
+		Set @message = @message + 'Rows updated: ' + Convert(varchar(9), @RowCountUpdated) + '; '
+		Set @message = @message + 'Rows deleted: ' + Convert(varchar(9), @RowCountDeleted)
+	End
 	Else
-		Set @message = @message + ' (No changes were made to T_Analysis_Job_to_MT_DB_Map)'
-		
+		Set @message = 'No changes were made to T_Analysis_Job_to_MT_DB_Map'
+	
 Done:
 	-----------------------------------------------------------
 	-- Exit

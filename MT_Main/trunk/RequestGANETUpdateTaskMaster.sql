@@ -10,31 +10,29 @@ GO
 CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 /****************************************************
 **
-**	Desc: 
-**		For each database listed in T_MT_Database_List
-**      Calls the RequestGANETUpdateTask SP
-**      If @TaskAvailable = 1, then exits the loop and
-**      exits this SP, returning the parameters returned
-**      by the RequestGANETUpdateTask SP.  If
-**      @TaskAvailable = 0, then continues calling
-**      RequestGANETUpdateTask in each database until 
-**      all have been called.
+**	Desc:	For each database listed in T_MT_Database_List, calls the RequestGANETUpdateTask SP
+**			If @TaskAvailable = 1, then exits the loop and exits this SP, returning 
+**			 the parameters returned by the RequestGANETUpdateTask SP.  If @TaskAvailable = 0, 
+**			 then continues calling RequestGANETUpdateTask in each database until all have been called.
 **
-**		If @dbName is provided, will check that DB first
-**		If @restrictToDbName = 1, then only checks @dbName
+**			If @dbName is provided, will check that DB first
+**			If @restrictToDbName = 1, then only checks @dbName
 **
-**		Auth: grk
-**		Date: 8/26/2003
-**		Updated: 02/19/2004 mem - Added check to confirm that each database actually exists
-**				 04/09/2004 mem - Removed @maxIterations and @maxHours parameters
-**				 07/05/2004 mem - Extended SP to call RequestGANETUpdateTask in the peptide DB's, in addition to the MTDB's
-**				 07/30/2004 mem - Added @unmodifiedPeptidesOnly, @noCleavageRuleFilters, and @skipRegression parameters
-**				 01/28/2005 mem - Updated bug involving @outFile, @inFile, and @predFile population for MTDB's
-**				 04/08/2005 mem - Updated call to GetGANETFolderPaths
-**				 05/28/2005 mem - Now passing @inFilePath to RequestGANETUpdateTask in Peptide DBs
-**			     11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	08/26/2003
+**			02/19/2004 mem - Added check to confirm that each database actually exists
+**			04/09/2004 mem - Removed @maxIterations and @maxHours parameters
+**			07/05/2004 mem - Extended SP to call RequestGANETUpdateTask in the peptide DB's, in addition to the MTDB's
+**			07/30/2004 mem - Added @unmodifiedPeptidesOnly, @noCleavageRuleFilters, and @skipRegression parameters
+**			01/28/2005 mem - Updated bug involving @outFile, @inFile, and @predFile population for MTDB's
+**			04/08/2005 mem - Updated call to GetGANETFolderPaths
+**			05/28/2005 mem - Now passing @inFilePath to RequestGANETUpdateTask in Peptide DBs
+**			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			07/05/2006 mem - Now using dbo.udfCombinePaths() to combine paths
 **
 *****************************************************/
+(
 	@processorName varchar(128),
 	@clientPerspective tinyint = 1,					-- 0 means running SP from local server; 1 means running SP from client
 	@restrictToDbName tinyint = 0,					-- If 1, will only check the DB named @dbName
@@ -50,27 +48,28 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 	@skipRegression tinyint = 0 output,				-- 1 if we should skip the regression and only make the plots
 	@taskAvailable tinyint = 0 output,				-- 1 if a task is available; otherwise 0
 	@message varchar(512) = '' output
+)
 As
 	set nocount on
 
-	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 	
 	declare @done int
-	set @done = 0
-
 	declare @ActivityRowCount int
-	set @ActivityRowCount = 0
-
 	declare @SPRowCount int
+	declare @UpdateEnabled tinyint
+
+	set @done = 0
+	set @ActivityRowCount = 0
 	set @SPRowCount = 0
 	
 	-- Note: @S needs to be unicode (nvarchar) for compatibility with sp_executesql
 	declare @S nvarchar(1024),
 			@CurrentDB varchar(255),
+			@UniqueRowIDCurrent int,
 			@SPToExec varchar(255),
 			@PreferredDBName varchar(255),
 			@outFileFolderPathBase varchar(255),
@@ -79,12 +78,13 @@ As
 
 	set @S = ''
 	set @CurrentDB = ''
+	set @UniqueRowIDCurrent = 0
 	set @SPToExec = ''
 	set @PreferredDBName = IsNull(@dbName, '')
 	set @message = ''
 		
 	---------------------------------------------------
-	-- clear the output arguments
+	-- Clear the output arguments
 	---------------------------------------------------
 	set @taskID = 0
 	set @dbName = ''
@@ -100,21 +100,29 @@ As
 	set @skipRegression = 0				-- Future: Obtain this from the peptide or mass tag database
 	set @taskAvailable = 0
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled 'Peptide_DB_Update', 'RequestGANETUpdateTaskMaster', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 	---------------------------------------------------
-	-- temporary table to hold list of databases to process
+	-- Create a temporary table to hold list of databases to process
 	---------------------------------------------------
-	CREATE TABLE #XDBNames (
+	CREATE TABLE #TmpDBsToProcess (
+		UniqueRowID int identity(1,1),
 		Database_Name varchar(128),
-		Processed tinyint,
 		IsPeptideDB tinyint
 	) 
 
+	-- Add an index to #TmpDBsToProcess on column UniqueRowID
+	CREATE CLUSTERED INDEX #IX_TmpDBsToProcess ON #TmpDBsToProcess(UniqueRowID)
+
 	---------------------------------------------------
-	-- populate temporary table with list of mass tag
-	-- databases that are not deleted
+	-- Populate the temporary table with the list of 
+	-- mass tag databases that are not deleted
 	---------------------------------------------------
-	INSERT INTO #XDBNames
-	SELECT	MTL_Name, 0 As Processed, 0 As IsPeptideDB
+	INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
+	SELECT	MTL_Name, 0 As IsPeptideDB
 	FROM	T_MT_Database_List
 	WHERE MTL_State <> 100
 	ORDER BY MTL_Name
@@ -128,10 +136,10 @@ As
 	end
 
 	---------------------------------------------------
-	-- add the peptide databases that are not deleted
+	-- Add the peptide databases that are not deleted
 	---------------------------------------------------
-	INSERT INTO #XDBNames
-	SELECT	PDB_Name, 0 As Processed, 1 As IsPeptideDB
+	INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
+	SELECT	PDB_Name, 1 As IsPeptideDB
 	FROM	T_Peptide_Database_List
 	WHERE PDB_State <> 100
 	ORDER BY PDB_Name
@@ -167,59 +175,57 @@ As
 										@message  output
 
 	---------------------------------------------------
-	-- step through the database list and call
+	-- Step through the database list and call
 	-- RequestGANETUpdateTask in each one (if it exists)
 	-- If a GANET regression task is found, then exit the
 	-- while loop
 	---------------------------------------------------
-	WHILE @done = 0 and @myError = 0  
-	BEGIN --<a>
+	While @done = 0 and @myError = 0  
+	Begin -- <a>
 	
 		If Len(@PreferredDBName) > 0
-			begin
-				-- Look for @PreferredDBName in XDBNames
-				--
-				SELECT	TOP 1 @CurrentDB = Database_Name, @IsPeptideDB = IsPeptideDB
-				FROM	#XDBNames 
-				WHERE	Processed = 0 AND Database_Name = @PreferredDBName
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-				--	
-				-- Set PreferredDBName to '' so that we don't check for it on the next loop
-				Set @PreferredDBName = ''
-			end
-		else
-			begin
-				-- Get next available entry from XDBNames
-				--
-				SELECT	TOP 1 @CurrentDB = Database_Name, @IsPeptideDB = IsPeptideDB
-				FROM	#XDBNames 
-				WHERE	Processed = 0
-				ORDER BY Database_Name
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-				--		
-				if @myRowCount = 0
-					set @done = 1
-			end
-
-		If @myRowCount > 0
-		begin --<b>
-		
-			-- update Process_State entry for given DB to 1
+		Begin
+			-- Look for @PreferredDBName in #TmpDBsToProcess
 			--
-			UPDATE	#XDBNames
-			SET		Processed = 1
-			WHERE	(Database_Name = @CurrentDB)
+			SELECT	TOP 1 @CurrentDB = Database_Name, @IsPeptideDB = IsPeptideDB
+			FROM	#TmpDBsToProcess 
+			WHERE	Database_Name = @PreferredDBName
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--	
+			-- Set PreferredDBName to '' so that we don't check for it on the next loop
+			Set @PreferredDBName = ''
+			
+			If @myRowCount > 0
+				-- Delete @CurrentDB from #TmpDBsToProcess
+				DELETE FROM #TmpDBsToProcess
+				WHERE Database_Name = @PreferredDBName
+
+			-- If @restrictToDbName = 1, then only check the preferred database
 			--
-			if @myError <> 0 
-			begin
-				set @message = 'Could not update the database list temp table'
-				set @myError = 51
-				goto Done
-			end
+			If @restrictToDbName = 1
+				Set @done = 1
+		End
+		Else
+		Begin
+			-- Get next available entry from #TmpDBsToProcess
+			--
+			SELECT TOP 1
+					@CurrentDB = Database_Name, 
+					@IsPeptideDB = IsPeptideDB,
+					@UniqueRowIDCurrent = UniqueRowID
+			FROM #TmpDBsToProcess 
+			WHERE UniqueRowID > @UniqueRowIDCurrent
+			ORDER BY UniqueRowID
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--		
+			if @myRowCount = 0
+				set @done = 1
+		End
+
+		If @myRowCount > 0
+		Begin -- <b>
 
 			-- Check if the database actually exists
 			SELECT @SPRowCount = Count(*) 
@@ -227,7 +233,7 @@ As
 			WHERE SD.NAME = @CurrentDB
 
 			If (@SPRowCount > 0)
-			Begin --<c>
+			Begin -- <c>
 
 				-- Check if the RequestGANETUpdateTask SP exists for @CurrentDB
 
@@ -239,17 +245,17 @@ As
 				EXEC sp_executesql @S, N'@SPRowCount int OUTPUT', @SPRowCount OUTPUT
 
 				If (@SPRowCount > 0)
-				Begin --<d>
+				Begin -- <d>
 					
 					-- Call RequestGANETUpdateTask in @CurrentDB
 					-- Peptide DB's require extra parameters
 
 					Set @SPToExec = '[' + @CurrentDB + ']..RequestGANETUpdateTask'
-					Set @outFilePath = @outFileFolderPathBase + @CurrentDB + '\'
-					Set @inFilePath = @inFileFolderPathBase + @CurrentDB + '\'
+					Set @outFilePath = dbo.udfCombinePaths(@outFileFolderPathBase, @CurrentDB + '\')
+					Set @inFilePath = dbo.udfCombinePaths (@inFileFolderPathBase, @CurrentDB + '\')
 					
 					If @IsPeptideDB = 1
-					  Begin
+					Begin
 						-- Peptide DB
 						-- Note that @outFile, @inFile, and @predFile will get overridden with customized names
 						Exec @myError = @SPToExec	
@@ -261,9 +267,9 @@ As
 													@inFileName = @inFile output,
 													@predFileName = @predFile output,
 													@message = @message output
-					  End
+					End
 					Else
-					  Begin
+					Begin
 						-- Mass Tag DB
 						Exec @myError = @SPToExec	
 													@ProcessorName,
@@ -277,7 +283,7 @@ As
 							Set @inFile = @inFileNameDefault
 							Set @predFile = @predFileNameDefault
 						End
-					  End
+					End
 					
 
 					If @myError <> 0
@@ -289,36 +295,26 @@ As
 					-- If a task was found, and no error occurred, then set @done = 1 so that
 					-- the while loop exits
 					If @TaskAvailable = 1 And @myError = 0
-					  Begin
+					Begin
 						Set @done = 1
 						Set @dbName = @CurrentDB
-					  End
+					End
 					Else
-					  Begin
+					Begin
 						Set @dbName = ''
 						Set @TaskAvailable = 0
-					  End
+					End
 
-				End --<d>
-										
-			End --<c>
-
-		end --<b>	
-			
-		-- If @restrictToDbName = 1, then only check the preferred database
-		--
-		If @restrictToDbName = 1
-			Set @done = 1
-				   
-	END --<a>
-
+				End -- </d>
+			End -- </c>
+		End -- </b>	
+	End -- </a>
 
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------
 	--
 Done:
-
 	Return @myError
 
 GO

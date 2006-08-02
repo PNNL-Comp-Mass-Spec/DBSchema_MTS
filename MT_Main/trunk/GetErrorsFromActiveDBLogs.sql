@@ -10,38 +10,37 @@ GO
 CREATE PROCEDURE dbo.GetErrorsFromActiveDBLogs
 /****************************************************
 ** 
-**		Desc:
-**		For each entry in the current activity table
-**      gets any log entries whose type is 'Error'.
-**		Optionally gets all entries. 
+**	Desc:	For each entry in the current activity table
+**			gets any log entries whose type is 'Error'.
+**			Optionally gets all entries. 
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth: grk
-**		Date: 04/16/2004
-**		      09/28/2004 mem - Updated #XMTDBNames populate query to exclude deleted databases
-**			  12/06/2004 mem - Added lookup of errors in PrismDev.Master_Sequences
-**			  11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
-**							 - Removed call to PrismDev.Master_Sequences
+**	Auth:	grk
+**	Date:	04/16/2004
+**			09/28/2004 mem - Updated #XMTDBNames populate query to exclude deleted databases
+**			12/06/2004 mem - Added lookup of errors in PrismDev.Master_Sequences
+**			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**						   - Removed call to PrismDev.Master_Sequences
+**			03/20/2006 mem - Updated to use all databases with state < 10, plus any extra ones that might be in T_Current_Activity
 **    
 *****************************************************/
+(
 	@errorsOnly int = 1
+)
 As
 	set nocount on
 	
-	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 
 	declare @cmd nvarchar(255)
 	declare @result int
 
-	declare @MTL_Name varchar(64)
-	declare @MTL_State int
 	declare @DBNameMatch varchar(128)
 	
 	declare @message varchar(255)
@@ -65,12 +64,12 @@ As
 	-- temporary table to hold extracted log error entries
 	---------------------------------------------------
 	CREATE TABLE #LE (
-		[Entry_ID] [int],
-		[posted_by] [varchar] (64),
-		[posting_time] [smalldatetime],
-		[type] [varchar] (32),
-		[message] [varchar] (500),
-		[DBName] [varchar] (64) 
+		Entry_ID int,
+		posted_by varchar(64),
+		posting_time datetime,
+		type varchar(32),
+		message varchar (512),
+		DBName varchar(128) 
 	) 
 	
 	---------------------------------------------------
@@ -88,16 +87,19 @@ As
 	VALUES     ('MT_Main', 0)
 	
 	---------------------------------------------------
-	-- populate temporary table with MT databases
-	-- in current activity table
+	-- populate temporary table with active MT databases
 	---------------------------------------------------
 	
 	INSERT INTO #XMTDBNames (DBName, Processed)
-	SELECT CA.Database_Name, 0 AS Processed
+	SELECT MT.MTL_Name, 0 AS Processed
+	FROM T_MT_Database_List MT
+	WHERE MT.MTL_State < 10
+	UNION
+	SELECT MT.MTL_Name, 0 AS Processed
 	FROM T_Current_Activity CA INNER JOIN T_MT_Database_List MT ON 
-	    CA.Database_ID = MT.MTL_ID AND CA.Type = 'MT'
-	WHERE (MT.MTL_State <> 100)
-	ORDER BY CA.Database_Name
+	     CA.Database_ID = MT.MTL_ID AND CA.Type = 'MT'
+	WHERE MT.MTL_State <> 100
+	ORDER BY MT.MTL_Name
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -108,21 +110,26 @@ As
 	end
 
 	---------------------------------------------------
-	-- populate temporary table with Peptide databases
+	-- Populate temporary table with Peptide databases
 	-- in current activity table
 	---------------------------------------------------
 
 	INSERT INTO #XMTDBNames (DBName, Processed)
-	SELECT CA.Database_Name, 0 AS Processed
+	SELECT PT.PDB_Name, 0 AS Processed
+	FROM T_Peptide_Database_List PT
+	WHERE (PT.PDB_State < 10)
+	UNION
+	SELECT PT.PDB_Name, 0 AS Processed
 	FROM T_Current_Activity CA INNER JOIN T_Peptide_Database_List PT ON 
-	    CA.Database_ID = PT.PDB_ID AND CA.Type = 'PT'
+	     CA.Database_ID = PT.PDB_ID AND CA.Type = 'PT'
 	WHERE (PT.PDB_State <> 100)
-	ORDER BY CA.Database_Name
+	ORDER BY PT.PDB_Name
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
+
 	-----------------------------------------------------------
-	-- process each entry in temporary table
+	-- Process each entry in #XMTDBNames
 	-----------------------------------------------------------
 	
 	declare @done int
@@ -196,10 +203,8 @@ As
 				-- get error entries for log from target DB into temporary table
 				--
 				Set @S = ''				
-				Set @S = @S + ' INSERT INTO #LE'
-				Set @S = @S + ' (Entry_ID, posted_by, posting_time, type, message, DBName)'
-				Set @S = @S + ' SELECT'
-				Set @S = @S + ' Entry_ID, posted_by, posting_time, type, message, ''' + @CurrentDB + ''''
+				Set @S = @S + ' INSERT INTO #LE (Entry_ID, posted_by, posting_time, type, message, DBName)'
+				Set @S = @S + ' SELECT Entry_ID, posted_by, posting_time, type, message, ''' + @CurrentDB + ''''
 				Set @S = @S + ' FROM [' + @CurrentDB + ']..T_Log_Entries'
 				if @errorsOnly = 1
 				begin
@@ -211,29 +216,13 @@ As
 	NextPass:	   
 	END --<a>
 
-/*	
-	-----------------------------------------------------------
-	-- Lookup errors in PrismDev.Master_Sequences
-	-----------------------------------------------------------
-	Set @S = ''				
-	Set @S = @S + ' INSERT INTO #LE'
-	Set @S = @S + ' (Entry_ID, posted_by, posting_time, type, message, DBName)'
-	Set @S = @S + ' SELECT'
-	Set @S = @S + ' Entry_ID, posted_by, posting_time, type, message, ''PrismDev.Master_Sequences'''
-	Set @S = @S + ' FROM PrismDev.Master_Sequences.dbo.T_Log_Entries'
-	if @errorsOnly = 1
-	begin
-		Set @S = @S + ' WHERE type = ''error'''
-	end
-
-	EXEC sp_executesql @S	
-*/
-
 	-----------------------------------------------------------
 	-- return contents of temporary table
 	-----------------------------------------------------------
 	--
-	select DBName, Entry_ID, posted_by, type, message, posting_time  from #LE ORDER BY DBName, Entry_ID DESC
+	SELECT DBName, Entry_ID, posted_by, type, message, posting_time
+	FROM #LE
+	ORDER BY DBName, Entry_ID DESC
 
 Done:
 	-----------------------------------------------------------

@@ -8,6 +8,7 @@ CREATE TABLE [T_Current_Activity] (
 	[Type] [char] (4) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
 	[Update_Began] [datetime] NULL ,
 	[Update_Completed] [datetime] NULL ,
+	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_Pause_Length_Minutes] DEFAULT (0),
 	[State] [int] NULL ,
 	[Comment] [varchar] (512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[Update_State] [int] NOT NULL CONSTRAINT [DF_T_Current_Activity_Update_State] DEFAULT (0),

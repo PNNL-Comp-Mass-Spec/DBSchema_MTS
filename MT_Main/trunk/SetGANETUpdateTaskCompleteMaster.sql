@@ -9,7 +9,6 @@ GO
 
 
 CREATE PROCEDURE dbo.SetGANETUpdateTaskCompleteMaster
-
 /****************************************************
 **
 **	Desc: 
@@ -18,16 +17,18 @@ CREATE PROCEDURE dbo.SetGANETUpdateTaskCompleteMaster
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 08/26/2003  
-**			  06/28/2004 mem - Changed from @mtdbName to @dbName 
-**			  11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	08/26/2003  
+**			06/28/2004 mem - Changed from @mtdbName to @dbName 
+**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
 **
 *****************************************************/
+(
 	@taskID int,
 	@dbName varchar (128),
 	@completionCode int = 0, -- 0->Success, 1->UpdateFailed, 2->ResultsFailed
 	@message varchar(512) output
+)
 As
 	set nocount on
 
@@ -39,7 +40,7 @@ As
 	declare @SPToExec varchar(255)
 	
 	---------------------------------------------------
-	-- Call SetGANETUpdateTaskComplete in the given mtdb
+	-- Call SetGANETUpdateTaskComplete in the given DB
 	---------------------------------------------------
 	
 	set @SPToExec = '[' + @dbName + ']..SetGANETUpdateTaskComplete'

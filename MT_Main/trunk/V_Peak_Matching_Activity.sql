@@ -10,8 +10,8 @@ GO
 CREATE VIEW dbo.V_Peak_Matching_Activity
 AS
 SELECT TOP 100 PERCENT t1.*
-FROM POGO.PRISM_RPT.dbo.T_Peak_Matching_Activity t1
-WHERE (PM_Start >= GETDATE() - 90)
+FROM POGO.PRISM_RPT.dbo.V_Peak_Matching_Activity t1
+WHERE (Active_Processor = 1)
 ORDER BY pm_start DESC
 
 GO

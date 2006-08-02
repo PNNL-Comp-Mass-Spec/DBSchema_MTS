@@ -7,19 +7,22 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateMast
 drop procedure [dbo].[UpdateMasterSequenceMasses]
 GO
 
-CREATE Procedure UpdateMasterSequenceMasses
+
+create Procedure UpdateMasterSequenceMasses
 /****************************************************
 ** 
-**		Desc: Calls CalculateMonoisotopicMassWrapper in Master_Sequences,
-**			  keeps track of progress in T_Current_Activity_History
-**			  T_Current_Activity
+**	Desc:	Calls CalculateMonoisotopicMassWrapper in Master_Sequences,
+**			 keeps track of progress in T_Current_Activity_History 
+**			 and T_Current_Activity
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth: mem
-**		Date: 11/28/2005
+**	Auth:	mem
+**	Date:	11/28/2005
+**			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			03/14/2006 mem - Now using column Pause_Length_Minutes
 **    
 *****************************************************/
 (
@@ -35,9 +38,11 @@ As
 
 	declare @matchCount int
 	
-	declare @completionDate datetime
-	declare @procTimeMinutesLast24Hours float
-	declare @procTimeMinutesLast7days float
+	declare @CompletionDate datetime
+	declare @PauseLengthMinutes real
+	declare @ProcTimeMinutesLast24Hours float
+	declare @ProcTimeMinutesLast7days float
+	declare @UpdateEnabled tinyint
 	
 	declare @message varchar(255)
 	declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
@@ -50,6 +55,11 @@ As
 	set @MasterSeqDB = 'Master_Sequences'	
 	set @MasterSeqDBID = 1000
 	set @MasterSeqDBState = 2
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled 'Master_Sequences_Update', 'UpdateMasterSequenceMasses', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 	-----------------------------------------------------------
 	-- Perform update
@@ -66,11 +76,14 @@ As
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
 	If @matchCount = 0
-		INSERT INTO T_Current_Activity (Database_ID, Database_Name, Type, Update_Began, State, Update_State)
-		VALUES (@MasterSeqDBID, @MasterSeqDB, 'MSeq', GetDate(), @MasterSeqDBState, 2)
+		INSERT INTO T_Current_Activity (Database_ID, Database_Name, Type, Update_Began, Update_Completed, 
+										Pause_Length_Minutes, State, Update_State)
+		VALUES (@MasterSeqDBID, @MasterSeqDB, 'MSeq', GetDate(), Null,
+				0, @MasterSeqDBState, 2)
 	Else
 		UPDATE T_Current_Activity
-		SET	Database_Name = @MasterSeqDB, Update_Began = GetDate(), Update_Completed = Null, State = @MasterSeqDBState, Comment = '', Update_State = 2
+		SET	Database_Name = @MasterSeqDB, Update_Began = GetDate(), Update_Completed = Null, 
+			Pause_Length_Minutes = 0, State = @MasterSeqDBState, Comment = '', Update_State = 2
 		WHERE Database_ID = @MasterSeqDBID AND Database_Name = @MasterSeqDB
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -84,14 +97,14 @@ As
 	
 	-----------------------------------------------------------
 	-- log beginning of update for database
-	--
+	-----------------------------------------------------------
 	if @logVerbosity > 1
 	begin
 		set @message = 'Master Update Begun for ' + @MasterSeqDB
 		execute PostLogEntry 'Normal', @message, 'UpdateMasterSequenceMasses'
 	end
 
-	-- get table counts before update (remember counts)
+	-- Get table counts before update (remember counts)
 	--
 	declare @count1 int
 	declare @historyId int
@@ -109,7 +122,7 @@ As
 
 	-----------------------------------------------------------
 	-- Call the mass calculation SP
-	-- 
+	-----------------------------------------------------------
 	Declare @SPToExec varchar(2048)
 	Declare @PeptidesProcessedCount int
 
@@ -126,22 +139,29 @@ As
 
 	-- Cache the current completion time
 	--
-	Set @completionDate = GetDate()
+	Set @CompletionDate = GetDate()
 
-	-- Update completion date for database in the current activity history table
+	-- Populate @PauseLengthMinutes
+	Set @PauseLengthMinutes = 0
+	SELECT @PauseLengthMinutes = Pause_Length_Minutes
+	FROM T_Current_Activity
+	WHERE Database_Name = @MasterSeqDB
+	
+	-- Update completion date and Pause Length for database in the current activity history table
 	UPDATE T_Current_Activity_History
-	SET Update_Completion_Date = @completionDate
+	SET Update_Completion_Date = @CompletionDate,
+		Pause_Length_Minutes = @PauseLengthMinutes
 	WHERE History_ID = @historyId
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
 	-- Compute the total processing time for the last 24 hours for this database,
-	Set @procTimeMinutesLast24Hours = 0
+	Set @ProcTimeMinutesLast24Hours = 0
 	
-	SELECT @procTimeMinutesLast24Hours = ROUND(SUM(ISNULL(DATEDIFF(second, Snapshot_Date, Update_Completion_Date), 0) / 60.0), 1)
+	SELECT @ProcTimeMinutesLast24Hours = ROUND(SUM(ISNULL(DATEDIFF(second, Snapshot_Date, Update_Completion_Date), 0) / 60.0 - Pause_Length_Minutes), 1)
 	FROM T_Current_Activity_History
-	WHERE (DATEDIFF(minute, ISNULL(Update_Completion_Date, @completionDate), @completionDate) / 60.0 <= 24) AND 
+	WHERE (DATEDIFF(minute, ISNULL(Update_Completion_Date, @CompletionDate), @CompletionDate) / 60.0 <= 24) AND 
 			Database_ID = @MasterSeqDBID AND Database_Name = @MasterSeqDB
 	GROUP BY Database_Name
 	--
@@ -149,11 +169,11 @@ As
 
 
 	-- Compute the total processing time for the last 7 days for this database,
-	Set @procTimeMinutesLast7days = 0
+	Set @ProcTimeMinutesLast7days = 0
 	
-	SELECT @procTimeMinutesLast7days = ROUND(SUM(ISNULL(DATEDIFF(second, Snapshot_Date, Update_Completion_Date), 0) / 60.0), 1)
+	SELECT @ProcTimeMinutesLast7days = ROUND(SUM(ISNULL(DATEDIFF(second, Snapshot_Date, Update_Completion_Date), 0) / 60.0 - Pause_Length_Minutes), 1)
 	FROM T_Current_Activity_History
-	WHERE (DATEDIFF(hour, ISNULL(Update_Completion_Date, @completionDate), @completionDate) / 24.0 <= 7) AND 
+	WHERE (DATEDIFF(hour, ISNULL(Update_Completion_Date, @CompletionDate), @CompletionDate) / 24.0 <= 7) AND 
 			Database_ID = @MasterSeqDBID AND Database_Name = @MasterSeqDB
 	GROUP BY Database_Name
 	--
@@ -163,9 +183,9 @@ As
 	-- Update completion date in the current activity table
 	--
 	UPDATE	T_Current_Activity
-	SET Update_Completed = @completionDate, Comment = @StatMsg, Update_State = 3, 
-		ET_Minutes_Last24Hours = @procTimeMinutesLast24Hours,
-		ET_Minutes_Last7Days = @procTimeMinutesLast7days
+	SET Update_Completed = @CompletionDate, Comment = @StatMsg, Update_State = 3, 
+		ET_Minutes_Last24Hours = @ProcTimeMinutesLast24Hours,
+		ET_Minutes_Last7Days = @ProcTimeMinutesLast7days
 	WHERE Database_ID = @MasterSeqDBID AND Database_Name = @MasterSeqDB
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -187,7 +207,7 @@ As
 	
 Done:
 	-----------------------------------------------------------
-	-- 
+	-- Exit
 	-----------------------------------------------------------
 	--
 	if @myError <> 0 and @logVerbosity > 0

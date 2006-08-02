@@ -20,7 +20,7 @@ SELECT TOP 100 PERCENT Database_Name,
 FROM (SELECT Database_Name, Snapshot_Date, 
           DATEDIFF(second, Snapshot_Date, 
           Update_Completion_Date) 
-          / 60.0 AS Processing_Time_Minutes
+          / 60.0 - Pause_Length_Minutes AS Processing_Time_Minutes
       FROM T_Current_Activity_History) LookupQ
 WHERE (Snapshot_Date > GETDATE() - 14)
 GROUP BY Database_Name

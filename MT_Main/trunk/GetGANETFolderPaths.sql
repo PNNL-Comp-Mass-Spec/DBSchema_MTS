@@ -11,27 +11,27 @@ GO
 CREATE PROCEDURE dbo.GetGANETFolderPaths
 /****************************************************
 ** 
-**		Desc: 
-**		Get paths to GANET transfer folder
-**
-**		Return values: 0: success, otherwise, error code
+**	Desc:	Get paths to GANET transfer folder
+**	
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
-**
-**		Auth: grk
-**		Date: 08/26/2003
-**			  04/08/2005 mem - removed @dbName parameter since unused
-**			  11/28/2005 mem - Now verifying that @rootFolderPath ends in a slash before concatenating subfolders to it
-**							 - Now checking for no match found in T_Folder_Paths for 'GANET Transfer Root Folder', and posting entry to error log if not found
+**	Auth:	grk
+**	Date:	08/26/2003
+**			04/08/2005 mem - removed @dbName parameter since unused
+**			11/28/2005 mem - Now verifying that @rootFolderPath ends in a slash before concatenating subfolders to it
+**						   - Now checking for no match found in T_Folder_Paths for 'GANET Transfer Root Folder', and posting entry to error log if not found
+**			07/20/2006 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
+(
 	@clientPerspective int = 1,					-- 0 means running SP from local server; 1 means running SP from client
-	@outFileName varchar(256) output,
-	@outFileFolderPath varchar(256) output,
-	@inFileName varchar(256) output,
-	@inFileFolderPath varchar(256) output,
-	@predFileName varchar(256) output,
-	@message varchar(512) output
+	@outFileName varchar(256)='' output,
+	@outFileFolderPath varchar(256)='' output,
+	@inFileName varchar(256)='' output,
+	@inFileFolderPath varchar(256)='' output,
+	@predFileName varchar(256)='' output,
+	@message varchar(512)='' output
+)
 AS
 	set nocount on
 
@@ -86,11 +86,8 @@ AS
 	else
 		set @rootFolderPath = @serverRoot
 	
-	If Right(@rootFolderPath, 1) <> '\'
-		Set @rootFolderPath = @rootFolderPath + '\'
-	
-	set @outFileFolderPath = @rootFolderPath + 'Out\' 
-	set @inFileFolderPath = @rootFolderPath + 'In\' 
+	set @outFileFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'Out\')
+	set @inFileFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'In\' )
 
     ---------------------------------------------------
 	-- Exit

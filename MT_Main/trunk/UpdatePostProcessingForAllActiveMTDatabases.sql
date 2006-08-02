@@ -10,34 +10,36 @@ GO
 CREATE PROCEDURE UpdatePostProcessingForAllActiveMTDatabases
 /****************************************************
 ** 
-**		Desc:
-**		For each active database listed in T_MT_Database_List
-**    Calls the >> SP if it exists in the MT database.
+**	Desc:	For each active database listed in T_MT_Database_List
+**			Calls the SP MasterUpdateQRProcessStart or MasterUpdatePeakMatchingPostProcessing
+**			if it exists in the MT database.
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	grk
-**		Date:	09/03/2003
-**				04/12/2004 grk - added interlock with T_Current_Activity update state
-**				04/14/2004 grk - added log verbosity control
-**				04/21/2004 grk - added logic to do GANET and Post Processing for DB in T_Current_Activity regardless of DB state
-**				09/28/2004 mem - Updated #XMTDBNames populate query to exclude deleted databases
-**				10/11/2005 mem - Now updating all DBs with state between 1 and 5, even if not present in T_Current_Activity; However, if the state is 3 or 4, then 'MasterUpdateQRProcessStart' is called instead of 'MasterUpdatePeakMatchingPostProcessing'
-**				11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	09/03/2003
+**			04/12/2004 grk - added interlock with T_Current_Activity update state
+**			04/14/2004 grk - added log verbosity control
+**			04/21/2004 grk - added logic to do GANET and Post Processing for DB in T_Current_Activity regardless of DB state
+**			09/28/2004 mem - Updated #XMTDBNames populate query to exclude deleted databases
+**			10/11/2005 mem - Now updating all DBs with state between 1 and 5, even if not present in T_Current_Activity; However, if the state is 3 or 4, then 'MasterUpdateQRProcessStart' is called instead of 'MasterUpdatePeakMatchingPostProcessing'
+**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**			03/13/2006 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 As
 	set nocount on
 	
-	declare @myError int
 	declare @myRowCount int
-	set @myError = 0
+	declare @myError int
 	set @myRowCount = 0
+	set @myError = 0
 
 	declare @cmd nvarchar(255)
 	declare @result int
+	declare @UpdateEnabled tinyint
 
 	declare @MTL_Name varchar(64)
 	declare @MTL_State int
@@ -62,6 +64,11 @@ As
 		
 	declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
 	set @logVerbosity = 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled 'MS_Peak_Matching', 'UpdatePostProcessingForAllActiveMTDatabases', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 
 	---------------------------------------------------
 	-- temporary table to hold list of databases to process
@@ -142,54 +149,55 @@ As
 		-- terminate loop if no more unprocessed entries in temporary table
 		--
 		if @myRowCount = 0
-			begin
-				set @done = 1
-			end
+		begin
+			set @done = 1
+		end
 		else
-			begin --<b>
-				-- get database name tag
-				--
-				exec @MTL_tag = DatabaseNameTag @CurrentMTDB
+		begin --<b>
+			-- get database name tag
+			--
+			exec @MTL_tag = DatabaseNameTag @CurrentMTDB
 
-			
-				-- mark entry in temporary table as processed
-				--
-				UPDATE	#XMTDBNames
-				SET		Processed = 1
-				WHERE	(MTDB_Name = @CurrentMTDB)
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-				--
-				if @myError <> 0 
-				begin
-					set @message = 'Could not update the mass tag database list temp table'
-					set @myError = 51
-					goto Done
-				end
+		
+			-- mark entry in temporary table as processed
+			--
+			UPDATE	#XMTDBNames
+			SET		Processed = 1
+			WHERE	(MTDB_Name = @CurrentMTDB)
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--
+			if @myError <> 0 
+			begin
+				set @message = 'Could not update the mass tag database list temp table'
+				set @myError = 51
+				goto Done
+			end
 
-				-- Check if @CurrentMTDB exists
-				--
-				SELECT	[name]
-				FROM master.dbo.sysdatabases
-				WHERE [name] = @CurrentMTDB
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-				--
-				if @myError <> 0 
-				begin
-					set @message = 'Could not check existence of database'
-					set @myError = 53
-					goto Done
-				end
-				--
-				-- skip further processing if database does not exist
-				--
-				if @myRowCount = 0 and @logVerbosity > 1
-					begin
-						set @message = 'Database "' + @CurrentMTDB + '" does not exist'
-						execute PostLogEntry 'Error', @message, 'UpdatePostProcessingForAllActiveMTDatabases'
-						goto NextPass
-					end
+			-- Check if @CurrentMTDB exists
+			--
+			SELECT	[name]
+			FROM master.dbo.sysdatabases
+			WHERE [name] = @CurrentMTDB
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--
+			if @myError <> 0 
+			begin
+				set @message = 'Could not check existence of database'
+				set @myError = 53
+				goto Done
+			end
+			--
+			-- skip further processing if database does not exist
+			--
+			if @myRowCount = 0 and @logVerbosity > 1
+			Begin
+				set @message = 'Database "' + @CurrentMTDB + '" does not exist'
+				execute PostLogEntry 'Error', @message, 'UpdatePostProcessingForAllActiveMTDatabases'
+			End
+			Else
+			Begin
 
 				If @CurrentMTState = 3 or @CurrentMTState = 4
 					Set @targetSPName = 'MasterUpdateQRProcessStart'
@@ -221,12 +229,19 @@ As
 					
 					Exec @myError = @SPToExec	
 				end --<c>
-			end --<b>	
-	NextPass:	   
+			End
+			
+		end --<b>	
+	
+		-- Validate that updating is enabled, abort if not enabled
+		exec VerifyUpdateEnabled 'MS_Peak_Matching', 'UpdatePostProcessingForAllActiveMTDatabases', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
+
 	END --<a>
 
 	-----------------------------------------------------------
-	-- Note which MTDB were and were not processed
+	-- Note which MTDBs were and were not processed
 	-----------------------------------------------------------
 	--
 	if @logVerbosity > 1
@@ -240,7 +255,7 @@ As
 
 Done:
 	-----------------------------------------------------------
-	-- 
+	-- Exit
 	-----------------------------------------------------------
 	--
 	if @myError <> 0 and @logVerbosity > 0

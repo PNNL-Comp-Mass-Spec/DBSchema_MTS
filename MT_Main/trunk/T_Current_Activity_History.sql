@@ -12,6 +12,7 @@ CREATE TABLE [T_Current_Activity_History] (
 	[TableCount3] [int] NULL ,
 	[TableCount4] [int] NULL ,
 	[Update_Completion_Date] [datetime] NULL ,
+	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_History_Pause_Length_Minutes] DEFAULT (0),
 	CONSTRAINT [PK_T_Current_Activity_History] PRIMARY KEY  NONCLUSTERED 
 	(
 		[History_ID]
@@ -20,6 +21,9 @@ CREATE TABLE [T_Current_Activity_History] (
 GO
 
  CREATE  CLUSTERED  INDEX [IX_T_Current_Activity_History] ON [T_Current_Activity_History]([Database_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
+GO
+
+ CREATE  INDEX [IX_T_Current_Activity_History_Snapshot_Date] ON [T_Current_Activity_History]([Snapshot_Date]) ON [PRIMARY]
 GO
 
 

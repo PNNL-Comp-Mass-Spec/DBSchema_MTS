@@ -10,18 +10,19 @@ GO
 CREATE PROCEDURE CleanupLogAllActiveDatabases
 /****************************************************
 ** 
-**		Desc:
-**      Calls the log cleanup stored procedure for the active databases
+**	Desc: Calls the log cleanup stored procedure for the active databases
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth: grk
-**		Date: 04/16/2004
-**			  08/13/2005 mem - Consolidated processing of both Peptide and MT databases in this procedure
-**							 - Added call to MoveHistoricLogEntries in Master_Sequences and in MT_Main
-**			  11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	04/16/2004
+**			08/13/2005 mem - Consolidated processing of both Peptide and MT databases in this procedure
+**						   - Added call to MoveHistoricLogEntries in Master_Sequences and in MT_Main
+**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**			07/15/2006 mem - Updated list of database states to process to include state 7
+**						   - Updated to use Sql Server 2005 system views if possible
 **    
 *****************************************************/
 As	
@@ -61,6 +62,19 @@ As
 	end
 
 	---------------------------------------------------
+	-- Determine whether or not we're running Sql Server 2005 or newer
+	---------------------------------------------------
+	Declare @VersionMajor int
+	Declare @UseSystemViews tinyint
+	
+	exec GetServerVersionInfo @VersionMajor output
+
+	If @VersionMajor >= 9
+		set @UseSystemViews = 1
+	else
+		set @UseSystemViews = 0
+
+	---------------------------------------------------
 	-- Create temporary table to hold list of databases to process
 	---------------------------------------------------
 
@@ -78,7 +92,7 @@ As
 	INSERT INTO #XDBNames
 	SELECT PDB_Name, 0
 	FROM T_Peptide_Database_List
-	WHERE PDB_State IN (2, 5)
+	WHERE PDB_State IN (2, 5, 7)
 	ORDER BY PDB_Name
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -93,16 +107,16 @@ As
 	INSERT INTO #XDBNames
 	SELECT MTL_Name, 0
 	FROM T_MT_Database_List
-	WHERE MTL_State IN (2, 5)
+	WHERE MTL_State IN (2, 5, 7)
 	ORDER BY MTL_Name
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
-	-- Now add Master_Sequences and add MT_Main
-	INSERT INTO #XDBNames VALUES ('Master_Sequences', 0)
-
+	-- Now add MT_Main and the Master_Sequences DB
+	-- Note that the DB will be skipped if not present
 	INSERT INTO #XDBNames VALUES ('MT_Main', 0)
+	INSERT INTO #XDBNames VALUES ('Master_Sequences', 0)
 
 	-----------------------------------------------------------
 	-- Process each entry in the temporary table
@@ -155,9 +169,14 @@ As
 			
 			-- Verify that @CurrentDB exists
 			--
-			SELECT @PreferredDBName = [name]
-			FROM master.dbo.sysdatabases
-			WHERE [name] = @CurrentDB
+			If @UseSystemViews = 1
+				SELECT @PreferredDBName = [name]
+				FROM master.sys.databases
+				WHERE [name] = @CurrentDB
+			Else
+				SELECT @PreferredDBName = [name]
+				FROM master.dbo.sysdatabases
+				WHERE [name] = @CurrentDB
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
@@ -175,11 +194,21 @@ As
 			begin
 				-- Check if the target SP exists for @CurrentDB
 				--
-				Set @S = ''				
-				Set @S = @S + ' SELECT @SPRowCount = COUNT(*)'
-				Set @S = @S + ' FROM [' + @PreferredDBName + ']..sysobjects'
-				Set @S = @S + ' WHERE [name] = ''' + @targetSPName + ''''
-							
+				If @UseSystemViews = 1
+				Begin
+					Set @S = ''				
+					Set @S = @S + ' SELECT @SPRowCount = COUNT(*)'
+					Set @S = @S + ' FROM [' + @PreferredDBName + '].sys.procedures'
+					Set @S = @S + ' WHERE [name] = ''' + @targetSPName + ''''
+				End
+				Else
+				Begin
+					Set @S = ''				
+					Set @S = @S + ' SELECT @SPRowCount = COUNT(*)'
+					Set @S = @S + ' FROM [' + @PreferredDBName + '].dbo.sysobjects'
+					Set @S = @S + ' WHERE [name] = ''' + @targetSPName + ''''
+				End
+											
 				EXEC sp_executesql @S, N'@SPRowCount int OUTPUT', @SPRowCount OUTPUT
 
 				If (@SPRowCount = 0)
@@ -190,7 +219,7 @@ As
 
 					-- Call target SP in @CurrentDB
 					--
-					Set @SPToExec = '[' + @CurrentDB + ']..' + @targetSPName
+					Set @SPToExec = '[' + @CurrentDB + '].dbo.' + @targetSPName
 					
 					Exec @myError = @SPToExec	
 				end

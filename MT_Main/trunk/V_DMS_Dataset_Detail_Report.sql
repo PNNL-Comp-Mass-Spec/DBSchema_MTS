@@ -7,10 +7,12 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_DMS_Data
 drop view [dbo].[V_DMS_Dataset_Detail_Report]
 GO
 
+
 CREATE VIEW dbo.V_DMS_Dataset_Detail_Report
 AS
 SELECT t1.*
 FROM GIGASAX.DMS5.dbo.V_Dataset_Detail_Report_Ex t1
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

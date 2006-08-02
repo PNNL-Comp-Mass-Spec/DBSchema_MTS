@@ -22,7 +22,7 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogsAllServers
 *****************************************************/
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the databases on the given Server
 	@errorsOnly int = 1,							-- If 1, then only returns error entries
-	@MaxLogEntriesPerDB int = 100,					-- Set to 0 to disable filtering number of 
+	@MaxLogEntriesPerDB int = 10,					-- Set to 0 to disable filtering number of 
 	@message varchar(255) = '' OUTPUT
 As	
 	set nocount on

@@ -7,18 +7,20 @@ if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetDBSchem
 drop procedure [dbo].[GetDBSchemaVersionByDBName]
 GO
 
+
 CREATE PROCEDURE dbo.GetDBSchemaVersionByDBName
 /****************************************************
 ** 
-**		Desc: 
-**		Calls GetDBSchemaVersion in the given database
+**	Desc:	Calls GetDBSchemaVersion in the given database (must be located on this server)
 **
-**		Return value: integer portion of the DB schema version
+**			Use Prism_IFC.dbo.GetDBSchemaVersionByDBName() for databases that may or may not be on this server
+**
+**	Return value: integer portion of the DB schema version
 ** 
 ** 
-**		Auth: mem
-**		Date: 08/20/2004
-**			  11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	08/20/2004
+**			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **    
 *****************************************************/
 (
@@ -31,7 +33,7 @@ AS
 	Declare @myError int
 	
 	-- Lookup the DBSchemaVersion by calling GetDBSchemaVersion in @DBName
-	Set @SPToExec = '[' + @DBName + ']..GetDBSchemaVersion'
+	Set @SPToExec = '[' + @DBName + '].dbo.GetDBSchemaVersion'
 	Set @DBSchemaVersion = 1.0
 	Set @myError = 0
 	
@@ -39,6 +41,7 @@ AS
 	
 	-- Note that the following will get truncated to an int
 	Return @DBSchemaVersion
+
 
 GO
 SET QUOTED_IDENTIFIER OFF 

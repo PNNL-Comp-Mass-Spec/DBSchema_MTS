@@ -14,6 +14,7 @@ CREATE TABLE [T_ORF_Database_List] (
 	[Notes] [varchar] (256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	[ODB_Created] [smalldatetime] NOT NULL CONSTRAINT [DF_T_ORF_Database_List_ODB_Created] DEFAULT (getdate()),
 	[ODB_DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_ORF_Database_List_ODB_DB_Schema_Version] DEFAULT (1),
+	[ODB_Fasta_File_Name] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
 	CONSTRAINT [PK_T_ORF_Database_List] PRIMARY KEY  CLUSTERED 
 	(
 		[ODB_ID]

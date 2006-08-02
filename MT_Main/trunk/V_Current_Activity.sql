@@ -19,8 +19,10 @@ FROM (SELECT CA.Database_Name AS Name, CA.Type,
           Round(DateDiff(second, CA.Update_Began, 
           CASE WHEN CA.Update_Completed IS NULL AND 
           CA.Update_State = 2 THEN GetDate() 
-          ELSE CA.Update_Completed END) / 60.0, 1) 
+          ELSE CA.Update_Completed END) 
+          / 60.0 - Pause_Length_Minutes, 1) 
           AS [Duration Last Cycle (Minutes)], 
+          CA.Pause_Length_Minutes, 
           ET_Minutes_Last24Hours AS [Duration Last 24 hours], 
           ET_Minutes_Last7Days AS [Duration Last 7 Days]
       FROM T_Current_Activity CA INNER JOIN
@@ -42,8 +44,10 @@ FROM (SELECT CA.Database_Name AS Name, CA.Type,
           Round(DateDiff(second, CA.Update_Began, 
           CASE WHEN CA.Update_Completed IS NULL AND 
           CA.Update_State = 2 THEN GetDate() 
-          ELSE CA.Update_Completed END) / 60.0, 1) 
+          ELSE CA.Update_Completed END) 
+          / 60.0 - Pause_Length_Minutes, 1) 
           AS [Duration Last Cycle (Minutes)], 
+          CA.Pause_Length_Minutes, 
           ET_Minutes_Last24Hours AS [Duration Last 24 hours], 
           ET_Minutes_Last7Days AS [Duration Last 7 Days]
       FROM T_Current_Activity AS CA INNER JOIN
@@ -66,8 +70,10 @@ FROM (SELECT CA.Database_Name AS Name, CA.Type,
           Round(DateDiff(second, CA.Update_Began, 
           CASE WHEN CA.Update_Completed IS NULL AND 
           CA.Update_State = 2 THEN GetDate() 
-          ELSE CA.Update_Completed END) / 60.0, 1) 
+          ELSE CA.Update_Completed END) 
+          / 60.0 - Pause_Length_Minutes, 1) 
           AS [Duration Last Cycle (Minutes)], 
+          CA.Pause_Length_Minutes, 
           ET_Minutes_Last24Hours AS [Duration Last 24 hours], 
           ET_Minutes_Last7Days AS [Duration Last 7 Days]
       FROM T_Current_Activity AS CA INNER JOIN

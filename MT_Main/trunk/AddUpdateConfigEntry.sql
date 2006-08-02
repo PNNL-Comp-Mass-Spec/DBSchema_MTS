@@ -28,11 +28,13 @@ CREATE PROCEDURE AddUpdateConfigEntry
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 09/22/2004
-**			  11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	09/22/2004
+**			11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
+**			12/15/2005 mem - Now preventing zero-length values from being added to #TmpValues
 **    
 *****************************************************/
+(
 	@dbName varchar(64),
 	@entryName varchar(256),
 	@entryValueList varchar(2048),
@@ -40,6 +42,7 @@ CREATE PROCEDURE AddUpdateConfigEntry
 	@configTableName varchar(64) = 'T_Process_Config',
 	@configNameColumn varchar(32) = 'Name',
 	@configValueColumn varchar(32) = 'Value'
+)
 AS
 
 	SET NOCOUNT ON
@@ -93,24 +96,25 @@ AS
 	Set @ListRemaining = @entryValueList
 	
 	While Len(@ListRemaining) > 0
-	  Begin -- <a>
-			---------------------------------------------------	
-			-- Extract next inclusion item and build criteria
-			---------------------------------------------------	
-			Set @DelimiterLoc = CharIndex(@valueDelimiter, @ListRemaining)		
-			If @DelimiterLoc > 0
-			  Begin
-				Set @CurrValue = RTrim(LTrim(SubString(@ListRemaining, 1, @DelimiterLoc-1)))
-				Set @ListRemaining = RTrim(LTrim(SubString(@ListRemaining, @DelimiterLoc+1, Len(@ListRemaining)-@DelimiterLoc)))
-			  End
-			Else			--last inclusion item
-			  Begin
-				Set @CurrValue = RTrim(LTrim(@ListRemaining))
-				Set @ListRemaining = ''
-			  End
+	Begin
+		---------------------------------------------------	
+		-- Extract next inclusion item and build criteria
+		---------------------------------------------------	
+		Set @DelimiterLoc = CharIndex(@valueDelimiter, @ListRemaining)		
+		If @DelimiterLoc > 0
+		 Begin
+			Set @CurrValue = RTrim(LTrim(SubString(@ListRemaining, 1, @DelimiterLoc-1)))
+			Set @ListRemaining = RTrim(LTrim(SubString(@ListRemaining, @DelimiterLoc+1, Len(@ListRemaining)-@DelimiterLoc)))
+		 End
+		Else			--last inclusion item
+		 Begin
+			Set @CurrValue = RTrim(LTrim(@ListRemaining))
+			Set @ListRemaining = ''
+		 End
 
-		INSERT INTO #TmpValues (NewValue)
-		VALUES (@CurrValue)
+		If Len(@CurrValue) > 0
+			INSERT INTO #TmpValues (NewValue)
+			VALUES (@CurrValue)
 	End
 
 	SELECT @valueListCount = COUNT(*)

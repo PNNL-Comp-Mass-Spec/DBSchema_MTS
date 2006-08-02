@@ -9,8 +9,9 @@ GO
 
 CREATE VIEW dbo.V_DMS_Mass_Correction_Factors
 AS
-SELECT t1.*
+SELECT TOP 100 PERCENT t1.*
 FROM GIGASAX.DMS5.dbo.T_Mass_Correction_Factors t1
+ORDER BY Monoisotopic_Mass_Correction
 
 GO
 SET QUOTED_IDENTIFIER OFF 
