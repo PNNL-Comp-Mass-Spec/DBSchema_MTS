@@ -1,0 +1,42 @@
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'AddDefaultPeakMatchingTasks', 0)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'AddGANETUpdateTask', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'CalculateMonoisotopicMass', 0)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ComputeMassTagsGANET', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ComputePMTQualityScore', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ComputeProteinCoverage', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ComputeProteinCoverageResidueLevel', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ExportGANET', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ForceLCQProcessingOnNextUpdate', 0)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ImportFTICRJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'ImportLCQJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'LogLevel', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'QuantitationProcessing', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RefreshAnalysisDescriptionInfo', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RefreshMSMSJobNets', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RefreshMSMSSICJobs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RefreshProteins', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'RunCustomSPs', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'UpdateMassTagNames', 1)
+INSERT INTO dbo.T_Process_Step_Control
+  VALUES (N'UpdateMassTags', 1)
+
+go
