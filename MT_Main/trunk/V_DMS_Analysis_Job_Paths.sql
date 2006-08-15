@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_DMS_Analysis_Job_Paths] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_DMS_Analysis_Job_Paths]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_DMS_Analysis_Job_Paths]
-GO
-
 CREATE VIEW dbo.V_DMS_Analysis_Job_Paths
 AS
 SELECT Job, Dataset, DatasetID, InstrumentClass, InstrumentName, 
@@ -32,8 +28,3 @@ FROM (SELECT AJ.AJ_jobID AS Job, DS.Dataset_Num AS Dataset,
       WHERE (AJ.AJ_StateID = 4)) T1
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[AppendTextFileToTargetFile] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[AppendTextFileToTargetFile]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[AppendTextFileToTargetFile]
-GO
-
 CREATE Procedure dbo.AppendTextFileToTargetFile
 /****************************************************
 **
@@ -215,8 +211,8 @@ AS
 			If @AtEOF = 0
 			Begin -- <c>
 				-- Read the first line of the input file to see if this is a Unicode file
-				-- Little Endian Unicode 16 files start with Bytes 255 and 254 (aka ÿþ)
-				-- Big Endian Unicode 16 files start with Bytes 254 and 255 (aka þÿ)
+				-- Little Endian Unicode 16 files start with Bytes 255 and 254 (aka Ã¿Ã¾)
+				-- Big Endian Unicode 16 files start with Bytes 254 and 255 (aka Ã¾Ã¿)
 
 				Set @LineIn = ''
 				EXEC @hr = sp_OAMethod  @TextStreamInFile, 'Readline', @LineIn OUT
@@ -423,8 +419,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,21 +1,28 @@
-if exists (select * from dbo.sysobjects where id = object_id(N'[T_Internal_Standards]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-drop table [T_Internal_Standards]
+/****** Object:  Table [dbo].[T_Internal_Standards] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[T_Internal_Standards](
+	[Internal_Std_Mix_ID] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Description] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Type] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+ CONSTRAINT [PK_T_Internal_Standards] PRIMARY KEY CLUSTERED 
+(
+	[Internal_Std_Mix_ID] ASC
+) ON [PRIMARY]
+) ON [PRIMARY]
+
 GO
 
-CREATE TABLE [T_Internal_Standards] (
-	[Internal_Std_Mix_ID] [int] IDENTITY (1, 1) NOT NULL ,
-	[Name] [varchar] (50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	[Description] [varchar] (255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	[Type] [varchar] (32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	CONSTRAINT [PK_T_Internal_Standards] PRIMARY KEY  CLUSTERED 
-	(
-		[Internal_Std_Mix_ID]
-	)  ON [PRIMARY] ,
-	CONSTRAINT [CK_T_Internal_Standards] CHECK ([Type] = 'All' or ([Type] = 'Postdigest' or [Type] = 'Predigest'))
+/****** Object:  Index [IX_T_Internal_Standards] ******/
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Internal_Standards] ON [dbo].[T_Internal_Standards] 
+(
+	[Name] ASC
 ) ON [PRIMARY]
 GO
-
- CREATE  UNIQUE  INDEX [IX_T_Internal_Standards] ON [T_Internal_Standards]([Name]) ON [PRIMARY]
+ALTER TABLE [dbo].[T_Internal_Standards]  WITH NOCHECK ADD  CONSTRAINT [CK_T_Internal_Standards] CHECK  (([Type] = 'All' or ([Type] = 'Postdigest' or [Type] = 'Predigest')))
 GO
-
-
+ALTER TABLE [dbo].[T_Internal_Standards] CHECK CONSTRAINT [CK_T_Internal_Standards]
+GO

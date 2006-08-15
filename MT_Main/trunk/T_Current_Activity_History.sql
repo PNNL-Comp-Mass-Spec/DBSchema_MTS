@@ -1,29 +1,37 @@
-if exists (select * from dbo.sysobjects where id = object_id(N'[T_Current_Activity_History]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-drop table [T_Current_Activity_History]
+/****** Object:  Table [dbo].[T_Current_Activity_History] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[T_Current_Activity_History](
+	[History_ID] [int] IDENTITY(1,1) NOT NULL,
+	[Database_ID] [int] NOT NULL,
+	[Database_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Snapshot_Date] [datetime] NOT NULL,
+	[TableCount1] [int] NULL,
+	[TableCount2] [int] NULL,
+	[TableCount3] [int] NULL,
+	[TableCount4] [int] NULL,
+	[Update_Completion_Date] [datetime] NULL,
+	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_History_Pause_Length_Minutes]  DEFAULT (0),
+ CONSTRAINT [PK_T_Current_Activity_History] PRIMARY KEY NONCLUSTERED 
+(
+	[History_ID] ASC
+)WITH FILLFACTOR = 90 ON [PRIMARY]
+) ON [PRIMARY]
+
 GO
 
-CREATE TABLE [T_Current_Activity_History] (
-	[History_ID] [int] IDENTITY (1, 1) NOT NULL ,
-	[Database_ID] [int] NOT NULL ,
-	[Database_Name] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	[Snapshot_Date] [datetime] NOT NULL ,
-	[TableCount1] [int] NULL ,
-	[TableCount2] [int] NULL ,
-	[TableCount3] [int] NULL ,
-	[TableCount4] [int] NULL ,
-	[Update_Completion_Date] [datetime] NULL ,
-	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_History_Pause_Length_Minutes] DEFAULT (0),
-	CONSTRAINT [PK_T_Current_Activity_History] PRIMARY KEY  NONCLUSTERED 
-	(
-		[History_ID]
-	) WITH  FILLFACTOR = 90  ON [PRIMARY] 
+/****** Object:  Index [IX_T_Current_Activity_History] ******/
+CREATE CLUSTERED INDEX [IX_T_Current_Activity_History] ON [dbo].[T_Current_Activity_History] 
+(
+	[Database_ID] ASC
+)WITH FILLFACTOR = 90 ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_Current_Activity_History_Snapshot_Date] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Current_Activity_History_Snapshot_Date] ON [dbo].[T_Current_Activity_History] 
+(
+	[Snapshot_Date] ASC
 ) ON [PRIMARY]
 GO
-
- CREATE  CLUSTERED  INDEX [IX_T_Current_Activity_History] ON [T_Current_Activity_History]([Database_ID]) WITH  FILLFACTOR = 90 ON [PRIMARY]
-GO
-
- CREATE  INDEX [IX_T_Current_Activity_History_Snapshot_Date] ON [T_Current_Activity_History]([Snapshot_Date]) ON [PRIMARY]
-GO
-
-

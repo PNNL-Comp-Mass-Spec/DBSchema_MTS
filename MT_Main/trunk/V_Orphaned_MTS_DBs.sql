@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Orphaned_MTS_DBs] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Orphaned_MTS_DBs]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Orphaned_MTS_DBs]
-GO
-
 create VIEW dbo.V_Orphaned_MTS_DBs
 AS
 SELECT TOP 100 PERCENT DBType, Name, State
@@ -34,8 +30,3 @@ FROM (SELECT 'MT' AS DBType, M.MTL_Name AS Name,
 ORDER BY dbtype, name
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

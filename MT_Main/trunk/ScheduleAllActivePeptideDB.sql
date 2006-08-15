@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ScheduleAllActivePeptideDB] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ScheduleAllActivePeptideDB]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ScheduleAllActivePeptideDB]
-GO
-
 CREATE PROCEDURE ScheduleAllActivePeptideDB
 /****************************************************
 ** 
@@ -73,11 +69,5 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[ScheduleAllActivePeptideDB] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[ScheduleAllActivePeptideDB]  TO [DMS_SP_User]
-GO
-

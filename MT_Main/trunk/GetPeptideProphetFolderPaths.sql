@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetPeptideProphetFolderPaths] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetPeptideProphetFolderPaths]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetPeptideProphetFolderPaths]
-GO
-
 
 CREATE PROCEDURE dbo.GetPeptideProphetFolderPaths
 /****************************************************
@@ -94,8 +90,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

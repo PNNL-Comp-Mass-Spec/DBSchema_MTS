@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_TempDB_Log_Truncation_History] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_TempDB_Log_Truncation_History]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_TempDB_Log_Truncation_History]
-GO
-
 CREATE VIEW dbo.V_TempDB_Log_Truncation_History
 AS
 SELECT TOP 100 PERCENT Entry_ID, posted_by, posting_time, 
@@ -21,8 +17,3 @@ WHERE (posted_by = 'ShrinkTempDBLogIfRequired')
 ORDER BY posting_time
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

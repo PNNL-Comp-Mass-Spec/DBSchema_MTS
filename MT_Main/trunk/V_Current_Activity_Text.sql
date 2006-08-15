@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Current_Activity_Text] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Current_Activity_Text]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Current_Activity_Text]
-GO
-
 CREATE VIEW dbo.V_Current_Activity_Text
 AS
 SELECT CAST(T_Current_Activity.Database_Name AS char(28)) 
@@ -50,8 +46,3 @@ FROM T_Current_Activity
 WHERE (T_Current_Activity.Type = 'MSeq')
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

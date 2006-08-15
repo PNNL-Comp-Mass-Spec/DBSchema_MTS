@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateAllActivePeptideDatabases] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateAllActivePeptideDatabases]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateAllActivePeptideDatabases]
-GO
-
 CREATE Procedure UpdateAllActivePeptideDatabases
 /****************************************************
 ** 
@@ -216,7 +212,7 @@ As
 		SELECT TOP 1
 			@PDB_ID = PDB_ID, 
 			@PDB_Name = PDB_Name,
-			@PDB_State = PDB_State,
+			@PDB_State = PDB_State,
 			@lastImport = IsNull(PDB_Last_Import, 0),
 			@readyForImport = DATEDIFF(Minute, IsNull(PDB_Last_Import, 0), GETDATE()) / 60.0 - ISNULL(PDB_Import_Holdoff, 24), 
 			@demandImport = IsNull(PDB_Demand_Import, 0),
@@ -573,8 +569,3 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

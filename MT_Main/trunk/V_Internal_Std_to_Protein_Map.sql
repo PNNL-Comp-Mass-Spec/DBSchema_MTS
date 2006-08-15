@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Internal_Std_to_Protein_Map] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Internal_Std_to_Protein_Map]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Internal_Std_to_Protein_Map]
-GO
-
 CREATE VIEW dbo.V_Internal_Std_to_Protein_Map
 AS
 SELECT dbo.T_Internal_Std_Proteins.Internal_Std_Protein_ID, 
@@ -21,8 +17,3 @@ FROM dbo.T_Internal_Std_Proteins INNER JOIN
     dbo.T_Internal_Std_Proteins.Internal_Std_Protein_ID = dbo.T_Internal_Std_to_Protein_Map.Internal_Std_Protein_ID
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

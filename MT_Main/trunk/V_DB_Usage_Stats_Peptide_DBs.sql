@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_DB_Usage_Stats_Peptide_DBs] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_DB_Usage_Stats_Peptide_DBs]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_DB_Usage_Stats_Peptide_DBs]
-GO
-
 CREATE VIEW dbo.V_DB_Usage_Stats_Peptide_DBs
 AS
 SELECT TOP 100 PERCENT LookupQ.PDB_Name, 
@@ -36,8 +32,3 @@ ORDER BY DATEDIFF(month, LookupQ.Last_Affected_Max,
     GETDATE()) DESC
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

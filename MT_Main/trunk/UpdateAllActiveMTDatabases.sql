@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateAllActiveMTDatabases] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateAllActiveMTDatabases]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateAllActiveMTDatabases]
-GO
-
 
 CREATE Procedure UpdateAllActiveMTDatabases
 /****************************************************
@@ -588,8 +584,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

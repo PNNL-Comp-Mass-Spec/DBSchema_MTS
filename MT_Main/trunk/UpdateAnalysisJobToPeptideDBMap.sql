@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateAnalysisJobToPeptideDBMap] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateAnalysisJobToPeptideDBMap]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateAnalysisJobToPeptideDBMap]
-GO
-
 CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 /****************************************************
 ** 
@@ -277,8 +273,3 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

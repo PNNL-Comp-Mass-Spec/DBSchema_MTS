@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Analysis_Job_to_MT_DB_Map] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Analysis_Job_to_MT_DB_Map]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Analysis_Job_to_MT_DB_Map]
-GO
-
 CREATE VIEW dbo.V_Analysis_Job_to_MT_DB_Map
 AS
 SELECT TOP 100 PERCENT AJMDM.Job, AJMDM.ResultType, 
@@ -20,8 +16,3 @@ GROUP BY AJMDM.Job, AJMDM.ResultType
 ORDER BY AJMDM.Job
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

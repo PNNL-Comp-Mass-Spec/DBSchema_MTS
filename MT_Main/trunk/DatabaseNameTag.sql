@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  UserDefinedFunction [dbo].[DatabaseNameTag] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[DatabaseNameTag]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[DatabaseNameTag]
-GO
-
 CREATE FUNCTION dbo.DatabaseNameTag
 	(
 	@DatabaseName varchar(128)
@@ -33,11 +29,5 @@ AS
 	END
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[DatabaseNameTag] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[DatabaseNameTag]  TO [DMS_SP_User]
-GO
-

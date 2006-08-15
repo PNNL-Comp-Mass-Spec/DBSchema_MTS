@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_MT_Database_List_Report] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_MT_Database_List_Report]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_MT_Database_List_Report]
-GO
-
 CREATE VIEW dbo.V_MT_Database_List_Report
 AS
 SELECT dbo.T_MT_Database_List.MTL_Name AS Name, 
@@ -21,8 +17,3 @@ FROM dbo.T_MT_Database_List INNER JOIN
 WHERE (dbo.T_MT_Database_State_Name.ID <> 100)
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetMTAssignedDBs] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetMTAssignedDBs]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetMTAssignedDBs]
-GO
-
 
 CREATE PROCEDURE GetMTAssignedDBs
 /****************************************************
@@ -144,11 +140,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetMTAssignedDBs] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetMTAssignedDBs]  TO [DMS_SP_User]
-GO
-

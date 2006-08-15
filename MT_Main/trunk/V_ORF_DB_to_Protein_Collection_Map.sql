@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_ORF_DB_to_Protein_Collection_Map] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_ORF_DB_to_Protein_Collection_Map]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_ORF_DB_to_Protein_Collection_Map]
-GO
-
 CREATE VIEW dbo.V_ORF_DB_to_Protein_Collection_Map
 AS
 SELECT TOP 100 PERCENT dbo.T_ORF_Database_List.ODB_ID, 
@@ -26,8 +22,3 @@ FROM dbo.V_DMS_Protein_Collections_List_Report RIGHT OUTER JOIN
 ORDER BY dbo.T_ORF_Database_List.ODB_Fasta_File_Name
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Peptide_Database_List_Report_Ex] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Peptide_Database_List_Report_Ex]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Peptide_Database_List_Report_Ex]
-GO
-
 CREATE VIEW dbo.V_Peptide_Database_List_Report_Ex
 AS
 SELECT dbo.T_Peptide_Database_List.PDB_Name AS Name, 
@@ -23,8 +19,3 @@ FROM dbo.T_Peptide_Database_List INNER JOIN
     dbo.T_Peptide_Database_List.PDB_State = dbo.T_MT_Database_State_Name.ID
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

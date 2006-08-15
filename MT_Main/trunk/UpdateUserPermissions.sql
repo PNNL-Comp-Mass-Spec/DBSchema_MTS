@@ -1,10 +1,7 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateUserPermissions] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
-GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateUserPermissions]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateUserPermissions]
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.UpdateUserPermissions
@@ -20,6 +17,7 @@ CREATE PROCEDURE dbo.UpdateUserPermissions
 **	Date:	12/13/2004
 **			01/27/2005 mem - Added MTS_DB_Dev and MTS_DB_Lite
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
+**			08/10/2006 mem - Added MTS_DB_Reader
 **    
 *****************************************************/
 AS
@@ -54,6 +52,10 @@ AS
 		exec sp_revokedbaccess 'MTS_DB_Lite'
 		set @S = @@ServerName + '\MTS_DB_Lite'
 		exec sp_grantdbaccess @S, 'MTS_DB_Lite'
+
+		exec sp_revokedbaccess 'MTS_DB_Reader'
+		set @S = @@ServerName + '\MTS_DB_Reader'
+		exec sp_grantdbaccess @S, 'MTS_DB_Reader'
 	End
 	Else
 	Begin
@@ -102,6 +104,18 @@ AS
 		exec sp_addrolemember 'db_datareader', 'MTS_DB_Lite'
 		exec sp_addrolemember 'db_datawriter', 'MTS_DB_Lite'
 		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Lite'
+
+
+		if exists (select * from sys.schemas where name = 'MTS_DB_Reader')
+			drop schema MTS_DB_Reader
+		if exists (select * from sys.sysusers where name = 'MTS_DB_Reader')
+			drop user MTS_DB_Reader
+			
+		set @S = 'create user MTS_DB_Reader for login [' + @@ServerName + '\MTS_DB_Reader]'
+		exec sp_executesql @S
+		
+		exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
+		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 */
 	End
 
@@ -123,11 +137,10 @@ AS
 	exec sp_addrolemember 'db_datawriter', 'MTS_DB_Lite'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Lite'
 
+	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
+	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
+
 	Return 0
 
-GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
 
+GO

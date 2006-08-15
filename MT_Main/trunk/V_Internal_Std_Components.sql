@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Internal_Std_Components] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Internal_Std_Components]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Internal_Std_Components]
-GO
-
 CREATE VIEW dbo.V_Internal_Standards_Composition
 AS
 SELECT dbo.T_Internal_Standards.Internal_Std_Mix_ID, 
@@ -35,8 +31,3 @@ FROM dbo.T_Internal_Standards INNER JOIN
     dbo.T_Internal_Std_Composition.Seq_ID = dbo.T_Internal_Std_Components.Seq_ID
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

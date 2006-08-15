@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Last_DB_Backup_Overdue] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Last_DB_Backup_Overdue]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Last_DB_Backup_Overdue]
-GO
-
 CREATE View dbo.V_Last_DB_Backup_Overdue
 AS
 SELECT name, Backup_Date, 
@@ -32,8 +28,3 @@ FROM (SELECT V_Last_DB_Backup.name,
 WHERE IsNull(backup_date, 0) < GetDate() - 28
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

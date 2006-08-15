@@ -1,10 +1,7 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdatePostProcessingForAllActiveMTDatabases] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
-GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdatePostProcessingForAllActiveMTDatabases]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdatePostProcessingForAllActiveMTDatabases]
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE UpdatePostProcessingForAllActiveMTDatabases
@@ -27,6 +24,7 @@ CREATE PROCEDURE UpdatePostProcessingForAllActiveMTDatabases
 **			10/11/2005 mem - Now updating all DBs with state between 1 and 5, even if not present in T_Current_Activity; However, if the state is 3 or 4, then 'MasterUpdateQRProcessStart' is called instead of 'MasterUpdatePeakMatchingPostProcessing'
 **			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
 **			03/13/2006 mem - Now calling VerifyUpdateEnabled
+**			08/03/2006 mem - Fixed bug when verifying that each database exists on the server
 **    
 *****************************************************/
 As
@@ -191,10 +189,13 @@ As
 			--
 			-- skip further processing if database does not exist
 			--
-			if @myRowCount = 0 and @logVerbosity > 1
+			if @myRowCount = 0
 			Begin
-				set @message = 'Database "' + @CurrentMTDB + '" does not exist'
-				execute PostLogEntry 'Error', @message, 'UpdatePostProcessingForAllActiveMTDatabases'
+				If @logVerbosity > 1
+				Begin
+					set @message = 'Database "' + @CurrentMTDB + '" does not exist'
+					execute PostLogEntry 'Error', @message, 'UpdatePostProcessingForAllActiveMTDatabases'
+				End
 			End
 			Else
 			Begin
@@ -266,12 +267,5 @@ Done:
 
 	return @myError
 
-GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
 
-GRANT  EXECUTE  ON [dbo].[UpdatePostProcessingForAllActiveMTDatabases]  TO [DMS_SP_User]
 GO
-
