@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Filter_Set_Overview] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Filter_Set_Overview]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Filter_Set_Overview]
-GO
-
 
 CREATE VIEW dbo.V_Filter_Set_Overview
 AS
@@ -38,8 +34,3 @@ ORDER BY OuterQ.PMT_Quality_Score_Value, OuterQ.Filter_Set_ID
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

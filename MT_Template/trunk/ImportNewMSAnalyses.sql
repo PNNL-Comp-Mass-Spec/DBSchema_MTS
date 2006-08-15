@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ImportNewMSAnalyses] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ImportNewMSAnalyses]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ImportNewMSAnalyses]
-GO
-
 
 CREATE Procedure dbo.ImportNewMSAnalyses
 /****************************************************
@@ -461,7 +457,7 @@ As
 	set @S = @S +   ' ParameterFileName, SettingsFileName,'
 	set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions,'
 	set @S = @S +   ' VolClient, VolServer, StoragePath, DatasetFolder, ResultsFolder,'
-	set @S = @S +   ' Completed, ResultType, SeparationSysType,'
+	set @S = @S +   ' Completed, ResultType, SeparationSysType,'
 	set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std],'
 	set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew '
 	set @S = @S +   'FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI '
@@ -608,8 +604,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-

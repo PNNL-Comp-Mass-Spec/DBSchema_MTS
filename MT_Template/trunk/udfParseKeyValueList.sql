@@ -1,12 +1,6 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  UserDefinedFunction [dbo].[udfParseKeyValueList] ******/
+SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF 
-GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[udfParseKeyValueList]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[udfParseKeyValueList]
-GO
-
 
 CREATE FUNCTION dbo.udfParseKeyValueList
 /****************************************************	
@@ -80,8 +74,3 @@ END
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QRRetrievePeptidesMultiQID] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QRRetrievePeptidesMultiQID]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QRRetrievePeptidesMultiQID]
-GO
-
 
 CREATE PROCEDURE dbo.QRRetrievePeptidesMultiQID
 /****************************************************	
@@ -286,11 +282,5 @@ AS
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QRRetrievePeptidesMultiQID] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QRRetrievePeptidesMultiQID]  TO [DMS_SP_User]
-GO
-

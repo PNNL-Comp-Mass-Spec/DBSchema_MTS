@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateUserPermissions] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateUserPermissions]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateUserPermissions]
-GO
-
 
 CREATE PROCEDURE dbo.UpdateUserPermissions
 /****************************************************
@@ -21,6 +17,8 @@ CREATE PROCEDURE dbo.UpdateUserPermissions
 **	Date:	12/13/2004
 **			01/27/2005 mem - Added MTS_DB_Dev and MTS_DB_Lite
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
+**			08/10/2006 mem - Added MTS_DB_Reader
+**			08/14/2006 mem - Updated to use dynamic sql to run the schema drops on Sql Server 2005; necessary to keep this SP compatible wiht Sql Server 2000
 **    
 *****************************************************/
 AS
@@ -31,7 +29,7 @@ AS
 	---------------------------------------------------
 	Declare @VersionMajor int
 	Declare @UseSystemViews tinyint
-	Declare @S nvarchar(256)
+	Declare @S nvarchar(512)
 	
 	exec MT_Main.dbo.GetServerVersionInfo @VersionMajor output
 
@@ -55,33 +53,49 @@ AS
 		exec sp_revokedbaccess 'MTS_DB_Lite'
 		set @S = @@ServerName + '\MTS_DB_Lite'
 		exec sp_grantdbaccess @S, 'MTS_DB_Lite'
+
+		exec sp_revokedbaccess 'MTS_DB_Reader'
+		set @S = @@ServerName + '\MTS_DB_Reader'
+		exec sp_grantdbaccess @S, 'MTS_DB_Reader'
+
 	End
 	Else
 	Begin
-		SELECT 'Uncomment the following code to run on Sql Server 2005' As TheMessage
-/*
-		if exists (select * from sys.schemas where name = 'MTUser')
-			drop schema MTUser
-		if exists (select * from sys.sysusers where name = 'MTUser')
-			drop user MTUser
-		create user MTUser for login MTUser
+		Declare @Sql varchar(4000)
+
+		Set @Sql = 'if exists (select * from sys.schemas where name = ''MTUser'') drop schema MTUser'
+		Exec (@Sql)
+
+		Set @Sql = 'if exists (select * from sys.sysusers where name = ''MTUser'') drop user MTUser'
+		Exec (@Sql)
+
+		Set @Sql = 'create user MTUser for login MTUser'
+		Exec (@Sql)
+		
 		exec sp_addrolemember 'db_datareader', 'MTUser'
 		exec sp_addrolemember 'DMS_SP_User', 'MTUser'
-			
-		if exists (select * from sys.schemas where name = 'MTAdmin')
-			drop schema MTAdmin
-		if exists (select * from sys.sysusers where name = 'MTAdmin')
-			drop user MTAdmin
-		create user MTAdmin for login MTAdmin
+
+
+		Set @Sql = 'if exists (select * from sys.schemas where name = ''MTAdmin'') drop schema MTAdmin'
+		Exec (@Sql)
+
+		Set @Sql = 'if exists (select * from sys.sysusers where name = ''MTAdmin'') drop user MTAdmin'
+		Exec (@Sql)
+
+		Set @Sql = 'create user MTAdmin for login MTAdmin'
+		Exec (@Sql)
+		
 		exec sp_addrolemember 'db_datareader', 'MTAdmin'
 		exec sp_addrolemember 'db_datawriter', 'MTAdmin'
 		exec sp_addrolemember 'DMS_SP_User', 'MTAdmin'
 
-		if exists (select * from sys.schemas where name = 'MTS_DB_Dev')
-			drop schema MTS_DB_Dev
-		if exists (select * from sys.sysusers where name = 'MTS_DB_Dev')
-			drop user MTS_DB_Dev
-			
+
+		Set @Sql = 'if exists (select * from sys.schemas where name = ''MTS_DB_Dev'') drop schema MTS_DB_Dev'
+		Exec (@Sql)
+
+		Set @Sql = 'if exists (select * from sys.sysusers where name = ''MTS_DB_Dev'') drop user MTS_DB_Dev'
+		Exec (@Sql)
+
 		set @S = 'create user MTS_DB_Dev for login [' + @@ServerName + '\MTS_DB_Dev]'
 		exec sp_executesql @S
 		
@@ -92,18 +106,31 @@ AS
 		exec sp_addrolemember 'db_datawriter', 'MTS_DB_DEV'
 		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_DEV'
 
-		if exists (select * from sys.schemas where name = 'MTS_DB_Lite')
-			drop schema MTS_DB_Lite
-		if exists (select * from sys.sysusers where name = 'MTS_DB_Lite')
-			drop user MTS_DB_Lite
 
+		Set @Sql = 'if exists (select * from sys.schemas where name = ''MTS_DB_Lite'') drop schema MTS_DB_Lite'
+		Exec (@Sql)
+
+		Set @Sql = 'if exists (select * from sys.sysusers where name = ''MTS_DB_Lite'') drop user MTS_DB_Lite'
+		Exec (@Sql)
 
 		set @S = 'create user MTS_DB_Lite for login [' + @@ServerName + '\MTS_DB_Lite]'
 		exec sp_executesql @S
 		exec sp_addrolemember 'db_datareader', 'MTS_DB_Lite'
 		exec sp_addrolemember 'db_datawriter', 'MTS_DB_Lite'
 		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Lite'
-*/
+
+
+		Set @Sql = 'if exists (select * from sys.schemas where name = ''MTS_DB_Reader'') drop schema MTS_DB_Reader'
+		Exec (@Sql)
+
+		Set @Sql = 'if exists (select * from sys.sysusers where name = ''MTS_DB_Reader'') drop user MTS_DB_Reader'
+		Exec (@Sql)
+
+		set @S = 'create user MTS_DB_Reader for login [' + @@ServerName + '\MTS_DB_Reader]'
+		exec sp_executesql @S
+		
+		exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
+		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 	End
 
 	exec sp_addrolemember 'db_datareader', 'MTUser'
@@ -124,12 +151,10 @@ AS
 	exec sp_addrolemember 'db_datawriter', 'MTS_DB_Lite'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Lite'
 
+	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
+	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
+
 	Return 0
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

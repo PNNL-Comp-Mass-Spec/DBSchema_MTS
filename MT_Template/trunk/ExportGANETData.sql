@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ExportGANETData] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ExportGANETData]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ExportGANETData]
-GO
-
 
 CREATE Procedure dbo.ExportGANETData
 /****************************************************
@@ -108,8 +104,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

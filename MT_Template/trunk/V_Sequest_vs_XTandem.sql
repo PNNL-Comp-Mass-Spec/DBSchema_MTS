@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Sequest_vs_XTandem] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Sequest_vs_XTandem]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Sequest_vs_XTandem]
-GO
-
 
 CREATE VIEW dbo.V_Sequest_vs_XTandem
 AS
@@ -45,8 +41,3 @@ ORDER BY SequestQ.Dataset_ID, SequestQ.XCorr DESC
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QRPeptideCrosstab] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QRPeptideCrosstab]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QRPeptideCrosstab]
-GO
-
 
 CREATE Procedure dbo.QRPeptideCrosstab
 /****************************************************	
@@ -142,11 +138,5 @@ AS
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QRPeptideCrosstab] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QRPeptideCrosstab]  TO [DMS_SP_User]
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[AddDefaultPeakMatchingTasks] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[AddDefaultPeakMatchingTasks]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[AddDefaultPeakMatchingTasks]
-GO
-
 
 CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 /****************************************************
@@ -440,8 +436,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[AddDefaultPeakMatchingTasks] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-

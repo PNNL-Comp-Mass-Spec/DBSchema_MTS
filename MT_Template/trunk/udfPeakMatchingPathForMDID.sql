@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  UserDefinedFunction [dbo].[udfPeakMatchingPathForMDID] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[udfPeakMatchingPathForMDID]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[udfPeakMatchingPathForMDID]
-GO
-
 create FUNCTION dbo.udfPeakMatchingPathForMDID
 /****************************************************	
 **	Constructs the path to the peak matching results
@@ -88,8 +84,3 @@ BEGIN
 END
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

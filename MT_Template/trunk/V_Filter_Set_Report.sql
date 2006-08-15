@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Filter_Set_Report] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Filter_Set_Report]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Filter_Set_Report]
-GO
-
 create VIEW dbo.V_Filter_Set_Report
 AS
 SELECT TOP 100 PERCENT OuterQ.Filter_Set_ID, 
@@ -49,8 +45,3 @@ ORDER BY OuterQ.PMT_Quality_Score_Value,
     FSR.Cleavage_State_Value DESC
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

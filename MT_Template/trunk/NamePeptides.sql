@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[NamePeptides] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NamePeptides]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[NamePeptides]
-GO
-
 
 CREATE Procedure dbo.NamePeptides
 /****************************************************
@@ -32,6 +28,7 @@ CREATE Procedure dbo.NamePeptides
 **			09/19/2004 mem - Changed references to reflect new MTDB schema and added optimization of determining @ProteinLength
 **			02/14/2005 mem - Now posting progress messages to the log every 5 minutes
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			08/10/2006 mem - Now populating Missed_Cleavage_Count
 **    
 *****************************************************/
 (
@@ -41,7 +38,7 @@ CREATE Procedure dbo.NamePeptides
 	@AbortOnError int = 0,						--if =0, then go to next Mass_Tag_ID / ref_id pair on error
 												--otherwise, return on error
 	@namingString varchar(10) = 't',			--string used in naming 'fully cleaved' peptides
-	@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all mass tags; when 0, only computes if the peptide name or peptide cleavage state is null
+	@RecomputeAll tinyint = 0,					-- When 1, recomputes stats for all mass tags; when 0, only computes if the peptide name or peptide cleavage state is null
 	@logLevel tinyint = 1
 )	
 AS
@@ -84,6 +81,7 @@ AS
 	declare @residueEnd int
 	declare @repeatCount smallint
 	declare @terminusState tinyint
+	declare @missedCleavageCount smallint
 	
 
 	---------------------------------------------------
@@ -209,8 +207,8 @@ AS
 				else
 					goto Done
 			end
-			
-			--find cleavage state
+
+			-- Determine cleavage state
 			EXEC @cleavageState = ComputeCleavageState
 					@Ref_ID,
 					@residueStart,
@@ -220,21 +218,26 @@ AS
 			set @fragmentNumber = 0
 			set @fragmentSpan = 0
 				
-			if (@cleavageState = 2)  
-			begin
-				-- Both ends cleaved, so compute fragment span and fragment number
-				EXEC @fragmentNumber = ComputeCleavagesInProtein
+			If (@cleavageState = 2)  
+			Begin
+				-- Both ends cleaved, so compute fragment number
+				EXEC @fragmentNumber = ComputePeptideFragmentNumber
 						@Ref_ID,
 						@residueStart,
 						@ProteinLength
-						
+
+				-- Compute fragment span
 				EXEC @fragmentSpan = ComputeCleavagesInPeptide
 						@Ref_ID,
 						@residueStart,
 						@residueEnd,
 						@ProteinLength
-			end
-			
+			End
+
+			-- Determine the number of missed cleavages
+			EXEC @missedCleavageCount = CountMissedCleavagePoints @peptide, @CheckForPrefixAndSuffixResidues = 0
+
+			-- Count the number of times the peptide occurs in the protein sequence	
 			EXEC @repeatCount = CountSubstringInProtein @Ref_ID, @peptide
 			
 			set @terminusState = 0
@@ -254,8 +257,7 @@ AS
 				set @massTagName = ltrim(rtrim(@Reference)) + '.' 
 					+ ltrim(rtrim(str(@residueStart)))
 					+ '.' + ltrim(rtrim(str(@residueEnd)))
-				
-				
+
 			-----------------------------------
 			--update mass tag name with computed value where Mass_Tag_ID and Ref_ID are the same
 			-----------------------------------
@@ -267,7 +269,8 @@ AS
 				Residue_Start = @residueStart,
 				Residue_End = @residueEnd,
 				Repeat_Count = @repeatCount,
-				Terminus_State = @terminusState
+				Terminus_State = @terminusState,
+				Missed_Cleavage_Count = @missedCleavageCount
 			WHERE Mass_Tag_ID = @Mass_Tag_ID AND Ref_ID = @Ref_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -317,8 +320,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

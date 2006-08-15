@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QRCollapseToUniqueList] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QRCollapseToUniqueList]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QRCollapseToUniqueList]
-GO
-
 
 CREATE Procedure dbo.QRCollapseToUniqueList 
 /****************************************************	
@@ -66,11 +62,5 @@ AS
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QRCollapseToUniqueList] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QRCollapseToUniqueList]  TO [DMS_SP_User]
-GO
-

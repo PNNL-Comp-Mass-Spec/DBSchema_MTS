@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Peak_Matching_Tasks] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Peak_Matching_Tasks]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Peak_Matching_Tasks]
-GO
-
 
 CREATE VIEW dbo.V_Peak_Matching_Tasks
 AS
@@ -21,8 +17,3 @@ FROM dbo.T_Peak_Matching_Task PM INNER JOIN
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

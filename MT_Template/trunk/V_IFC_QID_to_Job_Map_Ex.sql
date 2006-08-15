@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_IFC_QID_to_Job_Map_Ex] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_IFC_QID_to_Job_Map_Ex]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_IFC_QID_to_Job_Map_Ex]
-GO
-
 
 CREATE VIEW dbo.V_IFC_QID_to_Job_Map_Ex
 AS
@@ -27,8 +23,3 @@ FROM dbo.T_Quantitation_Description QD INNER JOIN
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

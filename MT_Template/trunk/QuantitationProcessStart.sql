@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QuantitationProcessStart] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QuantitationProcessStart]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QuantitationProcessStart]
-GO
-
 
 
 CREATE Procedure dbo.QuantitationProcessStart
@@ -215,11 +211,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QuantitationProcessStart] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QuantitationProcessStart]  TO [DMS_SP_User]
-GO
-

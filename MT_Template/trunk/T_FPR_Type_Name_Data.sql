@@ -1,0 +1,20 @@
+/****** Object:  Table [T_FPR_Type_Name] ******/
+/****** RowCount: 17 ******/
+/****** Columns: FPR_Type_ID, FPR_Type_Name ******/
+INSERT INTO [T_FPR_Type_Name] VALUES (-1,'(na)')
+INSERT INTO [T_FPR_Type_Name] VALUES (0,'Standard')
+INSERT INTO [T_FPR_Type_Name] VALUES (1,'Pair - N14/N15 - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (2,'Pair - N14/N15 - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (3,'Pair - ICAT - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (4,'Pair - ICAT - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (5,'Pair - Lys C12/C13 - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (6,'Pair - Lys C12/C13 - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (7,'Pair - PEO - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (8,'Pair - PEO - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (9,'Pair - PhIAT - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (10,'Pair - PhIAT - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (11,'Pair - PEO N14/N15 - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (12,'Pair - PEO N14/N15 - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (13,'Pair - O16/O18 - Light')
+INSERT INTO [T_FPR_Type_Name] VALUES (14,'Pair - O16/O18 - Heavy')
+INSERT INTO [T_FPR_Type_Name] VALUES (10000,'MS/MS')

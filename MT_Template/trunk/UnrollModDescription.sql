@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  StoredProcedure [dbo].[UnrollModDescription] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER OFF
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UnrollModDescription]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UnrollModDescription]
-GO
-
 
 create PROCEDURE dbo.UnrollModDescription
 /****************************************************
@@ -132,8 +128,3 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

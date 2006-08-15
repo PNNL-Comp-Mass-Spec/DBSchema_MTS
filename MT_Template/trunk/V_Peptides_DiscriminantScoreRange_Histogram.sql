@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Peptides_DiscriminantScoreRange_Histogram] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Peptides_DiscriminantScoreRange_Histogram]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Peptides_DiscriminantScoreRange_Histogram]
-GO
-
 create VIEW dbo.V_Peptides_DiscriminantScoreRange_Histogram
 AS
 SELECT TOP 100 PERCENT DiscriminantScore_Bin, COUNT(*) 
@@ -44,8 +40,3 @@ GROUP BY DiscriminantScore_Bin
 ORDER BY DiscriminantScore_Bin
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

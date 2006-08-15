@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_MassTags_GANETValueRange_Histogram] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_MassTags_GANETValueRange_Histogram]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_MassTags_GANETValueRange_Histogram]
-GO
-
 
 CREATE VIEW dbo.V_MassTags_GANETValueRange_Histogram
 AS
@@ -28,8 +24,3 @@ GROUP BY GANET_Bin
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

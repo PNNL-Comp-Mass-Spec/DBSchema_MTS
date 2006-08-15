@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[RefreshLocalProteinTable] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[RefreshLocalProteinTable]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[RefreshLocalProteinTable]
-GO
-
 
 CREATE Procedure dbo.RefreshLocalProteinTable
 /****************************************************
@@ -658,8 +654,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

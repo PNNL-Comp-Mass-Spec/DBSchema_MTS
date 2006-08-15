@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Mass_Tag_to_Protein_Map_Full_Sequence] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Mass_Tag_to_Protein_Map_Full_Sequence]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Mass_Tag_to_Protein_Map_Full_Sequence]
-GO
-
 
 CREATE VIEW dbo.V_Mass_Tag_to_Protein_Map_Full_Sequence
 AS
@@ -32,8 +28,3 @@ FROM (SELECT MTPM.Mass_Tag_ID, MTPM.Ref_ID,
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-
