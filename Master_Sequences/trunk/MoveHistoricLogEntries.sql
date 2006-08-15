@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[MoveHistoricLogEntries] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[MoveHistoricLogEntries]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[MoveHistoricLogEntries]
-GO
-
 
 CREATE Procedure MoveHistoricLogEntries
 /****************************************************
@@ -88,8 +84,3 @@ As
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

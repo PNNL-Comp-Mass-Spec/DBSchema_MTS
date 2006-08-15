@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Index_List] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Index_List]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Index_List]
-GO
-
 create VIEW dbo.V_Index_List
 AS
 SELECT tbl.name AS TableName, idx.name AS IndexName, 
@@ -23,8 +19,3 @@ WHERE (idx.indid > 0) AND (INDEXPROPERTY(tbl.id, idx.name,
     'IsStatistics') = 0)
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

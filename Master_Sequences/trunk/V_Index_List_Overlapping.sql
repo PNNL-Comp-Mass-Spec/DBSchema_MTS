@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Index_List_Overlapping] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Index_List_Overlapping]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Index_List_Overlapping]
-GO
-
 create VIEW dbo.V_Index_List_Overlapping
 AS
 SELECT TOP 100 PERCENT l1.TableName, l1.IndexName, 
@@ -29,8 +25,3 @@ FROM dbo.V_Index_List l1 INNER JOIN
 ORDER BY l1.TableName, l1.IndexName
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

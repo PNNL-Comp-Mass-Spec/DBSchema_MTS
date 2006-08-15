@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Table_Row_Counts] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Table_Row_Counts]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Table_Row_Counts]
-GO
-
 
 CREATE VIEW dbo.V_Table_Row_Counts
 AS
@@ -20,8 +16,3 @@ ORDER BY o.name
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

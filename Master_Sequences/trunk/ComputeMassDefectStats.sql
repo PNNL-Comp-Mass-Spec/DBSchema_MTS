@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ComputeMassDefectStats] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ComputeMassDefectStats]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ComputeMassDefectStats]
-GO
-
 
 CREATE PROCEDURE dbo.ComputeMassDefectStats
 /****************************************************
@@ -159,8 +155,3 @@ Done:
 	Return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-
