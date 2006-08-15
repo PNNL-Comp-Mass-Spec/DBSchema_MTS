@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[MakeProvisionalMTDB]    Script Date: 08/14/2006 20:23:19 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[MakeProvisionalMTDB]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[MakeProvisionalMTDB]
-GO
-
 CREATE PROCEDURE dbo.MakeProvisionalMTDB
 /****************************************************
 **
@@ -152,11 +148,5 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[MakeProvisionalMTDB] TO [MTUser]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[MakeProvisionalMTDB]  TO [MTUser]
-GO
-

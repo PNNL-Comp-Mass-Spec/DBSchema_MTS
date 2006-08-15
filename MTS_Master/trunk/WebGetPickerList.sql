@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[WebGetPickerList]    Script Date: 08/14/2006 20:23:23 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[WebGetPickerList]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[WebGetPickerList]
-GO
-
 CREATE PROCEDURE dbo.WebGetPickerList
 /****************************************************
 **
@@ -80,17 +76,9 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[WebGetPickerList] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[WebGetPickerList] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[WebGetPickerList]  TO [public]
+GRANT EXECUTE ON [dbo].[WebGetPickerList] TO [public]
 GO
-
-GRANT  EXECUTE  ON [dbo].[WebGetPickerList]  TO [DMS_SP_User]
-GO
-
-GRANT  EXECUTE  ON [dbo].[WebGetPickerList]  TO [MTUser]
-GO
-

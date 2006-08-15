@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QuoteNameList]    Script Date: 08/14/2006 20:23:21 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QuoteNameList]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QuoteNameList]
-GO
-
 
 CREATE PROCEDURE dbo.QuoteNameList
 /****************************************************
@@ -82,14 +78,7 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QuoteNameList] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[QuoteNameList] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[QuoteNameList]  TO [DMS_SP_User]
-GO
-
-GRANT  EXECUTE  ON [dbo].[QuoteNameList]  TO [MTUser]
-GO
-

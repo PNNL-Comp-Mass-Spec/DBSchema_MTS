@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[CleanupTrueFalseParameter]    Script Date: 08/14/2006 20:23:10 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[CleanupTrueFalseParameter]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[CleanupTrueFalseParameter]
-GO
-
 CREATE PROCEDURE dbo.CleanupTrueFalseParameter
 /****************************************************
 **
@@ -63,20 +59,11 @@ AS
 	Return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [MTS_DB_Lite]
 GO
-
-GRANT  EXECUTE  ON [dbo].[CleanupTrueFalseParameter]  TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[CleanupTrueFalseParameter]  TO [MTUser]
+GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [pogo\MTS_DB_Dev]
 GO
-
-GRANT  EXECUTE  ON [dbo].[CleanupTrueFalseParameter]  TO [pogo\MTS_DB_Dev]
-GO
-
-GRANT  EXECUTE  ON [dbo].[CleanupTrueFalseParameter]  TO [MTS_DB_Lite]
-GO
-

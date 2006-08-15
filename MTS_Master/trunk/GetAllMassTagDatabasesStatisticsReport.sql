@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetAllMassTagDatabasesStatisticsReport]    Script Date: 08/14/2006 20:23:13 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetAllMassTagDatabasesStatisticsReport]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetAllMassTagDatabasesStatisticsReport]
-GO
-
 CREATE PROCEDURE dbo.GetAllMassTagDatabasesStatisticsReport
 /****************************************************
 **
@@ -363,20 +359,11 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [MTS_DB_Lite]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllMassTagDatabasesStatisticsReport]  TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllMassTagDatabasesStatisticsReport]  TO [MTUser]
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [pogo\MTS_DB_Dev]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllMassTagDatabasesStatisticsReport]  TO [pogo\MTS_DB_Dev]
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllMassTagDatabasesStatisticsReport]  TO [MTS_DB_Lite]
-GO
-

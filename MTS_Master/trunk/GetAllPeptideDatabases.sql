@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetAllPeptideDatabases]    Script Date: 08/14/2006 20:23:14 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetAllPeptideDatabases]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetAllPeptideDatabases]
-GO
-
 CREATE PROCEDURE dbo.GetAllPeptideDatabases
 /****************************************************
 **
@@ -131,7 +127,7 @@ As
 			Set @Sql = @Sql + '   Created, [Last Update], ''' + @Server + ''', PDB_ID, DB_Schema_Version'
 			Set @Sql = @Sql + ' FROM ' + @MTMain + 'V_Peptide_Database_List_Report_Ex'
 
-			If @IncludeUnused = 0
+			If @IncludeUnused = 0
 			Begin
 				If Len(@sqlWhereClause) > 0
 					Set @sqlWhereClause = @sqlWhereClause + ' AND '
@@ -196,20 +192,11 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetAllPeptideDatabases] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[GetAllPeptideDatabases] TO [MTS_DB_Lite]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllPeptideDatabases]  TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetAllPeptideDatabases] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllPeptideDatabases]  TO [MTUser]
+GRANT EXECUTE ON [dbo].[GetAllPeptideDatabases] TO [pogo\MTS_DB_Dev]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllPeptideDatabases]  TO [pogo\MTS_DB_Dev]
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetAllPeptideDatabases]  TO [MTS_DB_Lite]
-GO
-

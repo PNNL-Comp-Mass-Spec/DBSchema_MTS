@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Active_PT_DBs]    Script Date: 08/14/2006 20:23:06 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Active_PT_DBs]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Active_PT_DBs]
-GO
-
 CREATE VIEW dbo.V_Active_PT_DBs
 AS
 SELECT TOP 100 PERCENT dbo.T_MTS_Servers.Server_Name, 
@@ -21,8 +17,3 @@ WHERE (dbo.T_MTS_Servers.Active = 1) AND
     (NOT (dbo.T_MTS_Peptide_DBs.State_ID IN (10, 15, 100, 101)))
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetDBSchemaVersionByDBName]    Script Date: 08/14/2006 20:23:17 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetDBSchemaVersionByDBName]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetDBSchemaVersionByDBName]
-GO
-
 
 CREATE PROCEDURE dbo.GetDBSchemaVersionByDBName
 /****************************************************
@@ -77,20 +73,11 @@ Done:
 	Return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Lite]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetDBSchemaVersionByDBName]  TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTUser]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetDBSchemaVersionByDBName]  TO [MTUser]
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [pogo\MTS_DB_Dev]
 GO
-
-GRANT  EXECUTE  ON [dbo].[GetDBSchemaVersionByDBName]  TO [pogo\MTS_DB_Dev]
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetDBSchemaVersionByDBName]  TO [MTS_DB_Lite]
-GO
-

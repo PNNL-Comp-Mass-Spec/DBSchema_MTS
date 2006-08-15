@@ -1,29 +1,27 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[UpdateDatabaseStatesSingleTable]    Script Date: 08/14/2006 20:23:23 ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[UpdateDatabaseStatesSingleTable]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[UpdateDatabaseStatesSingleTable]
-GO
-
 CREATE Procedure dbo.UpdateDatabaseStatesSingleTable
 /****************************************************
 ** 
-**		Desc: Updates the State_ID column in the master DB list tables
+**	Desc: Updates the State_ID column in the master DB list tables
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	mem
-**		Date:	11/12/2004
-**				12/06/2004 mem - Added @RemoteStateIgnoreList parameter
-**				12/10/2004 mem - Added query to add missing database names
-**				12/15/2004 mem - Now updating Server_ID
-**				08/02/2005 mem - Now updating DB_Schema_Version (added parameters @LocalSchemaVersionField and @RemoteSchemaVersionField)
+**	Auth:	mem
+**	Date:	11/12/2004
+**			12/06/2004 mem - Added @RemoteStateIgnoreList parameter
+**			12/10/2004 mem - Added query to add missing database names
+**			12/15/2004 mem - Now updating Server_ID
+**			08/02/2005 mem - Now updating DB_Schema_Version (added parameters @LocalSchemaVersionField and @RemoteSchemaVersionField)
+**			08/03/2006 mem - Added parameter @PreviewSql
 **    
 *****************************************************/
+(
 	@serverID int = 1,
 	@UpdateTableNames tinyint = 1,
 
@@ -39,10 +37,12 @@ CREATE Procedure dbo.UpdateDatabaseStatesSingleTable
 	@RemoteStateField varchar(128) = 'MTL_State',
 	@RemoteSchemaVersionField  varchar(128) = 'MTL_DB_Schema_Version',
 	
-	@RemoteStateIgnoreList varchar(128) = '15',				-- Do not update MTS_Master entries if the DB State in the remote table is in this list
+	@RemoteStateIgnoreList varchar(128) = '15,100',			-- Do not update MTS_Master entries if the DB State in the remote table is in this list
 
+	@PreviewSql tinyint = 0,								-- If 1, then prints the sql commands but does not execute them
 	@DBCountUpdated int = 0 OUTPUT,
 	@message varchar(255) = '' OUTPUT
+)
 As	
 	set nocount on
 	
@@ -51,6 +51,7 @@ As
 	set @myError = 0
 	set @myRowCount = 0
 
+	Set @PreviewSql = IsNull(@PreviewSql, 0)
 	set @DBCountUpdated = 0
 	set @message = ''
 	
@@ -100,20 +101,25 @@ As
 		Set @sql = @sql + '        OR LocalTable.Server_ID <> ' +  Convert(varchar(9), @ServerID) + ')'
 		Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
-		EXEC @result = sp_executesql @sql
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-
-		If @result <> 0
-		Begin
-			Set @message = 'Error adding new names to local table from remote table: ' + @MTMain + @RemoteTableName
-
-			Set @myError = 60001
-			Goto Done
-		End
+		If @PreviewSql <> 0
+			Print @Sql
 		Else
-			Set @DBCountUpdated = @DBCountUpdated + @myRowCount
-			
+		Begin
+			EXEC @result = sp_executesql @sql
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			If @result <> 0
+			Begin
+				Set @message = 'Error adding new names to local table from remote table: ' + @MTMain + @RemoteTableName
+
+				Set @myError = 60001
+				Goto Done
+			End
+			Else
+				Set @DBCountUpdated = @DBCountUpdated + @myRowCount
+		End
+					
 		
 		-- Second add any missing names
 		Set @sql = ''
@@ -127,19 +133,24 @@ As
 		Set @sql = @sql +     ' SELECT ' + @LocalNameField + ' FROM ' + @LocalTableName + ')'
 		Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
-		EXEC @result = sp_executesql @sql
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-
-		If @result <> 0
-		Begin
-			Set @message = 'Error updating names in local table to match those in remote table: ' + @MTMain + @RemoteTableName
-
-			Set @myError = 60002
-			Goto Done
-		End
+		If @PreviewSql <> 0
+			Print @Sql
 		Else
-			Set @DBCountUpdated = @DBCountUpdated + @myRowCount		
+		Begin
+			EXEC @result = sp_executesql @sql
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			If @result <> 0
+			Begin
+				Set @message = 'Error updating names in local table to match those in remote table: ' + @MTMain + @RemoteTableName
+
+				Set @myError = 60002
+				Goto Done
+			End
+			Else
+				Set @DBCountUpdated = @DBCountUpdated + @myRowCount		
+		End
 	End
 	
 	-- Now update mis-matched states or DB Schema Versions
@@ -154,21 +165,26 @@ As
 	Set @sql = @sql +        ' LocalTable.' + @LocalSchemaVersionField + ' <> RemoteTable.' + @RemoteSchemaVersionField + ')'
 	Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
-	EXEC @result = sp_executesql @sql
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-
-
-	If @result <> 0
-	Begin
-		Set @message = 'Error updating states in local table to match those in remote table: ' + @MTMain + @RemoteTableName
-
-		Set @myError = 60003
-		Goto Done
-	End
+	If @PreviewSql <> 0
+		Print @Sql
 	Else
-		Set @DBCountUpdated = @DBCountUpdated + @myRowCount
+	Begin
+		EXEC @result = sp_executesql @sql
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
+
+		If @result <> 0
+		Begin
+			Set @message = 'Error updating states in local table to match those in remote table: ' + @MTMain + @RemoteTableName
+
+			Set @myError = 60003
+			Goto Done
+		End
+		Else
+			Set @DBCountUpdated = @DBCountUpdated + @myRowCount
+	End
+	
 Done:
 	-----------------------------------------------------------
 	-- Exit
@@ -178,11 +194,5 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTUser]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[UpdateDatabaseStatesSingleTable]  TO [MTUser]
-GO
-
