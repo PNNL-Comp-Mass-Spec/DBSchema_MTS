@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetProteinJobPeptideCrosstab_20060727] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetProteinJobPeptideCrosstab_20060727]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetProteinJobPeptideCrosstab_20060727]
-GO
-
 CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab_20060727
 /****************************************************
 **	Desc:  
@@ -431,8 +427,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

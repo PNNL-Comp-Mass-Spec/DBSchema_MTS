@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[PostUsageLogEntry] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[PostUsageLogEntry]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[PostUsageLogEntry]
-GO
-
 CREATE PROCEDURE dbo.PostUsageLogEntry
 /****************************************************
 **
@@ -95,11 +91,5 @@ As
 	RETURN 0
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[PostUsageLogEntry] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[PostUsageLogEntry]  TO [DMS_SP_User]
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetQRollupsSummary] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetQRollupsSummary]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetQRollupsSummary]
-GO
-
 
 CREATE PROCEDURE dbo.GetQRollupsSummary
 /****************************************************
@@ -111,7 +107,7 @@ As
 	
 	exec @result = sp_executesql @s
 	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
@@ -126,11 +122,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetQRollupsSummary] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetQRollupsSummary]  TO [DMS_SP_User]
-GO
-

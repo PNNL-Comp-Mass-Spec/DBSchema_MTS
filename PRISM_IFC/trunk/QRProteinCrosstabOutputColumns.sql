@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[QRProteinCrosstabOutputColumns] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[QRProteinCrosstabOutputColumns]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[QRProteinCrosstabOutputColumns]
-GO
-
 CREATE PROCEDURE dbo.QRProteinCrosstabOutputColumns
 	(
 	@message varchar(512) = '' output
@@ -59,11 +55,5 @@ Done:
 	return @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[QRProteinCrosstabOutputColumns] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[QRProteinCrosstabOutputColumns]  TO [DMS_SP_User]
-GO
-

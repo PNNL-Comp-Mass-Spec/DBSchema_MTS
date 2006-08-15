@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[WebQRSummary] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[WebQRSummary]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[WebQRSummary]
-GO
-
 CREATE PROCEDURE dbo.WebQRSummary
 /****************************************************	
 **  Desc: Returns a summary for task or tasks listed
@@ -47,11 +43,5 @@ AS
 	RETURN @result
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[WebQRSummary] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[WebQRSummary]  TO [DMS_SP_User]
-GO
-

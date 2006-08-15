@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_QR_Glossary] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_QR_Glossary]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_QR_Glossary]
-GO
-
 CREATE VIEW dbo.V_QR_Glossary
 AS
 SELECT TOP 100 PERCENT dbo.T_SP_List.SP_Name, 
@@ -22,8 +18,3 @@ ORDER BY dbo.T_SP_List.SP_Name,
     dbo.T_SP_Glossary.Ordinal_Position
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

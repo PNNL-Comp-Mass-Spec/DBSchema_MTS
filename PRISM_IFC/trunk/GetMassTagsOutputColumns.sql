@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetMassTagsOutputColumns] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetMassTagsOutputColumns]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetMassTagsOutputColumns]
-GO
-
 CREATE PROCEDURE dbo.GetMassTagsOutputColumns
 /****************************************************
 **
@@ -99,7 +95,7 @@ As
 		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('MS_Dataset_Count', 'int')
 		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('MS_Job_Count', 'int')
 
-		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('Peak_Matching_Task_Count', 'int')
+		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('Peak_Matching_Task_Count', 'int')
 		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('SLiC_Score_Maximum', 'float')
 		INSERT INTO #OutputColumns (Column_Name, Data_Type) Values ('MT_Abundance_Avg', 'float')
 	End
@@ -122,11 +118,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetMassTagsOutputColumns] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetMassTagsOutputColumns]  TO [DMS_SP_User]
-GO
-

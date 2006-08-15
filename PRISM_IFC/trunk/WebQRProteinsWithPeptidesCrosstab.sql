@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[WebQRProteinsWithPeptidesCrosstab] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[WebQRProteinsWithPeptidesCrosstab]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[WebQRProteinsWithPeptidesCrosstab]
-GO
-
 CREATE PROCEDURE dbo.WebQRProteinsWithPeptidesCrosstab
 /****************************************************	
 **  Desc: Calls QRProteinsWithPeptidesCrosstab in the specified mass tag database
@@ -55,11 +51,5 @@ AS
 	RETURN @result
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[WebQRProteinsWithPeptidesCrosstab] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[WebQRProteinsWithPeptidesCrosstab]  TO [DMS_SP_User]
-GO
-

@@ -1,12 +1,6 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  UserDefinedFunction [dbo].[GetSPParameters] ******/
+SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_NULLS OFF 
-GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetSPParameters]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[GetSPParameters]
-GO
-
 CREATE FUNCTION dbo.GetSPParameters
 /****************************************************
 **
@@ -123,8 +117,3 @@ AS
 	END
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

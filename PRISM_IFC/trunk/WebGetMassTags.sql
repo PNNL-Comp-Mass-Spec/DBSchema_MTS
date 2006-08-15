@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  StoredProcedure [dbo].[WebGetMassTags] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER OFF
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[WebGetMassTags]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[WebGetMassTags]
-GO
-
 CREATE PROCEDURE WebGetMassTags
 /****************************************************
 **
@@ -78,11 +74,5 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[WebGetMassTags] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[WebGetMassTags]  TO [DMS_SP_User]
-GO
-
