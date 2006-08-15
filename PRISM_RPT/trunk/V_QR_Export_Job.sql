@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_QR_Export_Job] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_QR_Export_Job]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_QR_Export_Job]
-GO
-
 CREATE VIEW [dbo].[V_QR_Export_Job]
 AS
 SELECT TOP 100 PERCENT dbo.T_QR_Export_Job.jobkey AS [Key], 
@@ -39,8 +35,3 @@ ORDER BY dbo.T_QR_Export_Job.modified DESC
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

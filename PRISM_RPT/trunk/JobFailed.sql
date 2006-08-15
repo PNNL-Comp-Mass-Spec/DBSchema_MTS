@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[JobFailed] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[JobFailed]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[JobFailed]
-GO
-
 create PROCEDURE JobFailed
 /****************************************************	
 **  Desc: Marks an export job as failed.
@@ -31,8 +27,3 @@ AS
 	RETURN @myError
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_PeakMatching_Tasks_Stalled] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_PeakMatching_Tasks_Stalled]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_PeakMatching_Tasks_Stalled]
-GO
-
 CREATE VIEW [dbo].[V_PeakMatching_Tasks_Stalled]
 AS
 SELECT TOP 100 PERCENT *
@@ -36,8 +32,3 @@ ORDER BY PM_AssignedProcessorName
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

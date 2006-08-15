@@ -1,0 +1,21 @@
+/****** Object:  Table [T_Peak_Matching_Processors] ******/
+/****** RowCount: 18 ******/
+/****** Columns: PM_AssignedProcessorName, Active ******/
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('ARIZONA-02',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('ARIZONA-02_B',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('Ceres01',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('Ceres01_B',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('Ceres02',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('PUB-13',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('PUB-13_B',0)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('PUB-14',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('TITANIC-01',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('TITANIC-01_B',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('TITANIC-02',100)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD29856',0)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD37245',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD37474',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD49693',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD49693_B',0)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD49694',1)
+INSERT INTO [T_Peak_Matching_Processors] VALUES ('WD49694_B',0)

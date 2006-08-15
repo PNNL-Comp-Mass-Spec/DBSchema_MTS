@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[GetExportJob] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetExportJob]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetExportJob]
-GO
-
 CREATE PROCEDURE GetExportJob
 /****************************************************	
 **  Desc: This procedure selects a candidate export job from the
@@ -148,8 +144,3 @@ AS
 		return 52001		-- Note that this return code is used by the QR Export Manager to indicate that no jobs are available
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-
