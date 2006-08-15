@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  StoredProcedure [dbo].[GetDBSchemaVersion] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER OFF
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetDBSchemaVersion]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[GetDBSchemaVersion]
-GO
-
 CREATE PROCEDURE dbo.GetDBSchemaVersion
 /****************************************************
 **
@@ -52,11 +48,5 @@ As
 	Return @DBSchemaVersion
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersion] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[GetDBSchemaVersion]  TO [DMS_SP_User]
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  StoredProcedure [dbo].[CalculateMonoisotopicMass] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER OFF
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[CalculateMonoisotopicMass]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[CalculateMonoisotopicMass]
-GO
-
 
 CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 /****************************************************
@@ -513,8 +509,3 @@ done:
 	RETURN @PeptidesProcessedCount
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

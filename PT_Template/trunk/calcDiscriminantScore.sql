@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  UserDefinedFunction [dbo].[calcDiscriminantScore] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[calcDiscriminantScore]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[calcDiscriminantScore]
-GO
-
 
 CREATE FUNCTION dbo.calcDiscriminantScore
 /***************************
@@ -128,8 +124,3 @@ END
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

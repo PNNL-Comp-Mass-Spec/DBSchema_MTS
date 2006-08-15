@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  UserDefinedFunction [dbo].[GetXcorrP] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[GetXcorrP]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[GetXcorrP]
-GO
-
 
 CREATE FUNCTION dbo.GetXcorrP
 /***************************
@@ -42,8 +38,3 @@ END
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

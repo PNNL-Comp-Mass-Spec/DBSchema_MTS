@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[CountSubstringInString] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[CountSubstringInString]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[CountSubstringInString]
-GO
-
 
 
 CREATE PROCEDURE dbo.CountSubstringInString
@@ -58,11 +54,5 @@ RETURN @count
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[CountSubstringInString] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[CountSubstringInString]  TO [DMS_SP_User]
-GO
-

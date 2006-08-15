@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER OFF 
+/****** Object:  StoredProcedure [dbo].[SetGANETUpdateTaskComplete] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER OFF
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[SetGANETUpdateTaskComplete]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[SetGANETUpdateTaskComplete]
-GO
-
 
 CREATE Procedure dbo.SetGANETUpdateTaskComplete
 /****************************************************
@@ -63,8 +59,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ExportPeptideProphetJobList] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ExportPeptideProphetJobList]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ExportPeptideProphetJobList]
-GO
-
 
 CREATE Procedure dbo.ExportPeptideProphetJobList
 /****************************************************
@@ -21,6 +17,7 @@ CREATE Procedure dbo.ExportPeptideProphetJobList
 **
 **	Auth:	mem
 **	Date:	07/05/2006
+**			07/20/2006 mem - Updated query sent to bcp to not include dbo.udfCombinePaths()
 **    
 *****************************************************/
 (
@@ -142,17 +139,17 @@ AS
 	Set @ExportFilePath = '"' + dbo.udfCombinePaths(@TransferFolderPath, @JobListFileName) + '"'
 
 	-- Use a SQL query against T_Analysis_Description linked to T_Peptide_Prophet_Task_Job_Map, along with a Where clause
+	-- Note: Do not use dbo.udfCombinePaths() in this query, since it does not work with the bcp (bulk copy) program
 	Set @BcpSql = ''
-
-	Set @BcpSql = @BcpSql + ' SELECT TAD.Job, dbo.udfCombinePaths(dbo.udfCombinePaths(dbo.udfCombinePaths(dbo.udfCombinePaths('
-	Set @BcpSql = @BcpSql +        ' TAD.Vol_Client, TAD.Storage_Path), TAD.Dataset_Folder), TAD.Results_Folder), TAD.Dataset + ''_syn.txt'') AS Synopsis_File_Path'
+	Set @BcpSql = @BcpSql + ' SELECT TAD.Job, '
+	Set @BcpSql = @BcpSql +        ' VAJ.Results_Folder_Path + TAD.Dataset + ''_syn.txt'' AS Synopsis_File_Path'
 	Set @BcpSql = @BcpSql + ' FROM [' + @DBName + '].dbo.T_Peptide_Prophet_Task_Job_Map PPT INNER JOIN'
-	Set @BcpSql = @BcpSql +      ' [' + @DBName + '].dbo.T_Analysis_Description TAD ON PPT.Job = TAD.Job'
+	Set @BcpSql = @BcpSql +      ' [' + @DBName + '].dbo.T_Analysis_Description TAD ON PPT.Job = TAD.Job INNER JOIN'
+	Set @BcpSql = @BcpSql +      ' [' + @DBName + '].dbo.V_MSMS_Analysis_Jobs VAJ ON PPT.Job = VAJ.Job'
 	Set @BcpSql = @BcpSql + ' WHERE PPT.Task_ID = ' + Convert(varchar(9), @TaskID)
 	Set @BcpSql = @BcpSql + ' ORDER BY TAD.Job'
 	
 	Set @cmd = 'bcp "' + @BcpSql + '" queryout ' + @ExportFilePath + ' -c -T'
-	print @cmd
 	--
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	Set @myError = @result
@@ -171,8 +168,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

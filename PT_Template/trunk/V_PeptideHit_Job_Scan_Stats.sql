@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_PeptideHit_Job_Scan_Stats] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_PeptideHit_Job_Scan_Stats]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_PeptideHit_Job_Scan_Stats]
-GO
-
 
 CREATE VIEW dbo.V_PeptideHit_Job_Scan_Stats
 AS
@@ -26,8 +22,3 @@ GROUP BY dbo.T_Analysis_Description.Job
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,40 +1,32 @@
-if exists (select * from dbo.sysobjects where id = object_id(N'[T_Datasets]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-drop table [T_Datasets]
+/****** Object:  Table [dbo].[T_Datasets] ******/
+SET ANSI_NULLS ON
 GO
-
-CREATE TABLE [T_Datasets] (
-	[Dataset_ID] [int] NOT NULL ,
-	[Dataset] [varchar] (128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL ,
-	[Type] [varchar] (64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL ,
-	[Created_DMS] [datetime] NULL ,
-	[Acq_Time_Start] [datetime] NULL ,
-	[Acq_Time_End] [datetime] NULL ,
-	[Scan_Count] [int] NULL ,
-	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_Datasets_Created] DEFAULT (getdate()),
-	[Dataset_Process_State] [int] NOT NULL CONSTRAINT [DF_T_Datasets_Dataset_Process_State] DEFAULT (0),
-	[SIC_Job] [int] NULL ,
-	CONSTRAINT [PK_T_Datasets] PRIMARY KEY  CLUSTERED 
-	(
-		[Dataset_ID]
-	) WITH  FILLFACTOR = 90  ON [PRIMARY] ,
-	CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY 
-	(
-		[SIC_Job]
-	) REFERENCES [T_Analysis_Description] (
-		[Job]
-	),
-	CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY 
-	(
-		[Dataset_Process_State]
-	) REFERENCES [T_Dataset_Process_State] (
-		[ID]
-	)
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[T_Datasets](
+	[Dataset_ID] [int] NOT NULL,
+	[Dataset] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Type] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Created_DMS] [datetime] NULL,
+	[Acq_Time_Start] [datetime] NULL,
+	[Acq_Time_End] [datetime] NULL,
+	[Scan_Count] [int] NULL,
+	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_Datasets_Created]  DEFAULT (getdate()),
+	[Dataset_Process_State] [int] NOT NULL CONSTRAINT [DF_T_Datasets_Dataset_Process_State]  DEFAULT (0),
+	[SIC_Job] [int] NULL,
+ CONSTRAINT [PK_T_Datasets] PRIMARY KEY CLUSTERED 
+(
+	[Dataset_ID] ASC
+)WITH FILLFACTOR = 90 ON [PRIMARY]
 ) ON [PRIMARY]
+
 GO
 
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  Trigger [dbo].[trig_iu_T_Datasets] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE TRIGGER [trig_iu_T_Datasets] ON dbo.T_Datasets 
@@ -84,9 +76,13 @@ AS
 	End
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+ALTER TABLE [dbo].[T_Datasets]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
+REFERENCES [T_Analysis_Description] ([Job])
 GO
-SET ANSI_NULLS ON 
+ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Analysis_Description]
 GO
-
-
+ALTER TABLE [dbo].[T_Datasets]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY([Dataset_Process_State])
+REFERENCES [T_Dataset_Process_State] ([ID])
+GO
+ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State]
+GO

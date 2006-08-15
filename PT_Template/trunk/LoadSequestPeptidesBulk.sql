@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[LoadSequestPeptidesBulk] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[LoadSequestPeptidesBulk]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[LoadSequestPeptidesBulk]
-GO
-
 
 CREATE Procedure dbo.LoadSequestPeptidesBulk
 /****************************************************
@@ -43,7 +39,10 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 **			02/15/2006 mem - Added parameters @PeptideResultToSeqMapFilePath and @PeptideSeqToProteinMapFilePath
 **			06/04/2006 mem - Added parameter @LineCountToSkip, which is used during Bulk Insert
 **			07/18/2006 mem - Now considering charge state thresholds when filtering data
-**			08/01/2006 mem - Added parameter @PeptideProphetResultsFilePath
+**			08/03/2006 mem - Added parameter @PeptideProphetResultsFilePath
+**			08/10/2006 mem - Added parameters @SeqCandidateFilesFound and @PepProphetFileFound
+**						   - Added warning if peptide prophet results file does not contain the same number of rows as the synopsis file
+**			08/14/2006 mem - Updated peptide prophet results processing to consider charge state when counting the number of null entries
 **
 *****************************************************/
 (
@@ -58,6 +57,8 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 	@LineCountToSkip int=0,
 	@numLoaded int=0 output,
 	@numSkipped int=0 output,
+	@SeqCandidateFilesFound tinyint=0 output,
+	@PepProphetFileFound tinyint=0 output,
 	@message varchar(512)='' output
 )
 As
@@ -74,6 +75,8 @@ As
 
 	set @numLoaded = 0
 	set @numSkipped = 0
+	set @SeqCandidateFilesFound = 0
+	set @PepProphetFileFound = 0
 	set @message = ''
 
 	declare @jobStr varchar(12)
@@ -82,7 +85,12 @@ As
 	declare @Sql varchar(2048)
 	declare @UnfilteredCountLoaded int
 	set @UnfilteredCountLoaded = 0
-	
+
+	declare @RowCountTotal int
+	declare @RowCountNull int
+	declare @RowCountNullCharge5OrLess int
+	declare @MessageType varchar(32)
+
 	If @UsingPhysicalTempTables = 1
 	Begin
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_Filter_Flags]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
@@ -164,8 +172,8 @@ As
 		goto Done
 	end
 	
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
-	CREATE INDEX #IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
+	CREATE INDEX IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
 
 	-----------------------------------------------
 	-- Create a table for holding re-computed cleavage
@@ -177,7 +185,7 @@ As
 		Terminus_State tinyint NULL
 	)
 	
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Cleavage_State_Result_ID ON #Tmp_Peptide_Cleavage_State (Result_ID)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Cleavage_State_Result_ID ON #Tmp_Peptide_Cleavage_State (Result_ID)
 		
 	
 	-----------------------------------------------
@@ -189,7 +197,7 @@ As
 		Valid tinyint NOT NULL
 	)
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
 
 	-----------------------------------------------
 	-- Bulk load contents of synopsis file into temporary table
@@ -245,6 +253,9 @@ As
 
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_SeqToProteinMap]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_SeqToProteinMap]
+
+		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_PepProphet_Results]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [dbo].[#Tmp_PepProphet_Results]
 	End
 	
 	
@@ -263,7 +274,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ResultToSeqMap_Result_ID ON #Tmp_Peptide_ResultToSeqMap (Result_ID)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_ResultToSeqMap_Result_ID ON #Tmp_Peptide_ResultToSeqMap (Result_ID)
 
 
 	-- Table for contents of the SeqInfo file
@@ -288,7 +299,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_SeqInfo_Seq_ID ON #Tmp_Peptide_SeqInfo (Seq_ID_Local)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_SeqInfo_Seq_ID ON #Tmp_Peptide_SeqInfo (Seq_ID_Local)
 	
 
 	-- Table for contents of the ModDetails file
@@ -307,7 +318,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
 
 
 	-- Table for contents of the SeqToProteinMap file
@@ -336,7 +347,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_SeqToProteinMap_Seq_ID ON #Tmp_Peptide_SeqToProteinMap (Seq_ID_Local)
+	CREATE CLUSTERED INDEX IX_Tmp_Peptide_SeqToProteinMap_Seq_ID ON #Tmp_Peptide_SeqToProteinMap (Seq_ID_Local)
 
 
 	-----------------------------------------------
@@ -419,6 +430,8 @@ As
 			Set @message = 'Row count in the _ResultToSeqMap.txt file does not match the expected unique row count determined for the Sequest _syn.txt file for job ' + @jobStr + ' (' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' vs. ' + Convert(varchar(12), @ExpectedResultToSeqMapCount) + ')'
 			Goto Done
 		End
+
+		Set @SeqCandidateFilesFound = 1
 	End
 
 
@@ -466,9 +479,9 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Unfiltered_Unique_Records_Result_ID ON #Tmp_Unfiltered_Unique_Records (Result_ID)
-	CREATE INDEX #IX_Tmp_Unfiltered_Unique_Records_MH ON #Tmp_Unfiltered_Unique_Records (MH)
-	CREATE INDEX #IX_Tmp_Unfiltered_Unique_Records_Scan_Number ON #Tmp_Unfiltered_Unique_Records (Scan_Number)
+	CREATE CLUSTERED INDEX IX_Tmp_Unfiltered_Unique_Records_Result_ID ON #Tmp_Unfiltered_Unique_Records (Result_ID)
+	CREATE INDEX IX_Tmp_Unfiltered_Unique_Records_MH ON #Tmp_Unfiltered_Unique_Records (MH)
+	CREATE INDEX IX_Tmp_Unfiltered_Unique_Records_Scan_Number ON #Tmp_Unfiltered_Unique_Records (Scan_Number)
 	
 	
 	-----------------------------------------------
@@ -891,9 +904,9 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX #IX_Tmp_Unique_Records_Result_ID ON #Tmp_Unique_Records (Result_ID)
-	CREATE INDEX #IX_Tmp_Unique_Records_MH ON #Tmp_Unique_Records (MH)
-	CREATE INDEX #IX_Tmp_Unique_Records_Scan_Number ON #Tmp_Unique_Records (Scan_Number)
+	CREATE CLUSTERED INDEX IX_Tmp_Unique_Records_Result_ID ON #Tmp_Unique_Records (Result_ID)
+	CREATE INDEX IX_Tmp_Unique_Records_MH ON #Tmp_Unique_Records (MH)
+	CREATE INDEX IX_Tmp_Unique_Records_Scan_Number ON #Tmp_Unique_Records (Scan_Number)
 	
 	
 	-----------------------------------------------
@@ -1095,9 +1108,10 @@ As
 	Set @numAddedDiscScores = @myRowCount
 
 
-	-- Temp Disable
-	If 12345 = 67890 AND @PeptideProphetCountLoaded > 0
-	Begin
+	If @PeptideProphetCountLoaded > 0
+	Begin -- <a>
+		Set @PepProphetFileFound = 1
+
 		-----------------------------------------------
 		-- Copy selected contents of #Tmp_PepProphet_Results
 		-- into T_Score_Discriminant
@@ -1107,9 +1121,9 @@ As
 		SET Peptide_Prophet_FScore = PPR.FScore,
 			Peptide_Prophet_Probability = PPR.Probability
 		FROM T_Score_Discriminant SD INNER JOIN 
-			#Tmp_Unique_Records UR ON SD.Peptide_ID = UR.Peptide_ID_New INNER JOIN
-			#Tmp_Peptide_Import TPI ON UR.Result_ID = TPI.Result_ID INNER JOIN
-			#Tmp_PepProphet_Results PPR ON TPI.Result_ID = PPR.Result_ID
+			 #Tmp_Unique_Records UR ON SD.Peptide_ID = UR.Peptide_ID_New INNER JOIN
+			 #Tmp_Peptide_Import TPI ON UR.Result_ID = TPI.Result_ID INNER JOIN
+			 #Tmp_PepProphet_Results PPR ON TPI.Result_ID = PPR.Result_ID
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
@@ -1120,7 +1134,80 @@ As
 			goto Done
 		end
 		Set @numAddedPepProphetScores = @myRowCount
-	End
+
+		If @numAddedPepProphetScores < @numAddedDiscScores
+		Begin -- <b>
+			-----------------------------------------------
+			-- If a peptide is mapped to multiple proteins in #Tmp_Peptide_Import, then
+			--  #Tmp_PepProphet_Results may only contain the results for one of the entries
+			-- The following query helps account for this by linking #Tmp_Peptide_Import to itself,
+			--  along with linking it to #Tmp_Unique_Records and #Tmp_PepProphet_Results
+			-- 
+			-- This situation should only be true for a handful of jobs analyzed in July 2006
+			--  therefore, we'll post a warning entry to the log if this situation is encountered
+			--
+			-- Note, however, that Peptide Prophet values are not computed for charge states of 6 or higher,
+			-- so data with charge state 6 or higher will not have values present in #Tmp_PepProphet_Results
+			-----------------------------------------------
+	
+			UPDATE T_Score_Discriminant
+			SET Peptide_Prophet_FScore = PPR.FScore,
+				Peptide_Prophet_Probability = PPR.Probability
+			FROM T_Score_Discriminant SD INNER JOIN
+				 #Tmp_Unique_Records UR ON SD.Peptide_ID = UR.Peptide_ID_New INNER JOIN
+				 #Tmp_Peptide_Import TPI2 ON UR.Result_ID = TPI2.Result_ID INNER JOIN
+				 #Tmp_Peptide_Import TPI ON 
+					TPI2.Scan_Number = TPI.Scan_Number AND 
+					TPI2.Number_Of_Scans = TPI.Number_Of_Scans AND 
+					TPI2.Charge_State = TPI.Charge_State AND 
+					TPI2.XCorr = TPI.XCorr AND TPI2.DeltaCn = TPI.DeltaCn AND 
+					TPI2.Peptide = TPI.Peptide AND 
+					TPI2.Result_ID <> TPI.Result_ID INNER JOIN
+				 #Tmp_PepProphet_Results PPR ON TPI.Result_ID = PPR.Result_ID
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error updating T_Score_Discriminant with Peptide Prophet results for job ' + @jobStr + ' (Query #2)'
+				goto Done
+			end
+			Set @numAddedPepProphetScores = @numAddedPepProphetScores + @myRowCount
+
+
+			SELECT	@RowCountTotal = COUNT(*),
+					@RowCountNull = SUM(CASE WHEN SD.Peptide_Prophet_FScore IS NULL OR 
+												  SD.Peptide_Prophet_Probability IS NULL 
+										THEN 1 ELSE 0 END),
+					@RowCountNullCharge5OrLess = SUM(CASE WHEN UR.Charge_State <= 5 AND (
+														SD.Peptide_Prophet_FScore IS NULL OR 
+														SD.Peptide_Prophet_Probability IS NULL)
+										THEN 1 ELSE 0 END)
+			FROM T_Score_Discriminant SD INNER JOIN
+				 #Tmp_Unique_Records UR ON SD.Peptide_ID = UR.Peptide_ID_New
+
+
+			If @RowCountNull > 0
+			Begin -- <c>
+				set @message = 'Job ' + @jobStr + ' has ' + Convert(varchar(12), @RowCountNull) + ' out of ' + Convert(varchar(12), @RowCountTotal) + ' rows in T_Score_Discriminant with null peptide prophet FScore or Probability values'
+
+				If @RowCountNullCharge5OrLess = 0
+				Begin
+					set @message = @message + '; however, all have charge state 6+ or higher'
+					set @MessageType = 'Warning'
+				End
+				Else
+				Begin
+					set @message = @message + '; furthermore, ' + Convert(varchar(12), @RowCountNullCharge5OrLess) + ' of the rows have charge state 5+ or less'
+					set @MessageType = 'Error'
+				End
+
+				execute PostLogEntry @MessageType, @message, 'LoadSequestPeptidesBulk'
+				Set @message = ''
+			End -- </c>
+		End -- </b>
+	End -- </a>
 	Else
 	Begin
 		Set @PeptideProphetCountLoaded = 0
@@ -1225,7 +1312,6 @@ As
 	Set @numAddedPeptides = IsNull(@numAddedPeptides, 0)
 	Set @numAddedSeqScores = IsNull(@numAddedSeqScores, 0)
 	Set @numAddedDiscScores = IsNull(@numAddedDiscScores, 0)
-	Set @numAddedPepProphetScores = IsNull(@numAddedPepProphetScores, 0)
 		
 	if @numAddedPeptides <> @numAddedSeqScores
 	begin
@@ -1241,15 +1327,6 @@ As
 		rollback transaction @transName
 		set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedDiscScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedDiscScores)
 		Set @myError = 50008
-		Set @numLoaded = 0
-		goto Done
-	end
-	
-	if @PeptideProphetCountLoaded > 0 AND @numAddedPeptides <> @numAddedPepProphetScores
-	begin
-		rollback transaction @transName
-		set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedPepProphetScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedPepProphetScores)
-		Set @myError = 50009
 		Set @numLoaded = 0
 		goto Done
 	end
@@ -1292,8 +1369,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

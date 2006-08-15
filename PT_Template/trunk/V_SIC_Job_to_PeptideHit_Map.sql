@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_SIC_Job_to_PeptideHit_Map] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_SIC_Job_to_PeptideHit_Map]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_SIC_Job_to_PeptideHit_Map]
-GO
-
 
 CREATE VIEW dbo.V_SIC_Job_to_PeptideHit_Map
 AS
@@ -21,8 +17,3 @@ WHERE (AD_PeptideHit.ResultType LIKE '%Peptide_Hit')
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

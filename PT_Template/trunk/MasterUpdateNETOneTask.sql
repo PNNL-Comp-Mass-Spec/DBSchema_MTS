@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[MasterUpdateNETOneTask] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[MasterUpdateNETOneTask]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[MasterUpdateNETOneTask]
-GO
-
 
 CREATE Procedure dbo.MasterUpdateNETOneTask
 /****************************************************
@@ -190,8 +186,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

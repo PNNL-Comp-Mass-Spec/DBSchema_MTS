@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[LoadPeptidesForOneAnalysis] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[LoadPeptidesForOneAnalysis]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[LoadPeptidesForOneAnalysis]
-GO
-
 
 CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 /****************************************************
@@ -43,6 +39,7 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			06/04/2006 mem - Now passing @LineCountToSkip as an output parameter to let ValidateDelimitedFile determine whether or not a header row is present
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			08/01/2006 mem - Updated to define the Peptide Prophet results file path
+**			08/10/2006 mem - Now updating the status message if using the Seq_Candidate tables and/or if Peptide Prophet data was loaded
 **
 *****************************************************/
 (
@@ -248,10 +245,14 @@ AS
 	-----------------------------------------------
 	
 	declare @loaded int,
-			@peptideCountSkipped int
+			@peptideCountSkipped int,
+			@SeqCandidateFilesFound tinyint,
+			@PepProphetFileFound tinyint
 			
 	set @loaded = 0
 	set @peptideCountSkipped = 0
+	set @SeqCandidateFilesFound = 0
+	set @PepProphetFileFound = 0
 
 	If @ResultType = 'Peptide_Hit'
 	Begin
@@ -267,6 +268,8 @@ AS
 						@LineCountToSkip,
 						@loaded output,
 						@peptideCountSkipped output,
+						@SeqCandidateFilesFound output,
+						@PepProphetFileFound output,
 						@message output
 	End
 	Else
@@ -286,6 +289,8 @@ AS
 						@LineCountToSkip,
 						@loaded output,
 						@peptideCountSkipped output,
+						@SeqCandidateFilesFound output,
+						@PepProphetFileFound output,
 						@message output
 	 End
 	 Else
@@ -300,6 +305,12 @@ AS
 		--
 		set @message = Convert(varchar(12), @loaded) + ' peptides were loaded for job ' + @jobStr + ' (Filtered out ' + Convert(varchar(12), @peptideCountSkipped) + ' peptides; Filter_Set_ID = ' + Convert(varchar(12), @FilterSetID) + ')'
 
+		if @SeqCandidateFilesFound <> 0
+			set @message = @message + '; using the T_Seq_Candidate tables'
+		
+		if @PepProphetFileFound <> 0
+			set @message = @message + '; loaded Peptide Prophet data'
+			
 		-- bump the load count
 		--
 		set @numLoaded = @loaded
@@ -327,8 +338,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

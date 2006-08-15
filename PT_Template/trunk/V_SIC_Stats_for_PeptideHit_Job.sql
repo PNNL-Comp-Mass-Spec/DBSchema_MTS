@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_SIC_Stats_for_PeptideHit_Job] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_SIC_Stats_for_PeptideHit_Job]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_SIC_Stats_for_PeptideHit_Job]
-GO
-
 create VIEW dbo.V_SIC_Stats_for_PeptideHit_Job
 AS
 SELECT TOP 100 PERCENT dbo.V_SIC_Job_to_PeptideHit_Map.Dataset_ID,
@@ -43,8 +39,3 @@ FROM dbo.V_SIC_Job_to_PeptideHit_Map INNER JOIN
     dbo.T_Dataset_Stats_SIC.Optimal_Peak_Apex_Scan_Number = dbo.T_Dataset_Stats_Scans.Scan_Number
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

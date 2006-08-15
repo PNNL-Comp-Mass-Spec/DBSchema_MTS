@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  UserDefinedFunction [dbo].[Sigmoid] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[Sigmoid]') and xtype in (N'FN', N'IF', N'TF'))
-drop function [dbo].[Sigmoid]
-GO
-
 CREATE FUNCTION dbo.Sigmoid
 /***************************
 ** Sigmoid function
@@ -28,11 +24,5 @@ BEGIN
 END
 
 GO
-SET QUOTED_IDENTIFIER OFF 
+GRANT EXECUTE ON [dbo].[Sigmoid] TO [DMS_SP_User]
 GO
-SET ANSI_NULLS ON 
-GO
-
-GRANT  EXECUTE  ON [dbo].[Sigmoid]  TO [DMS_SP_User]
-GO
-

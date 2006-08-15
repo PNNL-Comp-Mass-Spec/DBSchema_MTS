@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ResetIdentityFieldSeed] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ResetIdentityFieldSeed]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ResetIdentityFieldSeed]
-GO
-
 
 CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 /****************************************************
@@ -22,6 +18,7 @@ CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 **	Date:	12/30/2005
 **			02/17/2006 mem - Now updating current identity to @IdentitySeed-1 if a table is empty; necessary if the user makes a single entry in a table then deletes the row
 **			03/14/2006 mem - Added table T_Seq_Candidate_ModDetails
+**			07/20/2006 mem - Added table T_Peptide_Prophet_Task
 **
 *****************************************************/
 (
@@ -88,6 +85,7 @@ AS
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Event_Log',					'Event_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Log_Entries',				'Entry_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_NET_Update_Task',			'Task_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Peptide_Prophet_Task',		'Task_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_General_Statistics',		'Sequence')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Process_Config',			'Process_Config_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Proteins',					'Ref_ID')
@@ -199,8 +197,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

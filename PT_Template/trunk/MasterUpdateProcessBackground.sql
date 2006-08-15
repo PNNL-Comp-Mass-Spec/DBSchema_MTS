@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[MasterUpdateProcessBackground] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[MasterUpdateProcessBackground]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[MasterUpdateProcessBackground]
-GO
-
 
 CREATE Procedure dbo.MasterUpdateProcessBackground
 /****************************************************
@@ -40,6 +36,7 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			03/18/2006 mem - Added call to ComputeMaxObsAreaForAvailableAnalyses
 **			07/06/2006 mem - Added call to ProcessPeptideProphetTasks and updated call to CheckAllFiltersForAvailableAnalyses
+**			08/02/2006 mem - Added call to SetReversedAndScrambledJobsToHolding
 **    
 *****************************************************/
 (
@@ -182,8 +179,37 @@ As
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
-		
+
 	-- < E >
+	--------------------------------------------------------------
+	-- Look for jobs in state 25 that were searched against a reversed or scrambled database
+	-- Update their states from 25 to 6 if enabled in T_Process_Step_Control
+	--------------------------------------------------------------
+	--
+	Set @ProcessStateMatch = 25
+	Set @NextProcessState = 6
+
+	-- See if Hold Reversed And Scrambled Jobs is enabled; assume, by default, that it is enabled
+	-- If it isn't, then skip this section
+
+	set @result = 1
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'HoldReversedAndScrambledJobs')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped SetReversedAndScrambledJobsToHolding', 'MasterUpdateProcessBackground'
+	end
+	Else
+	begin
+		EXEC @result =  SetReversedAndScrambledJobsToHolding @ProcessStateMatch, @NextProcessState, @count OUTPUT
+
+		set @message = 'Completed update SetReversedAndScrambledJobsToHolding: ' + convert(varchar(11), @count) + ' jobs set to holding'
+		If @logLevel >= 1 and @count > 0
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	
+	-- < F >
 	--------------------------------------------------------------
 	-- Resolve master sequence ID for each peptide in each new job
 	--------------------------------------------------------------
@@ -217,7 +243,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < F >
+	-- < G >
 	--------------------------------------------------------------
 	-- Verify sequence information
 	--  Refresh local sequences table from master sequence DB and
@@ -250,7 +276,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < G >
+	-- < H >
 	--------------------------------------------------------------
 	-- Populate Max_Obs_Area_In_Job in T_Peptides
 	--------------------------------------------------------------
@@ -299,7 +325,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 		
-	-- < H >
+	-- < I >
 	--------------------------------------------------------------
 	-- Update the SIC columns in T_Peptides for jobs that were reset to state 35
 	--------------------------------------------------------------
@@ -330,7 +356,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < I >
+	-- < J >
 	--------------------------------------------------------------
 	-- Call MasterUpdateNET (provided GANET processing is enabled)
 	--------------------------------------------------------------
@@ -361,7 +387,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < J >
+	-- < K >
 	--------------------------------------------------------------
 	-- Calculate confidence scores for each peptide in each new job
 	--------------------------------------------------------------
@@ -397,7 +423,7 @@ As
 		Goto Done
 
 
-	-- < K >
+	-- < L >
 	--------------------------------------------------------------
 	-- Peptide Prophet processing
 	--------------------------------------------------------------
@@ -434,7 +460,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 	
-	-- < L >
+	-- < M >
 	--------------------------------------------------------------
 	-- Calculate filter results for each peptide in each new job
 	--------------------------------------------------------------
@@ -476,7 +502,7 @@ As
 
 CalculateStatistics:
 	
-	-- < M >
+	-- < N >
 	--------------------------------------------------------------
 	-- Update general statistics
 	--------------------------------------------------------------
@@ -537,7 +563,7 @@ CalculateStatistics:
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < N >
+	-- < O >
 	-------------------------------------------------------------
 	-- Synchronize the analysis description information with DMS
 	-------------------------------------------------------------
@@ -619,8 +645,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

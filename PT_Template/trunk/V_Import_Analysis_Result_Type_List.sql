@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  View [dbo].[V_Import_Analysis_Result_Type_List] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[V_Import_Analysis_Result_Type_List]') and OBJECTPROPERTY(id, N'IsView') = 1)
-drop view [dbo].[V_Import_Analysis_Result_Type_List]
-GO
-
 
 CREATE VIEW dbo.V_Import_Analysis_Result_Type_List
 AS
@@ -16,8 +12,3 @@ WHERE (Name = 'Import_Result_Type')
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[ProcessPeptideProphetTasks] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[ProcessPeptideProphetTasks]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[ProcessPeptideProphetTasks]
-GO
-
 
 CREATE Procedure dbo.ProcessPeptideProphetTasks
 /****************************************************
@@ -171,8 +167,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-

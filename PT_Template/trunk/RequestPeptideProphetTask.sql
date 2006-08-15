@@ -1,12 +1,8 @@
-SET QUOTED_IDENTIFIER ON 
+/****** Object:  StoredProcedure [dbo].[RequestPeptideProphetTask] ******/
+SET ANSI_NULLS ON
 GO
-SET ANSI_NULLS ON 
+SET QUOTED_IDENTIFIER ON
 GO
-
-if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[RequestPeptideProphetTask]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-drop procedure [dbo].[RequestPeptideProphetTask]
-GO
-
 
 CREATE PROCEDURE dbo.RequestPeptideProphetTask
 /****************************************************
@@ -24,6 +20,7 @@ CREATE PROCEDURE dbo.RequestPeptideProphetTask
 **
 **	Auth:	mem
 **	Date:	07/05/2006
+**			07/20/2006 mem - Removed Print statement for Sql populating T_Peptide_Prophet_Task_Job_Map
 **
 *****************************************************/
 (
@@ -230,7 +227,6 @@ As
 	Set @S = @S + ' HAVING SUM(B.PeptideCount) < ' + Convert(varchar(12), @MaxPeptideCount)
 	Set @S = @S + ' ORDER BY A.Job ASC'
 	--	
-	print @S
 	Exec (@S)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -338,8 +334,3 @@ Done:
 
 
 GO
-SET QUOTED_IDENTIFIER OFF 
-GO
-SET ANSI_NULLS ON 
-GO
-
