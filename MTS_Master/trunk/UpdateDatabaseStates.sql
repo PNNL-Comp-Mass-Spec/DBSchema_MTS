@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[UpdateDatabaseStates]    Script Date: 08/14/2006 20:23:22 ******/
+/****** Object:  StoredProcedure [dbo].[UpdateDatabaseStates] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

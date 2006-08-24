@@ -25,13 +25,15 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **						   - Increased size of @ProteinDBName from 64 to 128 characters
 **			07/27/2006 mem - Updated to utilize the new column names in T_Proteins
 **						   - Updated to work with Protein Collection Lists (the V_DMS_Protein_Collection views in MT_Main)
+**			08/16/2006 mem - Added option @SwitchFromLegacyDBToProteinCollection
 **    
 *****************************************************/
 (
 	@message varchar(512) = '' output,
 	@infoOnly int = 0,
 	@importAllProteins int = 1,
-	@ForceLegacyDBProcessing tinyint = 0			-- Set to 1 to force processing of legacy protein DBs defined in T_Process_Config even If 'UseProteinSequencesDB' is enabled in T_Process_Step_Control
+	@ForceLegacyDBProcessing tinyint = 0,						-- Set to 1 to force processing of legacy protein DBs defined in T_Process_Config even If 'UseProteinSequencesDB' is enabled in T_Process_Step_Control
+	@SwitchFromLegacyDBToProteinCollection tinyint = 0			-- Set to 1 to update the entries in T_Proteins to use a protein collection (defined in T_Process_Config or T_Analysis_Description) if possible
 )
 As
 	Set nocount on 
@@ -44,7 +46,8 @@ As
 	Set @message = ''
 	Set @importAllProteins = IsNull(@importAllProteins, 1)
 	Set @ForceLegacyDBProcessing = IsNull(@ForceLegacyDBProcessing, 0)
-	
+	Set @SwitchFromLegacyDBToProteinCollection = IsNull(@SwitchFromLegacyDBToProteinCollection, 0)
+
 	declare @S nvarchar(2048)
 	declare @DBIDString nvarchar(30)
 	
@@ -68,16 +71,30 @@ As
 	Declare @UseProteinSequencesDB tinyint
 	Declare @ProteinSequenceUpdateRequired tinyint
 	
-	---------------------------------------------------
-	-- See If use of the Protein_Sequences database is enabled
-	---------------------------------------------------
+	Declare @ProteinSequenceDBSwitchPerformed tinyint
+	Set @ProteinSequenceDBSwitchPerformed = 0
+	
+	Declare @ProteinDBIDListCount int
+	Declare @ProteinDBIDList varchar(256)
 
-	Set @UseProteinSequencesDB = 0
-	SELECT @UseProteinSequencesDB = enabled
-	FROM T_Process_Step_Control
-	WHERE (Processing_Step_Name = 'UseProteinSequencesDB')
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	If @SwitchFromLegacyDBToProteinCollection <> 0
+	Begin
+		Set @UseProteinSequencesDB = 1
+	End
+	Else
+	Begin
+		---------------------------------------------------
+		-- See If use of the Protein_Sequences database is enabled
+		---------------------------------------------------
+
+		Set @UseProteinSequencesDB = 0
+		SELECT @UseProteinSequencesDB = enabled
+		FROM T_Process_Step_Control
+		WHERE (Processing_Step_Name = 'UseProteinSequencesDB')
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
 
 
 	If @UseProteinSequencesDB <> 0
@@ -241,33 +258,6 @@ As
 		Begin -- <b2>
 
 			---------------------------------------------------
-			-- Temp HackFix: Determine whether the protein masses need to be corrected or not
-			---------------------------------------------------
-			--
-			Declare @MonoMassCorrection float
-			Declare @AvgMassCorrection float
-			
-			Set @MonoMassCorrection = 0
-			Set @AvgMassCorrection = 0
-			
-			-- Note that Protein_ID = 1 should be 'PSLT001' with sequence:
-			-- VFKYWPTFVQQWENSLKAAQKGLEIWKSARADAWLAYHNGIFATSHYEGALTSEDISSAAAAALKGHKIRGGNVNTKSILDGSNRLAHTLALQG
-			-- This should have a monoisotopic mass of 10250.284595 and Average mass of 10256.40198
-			-- However, the Protein_Sequences DB currently lists the monoisotopic mass as 10232.2734375
-			--  and the average mass as 10238.5947265625
-			-- This should be fixed soon, but, until it is, we'll fix the masses here
-			
-			SELECT	@MonoMassCorrection =	CASE WHEN Monoisotopic_Mass < 10240 
-											THEN 18.0105633
-											ELSE 0.0 END,
-					@AvgMassCorrection =	CASE WHEN Average_Mass < 10250 
-											THEN 18.01528 
-											ELSE 0.0 END
-			FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
-			WHERE Protein_ID = 1 AND Protein_Name = 'PSLT001'
-		      
-
-			---------------------------------------------------
 			-- Construct a list of any protein collections with null ID values
 			-- If any are found, post an entry to the log, then delete them from #T_Tmp_Protein_Collection_List
 			---------------------------------------------------
@@ -298,7 +288,9 @@ As
 			-- Process each protein collection defined in #T_Tmp_Protein_Collection_List
 			---------------------------------------------------
 			--
-			Set @CurrentID = -9999999
+			SELECT @CurrentID = Min(Protein_Collection_ID)-1
+    		FROM #T_Tmp_Protein_Collection_List
+
     		Set @Continue = 1
     		While @Continue = 1
     		Begin -- <c2>
@@ -326,7 +318,7 @@ As
 							-- Preview missing proteins from Protein_Collection_ID @CurrentID
 							SELECT SourceQ.*
 							FROM (	SELECT  Protein_Name, Description, Protein_Sequence, Residue_Count, 
-											Monoisotopic_Mass + @MonoMassCorrection AS Monoisotopic_Mass, 
+											Monoisotopic_Mass, 
 											Reference_ID, Protein_ID
 									FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import 
 									WHERE Protein_Collection_ID = @CurrentID
@@ -339,7 +331,7 @@ As
 													Protein_Residue_Count, Monoisotopic_Mass, 
 													Protein_DB_ID, External_Reference_ID, External_Protein_ID, Protein_Collection_ID)
 							SELECT	SourceQ.Protein_Name, Left(SourceQ.Description, 7500) AS Description, SourceQ.Protein_Sequence, 
-									SourceQ.Residue_Count, SourceQ.Monoisotopic_Mass + @MonoMassCorrection AS Monoisotopic_Mass, 
+									SourceQ.Residue_Count, SourceQ.Monoisotopic_Mass, 
 									0 AS Protein_DB_ID, SourceQ.Reference_ID, SourceQ.Protein_ID, @CurrentID AS Protein_Collection_ID
 							FROM (	SELECT  Protein_Name, Description, Protein_Sequence, Residue_Count, 
 											Monoisotopic_Mass, Reference_ID, Protein_ID
@@ -364,6 +356,72 @@ As
 
 					If @infoOnly = 0 
 					Begin -- <e2>
+
+						If @SwitchFromLegacyDBToProteinCollection <> 0
+						Begin -- <f1>
+							---------------------------------------------------
+							-- Look for proteins that are currently associated with a Protein_DB_ID but could
+							-- be switched to this protein collection
+							---------------------------------------------------
+
+							Set @ProteinDBIDListCount = 0
+							Set @ProteinDBIDList = ''
+							SELECT @ProteinDBIDList = @ProteinDBIDList + Convert(varchar(9), Protein_DB_ID) + ','
+							FROM (
+								SELECT DISTINCT Protein_DB_ID
+								FROM T_Proteins TargetQ INNER JOIN
+										(	SELECT Protein_Name, Protein_ID, Reference_ID
+											FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
+											WHERE Protein_Collection_ID = @CurrentID
+										) SourceQ ON TargetQ.Reference = SourceQ.Protein_Name COLLATE SQL_Latin1_General_CP1_CI_AS
+								WHERE ISNULL(TargetQ.Protein_DB_ID, 1) <> 0 
+							) LookupQ
+							--
+							SELECT @myError = @result, @myRowcount = @@rowcount
+							Set @ProteinDBIDListCount = @myRowcount
+
+							If @ProteinDBIDListCount > 0	
+							Begin -- <g>
+								-- Remove the trailing comma from @ProteinDBIDList
+								If Len(@ProteinDBIDList) > 0
+									Set @ProteinDBIDList = Left(@ProteinDBIDList, Len(@ProteinDBIDList)-1)
+
+								UPDATE T_Proteins
+								SET Protein_DB_ID = 0, 
+									Protein_Collection_ID = @CurrentID, 
+									External_Reference_ID = SourceQ.Reference_ID, 
+									External_Protein_ID = SourceQ.Protein_ID,
+									Last_Affected = GetDate()
+								FROM T_Proteins TargetQ INNER JOIN
+										(	SELECT Protein_Name, Protein_ID, Reference_ID
+											FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
+											WHERE Protein_Collection_ID = @CurrentID
+										) SourceQ ON TargetQ.Reference = SourceQ.Protein_Name COLLATE SQL_Latin1_General_CP1_CI_AS
+								WHERE ISNULL(TargetQ.Protein_DB_ID, 1) <> 0 
+								--
+								SELECT @myError = @result, @myRowcount = @@rowcount
+								--
+								If @myError <> 0
+								Begin
+									Set @message = 'Error switching from using Protein_DB_ID ' + @ProteinDBIDList + ' to using ' + @ProteinCollectionDescription
+									goto Done
+								End
+								--
+								If @myRowcount > 0
+								Begin -- <h>
+									Set @ProteinSequenceDBSwitchPerformed = 1
+										
+									Set @message = 'Switched from using Protein_DB_ID'
+									If @ProteinDBIDListCount > 1
+										Set @message = @message + 's'
+									Set @message = @message + ' ' + @ProteinDBIDList + ' to ' + @ProteinCollectionDescription + ' for ' + Convert(varchar(12), @myRowcount) + ' proteins'
+
+									execute PostLogEntry 'Normal', @message, 'RefreshLocalProteinTable'
+									Set @message = ''
+								End -- </h>
+							End -- </g>
+						End -- </f1>
+
 						---------------------------------------------------
 						-- Update existing entries
 						-- First, check for Protein Sequences that need to be updated
@@ -398,7 +456,7 @@ As
 							Set @message = 'Error obtaining protein sequences to update for ' + @ProteinCollectionDescription
 							goto Done
 						End
-			
+
 						---------------------------------------------------
 						-- Now update the other fields as needed
 						-- Note: We cannot update Protein_Sequence here because
@@ -419,7 +477,7 @@ As
 							Protein_Collection_ID = @CurrentID,
 							Last_Affected = GetDate()
 						FROM (	SELECT  Protein_Name, Description, Residue_Count, 
-										Monoisotopic_Mass + @MonoMassCorrection AS Monoisotopic_Mass, 
+										Monoisotopic_Mass, 
 										Reference_ID, Protein_ID
 								FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import 
 								WHERE Protein_Collection_ID = @CurrentID
@@ -434,7 +492,7 @@ As
 							   T_Proteins.External_Reference_ID IS NULL OR
 							   T_Proteins.External_Protein_ID IS NULL OR
 							   T_Proteins.Protein_Collection_ID IS NULL OR
-							   T_Proteins.External_Protein_ID IN (SELECT Protein_ID FROM #T_Tmp_Protein_Sequence_Updates)
+							   T_Proteins.External_Protein_ID IN (SELECT DISTINCT Protein_ID FROM #T_Tmp_Protein_Sequence_Updates)
 							  )
 						--
 						SELECT @myError = @result, @myRowcount = @@rowcount
@@ -447,7 +505,7 @@ As
 
 
 						If @ProteinSequenceUpdateRequired > 0
-						Begin -- <f>
+						Begin -- <f2>
 							UPDATE T_Proteins
 							SET Protein_Sequence = SourceQ.Protein_Sequence, 
 								Protein_Residue_Count = SourceQ.Residue_Count,
@@ -464,7 +522,7 @@ As
 								Set @message = 'Error updating protein sequences for ' + @ProteinCollectionDescription
 								goto Done
 							End
-						End -- </f>
+						End -- </f2>
 
 					End -- </e2>
 				End -- </d>
@@ -603,7 +661,7 @@ As
 					Set @S = @S + ' FROM '
 					Set @S = @S + '  T_Proteins INNER JOIN '
 					Set @S = @S +    '[' + @ProteinDBName + '].dbo.T_ORF AS P ON '
-					Set @S = @S + '  T_Proteins.Reference = P.Reference AND'
+					Set @S = @S + ' T_Proteins.Reference = P.Reference AND'
 					Set @S = @S + '  IsNull(Protein_DB_ID, ' + @DBIDString + ') = ' + @DBIDString
 					Set @S = @S + ' WHERE T_Proteins.Protein_Residue_Count <> P.Amino_Acid_Count OR'
 					Set @S = @S +       ' T_Proteins.Monoisotopic_Mass <> P.Monoisotopic_Mass OR'
@@ -648,7 +706,16 @@ Done:
 			Select @message As TheMessage
 	End
 	Else
+	Begin
+		If @ProteinSequenceDBSwitchPerformed <> 0
+		Begin
+			UPDATE T_Process_Step_Control
+			SET enabled = 1
+			WHERE (Processing_Step_Name = 'UseProteinSequencesDB')
+		End
+		
 		Set @message = 'Refresh local Protein reference table: ' +  convert(varchar(12), @numAdded)
+	End
 	
 	return @myError
 

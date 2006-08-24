@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetAllProteinDatabases]    Script Date: 08/14/2006 20:23:15 ******/
+/****** Object:  StoredProcedure [dbo].[GetAllProteinDatabases] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.QCMSMSSeqStatDetails
+create PROCEDURE dbo.QCMSMSSeqStatDetails
 /****************************************************
 ** 
 **		Desc: 
@@ -465,7 +464,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QCMSMSSeqStatDetails] TO [DMS_SP_User]

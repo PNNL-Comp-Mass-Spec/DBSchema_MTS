@@ -1,4 +1,4 @@
-/****** Object:  View [dbo].[V_Table_Row_Counts]    Script Date: 08/14/2006 20:23:09 ******/
+/****** Object:  View [dbo].[V_Table_Row_Counts] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

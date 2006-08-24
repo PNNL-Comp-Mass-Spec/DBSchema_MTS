@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[PostLogEntry]    Script Date: 08/14/2006 20:23:21 ******/
+/****** Object:  StoredProcedure [dbo].[PostLogEntry] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

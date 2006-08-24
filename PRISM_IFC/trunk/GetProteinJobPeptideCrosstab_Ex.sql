@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE GetProteinJobPeptideCrosstab_Ex
+CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab_Ex
 /****************************************************
 **	Desc:  
 **  Generates a crosstab report of proteins against jobs
@@ -435,9 +435,6 @@ Done:
 	end
 */
 	return @myError
-
-
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [DMS_SP_User]

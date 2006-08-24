@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetAllMassTagDatabases]    Script Date: 08/14/2006 20:23:12 ******/
+/****** Object:  StoredProcedure [dbo].[GetAllMassTagDatabases] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

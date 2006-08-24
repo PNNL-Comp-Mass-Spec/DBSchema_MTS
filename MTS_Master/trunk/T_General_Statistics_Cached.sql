@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[T_General_Statistics_Cached]    Script Date: 08/14/2006 20:22:55 ******/
+/****** Object:  Table [dbo].[T_General_Statistics_Cached] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

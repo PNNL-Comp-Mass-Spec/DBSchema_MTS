@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[T_MTS_Protein_DBs]    Script Date: 08/14/2006 20:23:00 ******/
+/****** Object:  Table [dbo].[T_MTS_Protein_DBs] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_MTS_Protein_DBs](
 
 GO
 
-/****** Object:  Index [IX_T_MTS_Protein_DBs]    Script Date: 08/14/2006 20:23:00 ******/
+/****** Object:  Index [IX_T_MTS_Protein_DBs] ******/
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MTS_Protein_DBs] ON [dbo].[T_MTS_Protein_DBs] 
 (
 	[Protein_DB_Name] ASC

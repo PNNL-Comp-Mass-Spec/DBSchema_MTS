@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[T_MTS_DB_Types]    Script Date: 08/14/2006 20:22:57 ******/
+/****** Object:  Table [dbo].[T_MTS_DB_Types] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

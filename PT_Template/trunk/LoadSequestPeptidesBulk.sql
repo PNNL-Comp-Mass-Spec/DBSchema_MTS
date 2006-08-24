@@ -172,8 +172,8 @@ As
 		goto Done
 	end
 	
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
-	CREATE INDEX IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
+	CREATE INDEX #IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
 
 	-----------------------------------------------
 	-- Create a table for holding re-computed cleavage
@@ -185,7 +185,7 @@ As
 		Terminus_State tinyint NULL
 	)
 	
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Cleavage_State_Result_ID ON #Tmp_Peptide_Cleavage_State (Result_ID)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Cleavage_State_Result_ID ON #Tmp_Peptide_Cleavage_State (Result_ID)
 		
 	
 	-----------------------------------------------
@@ -197,7 +197,7 @@ As
 		Valid tinyint NOT NULL
 	)
 
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
 
 	-----------------------------------------------
 	-- Bulk load contents of synopsis file into temporary table
@@ -274,7 +274,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_ResultToSeqMap_Result_ID ON #Tmp_Peptide_ResultToSeqMap (Result_ID)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ResultToSeqMap_Result_ID ON #Tmp_Peptide_ResultToSeqMap (Result_ID)
 
 
 	-- Table for contents of the SeqInfo file
@@ -299,7 +299,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_SeqInfo_Seq_ID ON #Tmp_Peptide_SeqInfo (Seq_ID_Local)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_SeqInfo_Seq_ID ON #Tmp_Peptide_SeqInfo (Seq_ID_Local)
 	
 
 	-- Table for contents of the ModDetails file
@@ -318,7 +318,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
 
 
 	-- Table for contents of the SeqToProteinMap file
@@ -347,7 +347,7 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Peptide_SeqToProteinMap_Seq_ID ON #Tmp_Peptide_SeqToProteinMap (Seq_ID_Local)
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_SeqToProteinMap_Seq_ID ON #Tmp_Peptide_SeqToProteinMap (Seq_ID_Local)
 
 
 	-----------------------------------------------
@@ -479,9 +479,9 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Unfiltered_Unique_Records_Result_ID ON #Tmp_Unfiltered_Unique_Records (Result_ID)
-	CREATE INDEX IX_Tmp_Unfiltered_Unique_Records_MH ON #Tmp_Unfiltered_Unique_Records (MH)
-	CREATE INDEX IX_Tmp_Unfiltered_Unique_Records_Scan_Number ON #Tmp_Unfiltered_Unique_Records (Scan_Number)
+	CREATE CLUSTERED INDEX #IX_Tmp_Unfiltered_Unique_Records_Result_ID ON #Tmp_Unfiltered_Unique_Records (Result_ID)
+	CREATE INDEX #IX_Tmp_Unfiltered_Unique_Records_MH ON #Tmp_Unfiltered_Unique_Records (MH)
+	CREATE INDEX #IX_Tmp_Unfiltered_Unique_Records_Scan_Number ON #Tmp_Unfiltered_Unique_Records (Scan_Number)
 	
 	
 	-----------------------------------------------
@@ -904,9 +904,9 @@ As
 		goto Done
 	end
 
-	CREATE CLUSTERED INDEX IX_Tmp_Unique_Records_Result_ID ON #Tmp_Unique_Records (Result_ID)
-	CREATE INDEX IX_Tmp_Unique_Records_MH ON #Tmp_Unique_Records (MH)
-	CREATE INDEX IX_Tmp_Unique_Records_Scan_Number ON #Tmp_Unique_Records (Scan_Number)
+	CREATE CLUSTERED INDEX #IX_Tmp_Unique_Records_Result_ID ON #Tmp_Unique_Records (Result_ID)
+	CREATE INDEX #IX_Tmp_Unique_Records_MH ON #Tmp_Unique_Records (MH)
+	CREATE INDEX #IX_Tmp_Unique_Records_Scan_Number ON #Tmp_Unique_Records (Scan_Number)
 	
 	
 	-----------------------------------------------

@@ -116,7 +116,6 @@ As
 Done:
 	return @myError
 
-
 GO
 GRANT EXECUTE ON [dbo].[GetMassTagsOutputColumns] TO [DMS_SP_User]
 GO

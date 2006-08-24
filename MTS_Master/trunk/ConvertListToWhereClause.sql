@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[ConvertListToWhereClause]    Script Date: 08/14/2006 20:23:11 ******/
+/****** Object:  StoredProcedure [dbo].[ConvertListToWhereClause] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

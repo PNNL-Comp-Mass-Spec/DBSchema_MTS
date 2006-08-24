@@ -149,7 +149,7 @@ AS
 	-- speed of the Update query
 	-----------------------------------------------
 	--
-	CREATE NONCLUSTERED INDEX IX_TempTable_TGA_Seq_ID ON #Tmp_TGA (Seq_ID)
+	CREATE NONCLUSTERED INDEX #IX_TempTable_TGA_Seq_ID ON #Tmp_TGA (Seq_ID)
 
 	
 	-----------------------------------------------

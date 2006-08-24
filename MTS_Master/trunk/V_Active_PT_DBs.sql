@@ -1,4 +1,4 @@
-/****** Object:  View [dbo].[V_Active_PT_DBs]    Script Date: 08/14/2006 20:23:06 ******/
+/****** Object:  View [dbo].[V_Active_PT_DBs] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

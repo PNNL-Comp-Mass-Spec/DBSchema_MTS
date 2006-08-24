@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[T_Usage_Log](
  CONSTRAINT [PK_T_Usage_Log] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -23,19 +23,19 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Usage_Log_Calling_User] ON [dbo].[T_Usage_Log] 
 (
 	[Calling_User] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Usage_Log_Posted_By] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Usage_Log_Posted_By] ON [dbo].[T_Usage_Log] 
 (
 	[Posted_By] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Usage_Log_Target_DB_Name] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Usage_Log_Target_DB_Name] ON [dbo].[T_Usage_Log] 
 (
 	[Target_DB_Name] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO

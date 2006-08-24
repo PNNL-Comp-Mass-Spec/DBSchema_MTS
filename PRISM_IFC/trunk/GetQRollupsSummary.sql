@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE PROCEDURE dbo.GetQRollupsSummary
 /****************************************************
 **
@@ -119,7 +118,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetQRollupsSummary] TO [DMS_SP_User]

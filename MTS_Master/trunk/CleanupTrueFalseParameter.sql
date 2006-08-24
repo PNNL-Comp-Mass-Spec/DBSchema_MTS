@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[CleanupTrueFalseParameter]    Script Date: 08/14/2006 20:23:10 ******/
+/****** Object:  StoredProcedure [dbo].[CleanupTrueFalseParameter] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

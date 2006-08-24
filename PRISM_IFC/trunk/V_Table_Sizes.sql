@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE VIEW dbo.V_Table_Sizes
+create VIEW dbo.V_Table_Sizes
 AS
 SELECT TOP 100 PERCENT su.tablename AS Table_Name, 
     ROUND((CONVERT(float, su.tablesize) * spt.low) 
@@ -18,6 +17,5 @@ FROM master.dbo.spt_values spt CROSS JOIN
       GROUP BY so.name) su
 WHERE (spt.number = 1) AND (spt.type = 'E')
 ORDER BY su.tablesize DESC, su.tablename
-
 
 GO

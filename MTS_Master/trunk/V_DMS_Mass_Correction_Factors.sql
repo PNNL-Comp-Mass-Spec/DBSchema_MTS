@@ -1,4 +1,4 @@
-/****** Object:  View [dbo].[V_DMS_Mass_Correction_Factors]    Script Date: 08/14/2006 20:23:07 ******/
+/****** Object:  View [dbo].[V_DMS_Mass_Correction_Factors] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

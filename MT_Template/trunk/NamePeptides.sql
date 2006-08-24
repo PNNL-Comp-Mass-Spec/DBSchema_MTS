@@ -97,7 +97,7 @@ AS
 		[Unique_Row_ID] int IDENTITY (1, 1) NOT NULL
 	)
 
-	CREATE UNIQUE CLUSTERED INDEX IX_TempTable_TMPTags ON #TMPTags (Unique_Row_ID)
+	CREATE UNIQUE CLUSTERED INDEX #IX_TempTable_TMPTags ON #TMPTags (Unique_Row_ID)
 
 	---------------------------------------------------
 	-- copy data to temp table

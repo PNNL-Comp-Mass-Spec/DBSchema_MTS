@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetDBLocation]    Script Date: 08/14/2006 20:23:17 ******/
+/****** Object:  StoredProcedure [dbo].[GetDBLocation] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

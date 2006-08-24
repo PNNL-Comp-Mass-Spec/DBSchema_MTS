@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetCurrentActivitySummary]    Script Date: 08/14/2006 20:23:16 ******/
+/****** Object:  StoredProcedure [dbo].[GetCurrentActivitySummary] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

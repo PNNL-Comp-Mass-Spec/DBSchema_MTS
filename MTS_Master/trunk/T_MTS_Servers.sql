@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[T_MTS_Servers]    Script Date: 08/14/2006 20:23:02 ******/
+/****** Object:  Table [dbo].[T_MTS_Servers] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_MTS_Servers](
 
 GO
 
-/****** Object:  Index [IX_T_MTS_Servers]    Script Date: 08/14/2006 20:23:02 ******/
+/****** Object:  Index [IX_T_MTS_Servers] ******/
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MTS_Servers] ON [dbo].[T_MTS_Servers] 
 (
 	[Server_Name] ASC

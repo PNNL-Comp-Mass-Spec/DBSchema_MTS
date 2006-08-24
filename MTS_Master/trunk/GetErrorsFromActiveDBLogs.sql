@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetErrorsFromActiveDBLogs]    Script Date: 08/14/2006 20:23:18 ******/
+/****** Object:  StoredProcedure [dbo].[GetErrorsFromActiveDBLogs] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
