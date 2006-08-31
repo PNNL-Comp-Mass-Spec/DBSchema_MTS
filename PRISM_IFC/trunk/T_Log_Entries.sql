@@ -22,7 +22,7 @@ GO
 SET ANSI_NULLS ON
 GO
 
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 
@@ -33,7 +33,10 @@ AS
 **
 **	Desc: 
 **		Updates the Entered_By field if any of the other fields are changed
-**		Although the 
+**		Note that the SYSTEM_USER and suser_sname() functions are equivalent, with
+**		 both returning the username in the form PNL\D3L243 if logged in using 
+**		 integrated authentication or returning the Sql Server login name if
+**		 logged in with a Sql Server login
 **
 **		Auth: mem
 **		Date: 08/17/2006
