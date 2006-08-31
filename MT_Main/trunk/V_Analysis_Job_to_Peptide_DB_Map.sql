@@ -3,16 +3,19 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE VIEW dbo.V_Analysis_Job_to_Peptide_DB_Map
 AS
 SELECT TOP 100 PERCENT AJPDM.Job, AJPDM.ResultType, 
-    MIN(PTDB.PDB_Name) AS PDB_Name_First, 
-    MAX(PTDB.PDB_Name) AS PDB_Name_Last, 
-    COUNT(AJPDM.PDB_ID) AS PDB_Count
+    MIN(PTDB.PDB_Name) AS DB_Name_First, 
+    MAX(PTDB.PDB_Name) AS DB_Name_Last, 
+    COUNT(AJPDM.PDB_ID) AS DB_Count, 
+    MAX(AJPDM.Last_Affected) AS Last_Affected
 FROM dbo.T_Analysis_Job_to_Peptide_DB_Map AJPDM INNER JOIN
     dbo.T_Peptide_Database_List PTDB ON 
     AJPDM.PDB_ID = PTDB.PDB_ID
 GROUP BY AJPDM.Job, AJPDM.ResultType
 ORDER BY AJPDM.Job
+
 
 GO

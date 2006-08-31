@@ -20,13 +20,15 @@ CREATE PROCEDURE dbo.ParseFilterList
 **
 **	Auth:	mem
 **	Date:	10/01/2004
-**			11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
-**			02/23/2006 mem - Expanded @ValueMatchStr to varchar(128)
+**			03/07/2005 mem - Ported to the Peptide Database
+**			04/07/2005 mem - Expanded @ValueMatchStr to varchar(128)
+**			02/23/2006 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**			08/26/2006 mem - Now including ORDER BY Process_Config_ID in the SELECT TOP 1 query to ensure that all entries are processed
 **    
 *****************************************************/
 (
 	@filterValue varchar(128) = 'Experiment',
-	@filterValueLookupTableName varchar(256) = 'PT_Software_Q49..T_Analysis_Description',
+	@filterValueLookupTableName varchar(256) = 'MT_Main.dbo.V_DMS_Analysis_Job_Import',
 	@filterValueLookupColumnName varchar(128) = 'Experiment',
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
 	@filterMatchCount int = 0 OUTPUT
@@ -106,6 +108,7 @@ As
 				Value Like '%[%]%' AND 
 				Process_Config_ID > @ProcessConfigID AND 
 				Len(Value) > 0
+			ORDER BY Process_Config_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 

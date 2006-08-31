@@ -606,3 +606,5 @@ Done:
 
 
 GO
+GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [MTUser]
+GO

@@ -33,8 +33,8 @@ CREATE PROCEDURE MakeNewPeptideDB
 **			07/18/2006 mem - Now using V_DMS_Organism_List_Report to confirm @organism
 **						   - Updated @dataStoragePath and @logStoragePath to be blank by default, which results in looking up the paths in T_Folder_Paths
 **						   - Removed addition to the 'DB Maintenance Plan - PT DB Backup' maintenance plan since DB backups are now performed by SP Backup_MTS_DBs
-**						   - Now checking the Sql Server version; If Sql Server 2005, then not attempting to update any maintenance plans, and instead posting an error message to the log since DBs are currently not auto-added to the appropriate maintenance plan
 **			07/27/2006 mem - Updated to use @OrganismDBFileList to also populate Protein_Collection_Filter
+**			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
 **    
 *****************************************************/
 (
@@ -87,7 +87,7 @@ AS
 		goto done
 	End
 
-   	---------------------------------------------------
+	---------------------------------------------------
 	-- Populate @dataStoragePath and @logStoragePath If required
 	---------------------------------------------------
 	Set @dataStoragePath = LTrim(RTrim(IsNull(@dataStoragePath, '')))
@@ -292,8 +292,9 @@ AS
 	End
 	Else
 	Begin
-		Set @message = 'Database ' + @newDBName + ' needs to be added to a database maintenance plan'
-		Exec PostLogEntry 'Error', @message, 'MakeNewPeptideDB'
+		-- Nothing to do since we're using SSIS to call SPs CheckMTSDBs & BackupMTSDBs 
+		--  on Sql Server 2005 for integrity checking and DB backup
+		Set @myError = 0
 	End	
 
 

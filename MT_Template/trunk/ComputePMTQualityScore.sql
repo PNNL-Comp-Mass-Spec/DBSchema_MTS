@@ -34,6 +34,7 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			01/23/2006 mem - Now posting a message to T_Log_Entries on Success
 **			03/13/2006 mem - Now calling UpdateCachedHistograms
 **			07/10/2006 mem - Added support for Peptide Prophet scores
+**			08/26/2006 mem - Added support for RankScore (aka RankXc for Sequest); currently only used with Sequest results
 **
 ****************************************************/
 (
@@ -340,7 +341,9 @@ As
 			@XTandemLogEValueComparison varchar(2),			-- Only used for XTandem results
 			@XTandemLogEValueThreshold real,				-- Only used for XTandem results
 			@PeptideProphetComparison varchar(2),
-			@PeptideProphetThreshold float
+			@PeptideProphetThreshold float,
+			@RankScoreComparison varchar(2),				-- Only used for Sequest results
+			@RankScoreThreshold smallint					-- Only used for Sequest results
 
 	-----------------------------------------------------------
 	-- The following hold the DeltaCn thresholds last used to populate #PeptideStats
@@ -351,6 +354,8 @@ As
 			@SavedDeltaCnThreshold float,
 			@SavedDeltaCn2Comparison varchar(2),
 			@SavedDeltaCn2Threshold float,
+			@SavedRankScoreComparison varchar(2),
+			@SavedRankScoreThreshold float,
 			@SavedPeptideStatsRowCount int,
 			@SavedExperimentFilter varchar(128)
 
@@ -360,6 +365,8 @@ As
 	Set @SavedDeltaCnThreshold = -1
 	Set @SavedDeltaCn2Comparison = '~~'
 	Set @SavedDeltaCn2Threshold = -1
+	Set @SavedRankScoreComparison = '~~'
+	Set @SavedRankScoreThreshold = -1
 	Set @SavedPeptideStatsRowCount = 0
 	Set @SavedExperimentFilter = ''
 
@@ -467,7 +474,8 @@ As
 													@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 													@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
 													@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
-													@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT
+													@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+													@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
 
 					While @CriteriaGroupMatch > 0
 					Begin -- <e>
@@ -477,7 +485,7 @@ As
 						
 						If @ResultType = 'XT_Peptide_Hit'
 						Begin
-							-- Do not consider DeltaCN for XTandem results
+							-- Do not consider DeltaCN or RankScore for XTandem results
 							If @SavedResultType <> @ResultType OR
 							   @SavedDeltaCn2Comparison <> @DeltaCn2Comparison OR @SavedDeltaCn2Threshold <> @DeltaCn2Threshold OR
 							   @SavedExperimentFilter <> @FilterSetExperimentFilter OR
@@ -489,6 +497,7 @@ As
 							If @SavedResultType <> @ResultType OR
 							   @SavedDeltaCnComparison <> @DeltaCnComparison OR @SavedDeltaCnThreshold <> @DeltaCnThreshold OR
 							   @SavedDeltaCn2Comparison <> @DeltaCn2Comparison OR @SavedDeltaCn2Threshold <> @DeltaCn2Threshold OR
+							   @SavedRankScoreComparison <> @RankScoreComparison OR @SavedRankScoreThreshold <> @RankScoreThreshold OR
 							   @SavedExperimentFilter <> @FilterSetExperimentFilter OR
 							   @SavedPeptideStatsRowCount = 0
 							Set @PopulatePeptideStats = 1
@@ -556,7 +565,7 @@ As
 								Set @Sql = @Sql +        ' P.Charge_State,'
 								Set @Sql = @Sql +        ' MAX(IsNull(SS.XCorr, 0)) AS XCorr_Max,'
 								Set @Sql = @Sql +        ' 0 AS Hyperscore_Max,'
-								Set @Sql = @Sql +        ' 0 AS Log_EValue_Min,'
+								Set @Sql = @Sql + ' 0 AS Log_EValue_Min,'
 								Set @Sql = @Sql +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 								Set @Sql = @Sql +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
 								Set @Sql = @Sql +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
@@ -564,13 +573,15 @@ As
 								Set @Sql = @Sql +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 								Set @Sql = @Sql +      ' WHERE TAD.ResultType = ''Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
 								Set @Sql = @sql +        ' SS.DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
-								Set @Sql = @sql +        ' SS.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold)
+								Set @Sql = @sql +        ' SS.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold) + ' AND '
+								Set @Sql = @sql +        ' SS.RankXc ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
+								
 								If Len(@FilterSetExperimentFilter) > 0
 									Set @Sql = @sql +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
 									
 								Set @Sql = @sql +      ' GROUP BY TAD.Dataset_ID,'
 								Set @Sql = @sql +        ' P.Mass_Tag_ID,'
-								Set @Sql = @sql +   ' P.Scan_Number,'
+								Set @Sql = @sql +        ' P.Scan_Number,'
 								Set @Sql = @sql +        ' P.Charge_State'
 							End
 
@@ -629,6 +640,8 @@ As
 							Set @SavedDeltaCnThreshold = @DeltaCnThreshold
 							Set @SavedDeltaCn2Comparison = @DeltaCn2Comparison
 							Set @SavedDeltaCn2Threshold = @DeltaCn2Threshold
+							Set @SavedRankScoreComparison = @RankScoreComparison
+							Set @SavedRankScoreThreshold = @RankScoreThreshold
 							Set @SavedExperimentFilter = @FilterSetExperimentFilter
 							
 						End -- </f>
@@ -698,7 +711,8 @@ As
 														@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 														@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
 														@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
-														@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT
+														@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+														@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
 
 						If @myError <> 0
 						Begin

@@ -30,6 +30,7 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			02/14/2006 mem - Now pre-determining which jobs have entries in T_Peptides; if they don't have an entry in T_Peptides, then there is no need to try to delete entries from the tables with foreign keys to T_Peptides
 **			07/03/2006 mem - Now clearing RowCount_Loaded in T_Analysis_Description
 **			07/18/2006 mem - Updated the ALTER TABLE ADD CONSTRAINT queries to use WITH NOCHECK
+**			08/26/2006 mem - Now also clearing T_NET_Update_Task_Job_Map and T_Peptide_Prophet_Task_Job_Map
 **    
 *****************************************************/
 (
@@ -241,6 +242,24 @@ AS
 	FROM T_Analysis_Description TAD INNER JOIN
 		 T_Analysis_Filter_Flags AFF ON TAD.Job = AFF.Job INNER JOIN
 		 #JobListToDelete JobList ON TAD.Job = JobList.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto DefineConstraints
+
+
+	DELETE T_NET_Update_Task_Job_Map
+	FROM T_NET_Update_Task_Job_Map TJM INNER JOIN
+		 #JobListToDelete JobList ON TJM.Job = JobList.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto DefineConstraints
+
+
+	DELETE T_Peptide_Prophet_Task_Job_Map
+	FROM T_Peptide_Prophet_Task_Job_Map TJM INNER JOIN
+		 #JobListToDelete JobList ON TJM.Job = JobList.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--

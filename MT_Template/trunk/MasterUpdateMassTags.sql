@@ -7,17 +7,14 @@ GO
 CREATE PROCEDURE dbo.MasterUpdateMassTags
 /****************************************************
 ** 
-**		Desc: 
-**			Performs all the steps necessary to 
+**	Desc:	Performs all the steps necessary to 
 **			bring the status of the mass tag table
 **			to be current with the state of DMS
 **
 **			Also schedules GANET update task
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
-**
 **	Auth:	grk
 **	Date:	11/20/2003
 **			11/26/2003 grk - modified to add peak matching tasks from FTICR import count
@@ -49,6 +46,7 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			02/23/2006 mem - No longer posting the message returned by ImportNewMSMSAnalyses or ImportNewMSAnalyses to the log since those SPs are now doing that themselves
 **			03/04/2006 mem - Now calling UpdateGeneralStatisticsIfRequired to possibly update the general statistics
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			08/29/2006 mem - Updated call to AddDefaultPeakMatchingTasks to use @SetStateToHolding = 0
 **    
 *****************************************************/
 (
@@ -808,7 +806,7 @@ DoMSJobs:
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin AddDefaultPeakMatchingTasks', 'MasterUpdateMassTags'
 
-		exec @result = AddDefaultPeakMatchingTasks @message OUTPUT, @entriesAdded output
+		exec @result = AddDefaultPeakMatchingTasks @message OUTPUT, @entriesAdded output, @SetStateToHolding = 0
 		
 		set @message = 'Complete AddDefaultPeakMatchingTasks: ' + convert(varchar(32), @entriesAdded)
 		if @result <> 0

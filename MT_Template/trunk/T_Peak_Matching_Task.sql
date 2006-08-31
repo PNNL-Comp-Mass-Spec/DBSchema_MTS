@@ -27,6 +27,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
 	[PM_Finish] [datetime] NULL,
 	[PM_AssignedProcessorName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MD_ID] [int] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Peak_Matching_Task_Entered_By]  DEFAULT (suser_sname()),
  CONSTRAINT [PK_T_Peak_Matching_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
@@ -133,6 +134,10 @@ GO
 GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([MD_ID]) TO [DMS_SP_User]
 GO
 GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([MD_ID]) TO [DMS_SP_User]
+GO
+GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Entered_By]) TO [DMS_SP_User]
+GO
+GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Entered_By]) TO [DMS_SP_User]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_FTICR_Analysis_Description] ([Job])

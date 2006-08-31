@@ -7,6 +7,8 @@ CREATE TABLE [dbo].[T_Process_Config](
 	[Process_Config_ID] [int] IDENTITY(100,1) NOT NULL,
 	[Name] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Value] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_Process_Config_Last_Affected]  DEFAULT (getdate()),
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Process_Config_Entered_By]  DEFAULT (suser_sname()),
  CONSTRAINT [PK_T_Process_Config] PRIMARY KEY NONCLUSTERED 
 (
 	[Process_Config_ID] ASC
@@ -143,6 +145,49 @@ Begin
 
 	End -- </a2>
 End
+
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_u_T_Process_Config] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE TRIGGER [dbo].[trig_u_T_Process_Config] ON [dbo].[T_Process_Config] 
+FOR UPDATE
+AS
+/****************************************************
+**
+**	Desc: 
+**		Updates the Last_Affected and Entered_By fields 
+**		if any of the other fields are changed
+**		Note that the SYSTEM_USER and suser_sname() functions are equivalent, with
+**		 both returning the username in the form PNL\D3L243 if logged in using 
+**		 integrated authentication or returning the Sql Server login name if
+**		 logged in with a Sql Server login
+**
+**		Auth: mem
+**		Date: 08/30/2006
+**    
+*****************************************************/
+	
+	If @@RowCount = 0
+		Return
+
+	If Update([name]) OR
+	   Update([value])
+	Begin
+		UPDATE T_Process_Config
+		SET Last_Affected = GetDate(),
+			Entered_By = SYSTEM_USER
+		FROM T_Process_Config INNER JOIN 
+			 inserted ON T_Process_Config.Process_Config_ID = inserted.Process_Config_ID
+
+	End
 
 
 GO

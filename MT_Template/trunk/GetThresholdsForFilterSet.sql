@@ -8,7 +8,7 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 /****************************************************
 **
 **	Desc: 
-**		Returns thresholds for given filter set ID
+**		Returns thresholds for given filter Set ID
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -22,13 +22,15 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **			03/26/2005 mem - Added @TerminusState criteria
 **			12/11/2005 mem - Added @XTandemHyperscore and @XTandemLogEValue criteria
 **			07/10/2006 mem - Added @PeptideProphetComparison and @PeptideProphetThreshold
+**			08/26/2006 mem - Added @RankScoreComparison and @RankScoreThreshold
+**						   - Updated to cache the criteria for the given filter set group locally to remove the need to repeatedly query MT_Main.dbo.V_DMS_Filter_Sets_Import
 **    
 *****************************************************/
 (
 	@FilterSetID int,
 	@CriteriaGroupStart int=0,								-- If > 0, then will return the entries for this Filter Set having Filter_Criteria_Group >= @CriterionOrderStart
 
-	@CriteriaGroupMatch int=0 output,						-- > 0 if the @FilterSetID and @CriteriaGroupStart resolve to a valid set of criteria
+	@CriteriaGroupMatch int=0 output,						-- > 0 If the @FilterSetID and @CriteriaGroupStart resolve to a valid Set of criteria
 	@message varchar(255)='' output,
 
 	@SpectrumCountComparison varchar(2)='>=' output,
@@ -77,21 +79,25 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@XTandemLogEValueThreshold real=0 output,
 	
 	@PeptideProphetComparison varchar(2)='>=' output,
-	@PeptideProphetThreshold float=0 output
+	@PeptideProphetThreshold float=0 output,
+	
+	@RankScoreComparison varchar(2)='>=' output,
+	@RankScoreThreshold smallint=0 output
 )
 As
-	set nocount on
+	Set nocount on
 	
-	declare @myRowCount int,
+	Declare @myRowCount int,
 			@myError int
-	set @myRowCount = 0
-	set @myError = 0
+	Set @myRowCount = 0
+	Set @myError = 0
 
-	declare @matchCount int
-	Set @matchCount = 0
-
-	--------------------------------	
+	Declare @MatchCount int
+	Set @MatchCount = 0
+		
+	-------------------------------------------------
 	-- Set default return values
+	-------------------------------------------------
 	--
 	Set @CriteriaGroupMatch = 0
 	Set @message = ''
@@ -143,158 +149,179 @@ As
 	
 	Set @PeptideProphetComparison = '>='
 	Set @PeptideProphetThreshold = 0
+
+	Set @RankScoreComparison = '>='
+	Set @RankScoreThreshold = 0
 	
-	--------------------------------	
+	-------------------------------------------------
 	-- Validate @FilterSetID
+	-------------------------------------------------
 	--
-	SELECT @matchCount = COUNT(*)
-	FROM MT_Main..V_DMS_Filter_Sets_Import
+	SELECT @MatchCount = COUNT(*)
+	FROM MT_Main.dbo.V_DMS_Filter_Sets_Import
 	WHERE Filter_Set_ID = @FilterSetID
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 	--
-	if @myError <> 0
-	begin
-		set @message = 'Could not validate filter set ID ' + Convert(varchar(11), @FilterSetID) + ' in MT_Main..V_DMS_Filter_Sets_Import'		
-		goto Done
-	end
+	If @myError <> 0
+	Begin
+		Set @message = 'Could not validate filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' in MT_Main.dbo.V_DMS_Filter_Sets_Import'		
+		Goto Done
+	End
 	
-	if @matchCount = 0 
-	begin
-		set @message = 'Filter set ID ' + Convert(varchar(11), @FilterSetID) + ' not found in MT_Main..V_DMS_Filter_Sets_Import'
-		set @myError = 201
-		goto Done
-	end
+	If @MatchCount = 0
+	Begin
+		Set @message = 'Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' not found in MT_Main.dbo.V_DMS_Filter_Sets_Import'
+		Set @myError = 201
+		Goto Done
+	End
 
-	--------------------------------	
-	-- See if any criteria are defined for this filter set, 
-	--  having Filter_Criteria_Group >= @CriteriaGroupStart	
+	-------------------------------------------------
+	-- Populate a temporary table with the criteria defined for this filter Set
+	-- Using a temporary table to avoid having to re-query 
+	-- MT_Main.dbo.V_DMS_Filter_Sets_Import repeatedly
+	-------------------------------------------------
 	-- 
-	Set @CriteriaGroupMatch = 0
+
+	--	if exists (select * from dbo.sysobjects where id = object_id(N'[#T_TmpFilterSetCriteria') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+	--	drop table [#T_TmpFilterSetCriteria
+
+	CREATE TABLE #T_TmpFilterSetCriteria (
+		Filter_Criteria_Group_ID int NOT NULL ,
+		Criterion_ID int NOT NULL ,
+		Criterion_Comparison char(2) NOT NULL ,
+		Criterion_Value float NOT NULL 
+	)
 	
-	SELECT @CriteriaGroupMatch = MIN(Filter_Criteria_Group_ID)
-	FROM MT_Main..V_DMS_Filter_Sets_Import
+	Set @CriteriaGroupMatch = 0
+
+	INSERT INTO #T_TmpFilterSetCriteria (Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value)
+	SELECT Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value
+	FROM MT_Main.dbo.V_DMS_Filter_Sets_Import
 	WHERE Filter_Set_ID = @FilterSetID AND Filter_Criteria_Group_ID >= @CriteriaGroupStart
-	GROUP BY Filter_Set_ID
+	ORDER BY Filter_Criteria_Group_ID
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
-	
+
 	If @myRowCount > 0
 	Begin
-
-		--------------------------------	
+		-------------------------------------------------
+		-- Found one or more groups and criteria
+		-- Populate @CriteriaGroupMatch
+		-------------------------------------------------
+		SELECT @CriteriaGroupMatch = MIN(Filter_Criteria_Group_ID)
+		FROM #T_TmpFilterSetCriteria
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+		
+		-- Delete entries not belonging to @CriteriaGroupMatch, 
+		-- which will remove the need for us to filter on Filter_Criteria_Group_ID below
+		DELETE FROM #T_TmpFilterSetCriteria
+		WHERE Filter_Criteria_Group_ID <> @CriteriaGroupMatch
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+		
+		-------------------------------------------------
 		-- Lookup thresholds
+		-------------------------------------------------
+		
 		SELECT TOP 1 @SpectrumCountComparison = Criterion_Comparison,
 					 @SpectrumCountThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-			  Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 1		-- Spectrum_Count
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 1		-- Spectrum_Count
 		--
-		set @myError = @@Error
+		Set @myError = @@Error
 		
 		If @myError <> 0
-		begin
-			set @message = 'Error looking up Spectrum Count threshold for Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' and Filter_Criteria_Group_ID ' + convert(varchar(11), @CriteriaGroupMatch) + ' in MT_Main..V_DMS_Filter_Sets_Import'
-			goto Done
-		end
+		Begin
+			Set @message = 'Error looking up Spectrum Count threshold for Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' and Filter_Criteria_Group_ID ' + convert(varchar(11), @CriteriaGroupMatch) + ' in MT_Main.dbo.V_DMS_Filter_Sets_Import'
+			Goto DoneDropTable
+		End
 
-		SELECT TOP 1 @SpectrumCountComparison = Criterion_Comparison,
-					 @SpectrumCountThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-			  Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 1		-- Spectrum_Count
-	
 		SELECT TOP 1 @ChargeStateComparison = Criterion_Comparison,
 					 @ChargeStateThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 2		-- Charge
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 2		-- Charge
 
 		SELECT TOP 1 @HighNormalizedScoreComparison = Criterion_Comparison,
 					 @HighNormalizedScorethreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 3		-- High_Normalized_Score
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 3		-- High_Normalized_Score
 
 		SELECT TOP 1 @CleavageStateComparison = Criterion_Comparison,
 					 @CleavageStateThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 4		-- Cleavage_State
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 4		-- Cleavage_State
 
 		SELECT TOP 1 @PeptideLengthComparison = Criterion_Comparison,
 					 @PeptideLengthThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 5		-- Peptide_Length
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 5		-- Peptide_Length
 
 		SELECT TOP 1 @MassComparison = Criterion_Comparison,
 					 @MassThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 6		-- Mass
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 6		-- Mass
 
 		SELECT TOP 1 @DeltaCnComparison = Criterion_Comparison,
 					 @DeltaCnThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 7		-- DeltaCn
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 7		-- DeltaCn
 
 		SELECT TOP 1 @DeltaCn2Comparison = Criterion_Comparison,
 					 @DeltaCn2Threshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 8		-- DeltaCn2
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 8		-- DeltaCn2
 
 		SELECT TOP 1 @DiscriminantScoreComparison = Criterion_Comparison,
 					 @DiscriminantScoreThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 9		-- Discriminant_Score
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 9		-- Discriminant_Score
 
 		SELECT TOP 1 @NETDifferenceAbsoluteComparison = Criterion_Comparison,
 					 @NETDifferenceAbsoluteThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 10	-- NET_Difference_Absolute
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 10	-- NET_Difference_Absolute
 
 		SELECT TOP 1 @DiscriminantInitialFilterComparison = Criterion_Comparison,
 					 @DiscriminantInitialFilterThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 11	-- Discriminant_Initial_Filter
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 11	-- Discriminant_Initial_Filter
 
 		SELECT TOP 1 @ProteinCountComparison = Criterion_Comparison,
 					 @ProteinCountThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 12	-- Protein_Count
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 12	-- Protein_Count
 
 		SELECT TOP 1 @TerminusStateComparison = Criterion_Comparison,
 					 @TerminusStateThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 13	-- Terminus_State
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 13	-- Terminus_State
 
 		SELECT TOP 1 @XTandemHyperscoreComparison = Criterion_Comparison,
 					 @XTandemHyperscoreThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 14	-- XTandem_Hyperscore
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 14	-- XTandem_Hyperscore
 
 		SELECT TOP 1 @XTandemLogEValueComparison = Criterion_Comparison,
 					 @XTandemLogEValueThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 15	-- XTandem_LogEValue
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 15	-- XTandem_LogEValue
 
 		SELECT TOP 1 @PeptideProphetComparison = Criterion_Comparison,
 					 @PeptideProphetThreshold = Criterion_Value
-		FROM MT_Main..V_DMS_Filter_Sets_Import
-		WHERE Filter_Set_ID = @FilterSetID AND
-				Filter_Criteria_Group_ID = @CriteriaGroupMatch AND Criterion_ID = 16	-- Peptide_Prophet_Probability
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 16	-- Peptide_Prophet_Probability
 
+		SELECT TOP 1 @RankScoreComparison = Criterion_Comparison,
+					 @RankScoreThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 17	-- RankScore
+	
 	End
+
+DoneDropTable:
+	DROP TABLE #T_TmpFilterSetCriteria
 
 Done:
 	Return @myError

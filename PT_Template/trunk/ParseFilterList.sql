@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.ParseFilterList
 **			03/07/2005 mem - Ported to the Peptide Database
 **			04/07/2005 mem - Expanded @ValueMatchStr to varchar(128)
 **			02/23/2006 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
+**			08/26/2006 mem - Now including ORDER BY Process_Config_ID in the SELECT TOP 1 query to ensure that all entries are processed
 **    
 *****************************************************/
 (
@@ -107,6 +108,7 @@ As
 				Value Like '%[%]%' AND 
 				Process_Config_ID > @ProcessConfigID AND 
 				Len(Value) > 0
+			ORDER BY Process_Config_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 

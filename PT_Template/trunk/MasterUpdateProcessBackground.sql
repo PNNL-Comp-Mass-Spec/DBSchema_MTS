@@ -7,7 +7,7 @@ GO
 CREATE Procedure dbo.MasterUpdateProcessBackground
 /****************************************************
 ** 
-**		Desc: 
+**	Desc: 
 **		Filtering and sequence modification checks
 **		are performed on newly imported peptides and
 **		the results saved in the database 
@@ -37,6 +37,7 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			03/18/2006 mem - Added call to ComputeMaxObsAreaForAvailableAnalyses
 **			07/06/2006 mem - Added call to ProcessPeptideProphetTasks and updated call to CheckAllFiltersForAvailableAnalyses
 **			08/02/2006 mem - Added call to SetReversedAndScrambledJobsToHolding
+**			08/25/2006 mem - Now posting log entry before calling UpdatePeptideSICStats if any jobs are in state 20
 **    
 *****************************************************/
 (
@@ -168,6 +169,26 @@ As
 	end
 	else
 	begin
+		If @logLevel >= 1
+		Begin
+			-- See if any jobs have state @ProcessStateMatch
+			-- If they do, post a log entry that we are calling UpdatePeptideSICStats, since this can sometimes take awhile, 
+			--  particularly if the database's indices are corrupt and need to be re-created using DBCC DBREINDEX (T_Peptides, '', 90)
+			Set @count = 0
+			SELECT @count = COUNT(*)
+			FROM T_Analysis_Description
+			WHERE Process_State = @ProcessStateMatch
+			
+			If @count > 0
+			Begin
+				Set @message = 'Updating SIC stats in T_Peptides for available analyses in State ' + Convert(varchar(9), @ProcessStateMatch)
+				execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+				Set @message = ''
+			End
+			
+			Set @count = 0
+		End		
+				
 		EXEC @result = UpdatePeptideSICStats @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT, @count2 OUTPUT
 
 		set @message = 'Completed updating SIC stats in T_Peptides for available analyses in State ' + Convert(varchar(9), @ProcessStateMatch) + ': ' + convert(varchar(11), @count) + ' jobs processed and ' + Convert(varchar(11), @count2) + ' advanced to next state'

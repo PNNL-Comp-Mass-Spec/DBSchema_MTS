@@ -36,6 +36,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			06/28/2005 mem - Increased size of @IniFileName to 255 characters
 **			07/18/2005 mem - Now obtaining Instrument and Labelling from T_FTICR_Analysis_Description
 **			07/31/2006 mem - Increased size of @JobListFilter parameter to 2048 characters and added check for trailing comma
+**			08/29/2006 mem - Updated the default value for @SetStateToHolding to now be 1
 **     
 *****************************************************/
 (
@@ -43,7 +44,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 	@jobCountAdded int = 0 output,				-- Number of jobs added
 	@JobListFilter varchar(4096) = '',			-- Optional parameter: a comma separated list of Job Numbers; will only add the given jobs numbers
 	@IniFileOverride varchar(255) = '',			-- Optional parameter: Ini FileName to use instead of the default one
-	@SetStateToHolding tinyint = 0				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
+	@SetStateToHolding tinyint = 1				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
 )
 AS
 	Set NOCOUNT ON
@@ -64,7 +65,7 @@ AS
 	Set @jobCountAdded = 0
 	Set @JobListFilter = LTrim(RTrim(IsNull(@JobListFilter, '')))
 	Set @IniFileOverride = LTrim(RTrim(dbo.udfTrimToCRLF(IsNull(@IniFileOverride, ''))))
-	Set @SetStateToHolding = IsNull(@SetStateToHolding, 0)
+	Set @SetStateToHolding = IsNull(@SetStateToHolding, 1)
 	If @SetStateToHolding <> 0
 		Set @SetStateToHolding = 1
 		

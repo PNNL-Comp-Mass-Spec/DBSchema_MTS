@@ -6,52 +6,53 @@ GO
 CREATE Procedure dbo.UpdateDatabaseStates
 /****************************************************
 ** 
-**		Desc: Updates the State_ID column in the master DB list tables
+**	Desc:	Updates the State_ID column in the master DB list tables
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
-**
-**		Auth:	mem
-**		Date:	11/12/2004
-**				12/05/2004 mem - Added @StateIgnoreList parameter and updated call to UpdateDatabaseStatesSingleTable
-**				12/06/2004 mem - Removed Pogo from the @ServerFilter input parameter and switched to using V_Active_MTS_Servers
-**				08/02/2005 mem - Updated to pass @LocalSchemaVersionField and @RemoteSchemaVersionField to UpdateDatabaseStatesSingleTable
+**	Auth:	mem
+**	Date:	11/12/2004
+**			12/05/2004 mem - Added @StateIgnoreList parameter and updated call to UpdateDatabaseStatesSingleTable
+**			12/06/2004 mem - Removed Pogo from the @ServerFilter input parameter and switched to using V_Active_MTS_Servers
+**			08/02/2005 mem - Updated to pass @LocalSchemaVersionField and @RemoteSchemaVersionField to UpdateDatabaseStatesSingleTable
+**			08/30/2006 mem - Updated the log message
 **    
 *****************************************************/
+(
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the databases on the given Server
 	@UpdateTableNames tinyint = 1,
 	@DBCountUpdatedTotal int = 0 OUTPUT,
 	@message varchar(255) = '' OUTPUT
+)
 As	
-	set nocount on
+	Set nocount on
 	
-	declare @myError int
-	declare @myRowCount int
-	set @myError = 0
-	set @myRowCount = 0
+	Declare @myError int
+	Declare @myRowCount int
+	Set @myError = 0
+	Set @myRowCount = 0
 
 	-- Validate or clear the input/output parameters
 	Set @ServerFilter = IsNull(@ServerFilter, '')
 	Set @DBCountUpdatedTotal = 0
 	Set @message = ''
 
-	declare @result int
-	declare @ProcessSingleServer tinyint
+	Declare @result int
+	Declare @ProcessSingleServer tinyint
 	
 	If Len(@ServerFilter) > 0
 		Set @ProcessSingleServer = 1
 	Else
 		Set @ProcessSingleServer = 0
 
-	declare @Server varchar(128)
-	declare @ServerID int
+	Declare @Server varchar(128)
+	Declare @ServerID int
 
-	declare @Continue int
-	declare @processCount int			-- Count of servers processed
-	declare @DBCountUpdated int
+	Declare @Continue int
+	Declare @processCount int			-- Count of servers processed
+	Declare @DBCountUpdated int
 	
-	declare @StateIgnoreList varchar(128)
+	Declare @StateIgnoreList varchar(128)
 	Set @StateIgnoreList = '15, 100'
 	
 	-----------------------------------------------------------
@@ -61,11 +62,11 @@ As
 	-- Process each server in V_Active_MTS_Servers
 	-----------------------------------------------------------
 	--
-	set @processCount = 0
-	set @DBCountUpdated = 0
+	Set @processCount = 0
+	Set @DBCountUpdated = 0
 	
-	set @ServerID = -1
-	set @Continue = 1
+	Set @ServerID = -1
+	Set @Continue = 1
 	--	
 	While @Continue > 0 and @myError = 0
 	Begin -- <A>
@@ -79,12 +80,12 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
-		if @myError <> 0 
-		begin
-			set @message = 'Could not get next entry from V_Active_MTS_Servers'
-			set @myError = 50001
-			goto Done
-		end
+		If @myError <> 0 
+		Begin
+			Set @message = 'Could not get next entry from V_Active_MTS_Servers'
+			Set @myError = 50001
+			Goto Done
+		End
 		Set @continue = @myRowCount
 
 		If @continue > 0 And (@ProcessSingleServer = 0 Or Lower(@Server) = Lower(@ServerFilter))
@@ -99,10 +100,10 @@ As
 															@DBCountUpdated = @DBCountUpdated OUTPUT, @message = @message OUTPUT
 			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
 			
-			if @result <> 0
+			If @result <> 0
 			Begin
-				set @myError = 50002
-				goto Done
+				Set @myError = 50002
+				Goto Done
 			End
 			
 			Exec @result = UpdateDatabaseStatesSingleTable	@ServerID, @UpdateTableNames,
@@ -152,26 +153,31 @@ Done:
 	-- Exit
 	-----------------------------------------------------------
 	--
-	
 
-	if @myError <> 0
-	begin
+	If @myError <> 0
+	Begin
 		If Len(@message) = 0
-			set @message = 'Error updating DB states on local/remote servers; Error code: ' + convert(varchar(32), @myError)
+			Set @message = 'Error updating DB states on local/remote servers; Error code: ' + convert(varchar(32), @myError)
 
 		Exec PostLogEntry 'Error', @message, 'UpdateDatabaseStates'
-	end
+	End
 
 	Declare @LogMessage varchar(256)
-	Set @LogMessage = 'DB states updated for ' + Convert(varchar(9), @DBCountUpdatedTotal) + ' databases on ' + Convert(varchar(9), @processCount) + ' servers'
+	Set @LogMessage = 'DB states updated for ' + Convert(varchar(9), @DBCountUpdatedTotal)
+	If @DBCountUpdatedTotal = 1
+		Set @LogMessage = @LogMessage + ' database'
+	Else
+		Set @LogMessage = @LogMessage + ' databases'
+	--
+	Set @LogMessage = @LogMessage + ' on ' + Convert(varchar(9), @processCount) + ' servers'
 
-	if @DBCountUpdatedTotal > 0 
+	If @DBCountUpdatedTotal > 0 
 		Exec PostLogEntry 'Normal', @LogMessage, 'UpdateDatabaseStates'
 	
-	if Len(@message) = 0
+	If Len(@message) = 0
 		Set @message = @LogMessage
 
-	return @myError
+	Return @myError
 
 GO
 GRANT EXECUTE ON [dbo].[UpdateDatabaseStates] TO [MTUser]
