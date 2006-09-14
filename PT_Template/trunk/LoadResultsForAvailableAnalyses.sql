@@ -33,6 +33,7 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			01/15/2006 mem - Updated comments
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			07/03/2006 mem - Now populating field RowCount_Loaded in T_Analysis_Description
+**			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
 **    
 *****************************************************/
 (
@@ -46,16 +47,22 @@ AS
 	
 	declare @myRowCount int
 	declare @myError int
-	set @myRowCount = 0
-	set @myError = 0
+	Set @myRowCount = 0
+	Set @myError = 0
 	
-	set @numJobsProcessed = 0
+	Set @numJobsProcessed = 0
 	
 	declare @result int
 	declare @UpdateEnabled tinyint
 	declare @message varchar(255)
 	declare @ErrorType varchar(50)
+
+	Declare @jobAvailable int
+	Set @jobAvailable = 0
 	
+	Declare @UniqueID int
+	Set @UniqueID = 0
+
 	declare @Job int
 	declare @AnalysisTool varchar(64)
 	declare @ResultType varchar(64)
@@ -65,11 +72,50 @@ AS
 	declare @NextProcessStateToUse int
 
 	declare @count int
-	set @count = 0
+	Set @count = 0
 
 	declare @clientStoragePerspective tinyint
-	set @clientStoragePerspective  = 1
+	Set @clientStoragePerspective  = 1
 
+	-----------------------------------------------------------
+	-- Create a temporary table to track the available jobs,
+	--  ordered by Import_Priority and then by Job
+	-----------------------------------------------------------
+	
+	CREATE TABLE #Tmp_Available_Jobs (
+		UniqueID int Identity(1,1) NOT NULL,
+		Job int NOT NULL
+	)
+
+	-----------------------------------------------------------
+	-- Populate #Tmp_Available_Jobs
+	-----------------------------------------------------------
+	
+	INSERT INTO #Tmp_Available_Jobs (Job)
+	SELECT Job
+	FROM T_Analysis_Description
+	WHERE Process_State = @ProcessStateMatch
+	ORDER BY Import_Priority, Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	If @myError <> 0
+	Begin
+		Set @message = 'Error populating #Tmp_Available_Jobs'
+		Goto Done
+	End
+
+	If @myRowCount > 0
+		Set @jobAvailable = 1
+	Else
+		Set @jobAvailable = 0
+
+	If @jobAvailable = 0
+	Begin
+		Set @message = 'No analyses were available'
+		Goto Done
+	End
+	
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types
 	-----------------------------------------------
@@ -80,41 +126,6 @@ AS
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
-	
-
-	-----------------------------------------------
-	-- get next available analysis 
-	-----------------------------------------------
-	-- 
-	set @job = 0
-	set @AnalysisTool = ''
-	set @ResultType = ''
-	--
-	SELECT TOP 1 @Job = TAD.Job, @AnalysisTool = TAD.Analysis_Tool, @ResultType = TAD.ResultType
-	FROM dbo.T_Analysis_Description TAD INNER JOIN
-		 #T_ResultTypeList ON TAD.ResultType = #T_ResultTypeList.ResultType
-	WHERE TAD.Process_State = @ProcessStateMatch
-	ORDER BY TAD.Job ASC
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		set @message = 'Failure to fetch first analysis'
-		goto Done
-	end
-
-	-----------------------------------------------
-	-- verify that we got a job, and bail out with
-	-- an appropriate message if not
-	-----------------------------------------------
-	--
-	if @Job = 0
-	begin
-		set @message = 'No analyses were available'
-		goto Done
-	end
-	
 
 	-----------------------------------------------
 	-- Lookup state of Synopsis File error ignore in T_Process_Step_Control
@@ -126,115 +137,135 @@ AS
 	SELECT @IgnoreSynopsisFileFilterErrorsOnImport = enabled 
 	FROM T_Process_Step_Control
 	WHERE (Processing_Step_Name = 'IgnoreSynopsisFileFilterErrorsOnImport')
-	
+
 	
 	-----------------------------------------------
 	-- loop through new analyses and load peptides for each
 	-----------------------------------------------
 	--
-	while @Job <> 0 AND @myError = 0
-	begin -- <a>
+	Set @job = 0
+	Set @AnalysisTool = ''
+	Set @ResultType = ''
+	Set @UniqueID = 0
 
-		Set @jobprocessed = 0
-		If (@AnalysisTool = 'Sequest' OR @AnalysisTool = 'AgilentSequest' OR @AnalysisTool = 'XTandem')
-		Begin
-			Set @NextProcessStateToUse = @NextProcessState
-			exec @result = LoadPeptidesForOneAnalysis
-						@NextProcessStateToUse,
-						@Job, 
-						@message output,
-						@numLoaded output,
-						@clientStoragePerspective
+	while @jobAvailable <> 0 AND @myError = 0
+	Begin -- <a>
 		
-			Set @jobprocessed = 1
+		-----------------------------------------------------------
+		-- Get next available analysis from #Tmp_Available_Jobs
+		-- Link into T_Analysis_Description to make sure the job
+		--  is still in state @AvailableState and to lookup additional info
+		-----------------------------------------------------------
+		--
+		Set @job = 0
+		--
+		SELECT TOP 1 @job = TAD.Job, 
+					 @AnalysisTool = TAD.Analysis_Tool, 
+					 @ResultType = TAD.ResultType,
+					 @UniqueID = AJ.UniqueID
+		FROM #Tmp_Available_Jobs AJ INNER JOIN 
+			 T_Analysis_Description TAD on AJ.Job = TAD.Job INNER JOIN
+			 #T_ResultTypeList ON TAD.ResultType = #T_ResultTypeList.ResultType
+		WHERE TAD.Process_State = @ProcessStateMatch AND AJ.UniqueID > @UniqueID
+		ORDER BY AJ.UniqueID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0
+		Begin
+			Set @message = 'Failure to fetch next analysis'
+			Goto Done
 		End
 
-		If (@AnalysisTool = 'MASIC_Finnigan' OR @AnalysisTool = 'MASIC_Agilent')
-		Begin
-			Set @NextProcessStateToUse = 75
-			exec @result = LoadMASICResultsForOneAnalysis
+		If @myRowCount <> 1
+			Set @jobAvailable = 0
+		Else
+		Begin -- <b>
+			Set @jobprocessed = 0
+			If (@AnalysisTool = 'Sequest' OR @AnalysisTool = 'AgilentSequest' OR @AnalysisTool = 'XTandem')
+			Begin
+				Set @NextProcessStateToUse = @NextProcessState
+				exec @result = LoadPeptidesForOneAnalysis
 							@NextProcessStateToUse,
 							@Job, 
 							@message output,
 							@numLoaded output,
 							@clientStoragePerspective
 			
-			set @jobProcessed = 1
-		End
-		
-		If @jobProcessed = 0
-		 Begin
-			set @message = 'Unknown analysis tool ''' + @AnalysisTool + ''' for Job ' + Convert(varchar(11), @Job)
-			execute PostLogEntry 'Error', @message, 'LoadResultsForAvailableAnalyses'
-			set @message = ''
-			--
-			-- Reset the state for this job to 3, since peptide loading failed
-			Exec SetProcessState @Job, 3
-		 End		
-		Else
-		 Begin -- <b>
-			-- make log entry
-			--
-			if @result = 0
-				execute PostLogEntry 'Normal', @message, 'LoadResultsForAvailableAnalyses'
-			else
-			begin
-				-- Note that error codes 60002 and 60004 are defined in SP LoadPeptidesForOneAnalysis 
-				if @result = 60002 or @result = 60004
-				begin
-					if @IgnoreSynopsisFileFilterErrorsOnImport = 1
-						set @ErrorType = 'ErrorIgnore'
-					else
-						set @ErrorType = 'Error'
-				end
-				else
-					set @ErrorType = 'Error'
-				--
-				
-				execute PostLogEntry @ErrorType, @message, 'LoadResultsForAvailableAnalyses'
-			end
+				Set @jobprocessed = 1
+			End
 
-			-- Update RowCount_Loaded in T_Analysis_Description
-			UPDATE T_Analysis_Description
-			SET RowCount_Loaded = IsNull(@numLoaded, 0)
-			WHERE Job = @Job
-			--
-			SELECT @myRowCount = @@rowcount, @myError = @@error
+			If (@AnalysisTool = 'MASIC_Finnigan' OR @AnalysisTool = 'MASIC_Agilent')
+			Begin
+				Set @NextProcessStateToUse = 75
+				exec @result = LoadMASICResultsForOneAnalysis
+								@NextProcessStateToUse,
+								@Job, 
+								@message output,
+								@numLoaded output,
+								@clientStoragePerspective
+				
+				Set @jobProcessed = 1
+			End
 			
-			-- bump running count of peptides loaded
-			--
-			set @count = @count + @numLoaded
-			
-			-- check number of jobs processed
-			--
-			set @numJobsProcessed = @numJobsProcessed + 1
-			if @numJobsProcessed >= @numJobsToProcess goto Done
-		 End -- </b>
-		
-		-- get next available analysis
-		--
-		set @job = 0
-		--
-		SELECT TOP 1 @Job = TAD.Job, @AnalysisTool = TAD.Analysis_Tool, @ResultType = TAD.ResultType
-		FROM dbo.T_Analysis_Description TAD INNER JOIN
-			#T_ResultTypeList ON TAD.ResultType = #T_ResultTypeList.ResultType
-		WHERE TAD.Process_State = @ProcessStateMatch
-		ORDER BY TAD.Job ASC
-		--
-		SELECT @myRowCount = @@rowcount, @myError = @@error
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Failure to fetch next analysis'
-			goto Done
-		end
+			If @jobProcessed = 0
+			Begin
+				Set @message = 'Unknown analysis tool ''' + @AnalysisTool + ''' for Job ' + Convert(varchar(11), @Job)
+				execute PostLogEntry 'Error', @message, 'LoadResultsForAvailableAnalyses'
+				Set @message = ''
+				--
+				-- Reset the state for this job to 3, since peptide loading failed
+				Exec SetProcessState @Job, 3
+			End		
+			Else
+			Begin -- <c>
+				-- make log entry
+				--
+				If @result = 0
+					execute PostLogEntry 'Normal', @message, 'LoadResultsForAvailableAnalyses'
+				Else
+				Begin -- <d>
+					-- Note that error codes 60002 and 60004 are defined in SP LoadPeptidesForOneAnalysis 
+					If @result = 60002 or @result = 60004
+					Begin
+						If @IgnoreSynopsisFileFilterErrorsOnImport = 1
+							Set @ErrorType = 'ErrorIgnore'
+						Else
+							Set @ErrorType = 'Error'
+					End
+					Else
+						Set @ErrorType = 'Error'
+					--
+					
+					execute PostLogEntry @ErrorType, @message, 'LoadResultsForAvailableAnalyses'
+				End -- </d>
+
+				-- Update RowCount_Loaded in T_Analysis_Description
+				UPDATE T_Analysis_Description
+				Set RowCount_Loaded = IsNull(@numLoaded, 0)
+				WHERE Job = @Job
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				-- bump running count of peptides loaded
+				--
+				Set @count = @count + @numLoaded
+				
+				-- check number of jobs processed
+				--
+				Set @numJobsProcessed = @numJobsProcessed + 1
+				If @numJobsProcessed >= @numJobsToProcess 
+					Set @jobAvailable = 0
+					
+			End -- </c>
+		End -- </b>
 
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled @CallingFunctionDescription = 'LoadResultsForAvailableAnalyses', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 		If @UpdateEnabled = 0
 			Goto Done
 
-	end -- </a>
+	End -- </a>
 
 	-----------------------------------------------
 	-- exit the stored procedure
@@ -243,7 +274,7 @@ AS
 Done:
 
 	-- Post a log entry if an error exists
-	if @myError <> 0
+	If @myError <> 0
 		execute PostLogEntry 'Error', @message, 'LoadResultsForAvailableAnalyses'
 
 	Return @myError

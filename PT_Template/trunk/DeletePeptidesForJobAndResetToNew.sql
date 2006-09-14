@@ -31,6 +31,8 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			07/03/2006 mem - Now clearing RowCount_Loaded in T_Analysis_Description
 **			07/18/2006 mem - Updated the ALTER TABLE ADD CONSTRAINT queries to use WITH NOCHECK
 **			08/26/2006 mem - Now also clearing T_NET_Update_Task_Job_Map and T_Peptide_Prophet_Task_Job_Map
+**			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
+**						   - Now posting a log entry for the processed jobs
 **    
 *****************************************************/
 (
@@ -48,10 +50,13 @@ AS
 	set @myError = 0
 
 	Declare @commaLoc int
-	Declare @jobStr varchar(255)
 	Declare @HasPeptidesThreshold tinyint
 	
-	-- Populate a temporary table with the list of jobs in @JobListToDelete
+	Declare @Message varchar(512)
+	Declare @JobListProcessed varchar(512)
+	Set @JobListProcessed = ''
+	
+	-- Create a temporary table to hold the jobs to delete
 	CREATE TABLE #JobListToDelete (
 		Job int NOT NULL ,
 		HasPeptides tinyint NOT NULL DEFAULT (0) 			-- Will be 1 if the job has any peptides in T_Peptides and related tables; effectively ignored if @DropAndAddConstraints=1
@@ -59,27 +64,53 @@ AS
 
 	CREATE CLUSTERED INDEX #IX_Tmp_JobListToDelete_Job ON #JobListToDelete (Job)
 
-	-- Append a comma to @JobListToDelete
-	Set @JobListToDelete = LTrim(RTrim(@JobListToDelete)) + ','
+	-- Populate #JobListToDelete with the jobs in @JobListToDelete
+	INSERT INTO #JobListToDelete (Job)
+	SELECT value
+	FROM dbo.udfParseDelimitedList(@JobListToDelete, ',')
+	ORDER BY value
 	
-	Set @commaLoc = 1
-	While @commaLoc > 0
+	-- Look for jobs not present in T_Analysis_Description
+	Set @JobListProcessed = ''
+	SELECT @JobListProcessed = @JobListProcessed + Convert(varchar(12), JL.Job) + ','
+	FROM #JobListToDelete JL LEFT OUTER JOIN
+		 T_Analysis_Description TAD ON JL.Job = TAD.Job
+	WHERE TAD.Job Is Null
+	ORDER BY JL.Job
+	
+	If Len(IsNull(@JobListProcessed, '')) > 0
 	Begin
-		Set @commaLoc = CharIndex(',', @JobListToDelete)
-		
-		If @commaLoc > 0
-		Begin
-			Set @jobStr = SubString(@JobListToDelete, 1, @commaLoc-1)
-			Set @JobListToDelete = LTrim(RTrim(SubString(@JobListToDelete, @commaLoc+1, Len(@JobListToDelete) - @commaLoc)))
-		
-			INSERT INTO #JobListToDelete (Job)
-			SELECT Convert(int, @jobStr)
-			--
-			SELECT @myRowCount = @@rowcount, @myError = @@error
-			--
+		Set @Message = 'Warning, invalid jobs specified: ' + left(@JobListProcessed, Len(@JobListProcessed)-1)		
+		SELECT @Message AS Message
+		Print @Message
 
-		End
+		Set @Message = ''
+		
+		-- Delete the invalid jobs
+		DELETE #JobListToDelete
+		FROM #JobListToDelete JL LEFT OUTER JOIN
+			T_Analysis_Description TAD ON JL.Job = TAD.Job
+		WHERE TAD.Job Is Null
 	End
+
+	-- Update @JobListProcessed with the list of valid jobs
+	Set @JobListProcessed = ''
+	SELECT @JobListProcessed = @JobListProcessed + Convert(varchar(12), Job) + ', '
+	FROM #JobListToDelete
+	ORDER BY Job	
+
+	If Len(IsNull(@JobListProcessed, '')) = 0
+	Begin
+		Set @Message = 'Error: no valid jobs were found'
+
+		SELECT @Message AS Message
+		Print @Message
+
+		Goto Done
+	End
+	
+	-- Remove the trailing comma from @JobListProcessed
+	Set @JobListProcessed = left(@JobListProcessed, Len(@JobListProcessed)-1)
 
 	If @DropAndAddConstraints = 0
 		Set @HasPeptidesThreshold = 1
@@ -293,8 +324,17 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-	
 
+	
+	-- Prepare the log message
+	Set @message = 'Deleted data for jobs ' + @JobListProcessed
+	If Len(@message) > 475
+	Begin
+		-- Find the next comma after position 475
+		Set @commaLoc = CharIndex(',', @Message, 475)
+		Set @message = Left(@message, @commaLoc) + '...'
+	End
+	
 	If @ResetStateToNew <> 0
 	Begin
 		UPDATE T_Analysis_Description
@@ -307,8 +347,13 @@ AS
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
 		If @myError <> 0 Goto DefineConstraints
+		
+		Set @message = @message + '; Job states have been reset to 10'
 	End
 
+	exec PostLogEntry 'Normal', @message, 'DeletePeptidesForJobAndResetToNew'
+	SELECT @message
+	
 DefineConstraints:
 	If @DropAndAddConstraints = 1
 	Begin

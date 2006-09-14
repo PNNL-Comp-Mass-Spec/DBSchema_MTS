@@ -14,27 +14,27 @@ CREATE Procedure dbo.AddQuantitationDescription
 **
 **  Parameters: see comments beside each parameter
 **
-**  Auth: mem
-**	Date: 06/03/2003
-**
-**  Updated: 7/31/2003 by mem
-**			 8/26/2003 - changed Trial to Replicate where appropriate 
-**						 Now looks for old QuantitationID tasks with identical sample name and identical comment or identical MDID
-**						 If found, changes those the Quantitation_State for the old tasks to 5 = Superseded
-**			 9/17/2003 - Added @AddBackExcludedMassTags and @Expression_Ratio_Mode parameters
-**			 11/18/2003 - Added @MinimumHighNormalizedScore
-**			 12/01/2003 - Added @MinimumPeptideReplicateCount, @RepNormalizationPctSmallDataToDiscard, @RepNormalizationPctLargeDataToDiscard, and @RepNormalizationMinimumDataPointCount
-**			 04/13/2004 - Added @UMCAbundanceMode, @MinimumPMTQualityScore, @MinimumPeptideLength, @ORFCoverageComputationLevel
-**			 02/05/2005 - Added @MinimumHighDiscriminantScore
-**			 04/05/2005 - Added @MinimumMatchScore (aka SLiC Score)
-**						- Switched from using @@Identity to SCOPE_IDENTITY()
-**						- Changed default value for @MinimumHighDiscriminantScore to 0.2 and for @MinimumMatchScore to 0.35
-**			 04/07/2005 - Added MinimumDelMatchScore (aka Del SLiC Score)
-**			 06/16/2005 - Added InternalStdInclusionMode
-**			 08/12/2005 - Removed all of the processing option parameters and switched to calling LookupQuantitationDefaults to obtain the default values from T_Quantitation_Defaults.
-**						- Removed parameter @IniFileName
-**			 09/22/2005 - Added parameter @LookupDefaultOptions to specify whether the processing option parameters should be used or whether the values in T_Quantitation_Defaults should be used
-**						- Added back the processing option parameters since they are needed by Q Rollup
+**  Auth:	mem
+**	Date:	06/03/2003
+**			07/31/2003 mem
+**			08/26/2003 mem - changed Trial to Replicate where appropriate 
+**						   - Now looks for old QuantitationID tasks with identical sample name and identical comment or identical MDID
+**						   - If found, changes those the Quantitation_State for the old tasks to 5 = Superseded
+**			09/17/2003 mem - Added @AddBackExcludedMassTags and @Expression_Ratio_Mode parameters
+**			11/18/2003 mem - Added @MinimumHighNormalizedScore
+**			12/01/2003 mem - Added @MinimumPeptideReplicateCount, @RepNormalizationPctSmallDataToDiscard, @RepNormalizationPctLargeDataToDiscard, and @RepNormalizationMinimumDataPointCount
+**			04/13/2004 mem - Added @UMCAbundanceMode, @MinimumPMTQualityScore, @MinimumPeptideLength, @ORFCoverageComputationLevel
+**			02/05/2005 mem - Added @MinimumHighDiscriminantScore
+**			04/05/2005 mem - Added @MinimumMatchScore (aka SLiC Score)
+**						   - Switched from using @@Identity to SCOPE_IDENTITY()
+**						   - Changed default value for @MinimumHighDiscriminantScore to 0.2 and for @MinimumMatchScore to 0.35
+**			04/07/2005 mem - Added MinimumDelMatchScore (aka Del SLiC Score)
+**			06/16/2005 mem - Added InternalStdInclusionMode
+**			08/12/2005 mem - Removed all of the processing option parameters and switched to calling LookupQuantitationDefaults to obtain the default values from T_Quantitation_Defaults.
+**						   - Removed parameter @IniFileName
+**			09/22/2005 mem - Added parameter @LookupDefaultOptions to specify whether the processing option parameters should be used or whether the values in T_Quantitation_Defaults should be used
+**						   - Added back the processing option parameters since they are needed by Q Rollup
+**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **
 ****************************************************/
 (
@@ -75,7 +75,9 @@ CREATE Procedure dbo.AddQuantitationDescription
 
 	@MinimumPeptideReplicateCount smallint = 0,		-- Ignored if @LookupDefaultOptions <> 0
 	@ORFCoverageComputationLevel tinyint = 1,		-- Ignored if @LookupDefaultOptions <> 0
-	@InternalStdInclusionMode tinyint = 0			-- Ignored if @LookupDefaultOptions <> 0
+	@InternalStdInclusionMode tinyint = 0,			-- Ignored if @LookupDefaultOptions <> 0
+
+	@MinimumPeptideProphetProbability real = 0		-- Ignored if @LookupDefaultOptions <> 0
 )
 As
 	Set NoCount On
@@ -101,12 +103,13 @@ As
 		-- Lookup the Quantitation Defaults for @MDID (even if it's null)
 		Exec LookupQuantitationDefaults @MDID, @message output,
 										@Fraction_Highest_Abu_To_Use output, @Normalize_To_Standard_Abundances output, 
-										@Standard_Abundance_Min output, @Standard_Abundance_Max output, @UMCAbundanceMode output, 
-										@Expression_Ratio_Mode output, @MinimumHighNormalizedScore output, 
-										@MinimumHighDiscriminantScore output, @MinimumPMTQualityScore output, 
-										@MinimumPeptideLength output, @MinimumMatchScore output, @MinimumDelMatchScore output, 
+										@Standard_Abundance_Min output, @Standard_Abundance_Max output,
+										@UMCAbundanceMode output, @Expression_Ratio_Mode output, 
+										@MinimumHighNormalizedScore output, @MinimumHighDiscriminantScore output, 
+										@MinimumPMTQualityScore output, @MinimumPeptideLength output, 
+										@MinimumMatchScore output, @MinimumDelMatchScore output, 
 										@MinimumPeptideReplicateCount output, @ORFCoverageComputationLevel output, 
-										@InternalStdInclusionMode output
+										@InternalStdInclusionMode output, @MinimumPeptideProphetProbability output
 			
 
 	
@@ -155,6 +158,7 @@ As
 			Expression_Ratio_Mode,
 			Minimum_MT_High_Normalized_Score,
 			Minimum_MT_High_Discriminant_Score,
+			Minimum_MT_Peptide_Prophet_Probability,
 			Minimum_PMT_Quality_Score,
 			Minimum_Peptide_Length,
 			Minimum_Match_Score,
@@ -170,6 +174,7 @@ As
 			@Expression_Ratio_Mode,
 			@MinimumHighNormalizedScore,
 			@MinimumHighDiscriminantScore,
+			@MinimumPeptideProphetProbability,
 			@MinimumPMTQualityScore,
 			@MinimumPeptideLength,
 			@MinimumMatchScore,
@@ -234,7 +239,7 @@ As
 		End
 	
 Done:
-	Select @message
+	Print @message
 	
 	Return @myError
 

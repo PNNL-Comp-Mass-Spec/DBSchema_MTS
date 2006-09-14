@@ -15,6 +15,7 @@ CREATE TABLE [dbo].[T_Quantitation_Defaults](
 	[Expression_Ratio_Mode] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Expression_Ratio_Mode]  DEFAULT (0),
 	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_High_Normalized_Score]  DEFAULT (0),
 	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_High_Discriminant_Score]  DEFAULT (0.2),
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Peptide_Prophet_Probability]  DEFAULT (0),
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_PMT_Quality_Score]  DEFAULT (0),
 	[Minimum_Peptide_Length] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Peptide_Length]  DEFAULT (6),
 	[Minimum_Match_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Match_Score]  DEFAULT (0.35),

@@ -35,6 +35,7 @@ CREATE PROCEDURE MakeNewMassTagDB_Replace
 **						   - Removed addition to the 'DB Maintenance Plan - PT DB Backup' maintenance plan since DB backups are now performed by SP Backup_MTS_DBs
 **			07/27/2006 mem - Updated to verify each campaign defined in @campaign
 **			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
+**			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
 **    
 *****************************************************/
 (
@@ -64,6 +65,8 @@ AS
 	
 	declare @result int
 	declare @hit int
+
+	Declare @sql varchar(1024)
 
 	If Len(LTrim(RTrim(IsNull(@proteinDBName, '')))) = 0
 		Set @proteinDBName = '(na)'
@@ -336,6 +339,25 @@ AS
 
 
 	---------------------------------------------------
+	-- Update the Last_Affected column in T_Process_Config
+	-- Leave Entered_By unchanged
+	---------------------------------------------------
+	Set @sql = ''
+	Set @sql = @sql + ' UPDATE [' + @MTDBName + '].dbo.T_Process_Config'
+	Set @sql = @sql + ' SET Last_Affected = GetDate()'
+	Exec (@sql)
+
+	---------------------------------------------------
+	-- Update the Last_Affected column in T_Process_Step_Control
+	-- Leave Entered_By unchanged
+	---------------------------------------------------
+	Set @sql = ''
+	Set @sql = @sql + ' UPDATE [' + @MTDBName + '].dbo.T_Process_Step_Control'
+	Set @sql = @sql + ' SET Last_Affected = GetDate()'
+	Exec (@sql)
+
+
+	---------------------------------------------------
 	-- Configure the newly created database
 	---------------------------------------------------
 	
@@ -398,9 +420,7 @@ AS
 	-- embedded in it, and we need to add the Albert versions
 	---------------------------------------------------
 	
-	Declare @sql varchar(1024)
 	Set @sql = 'exec [' + @MTDBName + '].dbo.UpdateUserPermissions'
-	
 	Exec (@sql)
 
 

@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 /****************************************************
 ** 
@@ -19,6 +20,7 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 **			12/12/2005 mem - Now populating Created and Last_Affected with the date/time listed in T_Analysis_Description
 **						   - Added support for Peptide DBs with @DBSchemaVersion < 2
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			09/07/2006 mem - Now populating column Process_State
 **    
 *****************************************************/
 (
@@ -119,7 +121,8 @@ As
 		[Job] [int] NOT NULL ,
 		[ResultType] varchar(32) NULL ,
 		[Created] [datetime] NOT NULL ,
-		[Last_Affected] [datetime] NOT NULL 
+		[Last_Affected] [datetime] NOT NULL ,
+		[Process_State] int NOT NULL
 	)
 
 	-----------------------------------------------------------
@@ -164,16 +167,16 @@ As
 			If @DBSchemaVersion < 2
 			Begin
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected)'
-				Set @sql = @sql + ' SELECT Job, ''Peptide_Hit'' AS ResultType, Created, Created AS Last_Affected'
+				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
+				Set @sql = @sql + ' SELECT Job, ''Peptide_Hit'' AS ResultType, Created, Created AS Last_Affected, IsNull(State, 0)'
 				Set @sql = @sql + ' FROM [' + @PDB_Name + '].dbo.T_Analysis_Description'
 				Set @sql = @sql + ' WHERE Analysis_Tool LIKE ''%sequest%'' AND NOT Created IS NULL'
 			End
 			Else
 			Begin
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected)'
-				Set @sql = @sql + ' SELECT Job, ResultType, Created, IsNull(Last_Affected, Created)'
+				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
+				Set @sql = @sql + ' SELECT Job, ResultType, Created, IsNull(Last_Affected, Created), IsNull(Process_State, 0)'
 				Set @sql = @sql + ' FROM [' + @PDB_Name + '].dbo.T_Analysis_Description'
 			End
 			--
@@ -209,8 +212,8 @@ As
 				-- Insert missing jobs from #Temp_PTDB_Jobs into AJPDM
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_Peptide_DB_Map (Job, PDB_ID, ResultType, Created, Last_Affected)'
-				Set @sql = @sql + ' SELECT PTDB.Job, ' + @PDB_ID_Text + ' AS PDB_ID, PTDB.ResultType, PTDB.Created, PTDB.Last_Affected'
+				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_Peptide_DB_Map (Job, PDB_ID, ResultType, Created, Last_Affected, Process_State)'
+				Set @sql = @sql + ' SELECT PTDB.Job, ' + @PDB_ID_Text + ' AS PDB_ID, PTDB.ResultType, PTDB.Created, PTDB.Last_Affected, IsNull(PTDB.Process_State, 0)'
 				Set @sql = @sql + ' FROM #Temp_PTDB_Jobs AS PTDB LEFT OUTER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_Peptide_DB_Map AS AJPDM ON'
 				Set @sql = @sql +      ' PTDB.Job = AJPDM.Job AND AJPDM.PDB_ID = ' + @PDB_ID_Text
@@ -221,17 +224,20 @@ As
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				Set @RowCountAdded = @RowCountAdded + @myRowCount
 
-				-- Update jobs in #Temp_PTDB_Jobs with differing Created or Last_Affected times
+				-- Update jobs in #Temp_PTDB_Jobs with differing Created, Last_Affected, or Process_State times
 				--
 				Set @sql = ''
 				Set @sql = @sql + ' UPDATE T_Analysis_Job_to_Peptide_DB_Map'
-				Set @sql = @sql + ' SET Created = PTDB.Created, Last_Affected = PTDB.Last_Affected'
+				Set @sql = @sql + ' SET Created = PTDB.Created, '
+				Set @sql = @sql +     ' Last_Affected = PTDB.Last_Affected,'
+				Set @sql = @sql +     ' Process_State = IsNull(PTDB.Process_State, 0)'
 				Set @sql = @sql + ' FROM #Temp_PTDB_Jobs AS PTDB INNER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_Peptide_DB_Map AS AJPDM ON'
 				Set @sql = @sql +      ' PTDB.Job = AJPDM.Job AND AJPDM.PDB_ID = ' + @PDB_ID_Text
 				Set @sql = @sql + ' WHERE AJPDM.Created <> PTDB.Created OR '
-				Set @sql = @sql +       ' AJPDM.Last_Affected <> PTDB.Last_Affected'
-
+				Set @sql = @sql +       ' AJPDM.Last_Affected <> PTDB.Last_Affected OR '
+				Set @sql = @sql +       ' AJPDM.Process_State <> PTDB.Process_State'
+				
 				EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -271,5 +277,6 @@ Done:
 	end
 
 	return @myError
+
 
 GO

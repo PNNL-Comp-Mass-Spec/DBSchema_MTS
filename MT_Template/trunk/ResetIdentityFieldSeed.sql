@@ -18,6 +18,8 @@ CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 **	Date:	12/30/2005
 **			02/17/2006 mem - Now updating current identity to @IdentitySeed-1 if a table is empty; necessary if the user makes a single entry in a table then deletes the row
 **			03/14/2006 mem - Added tables T_Quantitation_Defaults, T_Peak_Matching_Defaults, and T_Histogram_Cache
+**			09/12/2006 mem - Added table T_Event_Log
+**			09/13/2006 mem - Added table T_Peptide_Load_Stats
 **
 *****************************************************/
 (
@@ -97,6 +99,8 @@ AS
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Quantitation_ResultDetails', 'QRD_ID')
 
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Log_Entries',				'Entry_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Event_Log',					'Event_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Peptide_Load_Stats',		'Entry_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_GANET_Update_Task',			'Task_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_General_Statistics',		'Entry_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Process_Config',			'Process_Config_ID')

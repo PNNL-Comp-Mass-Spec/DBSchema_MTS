@@ -15,7 +15,7 @@ CREATE Procedure dbo.AddMatchMaking
 **
 **			06/23/2003 mem - added @ToolVersion
 **			06/25/2003 mem - added 7 new inputs
-**			07/01/2003 mem - changed MD_State update logic to set to 5 if previously analyzed; 
+**			07/01/2003 mem - changed MD_State update logic to Set to 5 if previously analyzed; 
 **							 added new State column to allow setting of State to 2 immediately;
 **							 added GANET_Fit, GANET_Slope, and GANET_Intercept parameters
 **			07/17/2003 mem - added NetAdjNetMin, NetAdjNetMax, RefineMassCalPPMShift,  
@@ -27,6 +27,8 @@ CREATE Procedure dbo.AddMatchMaking
 **			02/05/2005 mem - added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter
 **			05/06/2005 mem - Added parameters @RefineMassCalPeakWidthPPM, @RefineMassCalPeakCenterPPM, @RefineNETTolPeakHeightCounts, @RefineNETTolPeakWidthNET, & @RefineNETTolPeakCenterNET
 **			12/20/2005 mem - Added parameter @LimitToPMTsFromDataset
+**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**
 *******************************************************/
 (
 	@Reference_Job int,
@@ -66,42 +68,48 @@ CREATE Procedure dbo.AddMatchMaking
 	@RefineNETTolPeakHeightCounts int=NULL,
 	@RefineNETTolPeakWidthNET real=NULL,
 	@RefineNETTolPeakCenterNET real = NULL,
-	@LimitToPMTsFromDataset tinyint = 0
+	@LimitToPMTsFromDataset tinyint = 0,
+	@MinimumPeptideProphetProbability real = 0
 )
 As
-Set NoCount On
+	Set NoCount On
 
-DECLARE @returnvalue INT
-SET @returnvalue=0
-	
-DECLARE @Date DATETIME
-SET @Date=GETDATE()	
+	declare @myRowCount int	
+	declare @myError int
+	Set @myRowCount = 0
+	Set @myError = 0
+		
+	Declare @charLoc int
 
-Declare @charLoc int
+	If Len(IsNull(@IniFileName, '')) = 0
+		Set @IniFileName = ''
 
-If Len(IsNull(@IniFileName, '')) = 0
-	Set @IniFileName = ''
+	If Len(@IniFileName) = 0 And @Parameters Like 'IniFile=%'
+	Begin
+		Set @charLoc = CHARINDEX('.ini', @Parameters)	
+		If IsNull(@charLoc, 0) > 1
+			Set @IniFileName = SubString(@Parameters, 9, @charLoc - 5)
+	End
 
-If Len(@IniFileName) = 0 And @Parameters Like 'IniFile=%'
-Begin
-	Set @charLoc = CHARINDEX('.ini', @Parameters)	
-	If IsNull(@charLoc, 0) > 1
-		set @IniFileName = SubString(@Parameters, 9, @charLoc - 5)
-End
+	-- Start a transaction
+	BEGIN TRANSACTION FullTrans
+		
+	-- If there are analyses with same Reference_Job and Type, then mark
+	-- this as an update (all previous have to be marked as Updated)
+	UPDATE dbo.T_Match_Making_Description
+	Set MD_State = 5
+	WHERE MD_Reference_Job=@Reference_Job AND 
+		  MD_Type=@Type
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 
-BEGIN TRANSACTION FullTrans		-- two updates; better have rollback available
-	
---if there are analyses with same Reference_Job and Type, then mark
---this as an update (all previous have to be marked as Updated)
-UPDATE dbo.T_Match_Making_Description
-SET MD_State = 5
-WHERE (MD_Reference_Job=@Reference_Job AND MD_Type=@Type)	-- AND MD_Parameters=@Parameters
-
-SET @returnvalue=@@ERROR
-
---append new row to the T_Match_Making_Description table
-IF @returnvalue=0 
-BEGIN
+	If @myError <> 0
+	Begin
+		ROLLBACK TRANSACTION FullTrans
+		Goto Done
+	End
+		
+	-- Append new row to the T_Match_Making_Description table
 	INSERT INTO dbo.T_Match_Making_Description (
 		MD_Reference_Job, MD_File, MD_Type, MD_Parameters, 
 		MD_Date, MD_State, MD_Peaks_Count, 
@@ -117,11 +125,12 @@ BEGIN
 		Refine_Mass_Cal_PeakCenterPPM, Refine_Mass_Tol_Used, 
 		Refine_NET_Tol_PeakHeightCounts, Refine_NET_Tol_PeakWidth, 
 		Refine_NET_Tol_PeakCenter, Refine_NET_Tol_Used,
-		Minimum_High_Normalized_Score, Minimum_High_Discriminant_Score, Minimum_PMT_Quality_Score,
+		Minimum_High_Normalized_Score, Minimum_High_Discriminant_Score, 
+		Minimum_Peptide_Prophet_Probability, Minimum_PMT_Quality_Score,
 		Ini_File_Name, Experiment_Filter, Experiment_Exclusion_Filter, Limit_To_PMTs_From_Dataset
 		)
 	VALUES (@Reference_Job, @File, @Type, @Parameters, 
-			@Date, @State, @PeaksCount, 
+			GetDate(), @State, @PeaksCount, 
 			@ToolVersion, @ComparisonMassTagCount,
 			@UMCTolerancePPM, @UMCCount,
 			@NetAdjTolerancePPM, @NetAdjUMCsHitCount,
@@ -134,22 +143,23 @@ BEGIN
 			@RefineMassCalPeakCenterPPM, @RefineMassTolUsed, 
 			@RefineNETTolPeakHeightCounts, @RefineNETTolPeakWidthNET, 
 			@RefineNETTolPeakCenterNET, @RefineNETTolUsed,
-			@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, @MinimumPMTQualityScore,
+			@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+			@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
 			@IniFileName, @ExperimentFilter, @ExperimentExclusionFilter, @LimitToPMTsFromDataset
 			)
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount, @MatchMakingID = SCOPE_IDENTITY()
 
-	SET @MatchMakingID=@@IDENTITY	--return ID	
-		
-	SET @returnvalue=@@ERROR
-END
-	
---if everything OK commit transaction, otherwise rollback
-IF @returnvalue=0
-	COMMIT TRANSACTION	FullTrans
-ELSE
-	ROLLBACK TRANSACTION FullTrans
+	If @myError <> 0
+	Begin
+		ROLLBACK TRANSACTION FullTrans
+		Goto Done
+	End
+	Else
+		COMMIT TRANSACTION	FullTrans
 
-Return @returnvalue
+Done:
+	Return @myError
 
 
 GO

@@ -23,6 +23,8 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **			09/28/2005 mem - Switched to using Peptide_Obs_Count_Passing_Filter instead of Number_of_Peptides for the 9th column of data
 **			12/22/2005 mem - Added parameter @JobToFilterOnByDataset
 **			06/08/2006 mem - Now returning Mod_Count and Mod_Description as the 10th and 11th columns
+**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**						   - Updated parsing of @ExperimentFilter and @ExperimentExclusionFilter to check for percent signs in the parameter; if no percent signs are present, then auto-adds them at the beginning and end
 **  
 ****************************************************************/
 (
@@ -45,7 +47,8 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
 	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
-	@JobToFilterOnByDataset int = 0					-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
+	@JobToFilterOnByDataset int = 0,				-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
+	@MinimumPeptideProphetProbability real = 0		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
 )
 As
 	Set NoCount On
@@ -89,7 +92,7 @@ As
 	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
 	Set @ExperimentExclusionFilter = IsNull(@ExperimentExclusionFilter, '')
 	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
-
+	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 
 	---------------------------------------------------	
 	-- Create a temporary table to hold the list of mass tags that match the 
@@ -106,29 +109,51 @@ As
 	---------------------------------------------------	
 
 	Set @ScoreFilteringSQL = ''
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' (IsNull(MT.High_Discriminant_Score, 0) >= ' + Convert(varchar(11), @MinimumHighDiscriminantScore) + ') '
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.PMT_Quality_Score, 0) >= ' +  Convert(varchar(11), @MinimumPMTQualityScore) + ') '
+	
+	If @MinimumPMTQualityScore <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.PMT_Quality_Score, 0) >= ' +  Convert(varchar(11), @MinimumPMTQualityScore) + ') '
+
+	If @MinimumHighDiscriminantScore <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Discriminant_Score, 0) >= ' + Convert(varchar(11), @MinimumHighDiscriminantScore) + ') '
+
+	If @MinimumPeptideProphetProbability <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Peptide_Prophet_Probability, 0) >= ' + Convert(varchar(11), @MinimumPeptideProphetProbability) + ') '
+
+	If @MinimumHighNormalizedScore <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Normalized_Score, 0) >= ' +  Convert(varchar(11), @MinimumHighNormalizedScore) + ') '
+	
 	If @ConfirmedOnly <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
 
-	---------------------------------------------------	
-	-- Possibly add High Normalized Score
-	-- It isn't indexed; thus only add it to @ScoreFilteringSQL if it is non-zero
-	---------------------------------------------------	
-	If @MinimumHighNormalizedScore <> 0
-		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Normalized_Score, 0) >= ' +  Convert(varchar(11), @MinimumHighNormalizedScore) + ') '
+	-- Remove ' AND' from the start of @ScoreFilteringSQL if non-blank
+	If Len(@ScoreFilteringSQL) > 0
+		Set @ScoreFilteringSQL = Substring(@ScoreFilteringSQL, 5, LEN(@ScoreFilteringSQL))
 
 
 	---------------------------------------------------	
 	-- Possibly add an experiment filter
 	---------------------------------------------------	
 	Set @ExperimentFilteringSQL = ''
-	If Len(@ExperimentFilter) > 0
-		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment LIKE ''%' + @ExperimentFilter + '%'')'
 
+	If Len(@ExperimentFilter) > 0
+	Begin
+		If CharIndex('%', @ExperimentFilter) = 0
+			Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment LIKE ''%' + @ExperimentFilter + '%'')'
+		Else
+			Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment LIKE ''' + @ExperimentFilter + ''')'
+	End
 
 	If Len(@ExperimentExclusionFilter) > 0
-		Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment NOT LIKE ''%' + @ExperimentExclusionFilter + '%'')'
+	Begin
+		If CharIndex('%', @ExperimentExclusionFilter) = 0
+			Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment NOT LIKE ''%' + @ExperimentExclusionFilter + '%'')'
+		Else
+			Set @ExperimentFilteringSQL = @ExperimentFilteringSQL + ' AND (TAD.Experiment NOT LIKE ''' + @ExperimentExclusionFilter + ''')'
+	End
+
+	-- Remove ' AND' from the start of @ExperimentFilteringSQL if non-blank
+	If Len(@ExperimentFilteringSQL) > 0
+		Set @ExperimentFilteringSQL = Substring(@ExperimentFilteringSQL, 5, LEN(@ExperimentFilteringSQL))
 
 
 	---------------------------------------------------	
@@ -165,7 +190,9 @@ As
 		Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
 		Set @BaseSql = @BaseSql +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
 		Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
-		Set @BaseSql = @BaseSql + ' WHERE TAD.Dataset = ''' + @Dataset + ''' AND ' + @ScoreFilteringSQL
+		Set @BaseSql = @BaseSql + ' WHERE TAD.Dataset = ''' + @Dataset + ''''
+		If Len(@ScoreFilteringSQL) > 0
+			Set @BaseSql = @BaseSql + ' AND ' + @ScoreFilteringSQL
 	End
 	Else
 	Begin
@@ -173,7 +200,8 @@ As
 		Begin
 			Set @BaseSql = @BaseSql + ' SELECT Mass_Tag_ID'
 			Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT'
-			Set @BaseSql = @BaseSql + ' WHERE ' + @ScoreFilteringSQL
+			If Len(@ScoreFilteringSQL) > 0
+				Set @BaseSql = @BaseSql + ' WHERE ' + @ScoreFilteringSQL
 		End
 		Else
 		Begin
@@ -181,7 +209,9 @@ As
 			Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
 			Set @BaseSql = @BaseSql +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
 			Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
-			Set @BaseSql = @BaseSql + ' WHERE ' + @ScoreFilteringSQL + @ExperimentFilteringSQL
+			Set @BaseSql = @BaseSql + ' WHERE ' + @ExperimentFilteringSQL
+			If Len(@ScoreFilteringSQL) > 0
+				Set @BaseSql = @BaseSql + ' AND ' + @ScoreFilteringSQL
 		End
 	End
 
@@ -219,7 +249,8 @@ As
 			-- (or not containing the given ID)
 			---------------------------------------------------	
 			--
-			-- @CurrIncItem should be of the form '1014'  or  'Not 1014'
+			-- @CurrIncItem should be of the form '1014'  or  'Not 1014'
+
 			-- If it doesn't match this form, abort processing and do not return any mass tags
 
 

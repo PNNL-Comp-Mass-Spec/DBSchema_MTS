@@ -10,6 +10,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
 	[Mod_List] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Mod_List]  DEFAULT (''),
 	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Normalized_Score]  DEFAULT (1.0),
 	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Discriminant_Score]  DEFAULT (0),
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT (0),
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score]  DEFAULT (0),
 	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter]  DEFAULT (''),
 	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter]  DEFAULT (''),
@@ -33,6 +34,138 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
 	[Task_ID] ASC
 )WITH FILLFACTOR = 90 ON [PRIMARY]
 ) ON [PRIMARY]
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_i_PeakMatchingTask] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE Trigger trig_i_PeakMatchingTask on dbo.T_Peak_Matching_Task
+For Insert
+AS
+	If @@RowCount = 0
+		Return
+
+	INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+	SELECT 3, inserted.Task_ID, inserted.Processing_State, 0, GetDate()
+	FROM inserted
+
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_u_PeakMatchingTask] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE Trigger trig_u_PeakMatchingTask on dbo.T_Peak_Matching_Task
+For Update
+AS
+	If @@RowCount = 0
+		Return
+
+	if update(Processing_State)
+		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+		SELECT 3, inserted.Task_ID, inserted.Processing_State, deleted.Processing_State, GetDate()
+		FROM deleted INNER JOIN inserted ON deleted.Task_ID = inserted.Task_ID
+
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_u_T_Peak_Matching_Task] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TRIGGER [trig_u_T_Peak_Matching_Task] ON dbo.T_Peak_Matching_Task 
+FOR UPDATE
+AS
+/****************************************************
+**
+**	Desc: 
+**		Updates the Entered_By field if any of the parameter fields are changed
+**		Note that the SYSTEM_USER and suser_sname() functions are equivalent, with
+**		 both returning the username in the form PNL\D3L243 if logged in using 
+**		 integrated authentication or returning the Sql Server login name if
+**		 logged in with a Sql Server login
+**
+**		Auth: mem
+**		Date: 08/31/2006
+**    
+*****************************************************/
+	
+	If @@RowCount = 0
+		Return
+
+	Declare @UpdateEnteredBy tinyint
+	Set @UpdateEnteredBy = 0
+
+	-- Note: Column Processing_State is checked below
+	If	Update(Job) OR
+		Update(Confirmed_Only) OR
+		Update(Mod_List) OR
+	    Update(Minimum_High_Normalized_Score) OR
+	    Update(Minimum_High_Discriminant_Score) OR
+	    Update(Minimum_PMT_Quality_Score) OR
+		Update(Experiment_Filter) OR
+	    Update(Experiment_Exclusion_Filter) OR
+		Update(Limit_To_PMTs_From_Dataset) OR
+	    Update(Internal_Std_Explicit) OR
+		Update(NET_Value_Type) OR
+		Update(Ini_File_Name) OR
+		Update(Processing_State)
+	Begin
+		If Update(Processing_State)
+		Begin
+			Declare @MatchCount int
+	
+			Set @MatchCount = 0
+			SELECT @MatchCount = Count(*)
+			FROM inserted
+			WHERE Processing_State = 1
+	
+			If @MatchCount > 0
+				Set @UpdateEnteredBy = 1
+		End
+		Else
+		Begin
+			Set @UpdateEnteredBy = 1
+		End
+	End
+
+	If @UpdateEnteredBy = 1
+	Begin
+		Declare @SepChar varchar(2)
+		set @SepChar = ' ('
+
+		-- Note that dbo.udfTimeStampText returns a timestamp 
+		-- in the form: 2006-09-01 09:05:03
+
+		Declare @UserInfo varchar(128)
+		Set @UserInfo = dbo.udfTimeStampText(GetDate()) + '; ' + LEFT(SYSTEM_USER,75)
+		Set @UserInfo = IsNull(@UserInfo, '')
+
+		UPDATE T_Peak_Matching_Task
+		SET Entered_By = CASE WHEN LookupQ.MatchLoc > 0 THEN Left(T_Peak_Matching_Task.Entered_By, LookupQ.MatchLoc-1) + @SepChar + @UserInfo + ')'
+						 WHEN T_Peak_Matching_Task.Entered_By IS NULL Then SYSTEM_USER
+						 ELSE IsNull(T_Peak_Matching_Task.Entered_By, '??') + @SepChar + @UserInfo + ')'
+						 END
+		FROM T_Peak_Matching_Task INNER JOIN 
+				(SELECT Task_ID, CharIndex(@SepChar, IsNull(Entered_By, '')) AS MatchLoc
+				 FROM inserted 
+				) LookupQ ON T_Peak_Matching_Task.Task_ID = LookupQ.Task_ID
+
+	End
 
 GO
 GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
@@ -66,6 +199,10 @@ GO
 GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Discriminant_Score]) TO [DMS_SP_User]
 GO
 GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Discriminant_Score]) TO [DMS_SP_User]
+GO
+GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_Peptide_Prophet_Probability]) TO [DMS_SP_User]
+GO
+GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_Peptide_Prophet_Probability]) TO [DMS_SP_User]
 GO
 GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_PMT_Quality_Score]) TO [DMS_SP_User]
 GO

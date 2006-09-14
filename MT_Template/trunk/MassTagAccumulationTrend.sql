@@ -15,14 +15,16 @@ CREATE PROCEDURE dbo.MassTagAccumulationTrend
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 05/24/2005
-**			  08/17/2005 mem - Now rounding TAD.Dataset_Created_DMS to the nearest date in the PMT Creation Stats query
+**	Auth:	mem
+**	Date:	05/24/2005
+**			08/17/2005 mem - Now rounding TAD.Dataset_Created_DMS to the nearest date in the PMT Creation Stats query
+**			09/07/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **    
 *****************************************************/
 (
 	@MinimumPMTQualityScore real = 1,
-	@MinimumHighDiscriminantScore real = 0
+	@MinimumHighDiscriminantScore real = 0,
+	@MinimumPeptideProphetProbability real = 0
 )
 AS
 	set nocount on
@@ -45,7 +47,13 @@ AS
 		Set @MinimumHighDiscriminantScore= 0
 	If @MinimumHighDiscriminantScore > 1
 		Set @MinimumHighDiscriminantScore = 1
-			
+
+	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
+	If @MinimumPeptideProphetProbability < 0
+		Set @MinimumPeptideProphetProbability= 0
+	If @MinimumPeptideProphetProbability > 1
+		Set @MinimumPeptideProphetProbability = 1
+
 	--------------------------------------------------------------
 	-- Create a temporary table to hold the histogrammed PMT creation dates
 	--------------------------------------------------------------
@@ -67,7 +75,8 @@ AS
 					T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN
 					T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 			WHERE PMT_Quality_Score >= @MinimumPMTQualityScore AND
-					High_Discriminant_Score >= @MinimumHighDiscriminantScore
+				  High_Discriminant_Score >= @MinimumHighDiscriminantScore AND
+				  High_Peptide_Prophet_Probability >= @MinimumPeptideProphetProbability
 			GROUP BY Pep.Mass_Tag_ID			
 		 ) LookupQ
 	GROUP BY Created

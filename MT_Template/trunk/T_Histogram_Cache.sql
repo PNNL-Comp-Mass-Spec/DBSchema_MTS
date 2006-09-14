@@ -10,6 +10,7 @@ CREATE TABLE [dbo].[T_Histogram_Cache](
 	[Score_Maximum] [float] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Score_Maximum]  DEFAULT (0),
 	[Bin_Count] [int] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Bin_Count]  DEFAULT (100),
 	[Discriminant_Score_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Discriminant_Score_Minimum]  DEFAULT (0),
+	[Peptide_Prophet_Probability_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Peptide_Prophet_Probability_Minimum]  DEFAULT (0),
 	[PMT_Quality_Score_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_PMT_Quality_Score_Minimum]  DEFAULT (0),
 	[Charge_State_Filter] [smallint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Charge_State_Filter]  DEFAULT (0),
 	[Use_Distinct_Peptides] [tinyint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Use_Distinct_Peptides]  DEFAULT (0),

@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE PROCEDURE dbo.LookupQuantitationDefaults
 /****************************************************	
 **
@@ -14,6 +13,7 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 **
 **  Auth:	mem
 **	Date:	08/12/2005
+**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **
 ****************************************************/
 (
@@ -31,13 +31,16 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 	@MinimumHighNormalizedScore real output,
 	@MinimumHighDiscriminantScore real output,
 	@MinimumPMTQualityScore real output,
+	
 	@MinimumPeptideLength tinyint output,
 	@MinimumMatchScore real output,
 	@MinimumDelMatchScore real output,
 
 	@MinimumPeptideReplicateCount smallint output,
 	@ORFCoverageComputationLevel tinyint output,
-	@InternalStdInclusionMode tinyint output
+	@InternalStdInclusionMode tinyint output,
+
+	@MinimumPeptideProphetProbability real output
 )
 AS
 	Set NoCount On
@@ -70,7 +73,9 @@ AS
 
 	Set @MinimumHighNormalizedScore = 0
 	Set @MinimumHighDiscriminantScore = 0.2
+	Set @MinimumPeptideProphetProbability = 0
 	Set @MinimumPMTQualityScore = 0
+	
 	Set @MinimumPeptideLength = 6
 	Set @MinimumMatchScore = 0.35
 	Set @MinimumDelMatchScore = 0.1
@@ -167,6 +172,7 @@ AS
 						@Expression_Ratio_Mode = Expression_Ratio_Mode, 
 						@MinimumHighNormalizedScore = Minimum_High_Normalized_Score, 
 						@MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score, 
+						@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
 						@MinimumPMTQualityScore = Minimum_PMT_Quality_Score, 
 						@MinimumPeptideLength = Minimum_Peptide_Length, 
 						@MinimumMatchScore = Minimum_Match_Score, 
@@ -191,7 +197,6 @@ AS
 						
 Done:
 	Return @myError
-
 
 
 GO

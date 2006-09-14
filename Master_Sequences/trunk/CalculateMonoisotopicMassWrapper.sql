@@ -10,28 +10,33 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMassWrapper
 **	Desc: Calls the CalculateMonoisotopicMass SP,
 **		  positing messages to T_Log_Entries at the start and end
 **
-**	Parameters:
-**	
-**  Output:
-
-**		Auth: mem
-**		Date: 07/20/2004
-**			  08/07/2004 mem - Updated PostLogEntry calls
-**			  02/04/2005 mem - Now recording the T_Sequence row count in T_Stats_History whenever new masses are calculated
-**			  11/28/2005 mem - Added output parameter @PeptidesProcessedCount
+**	Auth:	mem
+**	Date:	07/20/2004
+**			08/07/2004 mem - Updated PostLogEntry calls
+**			02/04/2005 mem - Now recording the T_Sequence row count in T_Stats_History whenever new masses are calculated
+**			11/28/2005 mem - Added output parameter @PeptidesProcessedCount
+**			08/22/2006 mem - Now calling UpdateStatsHistory to update T_Stats_History
 **    
 *****************************************************/
-	(
-		@SequencesToProcess int = 10000,			-- When greater than 0, then only processes the given number of sequences
-		@PeptidesProcessedCount int = 0 OUTPUT		-- Returns the actual number of sequences processed
-	)
+(
+	@SequencesToProcess int = 10000,			-- When greater than 0, then only processes the given number of sequences
+	@PeptidesProcessedCount int = 0 OUTPUT		-- Returns the actual number of sequences processed
+)
 AS
 	Set NoCount ON
+
+	declare @myError int
+	declare @myRowCount int
+	set @myError = 0
+	set @myRowCount = 0
 
 	Declare @message varchar(255),
 			@RecomputeAll tinyint,
 			@AbortOnUnknownSymbolError tinyint
 
+	Declare @ForceStatsUpdate tinyint
+	Set @ForceStatsUpdate = 0
+	
 	Set @message = 'Starting call to CalculateMonoisotopicMass; sequences to process: ' + convert(varchar(11), @SequencesToProcess)
 	-- Exec PostLogEntry 'Normal', @message, 'CalculateMonoisotopicMassWrapper'
 	
@@ -47,14 +52,11 @@ AS
 	Begin
 		Exec PostLogEntry 'Normal', @message, 'CalculateMonoisotopicMassWrapper'
 		
-		INSERT INTO T_Stats_History (Sequence_Count)
-		SELECT TableRowCount
-		FROM V_Table_Row_Counts
-		WHERE TableName = 'T_Sequence'
-		
+		Set @ForceStatsUpdate = 1
 	End
 	
-	Return 0
+	Exec UpdateStatsHistory @ForceStatsUpdate
 	
+	Return 0
 
 GO

@@ -16,6 +16,7 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[MD_Comparison_Mass_Tag_Count] [int] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_Comparison_Mass_Tag_Count]  DEFAULT (0),
 	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Normalized_Score]  DEFAULT (0),
 	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Discriminant_Score]  DEFAULT (0),
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_Peptide_Prophet_Probability]  DEFAULT (0),
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_PMT_Quality_Score]  DEFAULT (0),
 	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Filter]  DEFAULT (''),
 	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Exclusion_Filter]  DEFAULT (''),

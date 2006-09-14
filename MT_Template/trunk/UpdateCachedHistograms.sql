@@ -38,13 +38,6 @@ AS
 	set @message = ''
 	
 	Declare @HistogramCacheID int
-	Declare @mode int
-	Declare @ScoreMinimum real
-	Declare @ScoreMaximum real
-	Declare @BinCount int
-	Declare @DiscriminantScoreMinimum real
-	Declare @PMTQualityScoreMinimum real
-	Declare @UseDistinctPeptides tinyint
 	Declare @ResultTypeFilter varchar(32)
 
 	Declare @Continue int

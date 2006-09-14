@@ -38,6 +38,7 @@ CREATE PROCEDURE dbo.QRRetrievePeptidesMultiQID
 **			08/25/2005 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues (must also have @IncludeRefColumn = 1)
 **			01/31/2006 mem - Now returning 'Unknown' if the Cleavage_State value is null
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
+**			09/07/2006 mem - Now returning column High_Peptide_Prophet_Probability
 **
 ****************************************************/
 (
@@ -198,7 +199,11 @@ AS
 	Else
 		Set @QRDsql = @QRDsql + ' MT.Peptide,'
 		
-	Set @QRDsql = @QRDsql + ' Round(MT.Monoisotopic_Mass,5) As Monoisotopic_Mass, Round(MT.High_Normalized_Score,3) As [High_MS/MS_Score_(XCorr)], Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
+	Set @QRDsql = @QRDsql + ' Round(MT.Monoisotopic_Mass,5) As Monoisotopic_Mass, '
+	Set @QRDsql = @QRDsql + ' Round(MT.High_Normalized_Score,3) As [High_MS/MS_Score_(XCorr)], '
+	Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
+	Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
+	Set @QRDsql = @QRDsql + ' Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
 
 	If @ModsPresent > 0
 		Set @QRDsql = @QRDsql + ' MT.Mod_Description,'

@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE PROCEDURE dbo.GetMassTags
 /****************************************************
 **
@@ -488,4 +487,6 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[GetMassTags] TO [DMS_SP_User]
+GO
+GRANT EXECUTE ON [dbo].[GetMassTags] TO [dmswebuser]
 GO

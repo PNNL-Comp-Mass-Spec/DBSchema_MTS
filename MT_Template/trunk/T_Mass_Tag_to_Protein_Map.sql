@@ -24,19 +24,19 @@ CREATE TABLE [dbo].[T_Mass_Tag_to_Protein_Map](
 
 GO
 
-/****** Object:  Index [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ON [dbo].[T_Mass_Tag_to_Protein_Map] 
-(
-	[Cleavage_State] ASC
-) ON [PRIMARY]
-GO
-
-/****** Object:  Index [T_Mass_Tag_to_Protein_Map_Cleavage_And_Terminus_State] ******/
-CREATE NONCLUSTERED INDEX [T_Mass_Tag_to_Protein_Map_Cleavage_And_Terminus_State] ON [dbo].[T_Mass_Tag_to_Protein_Map] 
+/****** Object:  Index [IX_T_Mass_Tag_to_Protein_Map_Cleavage_And_Terminus_State] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Mass_Tag_to_Protein_Map_Cleavage_And_Terminus_State] ON [dbo].[T_Mass_Tag_to_Protein_Map] 
 (
 	[Mass_Tag_ID] ASC,
 	[Cleavage_State] ASC,
 	[Terminus_State] ASC
+) ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ON [dbo].[T_Mass_Tag_to_Protein_Map] 
+(
+	[Cleavage_State] ASC
 ) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])

@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE Procedure UpdateAnalysisJobToMTDBMap
 /****************************************************
 ** 
@@ -19,6 +20,7 @@ CREATE Procedure UpdateAnalysisJobToMTDBMap
 **						   - Added support for PMT Tag DBs with @DBSchemaVersion < 2
 **			03/10/2006 mem - Changed from T_Analysis_Description.Created to T_Analysis_Description.Created_PMT_Tag_DB
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
+**			09/07/2006 mem - Now populating column Process_State
 **    
 *****************************************************/
 (
@@ -119,7 +121,8 @@ As
 		[Job] [int] NOT NULL ,
 		[ResultType] varchar(32) NULL ,
 		[Created] [datetime] NOT NULL ,
-		[Last_Affected] [datetime] NOT NULL 
+		[Last_Affected] [datetime] NOT NULL ,
+		[Process_State] int NOT NULL
 	)
 
 	-----------------------------------------------------------
@@ -164,9 +167,9 @@ As
 			If @DBSchemaVersion < 2
 			Begin
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected)'
+				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
 				Set @sql = @sql + ' SELECT TAD.Job, ''Peptide_Hit'' AS ResultType, TAD.Created,'
-				Set @sql = @sql +        ' ISNULL(LookupQ.Last_Affected, TAD.Created) AS Last_Affected'
+				Set @sql = @sql +        ' IsNull(LookupQ.Last_Affected, TAD.Created) AS Last_Affected, IsNull(State, 0)'
 				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_Analysis_Description TAD LEFT OUTER JOIN'
 				Set @sql = @sql +   ' ( SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
 				Set @sql = @sql +     ' FROM [' + @MTL_Name + '].dbo.T_Mass_Tags MT INNER JOIN'
@@ -177,18 +180,19 @@ As
 				Set @sql = @sql + ' WHERE TAD.Analysis_Tool LIKE ''%sequest%'' AND NOT Created IS NULL'
 				Set @sql = @sql + ' UNION '
 				Set @sql = @sql + ' SELECT FAD.Job, FAD.ResultType, FAD.Created,'
-				Set @sql = @sql +        ' MAX(ISNULL(PM.PM_Start, FAD.Created)) AS Last_Affected'
+				Set @sql = @sql +        ' MAX(IsNull(PM.PM_Start, FAD.Created)) AS Last_Affected, IsNull(FAD.State, 0)'
 				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description FAD LEFT OUTER JOIN'
 				Set @sql = @sql +      ' [' + @MTL_Name + '].dbo.T_Peak_Matching_Task PM ON FAD.Job = PM.Job'
 				Set @sql = @sql + ' WHERE FAD.Analysis_Tool NOT LIKE ''%TIC%'' AND NOT Created IS NULL'
-				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created'
+				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created, FAD.State'
 			End
 			Else
 			Begin
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected)'
+				Set @sql = @sql + ' INSERT INTO #Temp_PMTTagDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
 				Set @sql = @sql + ' SELECT TAD.Job, TAD.ResultType, TAD.Created_PMT_Tag_DB AS Created, '
-				Set @sql = @sql +        ' ISNULL(LookupQ.Last_Affected, TAD.Created_PMT_Tag_DB) AS Last_Affected'
+				Set @sql = @sql +        ' IsNull(LookupQ.Last_Affected, TAD.Created_PMT_Tag_DB) AS Last_Affected,'
+				Set @sql = @sql +        ' IsNull(TAD.State, 0)'
 				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_Analysis_Description TAD LEFT OUTER JOIN'
 				Set @sql = @sql +   ' ( SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
 				Set @sql = @sql +     ' FROM [' + @MTL_Name + '].dbo.T_Mass_Tags MT INNER JOIN'
@@ -198,10 +202,11 @@ As
 				Set @sql = @sql +   ' ) LookupQ ON TAD.Job = LookupQ.Job'
 				Set @sql = @sql + ' UNION '
 				Set @sql = @sql + ' SELECT FAD.Job, FAD.ResultType, FAD.Created,'
-				Set @sql = @sql +        ' MAX(ISNULL(PM.PM_Start, FAD.Created)) AS Last_Affected'
+				Set @sql = @sql +        ' MAX(IsNull(PM.PM_Start, FAD.Created)) AS Last_Affected,'
+				Set @sql = @sql +        ' IsNull(FAD.State, 0)'
 				Set @sql = @sql + ' FROM [' + @MTL_Name + '].dbo.T_FTICR_Analysis_Description FAD LEFT OUTER JOIN'
 				Set @sql = @sql +      ' [' + @MTL_Name + '].dbo.T_Peak_Matching_Task PM ON FAD.Job = PM.Job'
-				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created'
+				Set @sql = @sql + ' GROUP BY FAD.Job, FAD.ResultType, FAD.Created, FAD.State'
 			End
 			--
 			EXEC @result = sp_executesql @sql
@@ -236,8 +241,8 @@ As
 				-- Insert missing jobs from #Temp_PMTTagDB_Jobs into AJMDM
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_MT_DB_Map (Job, MTL_ID, ResultType, Created, Last_Affected)'
-				Set @sql = @sql + ' SELECT MTDB.Job, ' + @MTL_ID_Text + ' AS MTL_ID, MTDB.ResultType, MTDB.Created, MTDB.Last_Affected'
+				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_MT_DB_Map (Job, MTL_ID, ResultType, Created, Last_Affected, Process_State)'
+				Set @sql = @sql + ' SELECT MTDB.Job, ' + @MTL_ID_Text + ' AS MTL_ID, MTDB.ResultType, MTDB.Created, MTDB.Last_Affected, IsNull(MTDB.Process_State, 0)'
 				Set @sql = @sql + ' FROM #Temp_PMTTagDB_Jobs AS MTDB LEFT OUTER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_MT_DB_Map AS AJMDM ON'
 				Set @sql = @sql +      ' MTDB.Job = AJMDM.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
@@ -252,12 +257,15 @@ As
 				--
 				Set @sql = ''
 				Set @sql = @sql + ' UPDATE T_Analysis_Job_to_MT_DB_Map'
-				Set @sql = @sql + ' SET Created = MTDB.Created, Last_Affected = MTDB.Last_Affected'
+				Set @sql = @sql + ' SET Created = MTDB.Created,'
+				Set @sql = @sql +     ' Last_Affected = MTDB.Last_Affected,'
+				Set @sql = @sql +     ' Process_State = IsNull(MTDB.Process_State, 0)'
 				Set @sql = @sql + ' FROM #Temp_PMTTagDB_Jobs AS MTDB INNER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_MT_DB_Map AS AJMDM ON'
 				Set @sql = @sql +      ' MTDB.Job = AJMDM.Job AND AJMDM.MTL_ID = ' + @MTL_ID_Text
 				Set @sql = @sql + ' WHERE AJMDM.Created <> MTDB.Created OR '
-				Set @sql = @sql +       ' AJMDM.Last_Affected <> MTDB.Last_Affected'
+				Set @sql = @sql +       ' AJMDM.Last_Affected <> MTDB.Last_Affected OR '
+				Set @sql = @sql +       ' AJMDM.Process_State <> MTDB.Process_State'
 
 				EXEC @result = sp_executesql @sql
 				--
@@ -297,5 +305,6 @@ Done:
 	end
 
 	return @myError
+
 
 GO

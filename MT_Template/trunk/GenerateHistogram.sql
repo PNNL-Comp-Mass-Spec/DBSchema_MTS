@@ -32,6 +32,8 @@ CREATE PROCEDURE dbo.GenerateHistogram
 **			03/19/2006 mem - Now using column Query_Speed_Category in T_Histogram_Cache
 **			03/26/2006 mem - Now including the input parameter values when posting an error to T_Log_Entries
 **			04/13/2006 mem - Fixed query bug involving NET histogram generation when @ResultTypeFilter <> ''
+**			09/06/2006 mem - Added mode 7 for Peptide Prophet Probability
+**						   - Added parameter @PeptideProphetProbabilityMinimum
 **    
 *****************************************************/
 (
@@ -42,6 +44,7 @@ CREATE PROCEDURE dbo.GenerateHistogram
 												-- Mode 4 means PMT Quality Score
 												-- Mode 5 means Hyperscore
 												-- Mode 6 means Log EValue
+												-- Mode 7 means Peptide Prophet Probability
 
 	@PreviewSql tinyint = 0,					-- When 1, then returns the Sql that is generated, rather than the data (ignored if @HistogramCacheIDOverride > 0)
 	@EstimateExecutionTime tinyint = 0,			-- When 1, then returns an estimate of the time the query will take to execute (in seconds) based on data in T_Histogram_Cache (ignored if @HistogramCacheIDOverride > 0)
@@ -58,7 +61,8 @@ CREATE PROCEDURE dbo.GenerateHistogram
 	@PMTQualityScoreMinimum real = 0,
 	@ChargeStateFilter smallint = 0,			-- If 0, then matches all charge states; set to a value > 0 to filter on a specific charge state
 	@UseDistinctPeptides tinyint = 1,			-- When 0 then all peptide observations are used, when 1 then only distinct peptide observations are used
-	@ResultTypeFilter varchar(32) = ''			-- Can be blank, Peptide_Hit, or XT_Peptide_Hit
+	@ResultTypeFilter varchar(32) = '',			-- Can be blank, Peptide_Hit, or XT_Peptide_Hit
+	@PeptideProphetProbabilityMinimum real = 0
 )
 AS
 	set nocount on
@@ -108,7 +112,7 @@ AS
 	-- Validate the inputs
 	-----------------------------------------------------
 	Set @mode = IsNull(@mode, 0)
-	If @mode < 0 Or @mode > 6
+	If @mode < 0 Or @mode > 7
 		Set @mode = 0
 
 	Set @ScoreMinimum = IsNull(@ScoreMinimum, 0)
@@ -120,6 +124,7 @@ AS
 	Set @ChargeStateFilter = IsNull(@ChargeStateFilter, 0)
 	Set @UseDistinctPeptides = IsNull(@UseDistinctPeptides, 0)
 	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
+	Set @PeptideProphetProbabilityMinimum = IsNull(@PeptideProphetProbabilityMinimum, 0)
 
 	Set @PreviewSql = IsNull(@PreviewSql, 0)
 	Set @EstimateExecutionTime = IsNull(@EstimateExecutionTime, 0)
@@ -140,6 +145,7 @@ AS
 				@ScoreMaximum = Score_Maximum,
 				@BinCount = Bin_Count,
 				@DiscriminantScoreMinimum = Discriminant_Score_Minimum,
+				@PeptideProphetProbabilityMinimum = Peptide_Prophet_Probability_Minimum,
 				@PMTQualityScoreMinimum = PMT_Quality_Score_Minimum,
 				@ChargeStateFilter = Charge_State_Filter,
 				@UseDistinctPeptides = Use_Distinct_Peptides,
@@ -198,6 +204,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -228,6 +236,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -269,6 +279,8 @@ AS
 			
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		End
@@ -293,6 +305,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -335,6 +349,8 @@ AS
 			
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		End
@@ -349,7 +365,7 @@ AS
 
 			Set @FromSql = @FromSql + '  FROM T_Peptides P'
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Score_Sequest SS ON P.Peptide_ID = SS.Peptide_ID'
-			If @DiscriminantScoreMinimum > 0
+			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
@@ -361,6 +377,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -403,6 +421,8 @@ AS
 			
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		End
@@ -417,7 +437,7 @@ AS
 
 			Set @FromSql = @FromSql + '  FROM T_Peptides P'
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
-			If @DiscriminantScoreMinimum > 0
+			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
@@ -427,6 +447,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -475,6 +497,8 @@ AS
 			
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		End
@@ -489,7 +513,7 @@ AS
 
 			Set @FromSql = @FromSql +     ' FROM T_Peptides P'
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
-			If @DiscriminantScoreMinimum > 0
+			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
@@ -499,6 +523,8 @@ AS
 				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 			If @DiscriminantScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 			If @ChargeStateFilter > 0
@@ -542,7 +568,7 @@ AS
 
 		Set @FromSql = @FromSql + '  FROM T_Peptides P'
 		Set @FromSql = @FromSql +     ' INNER JOIN T_Score_XTandem X ON P.Peptide_ID = X.Peptide_ID'
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 		If Len(@ResultTypeFilter) > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
@@ -554,6 +580,8 @@ AS
 			Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 		If @DiscriminantScoreMinimum > 0
 			Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND IsNull(SD.Peptide_Prophet_Probability, 0) >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 		If @PMTQualityScoreMinimum > 0
 			Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		If @ChargeStateFilter > 0
@@ -594,7 +622,7 @@ AS
 
 		Set @FromSql = @FromSql + '  FROM T_Peptides P'
 		Set @FromSql = @FromSql +     ' INNER JOIN T_Score_XTandem X ON P.Peptide_ID = X.Peptide_ID'
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 		If Len(@ResultTypeFilter) > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
@@ -606,6 +634,8 @@ AS
 			Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
 		If @DiscriminantScoreMinimum > 0
 			Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+		If @PeptideProphetProbabilityMinimum > 0
+			Set @FromSql = @FromSql + ' AND IsNull(SD.Peptide_Prophet_Probability, 0) >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
 		If @PMTQualityScoreMinimum > 0
 			Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
 		If @ChargeStateFilter > 0
@@ -630,6 +660,76 @@ AS
 
 	End
 
+	if @mode = 7
+	Begin
+		-- Peptide Prophet Probability Histogram
+		Set @BinField = 'Peptide_Prophet_Probability'
+		Set @FromSql = ''
+		Set @FromSql = @FromSql +     ' FROM ('
+		
+		If @UseDistinctPeptides <> 0 And Len(@ResultTypeFilter) = 0 And @ChargeStateFilter = 0
+		Begin
+			-- Fast query that only uses T_Mass_Tags
+			Set @QuerySpeedCategory = 0
+			
+			Set @FromSql = @FromSql +  ' SELECT MT.High_Peptide_Prophet_Probability AS Value'
+			Set @FromSql = @FromSql +  ' FROM T_Mass_Tags MT'
+			Set @FromSql = @FromSql +  ' WHERE NOT MT.High_Peptide_Prophet_Probability Is Null'
+			
+			If @DiscriminantScoreMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Discriminant_Score >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.High_Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
+			If @PMTQualityScoreMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
+		End
+		Else
+		Begin
+			Set @QuerySpeedCategory = 1
+
+			If @UseDistinctPeptides = 0
+				Set @FromSql = @FromSql + ' SELECT SD.Peptide_Prophet_Probability AS Value'
+			Else
+				Set @FromSql = @FromSql + ' SELECT MAX(SD.Peptide_Prophet_Probability) AS Value'
+			
+			Set @Fromsql = @FromSql +     ' FROM T_Peptides P '
+			Set @FromSql = @FromSql +     ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
+			If Len(@ResultTypeFilter) > 0
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			If @PMTQualityScoreMinimum > 0
+				Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
+
+			Set @FromSql = @FromSql +     ' WHERE NOT SD.Peptide_Prophet_Probability  Is Null'
+			If Len(@ResultTypeFilter) > 0
+				Set @FromSql = @FromSql + ' AND TAD.ResultType = ''' + @ResultTypeFilter + ''''
+			If @DiscriminantScoreMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum)
+			If @PeptideProphetProbabilityMinimum > 0
+				Set @FromSql = @FromSql + ' AND SD.Peptide_Prophet_Probability >= ' + Convert(varchar(12), @PeptideProphetProbabilityMinimum)
+			If @PMTQualityScoreMinimum > 0
+				Set @FromSql = @FromSql + ' AND MT.PMT_Quality_Score >= ' + Convert(varchar(12), @PMTQualityScoreMinimum)
+			If @ChargeStateFilter > 0
+			Begin
+				Set @QuerySpeedCategory = 2
+				Set @FromSql = @FromSql + ' AND P.Charge_State = ' + Convert(varchar(6), @ChargeStateFilter)
+			End
+			
+			If @UseDistinctPeptides <> 0
+				Set @FromSql = @FromSql + ' GROUP BY P.Mass_Tag_ID'
+		End
+
+		Set @FromSql = @FromSql + ') LookupQ '
+
+		If @ScoreMinimum >= @ScoreMaximum
+		Begin
+			Set @ScoreMinimum = 0
+			Set @ScoreMaximum = 1
+		End
+		
+		If @BinCount < 1
+			Set @BinCount = 100
+	End
+	
 	-----------------------------------------------------
 	-- Define the bin size based on @ScoreMinimum, @ScoreMaximum, and @BinCount
 	-----------------------------------------------------
@@ -756,6 +856,7 @@ AS
 						Score_Maximum = @ScoreMaximumInput AND 
 						(Bin_Count = @BinCount OR @mode = 4) AND
 						Discriminant_Score_Minimum = @DiscriminantScoreMinimum AND
+						Peptide_Prophet_Probability_Minimum = @PeptideProphetProbabilityMinimum AND
 						PMT_Quality_Score_Minimum = @PMTQualityScoreMinimum AND
 						Charge_State_Filter = @ChargeStateFilter AND
 						Use_Distinct_Peptides = @UseDistinctPeptides AND
@@ -767,6 +868,7 @@ AS
 					Score_Maximum = @ScoreMaximumInput AND 
 					(Bin_Count = @BinCount OR @mode = 4) AND
 					Discriminant_Score_Minimum = @DiscriminantScoreMinimum AND
+					Peptide_Prophet_Probability_Minimum = @PeptideProphetProbabilityMinimum AND
 					PMT_Quality_Score_Minimum = @PMTQualityScoreMinimum AND
 					Charge_State_Filter = @ChargeStateFilter AND
 					Use_Distinct_Peptides = @UseDistinctPeptides AND
@@ -872,6 +974,7 @@ AS
 	Set @InputParams = @InputParams + '@ScoreMaximum=' + convert(varchar(12), @ScoreMaximum) + ';'
 	Set @InputParams = @InputParams + '@BinCount=' + convert(varchar(9), @BinCount) + ';'
 	Set @InputParams = @InputParams + '@DiscriminantScoreMinimum=' + convert(varchar(12), @DiscriminantScoreMinimum) + ';'
+	Set @InputParams = @InputParams + '@PeptideProphetProbabilityMinimum=' + convert(varchar(12), @PeptideProphetProbabilityMinimum) + ';'
 	Set @InputParams = @InputParams + '@PMTQualityScoreMinimum=' + convert(varchar(9), @PMTQualityScoreMinimum) + ';'
 	Set @InputParams = @InputParams + '@ChargeStateFilter=' + convert(varchar(9), @ChargeStateFilter) + ';'
 	Set @InputParams = @InputParams + '@UseDistinctPeptides=' + convert(varchar(9), @UseDistinctPeptides) + ';'
@@ -959,12 +1062,14 @@ AS
 			Begin -- <c>
 				-- Make a new entry in T_Histogram_Cache
 				INSERT INTO T_Histogram_Cache ( Histogram_Mode, Score_Minimum, Score_Maximum, Bin_Count, 
-												Discriminant_Score_Minimum, PMT_Quality_Score_Minimum, Charge_State_Filter,
+												Discriminant_Score_Minimum, Peptide_Prophet_Probability_Minimum, 
+												PMT_Quality_Score_Minimum, Charge_State_Filter,
 												Use_Distinct_Peptides, Result_Type_Filter, 
 												Query_Date, Result_Count, Query_Speed_Category, Execution_Time_Seconds, 
 												Histogram_Cache_State, Auto_Update)
 				VALUES (	@mode, @ScoreMinimumInput, @ScoreMaximumInput, @BinCount,
-							@DiscriminantScoreMinimum, @PMTQualityScoreMinimum, @ChargeStateFilter,
+							@DiscriminantScoreMinimum, @PeptideProphetProbabilityMinimum, 
+							@PMTQualityScoreMinimum, @ChargeStateFilter,
 							@UseDistinctPeptides, @ResultTypeFilter, 
 							GetDate(), @ResultCount, @QuerySpeedCategory, @ExecutionTimeSeconds, 
 							1, @AutoUpdate)

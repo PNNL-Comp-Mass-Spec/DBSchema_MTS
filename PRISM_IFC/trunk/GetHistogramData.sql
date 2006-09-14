@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.GetHistogramData
 /****************************************************
 **
@@ -16,6 +17,8 @@ CREATE PROCEDURE dbo.GetHistogramData
 **
 **	Auth:	mem
 **	Date:	03/16/2006
+**			09/06/2006 mem - Added mode 7 for Peptide Prophet Probability
+**						   - Added parameter @PeptideProphetProbabilityMinimum
 **
 *****************************************************/
 
@@ -43,7 +46,8 @@ CREATE PROCEDURE dbo.GetHistogramData
 	@PMTQualityScoreMinimum real = 0,
 	@ChargeStateFilter smallint = 0,			-- If 0, then matches all charge states; set to a value > 0 to filter on a specific charge state
 	@UseDistinctPeptides tinyint = 0,			-- When 0 then all peptide observations are used, when 1 then only distinct peptide observations are used
-	@ResultTypeFilter varchar(32) = ''			-- Can be blank, Peptide_Hit, or XT_Peptide_Hit
+	@ResultTypeFilter varchar(32) = '',			-- Can be blank, Peptide_Hit, or XT_Peptide_Hit
+	@PeptideProphetProbabilityMinimum real = 0
 )
 As
 	set nocount on
@@ -109,14 +113,14 @@ As
 	-- Call GenerateHistogram in the given database
 	---------------------------------------------------
 
-	set @stmt = N'exec [' + @DBName + N'].dbo.GenerateHistogram @mode, @PreviewSql, @EstimateExecutionTime, @ForceUpdate, @HistogramCacheIDOverride, @HistogramCacheID, @message, @ScoreMinimum, @ScoreMaximum, @BinCount, @DiscriminantScoreMinimum, @PMTQualityScoreMinimum, @ChargeStateFilter, @UseDistinctPeptides, @ResultTypeFilter'
+	set @stmt = N'exec [' + @DBName + N'].dbo.GenerateHistogram @mode, @PreviewSql, @EstimateExecutionTime, @ForceUpdate, @HistogramCacheIDOverride, @HistogramCacheID, @message, @ScoreMinimum, @ScoreMaximum, @BinCount, @DiscriminantScoreMinimum, @PMTQualityScoreMinimum, @ChargeStateFilter, @UseDistinctPeptides, @ResultTypeFilter, @PeptideProphetProbabilityMinimum'
 	
-	set @params = N'@mode smallint, @PreviewSql tinyint, @EstimateExecutionTime tinyint, @ForceUpdate tinyint, @HistogramCacheIDOverride int, @HistogramCacheID int output, @message varchar(255) output, @ScoreMinimum real, @ScoreMaximum real, @BinCount int, @DiscriminantScoreMinimum real, @PMTQualityScoreMinimum real, @ChargeStateFilter smallint, @UseDistinctPeptides tinyint, @ResultTypeFilter varchar(32)'
+	set @params = N'@mode smallint, @PreviewSql tinyint, @EstimateExecutionTime tinyint, @ForceUpdate tinyint, @HistogramCacheIDOverride int, @HistogramCacheID int output, @message varchar(255) output, @ScoreMinimum real, @ScoreMaximum real, @BinCount int, @DiscriminantScoreMinimum real, @PMTQualityScoreMinimum real, @ChargeStateFilter smallint, @UseDistinctPeptides tinyint, @ResultTypeFilter varchar(32), @PeptideProphetProbabilityMinimum real'
 	
 	print @stmt
 	print @params
 	
-	exec @result = sp_executesql @stmt, @params, @mode = @mode, @PreviewSql = @PreviewSql, @EstimateExecutionTime = @EstimateExecutionTime, @ForceUpdate = @ForceUpdate, @HistogramCacheIDOverride = @HistogramCacheIDOverride, @HistogramCacheID = @HistogramCacheID output, @message = @message output, @ScoreMinimum = @ScoreMinimum,  @ScoreMaximum = @ScoreMaximum, @BinCount = @BinCount, @DiscriminantScoreMinimum = @DiscriminantScoreMinimum, @PMTQualityScoreMinimum = @PMTQualityScoreMinimum, @ChargeStateFilter = @ChargeStateFilter, @UseDistinctPeptides = @UseDistinctPeptides, @ResultTypeFilter = @ResultTypeFilter
+	exec @result = sp_executesql @stmt, @params, @mode = @mode, @PreviewSql = @PreviewSql, @EstimateExecutionTime = @EstimateExecutionTime, @ForceUpdate = @ForceUpdate, @HistogramCacheIDOverride = @HistogramCacheIDOverride, @HistogramCacheID = @HistogramCacheID output, @message = @message output, @ScoreMinimum = @ScoreMinimum,  @ScoreMaximum = @ScoreMaximum, @BinCount = @BinCount, @DiscriminantScoreMinimum = @DiscriminantScoreMinimum, @PMTQualityScoreMinimum = @PMTQualityScoreMinimum, @ChargeStateFilter = @ChargeStateFilter, @UseDistinctPeptides = @UseDistinctPeptides, @ResultTypeFilter = @ResultTypeFilter, @PeptideProphetProbabilityMinimum = @PeptideProphetProbabilityMinimum
 
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -127,6 +131,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[GetHistogramData] TO [DMS_SP_User]

@@ -21,52 +21,87 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			12/14/2004 mem - Now accepts a list of jobs to delete and reset
 **			12/11/2005 mem - Updated to support XTandem results
 **			03/13/2006 mem - Now calling UpdateCachedHistograms if any data is deleted from T_Peptides
+**			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
+**						   - Now posting a log entry for the processed jobs
+**			09/09/2006 mem - Updated to post a log entry only if rows were deleted from T_Peptides
 **    
 *****************************************************/
 (
-	@JobListToDelete varchar(4096),
+	@JobListToDelete varchar(4096),			-- Comma separated list of jobs to delete
 	@ResetStateToNew tinyint = 0
 )
 AS
 	set nocount on
 
+	declare @myRowCount int
 	declare @myError int
+	set @myRowCount = 0
 	set @myError = 0
 
-	declare @myRowCount int
-	set @myRowCount = 0
-
 	Declare @commaLoc int
-	Declare @jobStr varchar(255)
+	Declare @Message varchar(512)
+	Declare @JobListProcessed varchar(512)
+	Set @JobListProcessed = ''
 	
-	-- Populate a temporary table with the list of jobs in @JobListToDelete
+	Declare @DataDeleted int
+	Set @DataDeleted = 0
+	
+	-- Create a temporary table to hold the jobs to delete
 	
 	CREATE TABLE #JobListToDelete (
-		[Job] int NOT NULL
-	) ON [PRIMARY]
+		Job int NOT NULL ,
+	)
 
-	-- Append a comma to @JobListToDelete
-	Set @JobListToDelete = LTrim(RTrim(@JobListToDelete)) + ','
+	CREATE CLUSTERED INDEX #IX_Tmp_JobListToDelete_Job ON #JobListToDelete (Job)
+
+	-- Populate #JobListToDelete with the jobs in @JobListToDelete
+	INSERT INTO #JobListToDelete (Job)
+	SELECT value
+	FROM dbo.udfParseDelimitedList(@JobListToDelete, ',')
+	ORDER BY value
 	
-	Set @commaLoc = 1
-	While @commaLoc > 0
+	-- Look for jobs not present in T_Analysis_Description
+	Set @JobListProcessed = ''
+	SELECT @JobListProcessed = @JobListProcessed + Convert(varchar(12), JL.Job) + ','
+	FROM #JobListToDelete JL LEFT OUTER JOIN
+		 T_Analysis_Description TAD ON JL.Job = TAD.Job
+	WHERE TAD.Job Is Null
+	ORDER BY JL.Job
+	
+	If Len(IsNull(@JobListProcessed, '')) > 0
 	Begin
-		Set @commaLoc = CharIndex(',', @JobListToDelete)
-		
-		If @commaLoc > 0
-		Begin
-			Set @jobStr = SubString(@JobListToDelete, 1, @commaLoc-1)
-			Set @JobListToDelete = LTrim(RTrim(SubString(@JobListToDelete, @commaLoc+1, Len(@JobListToDelete) - @commaLoc)))
-		
-			INSERT INTO #JobListToDelete (Job)
-			SELECT Convert(int, @jobStr)
-			--
-			SELECT @myRowCount = @@rowcount, @myError = @@error
-			--
+		Set @Message = 'Warning, invalid jobs specified: ' + left(@JobListProcessed, Len(@JobListProcessed)-1)		
+		SELECT @Message AS Message
+		Print @Message
 
-		End
+		Set @Message = ''
+		
+		-- Delete the invalid jobs
+		DELETE #JobListToDelete
+		FROM #JobListToDelete JL LEFT OUTER JOIN
+			T_Analysis_Description TAD ON JL.Job = TAD.Job
+		WHERE TAD.Job Is Null
+	End
+
+	-- Update @JobListProcessed with the list of valid jobs
+	Set @JobListProcessed = ''
+	SELECT @JobListProcessed = @JobListProcessed + Convert(varchar(12), Job) + ', '
+	FROM #JobListToDelete
+	ORDER BY Job	
+
+	If Len(IsNull(@JobListProcessed, '')) = 0
+	Begin
+		Set @Message = 'Error: no valid jobs were found'
+
+		SELECT @Message AS Message
+		Print @Message
+
+		Goto Done
 	End
 	
+	-- Remove the trailing comma from @JobListProcessed
+	Set @JobListProcessed = left(@JobListProcessed, Len(@JobListProcessed)-1)
+
 	DELETE T_Score_Sequest
 	FROM T_Peptides INNER JOIN T_Score_Sequest 
 		 ON T_Peptides.Peptide_ID = T_Score_Sequest.Peptide_ID
@@ -75,7 +110,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto Done
-
+	
 	DELETE T_Score_Discriminant
 	FROM T_Peptides INNER JOIN T_Score_Discriminant 
 		 ON T_Peptides.Peptide_ID = T_Score_Discriminant.Peptide_ID
@@ -105,11 +140,27 @@ AS
 	-- Update T_Mass_Tags.Number_of_Peptides and .High_Normalized_Score, if necessary
 	If @myRowCount > 0
 	Begin
+		Set @DataDeleted = 1
 		Exec UpdateCachedHistograms @InvalidateButDoNotProcess=1
 		Exec ComputeMassTagsAnalysisCounts
 	End
 
-
+	If @DataDeleted = 0 And @ResetStateToNew = 0
+		Set @message = 'Did not find any data to delete for jobs ' + @JobListProcessed
+	Else
+	Begin
+		Set @DataDeleted = 1
+		
+		-- Prepare the log message
+		Set @message = 'Deleted data for jobs ' + @JobListProcessed
+		If Len(@message) > 475
+		Begin
+			-- Find the next comma after position 475
+			Set @commaLoc = CharIndex(',', @Message, 475)
+			Set @message = Left(@message, @commaLoc) + '...'
+		End
+	End
+		
 	If @ResetStateToNew <> 0
 	Begin
 		UPDATE T_Analysis_Description
@@ -120,8 +171,14 @@ AS
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
 		If @myError <> 0 Goto Done
+		
+		Set @message = @message + '; Job states have been reset to 10'
 	End
 
+	If @DataDeleted <> 0
+		exec PostLogEntry 'Normal', @message, 'DeletePeptidesForJobAndResetToNew'
+	--
+	SELECT @message
 
 Done:
 	Return @myError

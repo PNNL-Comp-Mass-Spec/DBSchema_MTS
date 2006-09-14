@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.GetQRollupsSummary
 /****************************************************
 **
@@ -29,6 +30,7 @@ CREATE PROCEDURE dbo.GetQRollupsSummary
 **						   - Fixed logic bug involving @ShowSuperseded
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**			09/07/2006 mem - Now returns [Min High Peptide Prophet Prob]
 **    
 *****************************************************/
 (
@@ -74,7 +76,7 @@ As
 	set @sql = @sql + ' QID, 0 as Sel, [Sample Name], Comment, [Results Folder Path],'
 	set @sql = @sql + ' [Unique Mass Tag Count], [Comparison Mass Tag Count], '
 	set @sql = @sql + ' [Threshold % For Inclusion], Normalize, [Std Abu Min], [Std Abu Max],'
-	set @sql = @sql + ' [Force Peak Max Abundance], [Min High MS/MS Score], [Min High Discriminant Score], [Min PMT Quality Score], '
+	set @sql = @sql + ' [Force Peak Max Abundance], [Min High MS/MS Score], [Min High Discriminant Score], [Min High Peptide Prophet Prob], [Min PMT Quality Score], '
 	set @sql = @sql + ' [Min SLiC Score], [Min Del SLiC Score], [Min Peptide Length], [Min Peptide Rep Count],'
 	set @sql = @sql + ' [ORF Coverage Computation Level], [Rep Norm Stats],'
 	set @sql = @sql + ' [Quantitation State ID], State, [Last Affected]'
@@ -118,6 +120,7 @@ As
 
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[GetQRollupsSummary] TO [DMS_SP_User]

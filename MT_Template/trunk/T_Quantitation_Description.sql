@@ -16,6 +16,7 @@ CREATE TABLE [dbo].[T_Quantitation_Description](
 	[Expression_Ratio_Mode] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Expression_Ratio_Mode]  DEFAULT (0),
 	[Minimum_MT_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_High_Normalized_Score]  DEFAULT (0),
 	[Minimum_MT_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_MT_High_Discriminant_Score]  DEFAULT (0),
+	[Minimum_MT_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_MT_Peptide_Prophet_Probability]  DEFAULT (0),
 	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_PMT_Quality_Score]  DEFAULT (0),
 	[Minimum_Peptide_Length] [tinyint] NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_Peptide_Length]  DEFAULT (6),
 	[Minimum_Match_Score] [decimal](9, 5) NOT NULL CONSTRAINT [DF_T_Quantitation_Description_Minimum_Match_Score]  DEFAULT (0),
@@ -104,6 +105,10 @@ GO
 GRANT SELECT ON [dbo].[T_Quantitation_Description] ([Minimum_MT_High_Discriminant_Score]) TO [DMS_SP_User]
 GO
 GRANT UPDATE ON [dbo].[T_Quantitation_Description] ([Minimum_MT_High_Discriminant_Score]) TO [DMS_SP_User]
+GO
+GRANT SELECT ON [dbo].[T_Quantitation_Description] ([Minimum_MT_Peptide_Prophet_Probability]) TO [DMS_SP_User]
+GO
+GRANT UPDATE ON [dbo].[T_Quantitation_Description] ([Minimum_MT_Peptide_Prophet_Probability]) TO [DMS_SP_User]
 GO
 GRANT SELECT ON [dbo].[T_Quantitation_Description] ([Minimum_PMT_Quality_Score]) TO [DMS_SP_User]
 GO

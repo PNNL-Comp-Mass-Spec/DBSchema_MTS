@@ -40,18 +40,18 @@ CREATE NONCLUSTERED INDEX [IX_T_Sequence_Monoisotopic_Mass] ON [dbo].[T_Sequence
 ) ON [PRIMARY]
 GO
 
+/****** Object:  Index [IX_T_Sequence_Seq_ID_Cleavage_State_Max] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Sequence_Seq_ID_Cleavage_State_Max] ON [dbo].[T_Sequence] 
+(
+	[Seq_ID] ASC,
+	[Cleavage_State_Max] ASC
+) ON [PRIMARY]
+GO
+
 /****** Object:  Index [IX_T_Sequence_Seq_ID_Monoisotopic_Mass] ******/
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Sequence_Seq_ID_Monoisotopic_Mass] ON [dbo].[T_Sequence] 
 (
 	[Seq_ID] ASC,
 	[Monoisotopic_Mass] ASC
-) ON [PRIMARY]
-GO
-
-/****** Object:  Index [T_Sequence_Seq_ID_Cleavage_State_Max] ******/
-CREATE NONCLUSTERED INDEX [T_Sequence_Seq_ID_Cleavage_State_Max] ON [dbo].[T_Sequence] 
-(
-	[Seq_ID] ASC,
-	[Cleavage_State_Max] ASC
 ) ON [PRIMARY]
 GO

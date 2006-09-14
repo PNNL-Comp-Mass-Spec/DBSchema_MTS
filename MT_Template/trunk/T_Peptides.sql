@@ -48,6 +48,14 @@ CREATE NONCLUSTERED INDEX [IX_T_Peptides_Peptide] ON [dbo].[T_Peptides]
 	[Peptide] ASC
 )WITH FILLFACTOR = 90 ON [PRIMARY]
 GO
+
+/****** Object:  Index [IX_T_Peptides_Peptide_ID_Mass_Tag_ID] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Peptides_Peptide_ID_Mass_Tag_ID] ON [dbo].[T_Peptides] 
+(
+	[Peptide_ID] ASC,
+	[Mass_Tag_ID] ASC
+) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[T_Peptides]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptides_T_Analysis_Description] FOREIGN KEY([Analysis_ID])
 REFERENCES [T_Analysis_Description] ([Job])
 GO

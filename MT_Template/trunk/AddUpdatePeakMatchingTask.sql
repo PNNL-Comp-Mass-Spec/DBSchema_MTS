@@ -23,6 +23,7 @@ CREATE Procedure dbo.AddUpdatePeakMatchingTask
 **			02/05/2005 mem - Added parameter @MinimumHighDiscriminantScore
 **			06/28/2005 mem - Increased size of @IniFileName to 255 characters
 **			07/05/2006 mem - Updated behavior of @SetStateToHolding so that non-zero values result in Processing_State = 5
+**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **      
 *****************************************************/
 (
@@ -32,6 +33,7 @@ CREATE Procedure dbo.AddUpdatePeakMatchingTask
 	@modList varchar(128) = '',
 	@MinimumHighNormalizedScore real = 1.5,
 	@MinimumHighDiscriminantScore real = .5,
+	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
 	@MinimumPMTQualityScore real = 0,
 	@priority int = 3,
 	@taskID int output,
@@ -135,6 +137,7 @@ As
 			Mod_List,
 			Minimum_High_Normalized_Score,
 			Minimum_High_Discriminant_Score,
+			Minimum_Peptide_Prophet_Probability,
 			Minimum_PMT_Quality_Score,
 			Ini_File_Name,
 			PM_Created,
@@ -149,6 +152,7 @@ As
 			@modList,
 			@MinimumHighNormalizedScore,
 			@MinimumHighDiscriminantScore,
+			@MinimumPeptideProphetProbability,
 			@MinimumPMTQualityScore,
 			@iniFileName,
 			GetDate(),
@@ -182,6 +186,8 @@ As
 			Confirmed_Only = @confirmedOnly, 
 			Mod_List = @modList, 
 			Minimum_High_Normalized_Score = @MinimumHighNormalizedScore,
+			Minimum_High_Discriminant_Score = @MinimumHighDiscriminantScore,
+			Minimum_Peptide_Prophet_Probability = @MinimumPeptideProphetProbability,
 			Minimum_PMT_Quality_Score = @MinimumPMTQualityScore,
 			Ini_File_Name = @iniFileName, 
 			Processing_State = @ProcessingState,

@@ -13,7 +13,8 @@ CREATE TABLE [dbo].[T_Peak_Matching_Defaults](
 	[Mod_List] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Mod_List]  DEFAULT (''),
 	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Normalized_Score]  DEFAULT (1.0),
 	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Discriminant_Score]  DEFAULT (0),
-	[Minimum_PMT_Quality_Score] [decimal](9, 5) NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_PMT_Quality_Score]  DEFAULT (1),
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_Peptide_Prophet_Probability]  DEFAULT (0),
+	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_PMT_Quality_Score]  DEFAULT (1),
 	[Priority] [int] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Defaults_Priority]  DEFAULT (5),
  CONSTRAINT [PK_T_Peak_Matching_Defaults] PRIMARY KEY CLUSTERED 
 (

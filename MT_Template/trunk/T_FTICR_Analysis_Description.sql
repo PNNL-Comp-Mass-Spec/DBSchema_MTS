@@ -51,6 +51,49 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
 ) ON [PRIMARY]
 
 GO
+
+/****** Object:  Trigger [dbo].[trig_i_FTICRAnalysisDescription] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE Trigger trig_i_FTICRAnalysisDescription on dbo.T_FTICR_Analysis_Description
+For Insert
+AS
+	If @@RowCount = 0
+		Return
+
+	INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+	SELECT 2, inserted.Job, inserted.State, 0, GetDate()
+	FROM inserted
+
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_u_FTICRAnalysisDescription] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE Trigger trig_u_FTICRAnalysisDescription on dbo.T_FTICR_Analysis_Description
+For Update
+AS
+	If @@RowCount = 0
+		Return
+
+	if update(State)
+		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+		SELECT 2, inserted.Job, inserted.State, deleted.State, GetDate()
+		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
+
+
+GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])
 REFERENCES [T_FAD_State_Name] ([FAD_State_ID])
 GO

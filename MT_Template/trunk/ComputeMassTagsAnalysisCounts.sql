@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.ComputeMassTagsAnalysisCounts
 **			09/28/2005 mem - Now updating column Peptide_Obs_Count_Passing_Filter
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/10/2006 mem - Updated to support Peptide Prophet values
+**			09/06/2006 mem - Now posting a log entry on success
 **    
 *****************************************************/
 (
@@ -232,17 +233,16 @@ AS
 	End
 	
 	If @CriteriaGroupMatch = 0 
-	  Begin
+	Begin
 
 		-- Invalid filter defined; post message to log
 		set @message = 'Filter set ID ' + Convert(varchar(11), @FilterSetID) + ' not found using GetThresholdsForFilterSet'
 		SELECT @message
 		execute PostLogEntry 'Error', @message, 'ComputeMassTagsAnalysisCounts'
 		Set @message = ''
-	  End
+	End
 	Else
-	  Begin -- <a>
-		
+	Begin -- <a>
 
 		-- Now call GetThresholdsForFilterSet to get the tresholds to filter against
 		-- Set Passes_Filter to 1 in #TmpMTObsStats for the matching mass tags
@@ -458,8 +458,11 @@ AS
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
-	  End -- </a>
+	End -- </a>
 
+	-- Post a log entry
+	Set @message = 'Updated observation counts in T_Mass_Tags using filter set ' + Convert(varchar(9), @FilterSetID)
+	execute PostLogEntry 'Normal', @message, 'ComputeMassTagsAnalysisCounts'
 	
 Done:
 	Return @myError

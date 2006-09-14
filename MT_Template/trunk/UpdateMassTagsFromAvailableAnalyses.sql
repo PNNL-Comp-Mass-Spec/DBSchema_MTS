@@ -24,6 +24,8 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 **			09/23/2005 mem - Updated to handle PDB_ID values of 0 or Null
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			03/13/2006 mem - Now calling UpdateCachedHistograms if any data is loaded
+**			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
+**						   - Added calls to AddPeptideLoadStatEntry after loading peptides from each job
 **    
 *****************************************************/
 (
@@ -33,120 +35,163 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 As
 	set nocount on
 	
-	declare @myRowCount int	
-	declare @myError int
-	set @myRowCount = 0
-	set @myError = 0
+	Declare @myRowCount int	
+	Declare @myError int
+	Set @myRowCount = 0
+	Set @myError = 0
 
-	set @numJobsProcessed = 0
+	Set @numJobsProcessed = 0
 	
-	declare @jobAvailable int
-	set @jobAvailable = 0
+	Declare @jobAvailable int
+	Set @jobAvailable = 0
+
+	Declare @UniqueID int
+	Set @UniqueID = 0
 	
 	Declare @message varchar(255)
-	set @message = ''
+	Set @message = ''
 	
-	declare @count int
-	declare @result int
-	declare @job int
-	declare @PDB_ID int
-	declare @UpdateEnabled tinyint
+	Declare @count int
+	Declare @result int
+	Declare @job int
+	Declare @PDB_ID int
+	Declare @UpdateEnabled tinyint
 	
-	declare @NumAddedPeptides int
-	set @NumAddedPeptides = 0
+	Declare @NumAddedPeptides int
+	Set @NumAddedPeptides = 0
 	
-	declare @PeptideDBName varchar(128)
-	declare @PeptideDBIDCached int
+	Declare @PeptideDBName varchar(128)
+	Declare @PeptideDBIDCached int
 	
-	declare @availableState int
-	set @availableState = 1 -- 'New' 
+	Declare @AvailableState int
+	Set @AvailableState = 1 -- 'New' 
 
+	Declare @MassTagUpdatedState int
+	Set @MassTagUpdatedState = 7
+	
 	-----------------------------------------------------------
-	-- loop through all available analyses and process their peptides
+	-- Create a temporary table to track the available jobs,
+	--  ordered by Import_Priority and then by Job
+	-----------------------------------------------------------
+	
+	CREATE TABLE #Tmp_Available_Jobs (
+		UniqueID int Identity(1,1) NOT NULL,
+		Job int NOT NULL
+	)
+	
+	-----------------------------------------------------------
+	-- Populate #Tmp_Available_Jobs
+	-----------------------------------------------------------
+	
+	INSERT INTO #Tmp_Available_Jobs (Job)
+	SELECT Job
+	FROM T_Analysis_Description
+	WHERE State = @AvailableState
+	ORDER BY Import_Priority, Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	If @myError <> 0
+	Begin
+		Set @message = 'Error populating #Tmp_Available_Jobs'
+		Goto Done
+	End
+
+	If @myRowCount > 0
+		Set @jobAvailable = 1
+	Else
+		Set @jobAvailable = 0
+		
+	-----------------------------------------------------------
+	-- Loop through all available analyses and process their peptides
 	-----------------------------------------------------------
 	--
 
 	Set @Job = 0
-	Set @jobAvailable = 1
 	Set @PeptideDBName = ''
 	Set @PeptideDBIDCached = -1
 	
-	While @jobAvailable > 0 and @myError = 0 and @numJobsProcessed < @numJobsToProcess
+	While @jobAvailable > 0 And @myError = 0 And @numJobsProcessed < @numJobsToProcess
 	Begin -- <a>
 		
 		-----------------------------------------------------------
-		-- get next available analysis
+		-- Get next available analysis from #Tmp_Available_Jobs
+		-- Link into T_Analysis_Description to make sure the job
+		--  is still in state @AvailableState and to determine PDB_ID
 		-- If PDB_ID is Null then @PDB_ID will = 0
 		-----------------------------------------------------------
 		--
 		Set @PDB_ID = 0
 		--
-		SELECT TOP 1 @job = Job, @PDB_ID = IsNull(PDB_ID, 0)
-		FROM T_Analysis_Description
-		WHERE State = @availableState AND Job > @job
-		ORDER BY Job ASC
+		SELECT TOP 1 @job = TAD.Job, 
+					 @PDB_ID = IsNull(TAD.PDB_ID, 0),
+					 @UniqueID = AJ.UniqueID
+		FROM #Tmp_Available_Jobs AJ INNER JOIN 
+			 T_Analysis_Description TAD on AJ.Job = TAD.Job
+		WHERE TAD.State = @availableState AND AJ.UniqueID > @UniqueID
+		ORDER BY AJ.UniqueID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
-		if @myError <> 0 
-		begin
-			set @message = 'Error while reading next job from T_Analysis_Description'
-			goto done
+		If @myError <> 0 
+		Begin
+			Set @message = 'Error while reading next job from T_Analysis_Description'
+			Goto done
 		end
 
-		if @myRowCount <> 1
+		If @myRowCount <> 1
 			Set @jobAvailable = 0
-		else
-		begin -- <b>
+		Else
+		Begin -- <b>
 			
 			If @PDB_ID = 0
 			Begin
 				-- Job has a value of 0 or Null for PDB_ID
 				-- This is the case in speciality DBs
-				-- Post a warning message to the log then update the job's state to 7
+				-- Post a warning message to the log then update the job's state to @MassTagUpdatedState
 				
-				set @message = 'Warning: Job ' + convert(varchar(11), @Job) + ' has a value of 0 or Null for PDB_ID in T_Analysis_Description; advancing job state to 7'
+				Set @message = 'Warning: Job ' + convert(varchar(11), @Job) + ' has a value of 0 or Null for PDB_ID in T_Analysis_Description; advancing job state to ' + Convert(varchar(9), @MassTagUpdatedState)
 				execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromAvailableAnalyses'
-				set @message = ''
+				Set @message = ''
 				
 				UPDATE T_Analysis_Description
-				SET State = 7
+				SET State = @MassTagUpdatedState
 				WHERE Job = @job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
 			End
 			Else
-			Begin
+			Begin -- <c>
 				If @PeptideDBIDCached = -1 OR @PeptideDBIDCached <> @PDB_ID
-				Begin
+				Begin -- <d1>
 					-----------------------------------------------------------
 					-- Lookup the peptide DB Name corresponding to PDB_ID
 					-----------------------------------------------------------
 					--
 					SELECT @PeptideDBIDCached = PDB_ID, @PeptideDBName = PDB_Name
-					FROM MT_Main..T_Peptide_Database_List
+					FROM MT_Main.dbo.T_Peptide_Database_List
 					WHERE PDB_ID = @PDB_ID
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 					--
-					if @myError <> 0 
-					begin
-						set @message = 'Error while reading next job from T_Analysis_Description'
-						goto done
+					If @myError <> 0 
+					Begin
+						Set @message = 'Error while reading next job from T_Analysis_Description'
+						Goto done
 					end
 					--
-					if @myRowCount <> 1
-					begin
-						set @message = 'Peptide database not found in MT_Main for job ' + convert(varchar(11), @Job) + '; PDB_ID ' + convert(varchar(11), @PDB_ID)
+					If @myRowCount <> 1
+					Begin
+						Set @message = 'Peptide database not found in MT_Main for job ' + convert(varchar(11), @Job) + '; PDB_ID ' + convert(varchar(11), @PDB_ID)
 						execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromAvailableAnalyses'
-						set @message = ''
-						set @PeptideDBIDCached = -1
+						Set @message = ''
+						Set @PeptideDBIDCached = -1
 					end
-				End
+				End -- </d1>
 				
-				if @PeptideDBIDCached <> -1 and @PeptideDBIDCached = @PDB_ID
-				begin
+				If @PeptideDBIDCached <> -1 And @PeptideDBIDCached = @PDB_ID
+				Begin -- <d2>
 					-----------------------------------------------------------
 					-- import peptides for the job
 					-----------------------------------------------------------
@@ -157,19 +202,26 @@ As
 					
 					-- make log entry
 					--
-					if @result = 0
+					If @result = 0
 						execute PostLogEntry 'Normal', @message, 'UpdateMassTagsFromAvailableAnalyses'
-					else
+					Else
 						execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromAvailableAnalyses'
 					
-				end
-			End
+				End -- <d2>
+			End -- <c>
 			
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.5, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.5, @AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.9, @AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.95,@PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.99,@AnalysisStateMatch=@MassTagUpdatedState
+
 			-- increment number of jobs processed
 			--
-			set @numJobsProcessed = @numJobsProcessed + 1
+			Set @numJobsProcessed = @numJobsProcessed + 1
 
-		end -- </b>
+		End -- </b>
 
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled @CallingFunctionDescription = 'UpdateMassTagsFromAvailableAnalyses', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output

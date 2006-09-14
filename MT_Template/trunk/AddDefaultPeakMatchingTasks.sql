@@ -32,11 +32,12 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			09/07/2004 mem - Changed logic to add multiple tasks for given job if several entries of the same Instrument_Name are present in T_Peak_Matching_Defaults
 **			09/20/2004 mem - Updated to new MTDB schema
 **			10/08/2004 mem - Switched from using MT_Main..V_DMS_Analysis_Job_Paths to V_DMS_Analysis_Job_Import
-**			03/04/2005 mem - Added parameter @MinimumHighDiscriminantScore
+**			03/04/2005 mem - Added support for Minimum_High_Discriminant_Score
 **			06/28/2005 mem - Increased size of @IniFileName to 255 characters
 **			07/18/2005 mem - Now obtaining Instrument and Labelling from T_FTICR_Analysis_Description
 **			07/31/2006 mem - Increased size of @JobListFilter parameter to 2048 characters and added check for trailing comma
 **			08/29/2006 mem - Updated the default value for @SetStateToHolding to now be 1
+**			09/06/2006 mem - Added support for Minimum_Peptide_Prophet_Probability
 **     
 *****************************************************/
 (
@@ -47,7 +48,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 	@SetStateToHolding tinyint = 1				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
 )
 AS
-	Set NOCOUNT ON
+	set nocount on
 
 	declare @myRowCount int	
 	declare @myError int
@@ -182,6 +183,7 @@ AS
 	Declare @modList varchar(128)
 	Declare @MinimumHighNormalizedScore float
 	Declare @MinimumHighDiscriminantScore float
+	Declare @MinimumPeptideProphetProbability real
 	Declare @MinimumPMTQualityScore decimal(9,5)
 	Declare @priority tinyint
 	Declare @SetStateToHoldingThisJob tinyint
@@ -334,6 +336,7 @@ AS
 							@modList = Mod_List, 
 							@MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
 							@MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score,
+							@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
 							@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
 							@priority = Priority
 						FROM T_Peak_Matching_Defaults
@@ -353,7 +356,8 @@ AS
 
 							Exec @result = AddUpdatePeakMatchingTask	@job, @iniFileName,
 																		@confirmedOnly, @modList,
-																		@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, @MinimumPMTQualityScore,
+																		@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+																		@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
 																		@priority, @taskID output,
 																		'add', @message output,
 																		@SetStateToHolding
@@ -378,6 +382,7 @@ AS
 				Set @modList = ''
 				Set @MinimumHighNormalizedScore = 1
 				Set @MinimumHighDiscriminantScore = 0.2
+				Set @MinimumPeptideProphetProbability = 0.2
 				Set @MinimumPMTQualityScore = 1
 				Set @priority = 6
 				Set @SetStateToHoldingThisJob = @SetStateToHolding
@@ -393,7 +398,8 @@ AS
 
 				Exec @result = AddUpdatePeakMatchingTask	@job, @iniFileName,
 															@confirmedOnly, @modList,
-															@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, @MinimumPMTQualityScore,
+															@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+															@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
 															@priority, @taskID output,
 															'add', @message output,
 															@SetStateToHoldingThisJob

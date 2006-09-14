@@ -41,6 +41,7 @@ CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/10/2006 mem - Updated to support Peptide Prophet values
+**			09/12/2006 mem - Now populating column RowCount_Loaded
 **
 *****************************************************/
 (
@@ -939,7 +940,7 @@ As
 
 Done:
 	-----------------------------------------------------------
-	-- Update state of the analysis job
+	-- Update analysis job state and column RowCount_Loaded
 	-----------------------------------------------------------
 	--
 
@@ -965,7 +966,8 @@ Done:
 
 	--
 	UPDATE T_Analysis_Description
-	SET State = @state
+	SET State = @state, 
+		RowCount_Loaded = @numAddedPeptides
 	WHERE Job = @job
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount

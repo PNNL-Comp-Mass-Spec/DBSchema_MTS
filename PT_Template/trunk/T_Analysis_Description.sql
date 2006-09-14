@@ -34,6 +34,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Created]  DEFAULT (getdate()),
 	[Last_Affected] [datetime] NULL,
 	[Process_State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Process_State]  DEFAULT (0),
+	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT (5),
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,

@@ -51,6 +51,13 @@ CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_ModCount] ON [dbo].[T_Mass_Tags]
 ) ON [PRIMARY]
 GO
 
+/****** Object:  Index [IX_T_Mass_Tags_PeptideProphetProbability] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PeptideProphetProbability] ON [dbo].[T_Mass_Tags] 
+(
+	[High_Peptide_Prophet_Probability] ASC
+) ON [PRIMARY]
+GO
+
 /****** Object:  Index [IX_T_Mass_Tags_PMTQS] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PMTQS] ON [dbo].[T_Mass_Tags] 
 (

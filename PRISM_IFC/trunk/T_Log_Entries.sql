@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[T_Log_Entries](
  CONSTRAINT [PK_T_Log_Entries] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH FILLFACTOR = 90 ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -38,8 +38,9 @@ AS
 **		 integrated authentication or returning the Sql Server login name if
 **		 logged in with a Sql Server login
 **
-**		Auth: mem
-**		Date: 08/17/2006
+**	Auth:	mem
+**	Date:	08/17/2006
+**			09/01/2006 mem - Updated to use dbo.udfTimeStampText
 **    
 *****************************************************/
 	
@@ -54,21 +55,11 @@ AS
 		Declare @SepChar varchar(2)
 		set @SepChar = ' ('
 
-		Declare @MonthCode varchar(2)
-		Set @MonthCode = Convert(varchar(2), Month(GetDate()))
-		If Len(@MonthCode) = 1
-			Set @MonthCode = '0' + @MonthCode
-
-		Declare @MinuteCode varchar(2)
-		Set @MinuteCode = DATENAME(n, GetDate())
-		If Len(@MinuteCode) = 1
-			Set @MinuteCode = '0' + @MinuteCode
-
-		Declare @DateTimeStamp varchar(20)
-		Set @DateTimeStamp = DATENAME(yy, GetDate()) + '-' + @MonthCode + '-' + DATENAME(dd, GetDate()) + ' ' + DATENAME(hh, GetDate()) + ':' + @MinuteCode
+		-- Note that dbo.udfTimeStampText returns a timestamp 
+		-- in the form: 2006-09-01 09:05:03
 
 		Declare @UserInfo varchar(128)
-		Set @UserInfo = @DateTimeStamp + '; ' + LEFT(SYSTEM_USER,75)
+		Set @UserInfo = dbo.udfTimeStampText(GetDate()) + '; ' + LEFT(SYSTEM_USER,75)
 		Set @UserInfo = IsNull(@UserInfo, '')
 
 		UPDATE T_Log_Entries

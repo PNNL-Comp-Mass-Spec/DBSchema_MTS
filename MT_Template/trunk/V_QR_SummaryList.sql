@@ -17,6 +17,7 @@ SELECT TOP 100 PERCENT QD.Quantitation_ID AS QID,
     QD.UMC_Abundance_Mode AS [Force Peak Max Abundance], 
     QD.Minimum_MT_High_Normalized_Score AS [Min High MS/MS Score],
      QD.Minimum_MT_High_Discriminant_Score AS [Min High Discriminant Score],
+     QD.Minimum_MT_Peptide_Prophet_Probability AS [Min High Peptide Prophet Prob],
      QD.Minimum_PMT_Quality_Score AS [Min PMT Quality Score], 
     QD.Minimum_Match_Score AS [Min SLiC Score], 
     QD.Minimum_Del_Match_Score AS [Min Del SLiC Score], 
@@ -54,8 +55,8 @@ GROUP BY QD.Quantitation_ID, QD.SampleName, QD.Comment,
     QD.Minimum_Peptide_Length, QD.UMC_Abundance_Mode, 
     QD.ORF_Coverage_Computation_Level, 
     QD.Minimum_MT_High_Discriminant_Score, 
-    QD.Minimum_Match_Score,
-    QD.Minimum_Del_Match_Score
+    QD.Minimum_Match_Score, QD.Minimum_Del_Match_Score, 
+    QD.Minimum_MT_Peptide_Prophet_Probability
 ORDER BY QD.Quantitation_ID
 
 
