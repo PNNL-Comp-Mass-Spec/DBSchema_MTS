@@ -18,20 +18,26 @@ CREATE Procedure dbo.GetPeptidesAndSICStats
 **	Auth:	mem
 **	Date:	09/27/2005
 **			12/16/2005 mem - Now returning additional MASIC columns
-**						   - Added parameters @GroupByPeptide, @MaxValueSelectionMode, @MinXCorrCharge1, @MinXCorrCharge2, @MinXCorrCharge3, and @MinDeltaCn
+**						   - Added parameters @GroupByPeptide, @MaxValueSelectionMode, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, and @MinDeltaCn
 **			01/20/2006 mem - Now returning the Monoisotopic_Mass and Parent_Ion_MZ for each peptide
 **			03/17/2006 mem - Updated to work with XTandem results
+**			09/15/2006 mem - Added parameters @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, and @MinXCorrPartiallyTrypticCharge3
+**						   - Renamed parameters @MinXCorrCharge1, @MinXCorrCharge2, and @MinXCorrCharge3 to @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, and @MinXCorrFullyTrypticCharge3
 **    
 *****************************************************/
 (
-	@JobList varchar(4000),						-- Comma separated list of job numbers
+	@JobList varchar(4000),							-- Comma separated list of Sequest job numbers
 	@CleavageStateMinimum tinyint = 2,
-	@GroupByPeptide tinyint = 1,				-- If 1, then group by peptide, returning the max value (specified by @MaxValueSelectionMode) for each sequence in each job
-	@MaxValueSelectionMode tinyint = 0,			-- 0 means use Peak_Area, 1 means use Peak_SN_Ratio, 2 means use StatMoments_Area, 3 means use XCorr or Hyperscore, 4 means Log_Evalue (only applicable for XTandem)
-	@MinXCorrCharge1 real = 1.9,
-	@MinXCorrCharge2 real = 2.2,
-	@MinXCorrCharge3 real = 3.75,
-	@MinDeltaCn real = 0.1,
+	@GroupByPeptide tinyint = 1,					-- If 1, then group by peptide, returning the max value (specified by @MaxValueSelectionMode) for each sequence in each job
+	@MaxValueSelectionMode tinyint = 0,				-- 0 means use Peak_Area, 1 means use Peak_SN_Ratio, 2 means use StatMoments_Area, 3 means use XCorr or Hyperscore, 4 means Log_Evalue (only applicable for XTandem)
+	@MinXCorrFullyTrypticCharge1 real = 1.9,		-- Only used for fully tryptic peptides
+	@MinXCorrFullyTrypticCharge2 real = 2.2,		-- Only used for fully tryptic peptides
+	@MinXCorrFullyTrypticCharge3 real = 3.75,		-- Only used for fully tryptic peptides
+	@MinDeltaCn real = 0.1,							-- This is actually DeltaCn2
+	@MinXCorrPartiallyTrypticCharge1 real = 4.0,					-- Only used if @CleavageStateMinimum is < 2
+	@MinXCorrPartiallyTrypticCharge2 real = 4.3,					-- Only used if @CleavageStateMinimum is < 2
+	@MinXCorrPartiallyTrypticCharge3 real = 4.7,					-- Only used if @CleavageStateMinimum is < 2
+	@PreviewSql tinyint = 0,
 	@message varchar(512) = '' output
 )
 As
@@ -62,10 +68,15 @@ As
 	if @MaxValueSelectionMode > 3
 		Set @MaxValueSelectionMode = 3
 
-	Set @MinXCorrCharge1 = IsNull(@MinXCorrCharge1, 1.9)
-	Set @MinXCorrCharge2 = IsNull(@MinXCorrCharge2, 2.2)
-	Set @MinXCorrCharge3 = IsNull(@MinXCorrCharge3, 3.75)
+	Set @MinXCorrFullyTrypticCharge1 = IsNull(@MinXCorrFullyTrypticCharge1, 1.9)
+	Set @MinXCorrFullyTrypticCharge2 = IsNull(@MinXCorrFullyTrypticCharge2, 2.2)
+	Set @MinXCorrFullyTrypticCharge3 = IsNull(@MinXCorrFullyTrypticCharge3, 3.75)
 	Set @MinDeltaCn = IsNull(@MinDeltaCn, 0.1)
+
+	Set @MinXCorrPartiallyTrypticCharge1 = IsNull(@MinXCorrPartiallyTrypticCharge1, 4.0)
+	Set @MinXCorrPartiallyTrypticCharge2 = IsNull(@MinXCorrPartiallyTrypticCharge2, 4.3)
+	Set @MinXCorrPartiallyTrypticCharge3 = IsNull(@MinXCorrPartiallyTrypticCharge3, 4.7)
+
 	Set @message = ''
 
 
@@ -328,21 +339,45 @@ As
 		Set @S = @S +     ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID INNER JOIN'
 		Set @S = @S +     ' T_Sequence S on Pep.Seq_ID = S.Seq_ID'
 		Set @S = @S + ' WHERE PPM.Cleavage_State >= @CleavageStateMinimum AND'
-		Set @S = @S +       ' TAD.job = @Job AND ('
+		Set @S = @S +  ' TAD.job = @Job AND ('
+		If @CleavageStateMinimum < 2
+			Set @S = @S +    '(PPM.Cleavage_State = 2 AND '
+			
 		If @Loop = 1
 		Begin
-			Set @S = @S +    ' Pep.Charge_State = 1 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrCharge1 OR'
-			Set @S = @S +    ' Pep.Charge_State = 2 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrCharge2 OR'
-			Set @S = @S +    ' Pep.Charge_State >= 3 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrCharge3'
+			Set @S = @S +    '(Pep.Charge_State = 1 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrFullyTrypticCharge1 OR'
+			Set @S = @S +    ' Pep.Charge_State = 2 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrFullyTrypticCharge2 OR'
+			Set @S = @S +    ' Pep.Charge_State >= 3 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrFullyTrypticCharge3)'
 		End
 
 		If @Loop = 2
 		Begin
-			Set @S = @S +    ' Pep.Charge_State = 1 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrCharge1 OR'
-			Set @S = @S +    ' Pep.Charge_State = 2 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrCharge2 OR'
-			Set @S = @S +    ' Pep.Charge_State >= 3 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrCharge3'
+			Set @S = @S +    '(Pep.Charge_State = 1 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrFullyTrypticCharge1 OR'
+			Set @S = @S +    ' Pep.Charge_State = 2 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrFullyTrypticCharge2 OR'
+			Set @S = @S +    ' Pep.Charge_State >= 3 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrFullyTrypticCharge3)'
 		End
 
+		If @CleavageStateMinimum < 2
+		Begin
+			Set @S = @S +    ') OR (PPM.Cleavage_State < 2 AND '
+
+			If @Loop = 1
+			Begin
+				Set @S = @S +    '(Pep.Charge_State = 1 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrPartiallyTrypticCharge1 OR'
+				Set @S = @S +    ' Pep.Charge_State = 2 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrPartiallyTrypticCharge2 OR'
+				Set @S = @S +    ' Pep.Charge_State >= 3 AND SS.DeltaCn2 >= @MinDeltaCn AND SS.XCorr >= @MinXCorrPartiallyTrypticCharge3)'
+			End
+
+			If @Loop = 2
+			Begin
+				Set @S = @S +    '(Pep.Charge_State = 1 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrPartiallyTrypticCharge1 OR'
+				Set @S = @S +    ' Pep.Charge_State = 2 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrPartiallyTrypticCharge2 OR'
+				Set @S = @S +    ' Pep.Charge_State >= 3 AND X.DeltaCn2 >= @MinDeltaCn AND X.Normalized_Score >= @MinXCorrPartiallyTrypticCharge3)'
+			End
+			
+			Set @S = @S +    ') '
+		End
+		
 		Set @S = @S +  ' )'
 
 		If @Loop = 1
@@ -387,7 +422,7 @@ As
 	End
 	
 	-- Params string for sp_ExecuteSql
-	Set @Params = '@Job int, @CleavageStateMinimum tinyint, @MinDeltaCn real, @MinXCorrCharge1 real, @MinXCorrCharge2 real, @MinXCorrCharge3 real'
+	Set @Params = '@Job int, @CleavageStateMinimum tinyint, @MinDeltaCn real, @MinXCorrFullyTrypticCharge1 real, @MinXCorrFullyTrypticCharge2 real, @MinXCorrFullyTrypticCharge3 real, @MinXCorrPartiallyTrypticCharge1 real, @MinXCorrPartiallyTrypticCharge2 real, @MinXCorrPartiallyTrypticCharge3 real'
 
 	--------------------------------------------------------------
 	-- Obtain the data for each job in #TmpJobList and place in #TmpPeptidesAndSICStats_Results
@@ -428,111 +463,135 @@ As
 			-- Populate the interim processing table with the data for @Job
 			If @JobIsPeptideHit = 1
 			Begin
-				exec sp_ExecuteSql @InsertSqlPeptideHit, @Params, @Job, @CleavageStateMinimum, @MinDeltaCn, @MinXCorrCharge1, @MinXCorrCharge2, @MinXCorrCharge3
+				if @PreviewSql <> 0
+					Print @InsertSqlPeptideHit
+				else
+					exec sp_ExecuteSql @InsertSqlPeptideHit,   @Params, @Job, @CleavageStateMinimum, @MinDeltaCn, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 			End
 			
 			If @JobIsXTPeptideHit = 1
 			Begin
-				exec sp_ExecuteSql @InsertSqlXTPeptideHit, @Params, @Job, @CleavageStateMinimum, @MinDeltaCn, @MinXCorrCharge1, @MinXCorrCharge2, @MinXCorrCharge3
+				if @PreviewSql <> 0
+					Print @InsertSqlXTPeptideHit
+				else
+					exec sp_ExecuteSql @InsertSqlXTPeptideHit, @Params, @Job, @CleavageStateMinimum, @MinDeltaCn, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 			End
 
-			-- Update the interim processing table to include the DS_SIC data	
-			UPDATE #TmpPeptidesAndSICStats
-			SET Optimal_Peak_Apex_Scan_Number = DS_SIC.Optimal_Peak_Apex_Scan_Number, 
-				Peak_Intensity = DS_SIC.Peak_Intensity, 
-				Peak_SN_Ratio = DS_SIC.Peak_SN_Ratio, 
-				FWHM_In_Scans = DS_SIC.FWHM_In_Scans,
-				Peak_Area = DS_SIC.Peak_Area, 
+			If @PreviewSql <> 0
+			Begin
+				Print @Params
+				SELECT @Job as Job, 
+						@CleavageStateMinimum AS CleavageStateMinimum, 
+						@MinDeltaCn As MinDeltaCN, 
+						@MinXCorrFullyTrypticCharge1 as MinXCorrCharge1, 
+						@MinXCorrFullyTrypticCharge2 as MinXCorrCharge2, 
+						@MinXCorrFullyTrypticCharge3 as MinXCorrCharge3, 
+						@MinXCorrPartiallyTrypticCharge1 as MinXCorrPartiallyTrypticCharge1, 
+						@MinXCorrPartiallyTrypticCharge2 as MinXCorrPartiallyTrypticCharge2, 
+						@MinXCorrPartiallyTrypticCharge3 as MinXCorrPartiallyTrypticCharge3
 
-				Parent_Ion_Intensity = DS_SIC.Parent_Ion_Intensity,
-				Parent_Ion_MZ = DS_SIC.MZ,
-				Peak_Baseline_Noise_Level = DS_SIC.Peak_Baseline_Noise_Level,
-				Peak_Baseline_Noise_StDev = DS_SIC.Peak_Baseline_Noise_StDev,
-				Peak_Baseline_Points_Used = DS_SIC.Peak_Baseline_Points_Used,
-				StatMoments_Area = DS_SIC.StatMoments_Area,
-				CenterOfMass_Scan = DS_SIC.CenterOfMass_Scan,
-				Peak_StDev = DS_SIC.Peak_StDev,
-				Peak_Skew = DS_SIC.Peak_Skew,
-				Peak_KSStat = DS_SIC.Peak_KSStat,
-				StatMoments_DataCount_Used = DS_SIC.StatMoments_DataCount_Used
-
-			FROM #TmpPeptidesAndSICStats S INNER JOIN
-				 T_Dataset_Stats_SIC DS_SIC ON 
-				 DS_SIC.Frag_Scan_Number = S.Scan_Number AND 
-				 DS_SIC.Job = S.SIC_Job
-			--
-			SELECT @myRowCount = @@rowcount, @myError = @@error
-
-			If @GroupByPeptide = 0
-			 Begin
-				--------------------------------------------------------------
-				-- Do not group by peptide; append all of the data to #TmpPeptidesAndSICStats_Results
-				--------------------------------------------------------------
-				Set @UseValueMinimum = 0
-			 End
+			End
 			Else
-			 Begin -- <c>
-				--------------------------------------------------------------
-				-- Group By the metric indicated by @MaxValueSelectionMode
-				-- First, need to flag the row with the highest XCorr for each Seq_ID
-				--------------------------------------------------------------
+			Begin -- <c>
 				
-				Set @UseValueMinimum = 1
-					
-				-- Define the Selection Field based on @MaxValueSelectionMode
-				-- Default to use Peak_Area
-				Set @SelectionField = 'Peak_Area'
-				
-				If @MaxValueSelectionMode = 0
-					Set @SelectionField = 'Peak_Area'
+				-- Update the interim processing table to include the DS_SIC data	
+				UPDATE #TmpPeptidesAndSICStats
+				SET Optimal_Peak_Apex_Scan_Number = DS_SIC.Optimal_Peak_Apex_Scan_Number, 
+					Peak_Intensity = DS_SIC.Peak_Intensity, 
+					Peak_SN_Ratio = DS_SIC.Peak_SN_Ratio, 
+					FWHM_In_Scans = DS_SIC.FWHM_In_Scans,
+					Peak_Area = DS_SIC.Peak_Area, 
 
-				If @MaxValueSelectionMode = 1
-					Set @SelectionField = 'Peak_SN_Ratio'
+					Parent_Ion_Intensity = DS_SIC.Parent_Ion_Intensity,
+					Parent_Ion_MZ = DS_SIC.MZ,
+					Peak_Baseline_Noise_Level = DS_SIC.Peak_Baseline_Noise_Level,
+					Peak_Baseline_Noise_StDev = DS_SIC.Peak_Baseline_Noise_StDev,
+					Peak_Baseline_Points_Used = DS_SIC.Peak_Baseline_Points_Used,
+					StatMoments_Area = DS_SIC.StatMoments_Area,
+					CenterOfMass_Scan = DS_SIC.CenterOfMass_Scan,
+					Peak_StDev = DS_SIC.Peak_StDev,
+					Peak_Skew = DS_SIC.Peak_Skew,
+					Peak_KSStat = DS_SIC.Peak_KSStat,
+					StatMoments_DataCount_Used = DS_SIC.StatMoments_DataCount_Used
 
-				If @MaxValueSelectionMode = 2
-					Set @SelectionField = 'StatMoments_Area'
-
-				If @JobIsPeptideHit = 1
-				Begin
-					If @MaxValueSelectionMode = 3
-						Set @SelectionField = 'XCorr'
-				End
-
-				If @JobIsXTPeptideHit = 1
-				Begin
-					If @MaxValueSelectionMode = 3
-						Set @SelectionField = 'Hyperscore'
-
-					If @MaxValueSelectionMode = 4
-						Set @SelectionField = 'Log_Evalue'
-				End
-			
-				Set @S = ''
-				Set @S = @S + ' UPDATE #TmpPeptidesAndSICStats'
-				Set @S = @S + ' SET UseValue = 1'
-				Set @S = @S + ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
-				Set @S = @S +    ' ( SELECT MIN(S.Unique_Row_ID) AS Unique_Row_ID_Min'
-				Set @S = @S +      ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
-				Set @S = @S +       ' ( SELECT SIC_Job, Seq_ID, MAX(' + @SelectionField + ') AS Value_Max'
-				Set @S = @S +         ' FROM #TmpPeptidesAndSICStats'
-				Set @S = @S +         ' GROUP BY SIC_Job, Seq_ID, XCorr'
-				Set @S = @S +       ' ) LookupQ ON'
-				Set @S = @S +       ' S.SIC_Job = LookupQ.SIC_Job AND'
-				Set @S = @S +       ' S.Seq_ID = LookupQ.Seq_ID AND'
-				Set @S = @S +       ' S.' + @SelectionField + ' = LookupQ.Value_Max'
-				Set @S = @S +       ' GROUP BY S.Seq_ID'
-				Set @S = @S +    ' ) UniqueRowQ ON'
-				Set @S = @S +    ' S.Unique_Row_ID = UniqueRowQ.Unique_Row_ID_Min'
-				
-				exec sp_ExecuteSql @S
+				FROM #TmpPeptidesAndSICStats S INNER JOIN
+					T_Dataset_Stats_SIC DS_SIC ON 
+					DS_SIC.Frag_Scan_Number = S.Scan_Number AND 
+					DS_SIC.Job = S.SIC_Job
 				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error							
+				SELECT @myRowCount = @@rowcount, @myError = @@error
 
-			 End -- </c>
+				If @GroupByPeptide = 0
+				Begin
+					--------------------------------------------------------------
+					-- Do not group by peptide; append all of the data to #TmpPeptidesAndSICStats_Results
+					--------------------------------------------------------------
+					Set @UseValueMinimum = 0
+				End
+				Else
+				Begin -- <d>
+					--------------------------------------------------------------
+					-- Group By the metric indicated by @MaxValueSelectionMode
+					-- First, need to flag the row with the highest XCorr for each Seq_ID
+					--------------------------------------------------------------
+					
+					Set @UseValueMinimum = 1
+						
+					-- Define the Selection Field based on @MaxValueSelectionMode
+					-- Default to use Peak_Area
+					Set @SelectionField = 'Peak_Area'
+					
+					If @MaxValueSelectionMode = 0
+						Set @SelectionField = 'Peak_Area'
+
+					If @MaxValueSelectionMode = 1
+						Set @SelectionField = 'Peak_SN_Ratio'
+
+					If @MaxValueSelectionMode = 2
+						Set @SelectionField = 'StatMoments_Area'
+
+					If @JobIsPeptideHit = 1
+					Begin
+						If @MaxValueSelectionMode = 3
+							Set @SelectionField = 'XCorr'
+					End
+
+					If @JobIsXTPeptideHit = 1
+					Begin
+						If @MaxValueSelectionMode = 3
+							Set @SelectionField = 'Hyperscore'
+
+						If @MaxValueSelectionMode = 4
+							Set @SelectionField = 'Log_Evalue'
+					End
+				
+					Set @S = ''
+					Set @S = @S + ' UPDATE #TmpPeptidesAndSICStats'
+					Set @S = @S + ' SET UseValue = 1'
+					Set @S = @S + ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
+					Set @S = @S +    ' ( SELECT MIN(S.Unique_Row_ID) AS Unique_Row_ID_Min'
+					Set @S = @S +      ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
+					Set @S = @S +       ' ( SELECT SIC_Job, Seq_ID, MAX(' + @SelectionField + ') AS Value_Max'
+					Set @S = @S +         ' FROM #TmpPeptidesAndSICStats'
+					Set @S = @S +         ' GROUP BY SIC_Job, Seq_ID, XCorr'
+					Set @S = @S +       ' ) LookupQ ON'
+					Set @S = @S +       ' S.SIC_Job = LookupQ.SIC_Job AND'
+					Set @S = @S +       ' S.Seq_ID = LookupQ.Seq_ID AND'
+					Set @S = @S +       ' S.' + @SelectionField + ' = LookupQ.Value_Max'
+					Set @S = @S +       ' GROUP BY S.Seq_ID'
+					Set @S = @S +    ' ) UniqueRowQ ON'
+					Set @S = @S +    ' S.Unique_Row_ID = UniqueRowQ.Unique_Row_ID_Min'
+					
+					exec sp_ExecuteSql @S
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error							
+				
+				End -- </d>
+			End -- </c>
 
 			--------------------------------------------------------------
 			-- Append the desired data to #TmpPeptidesAndSICStats_Results
@@ -577,7 +636,10 @@ As
 			Set @S = @S + ' WHERE S.UseValue >= ' + Convert(varchar(6), @UseValueMinimum)
 			Set @S = @S + ' ORDER BY S.Dataset, S.Job, S.XCorr DESC, S.Seq_ID'
 
-			exec sp_ExecuteSql @S
+			If @PreviewSql <> 0
+				Print @S
+			Else
+				exec sp_ExecuteSql @S
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error	
 		End -- </b>
@@ -594,7 +656,10 @@ As
 	Set @S = @S + '	FROM #TmpPeptidesAndSICStats_Results'
 	Set @S = @S + '	ORDER BY Dataset, Job, XCorr DESC, Seq_ID'
 
-	exec sp_ExecuteSql @S
+	If @PreviewSql <> 0
+		Print @S
+	Else
+		exec sp_ExecuteSql @S
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error							
 
@@ -606,5 +671,5 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [MTUser]
 GO

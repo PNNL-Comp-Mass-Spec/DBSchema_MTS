@@ -38,15 +38,16 @@ CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
 **			05/20/2005 mem - Now updating field Internal_Standard_Only to 0 for any new mass tags
 **			09/02/2005 mem - Now populating columns Peak_Area and Peak_SN_Ratio in T_Peptides
 **			10/09/2005 mem - Now calling ComputeMaxObsAreaByJob to populate Max_Obs_Area_In_Job in T_Peptides
-**			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
+**			12/01/2005 mem - Added brackets around @PeptideDBName as needed to allow for DBs with dashes in the name
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/10/2006 mem - Updated to support Peptide Prophet values
 **			09/12/2006 mem - Now populating column RowCount_Loaded
+**			09/19/2006 mem - Replaced parameter @PeptideDBName with @PeptideDBPath
 **
 *****************************************************/
 (
 	@job int,
-	@PeptideDBName varchar(128),				-- Peptide Database Name
+	@PeptideDBPath varchar(256),				-- Should be of the form ServerName.[DatabaseName] or simply [DatabaseName]
 	@numAddedPeptides int = 0 output,
 	@message varchar(512) = '' output 
 )
@@ -111,7 +112,7 @@ As
 		set @S = ''
 		set @S = @S + ' SELECT @matchCount = Count(Job) '
 		set @S = @S + ' FROM '
-		set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Analysis_Filter_Flags'
+		set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Filter_Flags'
 		set @S = @S + ' WHERE (Job = ' + @jobStr + ') '
 		set @S = @S + ' AND ('
 		set @S = @S + '    Filter_ID IN '
@@ -126,7 +127,7 @@ As
 		
 		If IsNull(@matchCount, 0) = 0
 		Begin
-			set @message = 'Job ' + @jobStr + ' has not yet been tested in peptide DB ' + @PeptideDBName + ' against any of the import filters defined in T_Process_Config; thus, no peptides can be imported'
+			set @message = 'Job ' + @jobStr + ' has not yet been tested in peptide DB ' + @PeptideDBPath + ' against any of the import filters defined in T_Process_Config; thus, no peptides can be imported'
 			set @myError = 50001
 			goto Done
 		End
@@ -288,7 +289,7 @@ As
 	
 	-----------------------------------------------------------
 	-- build dynamic SQL and execute it to populate
-	-- #Imported_Peptides from @PeptideDBName
+	-- #Imported_Peptides from @PeptideDBPath
 	-----------------------------------------------------------
 	--
 	declare @numPeptidesImported int
@@ -309,7 +310,7 @@ As
 	set @S = @S + ' Peptide, Clean_Sequence, Mod_Count, Mod_Description,'
 	set @S = @S + ' Seq_ID, Peptide_ID, Peak_Area, Peak_SN_Ratio '
 	set @S = @S + 'FROM '
-	set @S = @S +   ' [' + @peptideDBName + '].dbo.V_Peptide_Export '
+	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_Peptide_Export '
 	set @S = @S + 'WHERE (Analysis_ID = ' + @jobStr + ') '
 
 	if @ImportFilterCount > 0
@@ -361,7 +362,7 @@ As
 	set @S = @S + ' SELECT @MaxA = MaxScanNumberPeptideHit, '
 	set @S = @S + ' @MaxB = MaxScanNumberSICs,'
 	set @S = @S + ' @MaxC = MaxScanNumberAllScans'
-	set @S = @S + ' FROM [' + @peptideDBName + '].dbo.V_PeptideHit_Job_Scan_Max'
+	set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.V_PeptideHit_Job_Scan_Max'
 	set @S = @S + ' WHERE (Job = ' + @jobStr + ') '
 
 	set @ParamDef = '@MaxA int output, @MaxB int output, @MaxC int output'
@@ -421,7 +422,7 @@ As
 	set @S = @S + 'SELECT'
 	set @S = @S + ' VPE.Seq_ID, VPE.Cleavage_State, VPE.Terminus_State, VPE.Reference '
 	set @S = @S + 'FROM '
-	set @S = @S +   ' [' + @peptideDBName + '].dbo.V_Protein_Export AS VPE INNER JOIN'
+	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_Protein_Export AS VPE INNER JOIN'
 	set @S = @S + ' #Imported_Peptides AS IP ON '
 	set @S = @S + ' IP.Peptide_ID_Original = VPE.Peptide_ID '
 	set @S = @S + 'GROUP BY VPE.Seq_ID, VPE.Cleavage_State, VPE.Terminus_State, VPE.Reference'
@@ -749,7 +750,7 @@ As
 		set @S = @S + ' )'
 		set @S = @S + ' SELECT IP.Peptide_ID_New, SS.XCorr, SS.DeltaCn, SS.DeltaCn2, SS.SP, SS.RankSp, SS.RankXc, SS.DelM, SS.XcRatio'
 		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
-		set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Sequest AS SS ON IP.Peptide_ID_Original = SS.Peptide_ID'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Sequest AS SS ON IP.Peptide_ID_Original = SS.Peptide_ID'
 		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 		--
 		exec @result = sp_executesql @S
@@ -800,7 +801,7 @@ As
 		set @S = @S + ' SELECT IP.Peptide_ID_New, X.Hyperscore, X.Log_EValue, X.DeltaCn2,'
 		set @S = @S +        ' X.Y_Score, X.Y_Ions, X.B_Score, X.B_Ions, X.DelM, X.Intensity, X.Normalized_Score'
 		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
-		set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_XTandem AS X ON IP.Peptide_ID_Original = X.Peptide_ID'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_XTandem AS X ON IP.Peptide_ID_Original = X.Peptide_ID'
 		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 		--
 		exec @result = sp_executesql @S
@@ -860,7 +861,7 @@ As
 	set @S = @S + ' SELECT IP.Peptide_ID_New, MScore, DiscriminantScore, DiscriminantScoreNorm,'
 	set @S = @S +        ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability'
 	set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
-	set @S = @S +   ' [' + @peptideDBName + '].dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
+	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
 	set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 	--
 	exec @result = sp_executesql @S

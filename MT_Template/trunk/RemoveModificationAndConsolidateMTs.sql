@@ -19,12 +19,9 @@ CREATE PROCEDURE dbo.RemoveModificationAndConsolidateMTs
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters:
-**	
-**  Output:
-**
-**		Auth: mem
-**		Date: 10/20/2004
+**	Auth:	mem
+**	Date:	10/20/2004
+**			09/19/2006 mem - Added support for table T_Mass_Tag_Peptide_Prophet_Stats
 **    
 *****************************************************/
 (
@@ -352,7 +349,8 @@ AS
 	
 	ALTER TABLE dbo.T_Peptides
 		DROP CONSTRAINT FK_T_Peptides_T_Mass_Tags
-	ALTER TABLE dbo.T_Peptides WITH NOCHECK ADD CONSTRAINT
+	ALTER TABLE dbo.T_Peptides WITH NOCHECK ADD CONSTRAINT
+
 		FK_T_Peptides_T_Mass_Tags FOREIGN KEY
 		(Mass_Tag_ID) REFERENCES dbo.T_Mass_Tags (Mass_Tag_ID) ON UPDATE CASCADE
 	
@@ -362,6 +360,12 @@ AS
 		FK_T_Mass_Tags_NET_T_Mass_Tags FOREIGN KEY
 		(Mass_Tag_ID) REFERENCES dbo.T_Mass_Tags (Mass_Tag_ID) ON UPDATE CASCADE
 	
+
+	ALTER TABLE dbo.T_Mass_Tag_Peptide_Prophet_Stats
+		DROP CONSTRAINT FK_T_Mass_Tag_Peptide_Prophet_Stats_T_Mass_Tags
+	ALTER TABLE dbo.T_Mass_Tag_Peptide_Prophet_Stats WITH NOCHECK ADD CONSTRAINT
+		FK_T_Mass_Tag_Peptide_Prophet_Stats_T_Mass_Tags FOREIGN KEY
+		(Mass_Tag_ID) REFERENCES dbo.T_Mass_Tags (Mass_Tag_ID) ON UPDATE CASCADE
 
 	
 	---------------------------
@@ -485,6 +489,7 @@ AS
 	ALTER TABLE dbo.T_FTICR_UMC_ResultDetails DROP CONSTRAINT FK_T_FTICR_UMC_ResultDetails_T_Mass_Tags
 	ALTER TABLE dbo.T_Mass_Tag_to_Protein_Map DROP CONSTRAINT FK_T_Mass_Tag_to_Protein_Map_T_Mass_Tags
 	ALTER TABLE dbo.T_Mass_Tags_NET DROP CONSTRAINT FK_T_Mass_Tags_NET_T_Mass_Tags
+	ALTER TABLE dbo.T_Mass_Tag_Peptide_Prophet_Stats DROP CONSTRAINT FK_T_Mass_Tag_Peptide_Prophet_Stats_T_Mass_Tags
 	ALTER TABLE dbo.T_Peptides DROP CONSTRAINT FK_T_Peptides_T_Mass_Tags
 	ALTER TABLE dbo.T_Quantitation_ResultDetails DROP CONSTRAINT FK_T_Quantitation_ResultDetails_T_Mass_Tags
 	
@@ -503,6 +508,8 @@ AS
 		ADD CONSTRAINT FK_T_Mass_Tag_to_Protein_Map_T_Mass_Tags foreign key(Mass_Tag_ID) references dbo.T_Mass_Tags(Mass_Tag_ID)
 	ALTER TABLE dbo.T_Mass_Tags_NET
 		ADD CONSTRAINT FK_T_Mass_Tags_NET_T_Mass_Tags foreign key(Mass_Tag_ID) references dbo.T_Mass_Tags(Mass_Tag_ID)
+	ALTER TABLE dbo.T_Mass_Tag_Peptide_Prophet_Stats 
+		ADD CONSTRAINT FK_T_Mass_Tag_Peptide_Prophet_Stats_T_Mass_Tags foreign key(Mass_Tag_ID) references dbo.T_Mass_Tags(Mass_Tag_ID)
 	ALTER TABLE dbo.T_Peptides
 		ADD CONSTRAINT FK_T_Peptides_T_Mass_Tags foreign key(Mass_Tag_ID) references dbo.T_Mass_Tags(Mass_Tag_ID)
 	ALTER TABLE dbo.T_Quantitation_ResultDetails

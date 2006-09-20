@@ -30,6 +30,7 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **			10/12/2005 mem - Added parameter @PostLogEntryOnSuccess
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @peptideDBName from 64 to 128 characters
+**			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **    
 *****************************************************/
 (
@@ -41,64 +42,116 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
  	@PostLogEntryOnSuccess tinyint = 0
 )
 As
-	set nocount on
+	Set nocount on
 
-	declare @myError int
-	declare @myRowCount int
-	set @myError = 0
-	set @myRowCount = 0
+	Declare @myError int
+	Declare @myRowCount int
+	Set @myError = 0
+	Set @myRowCount = 0
 
-	set @infoOnly = IsNull(@infoOnly, 0)
-	set @jobsUpdated = 0
-	set @peptideRowsUpdated = 0
-	set @message = ''
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	Set @jobsUpdated = 0
+	Set @peptideRowsUpdated = 0
+	Set @message = ''
 
-	declare @result int
-	set @result = 0
+	Declare @result int
+	Set @result = 0
 		
-	declare @peptideDBName varchar(128)
-	declare @peptideDBID int
-	declare @jobCountToUpdate int
-	
-	set @peptideDBName = ''
+	Declare @PeptideDBPath varchar(256)		-- Switched from @peptideDBName to @PeptideDBPath on 9/19/2006
+	Declare @PeptideDBID int
+	Declare @jobCountToUpdate int
 
-	declare @S nvarchar(4000)
-	declare @continue tinyint
+	Declare @PeptideDBCountInvalid int
+	Declare @InvalidDBList varchar(1024)
+
+	Declare @S nvarchar(4000)
+	Declare @continue tinyint
 
 	---------------------------------------------------
 	-- Create two temporary tables
 	---------------------------------------------------
 	--
 	CREATE TABLE #T_Peptide_Database_List (
-		PeptideDBName varchar(128) NOT NULL,
-		PDB_ID int
+		PeptideDBName varchar(128) NULL,
+		PeptideDBID int NULL,
+		PeptideDBServer varchar(128) NULL,
+		PeptideDBPath varchar(256) NULL
 	)
-
 
 	CREATE TABLE #T_Jobs_To_Update (
 		Job int NOT NULL
 	)
 
 	---------------------------------------------------
-	-- Get peptide database name(s)
+	-- Populate #T_Peptide_Database_List with the PDB_ID values
+	-- defined in T_Analysis_Description
 	---------------------------------------------------
 	--
-	INSERT INTO #T_Peptide_Database_List (PeptideDBName, PDB_ID)
-	SELECT DISTINCT PDL.PDB_Name, PDL.PDB_ID
-	FROM MT_Main.dbo.T_Peptide_Database_List AS PDL INNER JOIN
-		T_Analysis_Description AS TAD ON 
-		PDL.PDB_ID = TAD.PDB_ID
-	WHERE NOT (PDL.PDB_Name IS NULL)
+	INSERT INTO #T_Peptide_Database_List (PeptideDBID)
+	SELECT DISTINCT PDB_ID
+	FROM T_Analysis_Description TAD
+	WHERE NOT PDB_ID IS NULL
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myRowCount < 1
 	begin
-		set @message = 'No analyses with valid peptide DBs were found'
-		set @myError = 0
+		Set @message = 'No analyses with valid peptide DB IDs were found'
+		Set @myError = 0
 		goto Done
 	end
 
+	---------------------------------------------------
+	-- Determine the name and server for each Peptide DB in #T_Peptide_Database_List
+	---------------------------------------------------
+	--
+	exec @myError = MT_Main.dbo.PopulatePeptideDBLocationTable @PreferDBName = 0, @message = @message output
+
+	If @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling MT_Main.dbo.PopulatePeptideDBLocationTable'
+		
+		Set @message = @message + '; Error Code ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
+	
+	Set @PeptideDBCountInvalid = 0
+	SELECT @PeptideDBCountInvalid = COUNT(*)
+	FROM #T_Peptide_Database_List
+	WHERE PeptideDBName Is Null
+
+	If @PeptideDBCountInvalid > 0
+	Begin -- <a>
+		-- One or more DBs in #T_Peptide_Database_List are unknown
+		-- Construct a comma-separated list, post a log entry, 
+		--  and delete the invalid databases from #T_Peptide_Database_List
+		
+		Set @InvalidDBList = ''
+		SELECT @InvalidDBList = @InvalidDBList + PeptideDBID + ','
+		FROM #T_Peptide_Database_List
+		WHERE PeptideDBName Is Null
+		ORDER BY PeptideDBID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		If @myRowCount > 0
+		Begin
+			-- Remove the trailing comma
+			Set @InvalidDBList = Left(@InvalidDBList, Len(@InvalidDBList)-1)
+			
+			Set @message = 'Invalid peptide DB ID'
+			If @myRowCount > 1
+				Set @message = @message + 's'
+				
+			Set @message = @message + ' defined in T_Analysis_Description: ' + @InvalidDBList
+			execute PostLogEntry 'Error', @message, 'RefreshMSMSJobNETs'
+			Set @message = ''
+			
+			DELETE FROM #T_Peptide_Database_List
+			WHERE PeptideDBName Is Null
+		End
+	End
 
 	---------------------------------------------------
 	-- Loop through peptide database(s) and look for jobs
@@ -109,7 +162,10 @@ As
 	Set @continue = 1
 	While @continue = 1
 	Begin -- <a>
-		SELECT TOP 1 @peptideDBName = PeptideDBName, @peptideDBID = PDB_ID
+		Set @PeptideDBPath = ''
+
+		SELECT TOP 1 @PeptideDBPath = PeptideDBPath,
+					 @PeptideDBID = PeptideDBID
 		FROM #T_Peptide_Database_List
 		ORDER BY PeptideDBName
 		--
@@ -121,25 +177,25 @@ As
 		Begin -- <b>
 
 			TRUNCATE TABLE #T_Jobs_To_Update
-			set @jobCountToUpdate = 0
+			Set @jobCountToUpdate = 0
 			
-			set @S = ''
-			set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
-			set @S = @S + ' SELECT TAD.Job'
-			set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
-			set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Analysis_Description AS PepTAD ON '
-			set @S = @S + ' 	TAD.Job = PepTAD.Job'
-			set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @peptideDBID) + ' AND'
-			set @S = @S + '    ('
-			set @S = @S + '  (IsNull(TAD.GANET_Fit, 0) <> IsNull(PepTAD.GANET_Fit, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.GANET_Slope, 0) <> IsNull(PepTAD.GANET_Slope, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.GANET_Intercept, 0) <> IsNull(PepTAD.GANET_Intercept, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.GANET_RSquared, 0) <> IsNull(PepTAD.GANET_RSquared, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.ScanTime_NET_Slope, 0) <> IsNull(PepTAD.ScanTime_NET_Slope, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.ScanTime_NET_Intercept, 0) <> IsNull(PepTAD.ScanTime_NET_Intercept, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.ScanTime_NET_Fit, 0) <> IsNull(PepTAD.ScanTime_NET_Fit, 0)) OR'
-			set @S = @S + '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0))'
-			set @S = @S + '    )'
+			Set @S = ''
+			Set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + ' SELECT TAD.Job'
+			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
+			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
+			Set @S = @S + ' 	TAD.Job = PepTAD.Job'
+			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @PeptideDBID) + ' AND'
+			Set @S = @S + '    ('
+			Set @S = @S + '  (IsNull(TAD.GANET_Fit, 0) <> IsNull(PepTAD.GANET_Fit, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.GANET_Slope, 0) <> IsNull(PepTAD.GANET_Slope, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.GANET_Intercept, 0) <> IsNull(PepTAD.GANET_Intercept, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.GANET_RSquared, 0) <> IsNull(PepTAD.GANET_RSquared, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Slope, 0) <> IsNull(PepTAD.ScanTime_NET_Slope, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Intercept, 0) <> IsNull(PepTAD.ScanTime_NET_Intercept, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Fit, 0) <> IsNull(PepTAD.ScanTime_NET_Fit, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0))'
+			Set @S = @S + '    )'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND TAD.Job In (' + @JobFilterList + ')'
@@ -147,30 +203,30 @@ As
 			exec @result = sp_executesql @S
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
+			Set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
 			--
 			if @myError <> 0
 			begin
-				set @message = 'Error comparing jobs to those in ' + @peptideDBName + ', examining NET values'
+				Set @message = 'Error comparing jobs to those in ' + @PeptideDBPath + ', examining NET values'
 				goto Done
 			end
 
 			-- Look for jobs with undefined Scan_Time_Peak_Apex values, 
 			-- but available Scan_Time info in the peptide DB
-			set @S = ''
-			set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
-			set @S = @S + ' SELECT LookupQ.Job'
-			set @S = @S + ' FROM (SELECT TAD.Job,'
-			set @S = @S +              ' COUNT(TP.Peptide_ID) AS NullScanTimeCount'
-			set @S = @S +              ' FROM T_Analysis_Description AS TAD INNER JOIN'
-			set @S = @S +                   ' T_Peptides AS TP ON TAD.Job = TP.Analysis_ID'
-			set @S = @S +              ' WHERE TP.Scan_Time_Peak_Apex IS NULL AND TAD.State > 1'
-			set @S = @S +              ' GROUP BY TAD.Job'
-			set @S = @S +      ' ) LookupQ INNER JOIN '
-			set @S = @S +    ' [' + @peptideDBName + '].dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
-			set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Jobs_To_Update'
-			set @S = @S + '   ON LookupQ.Job = #T_Jobs_To_Update.Job'
-			set @S = @S + ' WHERE (LookupQ.NullScanTimeCount > 0) AND #T_Jobs_To_Update.Job IS NULL'
+			Set @S = ''
+			Set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + ' SELECT LookupQ.Job'
+			Set @S = @S + ' FROM (SELECT TAD.Job,'
+			Set @S = @S +              ' COUNT(TP.Peptide_ID) AS NullScanTimeCount'
+			Set @S = @S +              ' FROM T_Analysis_Description AS TAD INNER JOIN'
+			Set @S = @S + ' T_Peptides AS TP ON TAD.Job = TP.Analysis_ID'
+			Set @S = @S +              ' WHERE TP.Scan_Time_Peak_Apex IS NULL AND TAD.State > 1'
+			Set @S = @S +              ' GROUP BY TAD.Job'
+			Set @S = @S +      ' ) LookupQ INNER JOIN '
+			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
+			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Jobs_To_Update'
+			Set @S = @S + '   ON LookupQ.Job = #T_Jobs_To_Update.Job'
+			Set @S = @S + ' WHERE (LookupQ.NullScanTimeCount > 0) AND #T_Jobs_To_Update.Job IS NULL'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND LookupQ.Job In (' + @JobFilterList + ')'
@@ -178,11 +234,11 @@ As
 			exec @result = sp_executesql @S
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
+			Set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
 			--
 			if @myError <> 0
 			begin
-				set @message = 'Error comparing jobs to those in ' + @peptideDBName + ', Scan_Time values'
+				Set @message = 'Error comparing jobs to those in ' + @PeptideDBPath + ', Scan_Time values'
 				goto Done
 			end
 			
@@ -190,7 +246,7 @@ As
 			-- Remove peptide DB from #T_Peptide_Database_List
 			---------------------------------------------------
 			DELETE FROM #T_Peptide_Database_List
-			WHERE PDB_ID = @peptideDBID 
+			WHERE PeptideDBID = @PeptideDBID 
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
@@ -203,34 +259,34 @@ As
 				-- Update the peptides for the appropriate jobs
 				---------------------------------------------------
 				--
-				set @S = ''
+				Set @S = ''
 
 				If @infoOnly <> 0
 				Begin
 					-- Return the Job and the number of rows that would be updated
-					set @S = @S + 'SELECT JTU.Job, Count(TP.Peptide_ID) AS Peptide_Rows_To_Update'
+					Set @S = @S + 'SELECT JTU.Job, Count(TP.Peptide_ID) AS Peptide_Rows_To_Update'
 				End
 				Else
 				Begin
-					set @S = @S + 'UPDATE TP'
-					set @S = @S + ' SET GANET_Obs = PepTP.GANET_Obs,'
-					set @S = @S +     ' Scan_Time_Peak_Apex = PepTP.Scan_Time_Peak_Apex'
+					Set @S = @S + 'UPDATE TP'
+					Set @S = @S + ' Set GANET_Obs = PepTP.GANET_Obs,'
+					Set @S = @S +     ' Scan_Time_Peak_Apex = PepTP.Scan_Time_Peak_Apex'
 				End
 
-				set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
-				set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Peptides AS PepTP ON'
-				set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND'
-				set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND'
-				set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND'
-				set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND'
-				set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID AND'
-				set @S = @S +      ' (IsNull(TP.GANET_Obs,0) <> PepTP.GANET_Obs OR'
-				set @S = @S +       ' IsNull(TP.Scan_Time_Peak_Apex,0) <> PepTP.Scan_Time_Peak_Apex)'
-				set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
+				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON'
+				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND'
+				Set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND'
+				Set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND'
+				Set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND'
+				Set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID AND'
+				Set @S = @S +      ' (IsNull(TP.GANET_Obs,0) <> PepTP.GANET_Obs OR'
+				Set @S = @S +       ' IsNull(TP.Scan_Time_Peak_Apex,0) <> PepTP.Scan_Time_Peak_Apex)'
+				Set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
 				If @infoOnly <> 0
 				Begin
-					set @S = @S + ' GROUP BY JTU.Job'
-					set @S = @S + ' ORDER BY JTU.Job'
+					Set @S = @S + ' GROUP BY JTU.Job'
+					Set @S = @S + ' ORDER BY JTU.Job'
 				End
 
 				exec @result = sp_executesql @S
@@ -239,7 +295,7 @@ As
 				--
 				if @myError <> 0
 				begin
-					set @message = 'Error updating peptide GANET_Obs values using ' + @peptideDBName
+					Set @message = 'Error updating peptide GANET_Obs values using ' + @PeptideDBPath
 					goto Done
 				end
 					
@@ -250,39 +306,39 @@ As
 				-- Update the discriminant score values for the appropriate jobs
 				---------------------------------------------------
 				--
-				set @S = ''
+				Set @S = ''
 
 				If @infoOnly <> 0
 				Begin
 					-- Return the Job and the number of rows that would be updated
-					set @S = @S + 'SELECT JTU.Job, Count(SD.Peptide_ID) AS Peptide_Rows_To_Update'
+					Set @S = @S + 'SELECT JTU.Job, Count(SD.Peptide_ID) AS Peptide_Rows_To_Update'
 				End
 				Else
 				Begin
-					set @S = @S + 'UPDATE SD'
-					set @S = @S + ' SET DiscriminantScore = PepSD.DiscriminantScore, '
-					set @S = @S +     ' DiscriminantScoreNorm = PepSD.DiscriminantScoreNorm'
+					Set @S = @S + 'UPDATE SD'
+					Set @S = @S + ' Set DiscriminantScore = PepSD.DiscriminantScore, '
+					Set @S = @S +     ' DiscriminantScoreNorm = PepSD.DiscriminantScoreNorm'
 				End
 			
-				set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
-				set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Peptides AS PepTP ON '
-				set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND '
-				set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND '
-				set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND '
-				set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND '
-				set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID INNER JOIN'
-				set @S = @S +      ' T_Score_Discriminant AS SD ON '
-				set @S = @S +      ' TP.Peptide_ID = SD.Peptide_ID INNER JOIN '
-				set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Score_Discriminant AS PepSD ON '
-				set @S = @S +      ' PepTP.Peptide_ID = PepSD.Peptide_ID AND '
-				set @S = @S +      ' (IsNull(SD.DiscriminantScore,0) <> PepSD.DiscriminantScore OR '
-				set @S = @S +       ' IsNull(SD.DiscriminantScoreNorm,0) <> PepSD.DiscriminantScoreNorm)'
-				set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
+				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON '
+				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND '
+				Set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND '
+				Set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND '
+				Set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND '
+				Set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID INNER JOIN'
+				Set @S = @S +      ' T_Score_Discriminant AS SD ON '
+				Set @S = @S +      ' TP.Peptide_ID = SD.Peptide_ID INNER JOIN '
+				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS PepSD ON '
+				Set @S = @S +      ' PepTP.Peptide_ID = PepSD.Peptide_ID AND '
+				Set @S = @S +      ' (IsNull(SD.DiscriminantScore,0) <> PepSD.DiscriminantScore OR '
+				Set @S = @S +       ' IsNull(SD.DiscriminantScoreNorm,0) <> PepSD.DiscriminantScoreNorm)'
+				Set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
 
 				If @infoOnly <> 0
 				Begin
-					set @S = @S + ' GROUP BY JTU.Job'
-					set @S = @S + ' ORDER BY JTU.Job'
+					Set @S = @S + ' GROUP BY JTU.Job'
+					Set @S = @S + ' ORDER BY JTU.Job'
 				End
 				
 				exec @result = sp_executesql @S
@@ -291,7 +347,7 @@ As
 				--
 				if @myError <> 0
 				begin
-					set @message = 'Error updating peptide Discriminant Score values using ' + @peptideDBName
+					Set @message = 'Error updating peptide Discriminant Score values using ' + @PeptideDBPath
 					goto Done
 				end
 
@@ -299,41 +355,41 @@ As
 				-- Update the GANET values for these jobs
 				---------------------------------------------------
 				--
-				set @S = ''
+				Set @S = ''
 				If @infoOnly <> 0
 				Begin
 					-- Return the Job and the number of rows that would be updated
-					set @S = @S + 'SELECT TAD.Job,'
-					set @S = @S + ' TAD.GANET_Fit, PTAD.GANET_Fit AS Fit_In_PeptideDB,'
-					set @S = @S + ' TAD.GANET_Slope, PTAD.GANET_Slope AS Slope_In_PeptideDB, '
-					set @S = @S + ' TAD.GANET_Intercept, PTAD.GANET_Intercept AS Intercept_In_PeptideDB, '
-					set @S = @S + ' TAD.GANET_RSquared, PTAD.GANET_RSquared AS RSquared_In_PeptideDB,'
-					set @S = @S + ' TAD.ScanTime_NET_Slope, PTAD.ScanTime_NET_Slope AS Slope_In_PeptideDB, '
-					set @S = @S + ' TAD.ScanTime_NET_Intercept, PTAD.ScanTime_NET_Intercept AS Intercept_In_PeptideDB, '
-					set @S = @S + ' TAD.ScanTime_NET_RSquared, PTAD.ScanTime_NET_RSquared AS RSquared_In_PeptideDB,'
-					set @S = @S + ' TAD.ScanTime_NET_Fit, PTAD.ScanTime_NET_Fit AS Fit_In_PeptideDB'
+					Set @S = @S + 'SELECT TAD.Job,'
+					Set @S = @S + ' TAD.GANET_Fit, PTAD.GANET_Fit AS Fit_In_PeptideDB,'
+					Set @S = @S + ' TAD.GANET_Slope, PTAD.GANET_Slope AS Slope_In_PeptideDB, '
+					Set @S = @S + ' TAD.GANET_Intercept, PTAD.GANET_Intercept AS Intercept_In_PeptideDB, '
+					Set @S = @S + ' TAD.GANET_RSquared, PTAD.GANET_RSquared AS RSquared_In_PeptideDB,'
+					Set @S = @S + ' TAD.ScanTime_NET_Slope, PTAD.ScanTime_NET_Slope AS Slope_In_PeptideDB, '
+					Set @S = @S + ' TAD.ScanTime_NET_Intercept, PTAD.ScanTime_NET_Intercept AS Intercept_In_PeptideDB, '
+					Set @S = @S + ' TAD.ScanTime_NET_RSquared, PTAD.ScanTime_NET_RSquared AS RSquared_In_PeptideDB,'
+					Set @S = @S + ' TAD.ScanTime_NET_Fit, PTAD.ScanTime_NET_Fit AS Fit_In_PeptideDB'
 				End
 				Else
 				Begin
-					set @S = @S + 'UPDATE T_Analysis_Description'
-					set @S = @S + ' SET GANET_Fit = PTAD.GANET_Fit,'
-					set @S = @S + '	    GANET_Slope = PTAD.GANET_Slope,'
-					set @S = @S + '	    GANET_Intercept = PTAD.GANET_Intercept,'
-					set @S = @S + '	    GANET_RSquared = PTAD.GANET_RSquared,'
-					set @S = @S + '     ScanTime_NET_Fit = PTAD.ScanTime_NET_Fit,'
-					set @S = @S + '	    ScanTime_NET_Slope = PTAD.ScanTime_NET_Slope,'
-					set @S = @S + '	    ScanTime_NET_Intercept = PTAD.ScanTime_NET_Intercept,'
-					set @S = @S + '	    ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared'
+					Set @S = @S + 'UPDATE T_Analysis_Description'
+					Set @S = @S + ' Set GANET_Fit = PTAD.GANET_Fit,'
+					Set @S = @S + '	    GANET_Slope = PTAD.GANET_Slope,'
+					Set @S = @S + '	    GANET_Intercept = PTAD.GANET_Intercept,'
+					Set @S = @S + '	    GANET_RSquared = PTAD.GANET_RSquared,'
+					Set @S = @S + '     ScanTime_NET_Fit = PTAD.ScanTime_NET_Fit,'
+					Set @S = @S + '	    ScanTime_NET_Slope = PTAD.ScanTime_NET_Slope,'
+					Set @S = @S + '	    ScanTime_NET_Intercept = PTAD.ScanTime_NET_Intercept,'
+					Set @S = @S + '	    ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared'
 				End
 
-				set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
-				set @S = @S + '	    #T_Jobs_To_Update AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
-				set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Analysis_Description AS PTAD ON'
-				set @S = @S + '	    TAD.Job = PTAD.Job'
+				Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
+				Set @S = @S + '	    #T_Jobs_To_Update AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
+				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PTAD ON'
+				Set @S = @S + '	    TAD.Job = PTAD.Job'
 
 				If @infoOnly <> 0
 				Begin
-					set @S = @S + ' ORDER BY TAD.Job'
+					Set @S = @S + ' ORDER BY TAD.Job'
 				End
 
 				exec @result = sp_executesql @S
@@ -342,7 +398,7 @@ As
 				--
 				if @myError <> 0
 				begin
-					set @message = 'Error updating job GANETs using ' + @peptideDBName
+					Set @message = 'Error updating job GANETs using ' + @PeptideDBPath
 					goto Done
 				end
 
@@ -362,7 +418,7 @@ As
 	Begin
 		-- Make sure the MSMS Processing will occur on the next master update
 		UPDATE T_Process_Step_Control
-		SET Enabled = 1
+		Set Enabled = 1
 		WHERE Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -372,17 +428,17 @@ Done:
 	If @myError <> 0
 	Begin
 		If Len(@message) = 0
-			set @message = 'Error refreshing Job GANETs, error code ' + convert(varchar(12), @myError)
+			Set @message = 'Error refreshing Job GANETs, error code ' + convert(varchar(12), @myError)
 		execute PostLogEntry 'Error', @message, 'RefreshMSMSJobNETs'
 	End
 	Else
 	Begin
 		If @jobsUpdated > 0
 		Begin
-			set @message = 'Job GANETs refreshed for ' + convert(varchar(12), @jobsUpdated) + ' MS/MS Jobs and ' + convert(varchar(12), @peptideRowsUpdated) + ' peptide rows'
+			Set @message = 'Job GANETs refreshed for ' + convert(varchar(12), @jobsUpdated) + ' MS/MS Jobs and ' + convert(varchar(12), @peptideRowsUpdated) + ' peptide rows'
 			If @infoOnly <> 0
 			Begin
-				set @message = 'InfoOnly: ' + @message
+				Set @message = 'InfoOnly: ' + @message
 				Select @message AS RefreshMSMSJobNETs_Message
 			End
 			Else

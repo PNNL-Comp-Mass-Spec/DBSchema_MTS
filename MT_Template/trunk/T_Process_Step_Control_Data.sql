@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Step_Control] ******/
-/****** RowCount: 23 ******/
+/****** RowCount: 24 ******/
 /****** Columns: Processing_Step_Name, enabled, Last_Affected, Entered_By ******/
 INSERT INTO [T_Process_Step_Control] VALUES ('AddDefaultPeakMatchingTasks',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('AddGANETUpdateTask',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -22,5 +22,6 @@ INSERT INTO [T_Process_Step_Control] VALUES ('RefreshMSMSSICJobs',1,'9/1/2006 12
 INSERT INTO [T_Process_Step_Control] VALUES ('RefreshProteins',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('RunCustomSPs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('UpdateMassTagNames',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('UpdateMassTagPeptideProphetStats',1,'9/15/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('UpdateMassTags',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('UseProteinSequencesDB',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')

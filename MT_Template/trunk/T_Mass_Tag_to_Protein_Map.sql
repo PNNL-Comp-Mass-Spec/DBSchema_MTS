@@ -54,7 +54,7 @@ REFERENCES [T_Peptide_Terminus_State_Name] ([Terminus_State])
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map] CHECK CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Peptide_Terminus_State_Name]
 GO
-ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Proteins] FOREIGN KEY([Ref_ID])
+ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Proteins] FOREIGN KEY([Ref_ID])
 REFERENCES [T_Proteins] ([Ref_ID])
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map] CHECK CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Proteins]

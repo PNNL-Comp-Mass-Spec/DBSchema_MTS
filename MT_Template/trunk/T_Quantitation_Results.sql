@@ -236,7 +236,7 @@ GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Match_Score_Average]) TO [DMS_S
 GO
 GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Match_Score_Average]) TO [DMS_SP_User]
 GO
-ALTER TABLE [dbo].[T_Quantitation_Results]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Quantitation_Results_T_Proteins] FOREIGN KEY([Ref_ID])
+ALTER TABLE [dbo].[T_Quantitation_Results]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_Results_T_Proteins] FOREIGN KEY([Ref_ID])
 REFERENCES [T_Proteins] ([Ref_ID])
 GO
 ALTER TABLE [dbo].[T_Quantitation_Results] CHECK CONSTRAINT [FK_T_Quantitation_Results_T_Proteins]

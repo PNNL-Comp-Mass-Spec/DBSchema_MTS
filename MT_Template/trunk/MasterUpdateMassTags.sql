@@ -47,6 +47,7 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			03/04/2006 mem - Now calling UpdateGeneralStatisticsIfRequired to possibly update the general statistics
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			08/29/2006 mem - Updated call to AddDefaultPeakMatchingTasks to use @SetStateToHolding = 0
+**			09/15/2006 mem - Added call to UpdateMassTagPeptideProphetStats
 **    
 *****************************************************/
 (
@@ -391,7 +392,6 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-
 	-- < I >
 	--------------------------------------------------------------
 	-- Update the PMT Quality Scores for the mass tags
@@ -408,7 +408,7 @@ As
 		
 		if @result = 0
 		Begin
-			-- Note that ComputePMTQualityScore calls PostLogEntry with @message
+			-- Note that ComputePMTQualityScore calls PostLogEntry with @message if successful
 			set @message = 'Complete ComputePMTQualityScore'
 			If @logLevel >= 2
 				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
@@ -423,6 +423,44 @@ As
 	else
 		If @logLevel >= 3
 			execute PostLogEntry 'Normal', 'Skipped ComputePMTQualityScore', 'MasterUpdateMassTags'
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+
+	-- < J >
+	--------------------------------------------------------------
+	-- Update the Peptide Prophet Stats cached in T_Mass_Tag_Peptide_Prophet_Stats
+	--------------------------------------------------------------
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'UpdateMassTagPeptideProphetStats')
+	if @result > 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Begin UpdateMassTagPeptideProphetStats', 'MasterUpdateMassTags'
+		
+		EXEC @result = UpdateMassTagPeptideProphetStats @message = @message output
+		
+		if @result = 0
+		Begin
+			-- Note that UpdateMassTagPeptideProphetStats calls PostLogEntry with @message if successful
+			set @message = 'Complete UpdateMassTagPeptideProphetStats'
+			If @logLevel >= 2
+				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		End
+		else
+		Begin
+			set @message = 'Complete UpdateMassTagPeptideProphetStats: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+			If @logLevel >= 1
+				EXEC PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+		End
+	end
+	else
+		If @logLevel >= 3
+			execute PostLogEntry 'Normal', 'Skipped UpdateMassTagPeptideProphetStats', 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output

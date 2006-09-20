@@ -23,7 +23,7 @@ CREATE TABLE [dbo].[T_Protein_Coverage](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Protein_Coverage]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Protein_Coverage_T_Proteins] FOREIGN KEY([Ref_ID])
+ALTER TABLE [dbo].[T_Protein_Coverage]  WITH CHECK ADD  CONSTRAINT [FK_T_Protein_Coverage_T_Proteins] FOREIGN KEY([Ref_ID])
 REFERENCES [T_Proteins] ([Ref_ID])
 GO
 ALTER TABLE [dbo].[T_Protein_Coverage] CHECK CONSTRAINT [FK_T_Protein_Coverage_T_Proteins]

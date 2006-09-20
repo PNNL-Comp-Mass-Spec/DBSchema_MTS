@@ -46,6 +46,7 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			06/10/2006 mem - Added support for Protein_Collection_Filter, Seq_Direction_Filter, and Protein_Collection_and_Protein_Options_Combo in T_Process_Config
 **			06/13/2006 mem - Updated to recognize Protein_Collection_List jobs by only testing the Protein_Collection_List field in the source tablet for 'na' or '' rather than also testing the Organism_DB_Name field
 **			08/01/2006 mem - Increased size of @JobListOverride and switched to use udfParseDelimitedList to parse the list
+**			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB Name
 **
 *****************************************************/
 (
@@ -70,11 +71,17 @@ As
 	declare @endingSize int
 
 	declare @peptideDBName varchar(128)
+	declare @peptideDBServer varchar(128)
+	declare @peptideDBPath varchar(256)
 	set @peptideDBName = ''
-
+	set @peptideDBServer = ''
+	set @peptideDBPath = ''
+	
 	declare @peptideDBID int
-	declare @MissingPeptideDB tinyint
 
+	declare @PeptideDBCountInvalid int
+	declare @InvalidDBList varchar(1024)
+	
 	declare @SCampaign varchar(255)
 	declare @SAddnl varchar(2000)
 	declare @SCampaignAndAddnl varchar(2000)
@@ -139,7 +146,10 @@ As
 	---------------------------------------------------
 	--
 	CREATE TABLE #T_Peptide_Database_List (
-		PeptideDBName varchar(128) NOT NULL
+		PeptideDBName varchar(128) NULL,
+		PeptideDBID int NULL,
+		PeptideDBServer varchar(128) NULL,
+		PeptideDBPath varchar(256) NULL
 	)
 
 	CREATE TABLE #TmpFilterList (
@@ -227,7 +237,7 @@ As
 		Set @DateText = ''
 		
 	---------------------------------------------------
-	-- Get peptide database name(s)
+	-- Get peptide database name(s) from T_Process_Config
 	---------------------------------------------------
 	--
 	INSERT INTO #T_Peptide_Database_List (PeptideDBName)
@@ -243,9 +253,60 @@ As
 		set @myError = 40000
 		goto Done
 	end
-
+		
 	---------------------------------------------------
-	-- Count number of Enzyme_ID entries in T_Process_Config
+	-- Determine the ID and server for each Peptide DB in #T_Peptide_Database_List
+	---------------------------------------------------
+	--
+	exec @myError = MT_Main.dbo.PopulatePeptideDBLocationTable @PreferDBName = 1, @message = @message output
+
+	If @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling MT_Main.dbo.PopulatePeptideDBLocationTable'
+		
+		Set @message = @message + '; Error Code ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
+	
+	Set @PeptideDBCountInvalid = 0
+	SELECT @PeptideDBCountInvalid = COUNT(*)
+	FROM #T_Peptide_Database_List
+	WHERE PeptideDBID Is Null
+
+	If @PeptideDBCountInvalid > 0
+	Begin -- <a>
+		-- One or more DBs in #T_Peptide_Database_List are unknown
+		-- Construct a comma-separated list, post a log entry, 
+		--  and delete the invalid databases from #T_Peptide_Database_List
+		
+		Set @InvalidDBList = ''
+		SELECT @InvalidDBList = @InvalidDBList + PeptideDBName + ','
+		FROM #T_Peptide_Database_List
+		WHERE PeptideDBID Is Null
+		ORDER BY PeptideDBName
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		If @myRowCount > 0
+		Begin
+			-- Remove the trailing comma
+			Set @InvalidDBList = Left(@InvalidDBList, Len(@InvalidDBList)-1)
+			
+			Set @message = 'Invalid peptide DB'
+			If @myRowCount > 1
+				Set @message = @message + 's'
+			Set @message = @message + ' defined in T_Process_Config: ' + @InvalidDBList
+			execute PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
+			set @message = ''
+			
+			DELETE FROM #T_Peptide_Database_List
+			WHERE PeptideDBID Is Null
+		End
+	End
+	
+	---------------------------------------------------
+	-- Count the number of Enzyme_ID entries in T_Process_Config
 	---------------------------------------------------
 	--
 	Set @filterMatchCount = 0
@@ -257,7 +318,6 @@ As
 		Set	@FilterOnEnzymeID = 1
 	Else
 		Set @FilterOnEnzymeID = 0
-
 
 	---------------------------------------------------
 	-- Get minimum GANET Fit threshold for this database
@@ -427,7 +487,14 @@ As
 	Set @continue = 1
 	While @continue = 1
 	Begin -- <PepDB>
-		SELECT TOP 1 @peptideDBName = PeptideDBName
+		Set @peptideDBName = ''
+		Set @peptideDBServer = ''
+		Set @peptideDBID = 0
+		
+		SELECT TOP 1 @peptideDBName = PeptideDBName,
+					 @peptideDBServer = PeptideDBServer,
+					 @peptideDBID = PeptideDBID,
+					 @peptideDBPath = PeptideDBPath
 		FROM #T_Peptide_Database_List
 		ORDER BY PeptideDBName
 		--
@@ -437,26 +504,11 @@ As
 			Set @continue = 0
 		Else
 		Begin -- <a>
-
-			-- Lookup the PDB_ID value for @peptideDBName in MT_Main
-			--
-			Set @peptideDBID = 0
-			SELECT @peptideDBID = PDB_ID
-			FROM MT_Main.dbo.T_Peptide_Database_List
-			WHERE PDB_Name = @peptideDBName
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-			--
-			If @myRowCount = 0
-				Set @MissingPeptideDB = 1
-			Else
-				Set @MissingPeptideDB = 0
-			
-
 			---------------------------------------------------
 			-- Define the table where we will look up jobs from
 			---------------------------------------------------
-			set @filterValueLookupTableName = '[' + @peptideDBName + '].dbo.T_Analysis_Description'
+			
+			set @filterValueLookupTableName = @peptideDBPath + '.dbo.T_Analysis_Description'
 
 			---------------------------------------------------
 			-- Clear the #TmpNewAnalysisJobs and the filter tables
@@ -672,8 +724,8 @@ As
 			set @S = @S + '	PT.GANET_Fit, PT.GANET_Slope, PT.GANET_Intercept, PT.GANET_RSquared,'
 			set @S = @S + '	ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit '
 			set @S = @S + 'FROM '
-			set @S = @S +   '[' + @peptideDBName + '].dbo.T_Analysis_Description AS PT LEFT OUTER JOIN '
-			set @S = @S +   '[' + @peptideDBName + '].dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID '
+			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT LEFT OUTER JOIN '
+			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID '
 
 			If @UsingJobListOverride = 1
 			Begin
@@ -734,7 +786,7 @@ As
 
 			If @PreviewSql <> 0
 			Begin
-				Print '-- Sql used to import new MS/MS analyses from "' + @peptideDBName + '"'
+				Print '-- Sql used to import new MS/MS analyses from "' + @peptideDBPath + '"'
 				Print @S + @CrLf
 			End
 			--			
@@ -822,11 +874,11 @@ As
 				
 				Set @entriesAdded = @entriesAdded + @myRowCount
 				
-				IF @myRowCount > 0 and @infoOnly = 0 And @MissingPeptideDB = 1
+				IF @myRowCount > 0 and @infoOnly = 0 And @peptideDBID = 0
 				Begin
-					-- New jobs were added, but the Peptide DB was unknown
+					-- New jobs were added, but the Peptide DB ID was unknown
 					-- Post an entry to the log, but do not return an error
-					Set @message = 'Peptide database ' + @peptideDBName + ' was not found in MT_Main.dbo.T_Peptide_Database_List; newly imported Jobs have been assigned a PDB_ID value of 0'
+					Set @message = 'Peptide database ' + @peptideDBName + ' was not found in MT_Main.dbo.T_Peptide_Database_List on server ' + @peptideDBServer + '; newly imported Jobs have been assigned a PDB_ID value of 0'
 					execute PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
 					Set @message = ''
 				End

@@ -21,6 +21,7 @@ CREATE Procedure dbo.RefreshMSMSSICJobs
 **						   - Added call to RefreshMSMSSICStats for any jobs updated by this SP
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @peptideDBName from 64 to 128 characters
+**			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **    
 *****************************************************/
 (
@@ -31,67 +32,119 @@ CREATE Procedure dbo.RefreshMSMSSICJobs
  	@PostLogEntryOnSuccess tinyint = 0
 )
 As
-	set nocount on
+	Set nocount on
 
-	declare @myError int
-	declare @myRowCount int
-	set @myError = 0
-	set @myRowCount = 0
+	Declare @myError int
+	Declare @myRowCount int
+	Set @myError = 0
+	Set @myRowCount = 0
 
-	set @infoOnly = IsNull(@infoOnly, 0)
-	set @jobsUpdated = 0
-	set @message = ''
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	Set @jobsUpdated = 0
+	Set @message = ''
 
-	declare @result int
-	set @result = 0
+	Declare @result int
+	Set @result = 0
 		
-	declare @peptideDBName varchar(128)
-	declare @peptideDBID int
-	declare @jobCountToUpdate int
-	
-	declare @Job int
-	declare @JobStr varchar(12)
-	
-	set @peptideDBName = ''
+	Declare @PeptideDBPath varchar(256)		-- Switched from @peptideDBName to @PeptideDBPath on 9/19/2006
+	Declare @PeptideDBID int
+	Declare @jobCountToUpdate int
 
-	declare @S nvarchar(4000)
-	declare @continue tinyint
-	declare @SICStatsContinue tinyint
+	Declare @PeptideDBCountInvalid int
+	Declare @InvalidDBList varchar(1024)
+	
+	Declare @Job int
+	Declare @JobStr varchar(12)
+	
+	Declare @S nvarchar(4000)
+	Declare @continue tinyint
+	Declare @SICStatsContinue tinyint
 
 	---------------------------------------------------
 	-- Create two temporary tables
 	---------------------------------------------------
 	--
 	CREATE TABLE #T_Peptide_Database_List (
-		PeptideDBName varchar(128) NOT NULL,
-		PDB_ID int
+		PeptideDBName varchar(128) NULL,
+		PeptideDBID int NULL,
+		PeptideDBServer varchar(128) NULL,
+		PeptideDBPath varchar(256) NULL
 	)
-
 
 	CREATE TABLE #T_Jobs_To_Update (
 		Job int NOT NULL
 	)
 
 	---------------------------------------------------
-	-- Get peptide database name(s)
+	-- Populate #T_Peptide_Database_List with the PDB_ID values
+	-- defined in T_Analysis_Description
 	---------------------------------------------------
 	--
-	INSERT INTO #T_Peptide_Database_List (PeptideDBName, PDB_ID)
-	SELECT DISTINCT PDL.PDB_Name, PDL.PDB_ID
-	FROM MT_Main.dbo.T_Peptide_Database_List AS PDL INNER JOIN
-		T_Analysis_Description AS TAD ON 
-		PDL.PDB_ID = TAD.PDB_ID
-	WHERE NOT (PDL.PDB_Name IS NULL)
+	INSERT INTO #T_Peptide_Database_List (PeptideDBID)
+	SELECT DISTINCT PDB_ID
+	FROM T_Analysis_Description TAD
+	WHERE NOT PDB_ID IS NULL
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myRowCount < 1
 	begin
-		set @message = 'No analyses with valid peptide DBs were found'
-		set @myError = 0
+		Set @message = 'No analyses with valid peptide DB IDs were found'
+		Set @myError = 0
 		goto Done
 	end
 
+	---------------------------------------------------
+	-- Determine the name and server for each Peptide DB in #T_Peptide_Database_List
+	---------------------------------------------------
+	--
+	exec @myError = MT_Main.dbo.PopulatePeptideDBLocationTable @PreferDBName = 0, @message = @message output
+
+	If @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling MT_Main.dbo.PopulatePeptideDBLocationTable'
+		
+		Set @message = @message + '; Error Code ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
+	
+	Set @PeptideDBCountInvalid = 0
+	SELECT @PeptideDBCountInvalid = COUNT(*)
+	FROM #T_Peptide_Database_List
+	WHERE PeptideDBName Is Null
+
+	If @PeptideDBCountInvalid > 0
+	Begin -- <a>
+		-- One or more DBs in #T_Peptide_Database_List are unknown
+		-- Construct a comma-separated list, post a log entry, 
+		--  and delete the invalid databases from #T_Peptide_Database_List
+		
+		Set @InvalidDBList = ''
+		SELECT @InvalidDBList = @InvalidDBList + PeptideDBID + ','
+		FROM #T_Peptide_Database_List
+		WHERE PeptideDBName Is Null
+		ORDER BY PeptideDBID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		If @myRowCount > 0
+		Begin
+			-- Remove the trailing comma
+			Set @InvalidDBList = Left(@InvalidDBList, Len(@InvalidDBList)-1)
+			
+			Set @message = 'Invalid peptide DB ID'
+			If @myRowCount > 1
+				Set @message = @message + 's'
+				
+			Set @message = @message + ' defined in T_Analysis_Description: ' + @InvalidDBList
+			execute PostLogEntry 'Error', @message, 'RefreshMSMSSICJobs'
+			Set @message = ''
+			
+			DELETE FROM #T_Peptide_Database_List
+			WHERE PeptideDBName Is Null
+		End
+	End
 
 	---------------------------------------------------
 	-- Loop through peptide database(s) and look for jobs
@@ -102,7 +155,10 @@ As
 	Set @continue = 1
 	While @continue = 1
 	Begin -- <a>
-		SELECT TOP 1 @peptideDBName = PeptideDBName, @peptideDBID = PDB_ID
+		Set @PeptideDBPath = ''
+
+		SELECT TOP 1 @PeptideDBPath = PeptideDBPath,
+					 @PeptideDBID = PeptideDBID
 		FROM #T_Peptide_Database_List
 		ORDER BY PeptideDBName
 		--
@@ -114,17 +170,17 @@ As
 		Begin -- <b>
 
 			TRUNCATE TABLE #T_Jobs_To_Update
-			set @jobCountToUpdate = 0
+			Set @jobCountToUpdate = 0
 			
-			set @S = ''
-			set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
-			set @S = @S + ' SELECT TAD.Job'
-			set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
-			set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Analysis_Description AS PepTAD ON '
-			set @S = @S + ' 	TAD.Job = PepTAD.Job INNER JOIN '
-			set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Datasets AS DS ON PepTAD.Dataset_ID = DS.Dataset_ID'
-			set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @peptideDBID) + ' AND'
-			set @S = @S + '    (TAD.Dataset_SIC_Job IS NULL OR IsNull(TAD.Dataset_SIC_Job,0) <> DS.SIC_Job)'
+			Set @S = ''
+			Set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + ' SELECT TAD.Job'
+			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
+			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
+			Set @S = @S + ' 	TAD.Job = PepTAD.Job INNER JOIN '
+			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Datasets AS DS ON PepTAD.Dataset_ID = DS.Dataset_ID'
+			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @PeptideDBID) + ' AND'
+			Set @S = @S + '    (TAD.Dataset_SIC_Job IS NULL OR IsNull(TAD.Dataset_SIC_Job,0) <> DS.SIC_Job)'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND TAD.Job In (' + @JobFilterList + ')'
@@ -132,11 +188,11 @@ As
 			exec @result = sp_executesql @S
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
+			Set @jobCountToUpdate = @jobCountToUpdate + @myRowCount
 			--
 			if @myError <> 0
 			begin
-				set @message = 'Error comparing jobs to those in ' + @peptideDBName + ', examining NET values'
+				Set @message = 'Error comparing jobs to those in ' + @PeptideDBPath + ', examining NET values'
 				goto Done
 			end
 
@@ -145,7 +201,7 @@ As
 			-- Remove peptide DB from #T_Peptide_Database_List
 			---------------------------------------------------
 			DELETE FROM #T_Peptide_Database_List
-			WHERE PDB_ID = @peptideDBID 
+			WHERE PeptideDBID = @PeptideDBID 
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -157,30 +213,30 @@ As
 				-- Update the Dataset_SIC_Job for the appropriate jobs
 				---------------------------------------------------
 				--
-				set @S = ''
+				Set @S = ''
 
 				If @infoOnly <> 0
 				Begin
 					-- Return the Job and the number of rows that would be updated
-					set @S = @S + 'SELECT JTU.Job'
+					Set @S = @S + 'SELECT JTU.Job'
 					
 				End
 				Else
 				Begin
-					set @S = @S + 'UPDATE TAD'
-					set @S = @S + ' SET Dataset_SIC_Job = DS.SIC_Job'
+					Set @S = @S + 'UPDATE TAD'
+					Set @S = @S + ' Set Dataset_SIC_Job = DS.SIC_Job'
 				End
 
-				set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
-				set @S = @S +    ' [' + @peptideDBName + '].dbo.T_Analysis_Description AS PepTAD ON '
-				set @S = @S +     ' TAD.Job = PepTAD.Job INNER JOIN '
-				set @S = @S +       @peptideDBName + '.dbo.T_Datasets AS DS ON '
-				set @S = @S +     ' PepTAD.Dataset_ID = DS.Dataset_ID INNER JOIN'
-				set @S = @S +     ' #T_Jobs_To_Update AS JTU ON TAD.Job = JTU.Job'
+				Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
+				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
+				Set @S = @S +     ' TAD.Job = PepTAD.Job INNER JOIN '
+				Set @S = @S +     ' ' + @PeptideDBPath + '.dbo.T_Datasets AS DS ON '
+				Set @S = @S +     ' PepTAD.Dataset_ID = DS.Dataset_ID INNER JOIN'
+				Set @S = @S +     ' #T_Jobs_To_Update AS JTU ON TAD.Job = JTU.Job'
 
 				If @infoOnly <> 0
 				Begin
-					set @S = @S + ' ORDER BY JTU.Job'
+					Set @S = @S + ' ORDER BY JTU.Job'
 				End
 
 				exec @result = sp_executesql @S
@@ -189,7 +245,7 @@ As
 				--
 				if @myError <> 0
 				begin
-					set @message = 'Error updating Dataset_SIC_Job values in using ' + @peptideDBName
+					Set @message = 'Error updating Dataset_SIC_Job values in using ' + @PeptideDBPath
 					goto Done
 				end
 					
@@ -207,7 +263,7 @@ As
 					--
 					if @myError <> 0
 					begin
-						set @message = 'Error obtaining next job from #T_Jobs_To_Update in RefreshMSMSSICStats loop'
+						Set @message = 'Error obtaining next job from #T_Jobs_To_Update in RefreshMSMSSICStats loop'
 						goto Done
 					end
 
@@ -225,7 +281,7 @@ As
 						
 						if @myError <> 0
 						begin
-							set @message = 'Error calling RefreshMSMSSICStats for Job ' + Convert(varchar(12), @Job)
+							Set @message = 'Error calling RefreshMSMSSICStats for Job ' + Convert(varchar(12), @Job)
 							goto Done
 						end
 					End
@@ -247,17 +303,17 @@ Done:
 	If @myError <> 0
 	Begin
 		If Len(@message) = 0
-			set @message = 'Error updating Dataset_SIC_Job values, error code ' + convert(varchar(12), @myError)
+			Set @message = 'Error updating Dataset_SIC_Job values, error code ' + convert(varchar(12), @myError)
 		execute PostLogEntry 'Error', @message, 'RefreshMSMSSICJobs'
 	End
 	Else
 	Begin
 		If @jobsUpdated > 0
 		Begin
-			set @message = 'Dataset_SIC_Job values refreshed for ' + convert(varchar(12), @jobsUpdated) + ' MS/MS Jobs'
+			Set @message = 'Dataset_SIC_Job values refreshed for ' + convert(varchar(12), @jobsUpdated) + ' MS/MS Jobs'
 			If @infoOnly <> 0
 			Begin
-				set @message = 'InfoOnly: ' + @message
+				Set @message = 'InfoOnly: ' + @message
 				Select @message AS RefreshMSMSSICJobs_Message
 			End
 			Else

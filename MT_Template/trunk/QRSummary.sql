@@ -38,6 +38,7 @@ CREATE Procedure dbo.QRSummary
 **			12/20/2005 mem - Renamed table T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
 **			03/13/2006 mem - Now sorting on Sample Name rather than QID
 **			07/11/2006 mem - Now displaying the list of QIDs in the same order as defined in @QuantitationIDList (by default); set parameter @SortBySampleName to 1 to sort the list by sample name
+**			09/14/2006 mem - Switched from SELECT DISTINCT to SELECT ... GROUP BY when populating @ExperimentList
 **
 ****************************************************/
 (
@@ -194,7 +195,7 @@ AS
 				-- Need to determine the experiments that these jobs belong to
 				Set @ExperimentList = ''
 				
-				SELECT	DISTINCT @ExperimentList = @ExperimentList + ', ' + LTrim(RTrim(Convert(varchar(19), FAD.Experiment)))
+				SELECT	@ExperimentList = @ExperimentList + ', ' + LTrim(RTrim(Convert(varchar(19), FAD.Experiment)))
 				FROM	T_Quantitation_Description AS QD INNER JOIN
 						T_Quantitation_MDIDs ON 
 						QD.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
@@ -205,6 +206,7 @@ AS
 					    T_FTICR_Analysis_Description AS FAD ON 
 					    MMD.MD_Reference_Job = FAD.Job
 				WHERE	QD.Quantitation_ID = Convert(int, @QuantitationID)
+				GROUP BY FAD.Experiment
 				ORDER BY FAD.Experiment
 
 				-- Remove the leading comma
