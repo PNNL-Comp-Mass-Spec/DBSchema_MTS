@@ -1,5 +1,5 @@
 /****** Object:  Table [T_MTS_Peptide_DBs] ******/
-/****** RowCount: 112 ******/
+/****** RowCount: 116 ******/
 /****** Columns: Peptide_DB_ID, Peptide_DB_Name, Server_ID, State_ID, Last_Affected, DB_Schema_Version, Comment ******/
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1007,'PT_Deinococcus_A8',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1008,'PT_Shewanella_A9',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
@@ -48,11 +48,11 @@ INSERT INTO [T_MTS_Peptide_DBs] VALUES (1056,'PT_Human_A57',2,5,'8/2/2005 12:00:
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1057,'PT_A_Thaliana_A58',2,5,'7/22/2006 4:10:01 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1058,'PT_Borrelia_A59',2,10,'7/21/2006 7:10:01 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1059,'PT_D_Desulfuricans_A60',2,5,'8/2/2005 12:00:54 PM',2,'Moved from Pogo to Albert in November 2004')
-INSERT INTO [T_MTS_Peptide_DBs] VALUES (1060,'PT_D_Vulgaris_A61',2,3,'7/17/2006 8:10:02 PM',2,'Moved from Pogo to Albert in November 2004')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1060,'PT_D_Vulgaris_A61',2,5,'9/25/2006 7:10:00 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1061,'PT_E_Coli_A62',2,3,'7/19/2006 3:10:01 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1062,'PT_G_Metallireducens_A63',2,5,'8/2/2005 12:00:54 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1063,'PT_G_Sulfurreducens_A64',2,5,'8/2/2005 12:00:54 PM',2,'Moved from Pogo to Albert in November 2004')
-INSERT INTO [T_MTS_Peptide_DBs] VALUES (1064,'PT_M_Barkeri_A65',2,10,'7/20/2006 11:10:00 PM',2,'Moved from Pogo to Albert in November 2004')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1064,'PT_M_Barkeri_A65',3,5,'9/25/2006 7:45:41 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1065,'PT_Mouse_A66',1,5,'8/3/2006 3:02:21 PM',2,'Moved from Pogo to Albert in November 2004; moved back to Pogo in August 2006')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1066,'PT_None_A67',2,5,'6/26/2006 12:10:02 AM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1067,'PT_R_Sphaeroides_A68',2,3,'7/17/2006 8:10:02 PM',2,'Moved from Pogo to Albert in November 2004')
@@ -113,3 +113,7 @@ INSERT INTO [T_MTS_Peptide_DBs] VALUES (1121,'PT_Mouse_BDI_Hutch_A122',1,3,'8/30
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1122,'PT_Shewanella_A123',3,5,'8/25/2006 4:10:01 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1123,'PT_Human_A124',1,5,'8/31/2006 1:00:06 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1124,'PT_Shewanella_A125',3,5,'8/31/2006 1:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1125,'PT_A_dehalogenans_A126',3,5,'9/25/2006 4:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1126,'PT_Arthrobacter_A127',3,5,'9/25/2006 4:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1127,'PT_E_chaffeensis_A128',3,5,'9/25/2006 7:28:17 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1128,'PT_P_aeruginosa_A129',3,5,'9/25/2006 7:30:52 PM',2,'')

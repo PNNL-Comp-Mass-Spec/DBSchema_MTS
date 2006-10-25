@@ -1,5 +1,5 @@
 /****** Object:  Table [T_MTS_MT_DBs] ******/
-/****** RowCount: 278 ******/
+/****** RowCount: 288 ******/
 /****** Columns: MT_DB_ID, MT_DB_Name, Server_ID, State_ID, Last_Affected, DB_Schema_Version, Comment ******/
 INSERT INTO [T_MTS_MT_DBs] VALUES (1004,'MT_Deinococcus_P12',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
 INSERT INTO [T_MTS_MT_DBs] VALUES (1005,'MT_Shewanella_P14',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
@@ -279,3 +279,13 @@ INSERT INTO [T_MTS_MT_DBs] VALUES (1306,'MT_Human_P314',2,5,'8/18/2006 11:06:06 
 INSERT INTO [T_MTS_MT_DBs] VALUES (1307,'MT_Human_X315',2,5,'8/24/2006 4:36:53 PM',2,'')
 INSERT INTO [T_MTS_MT_DBs] VALUES (1308,'MT_Human_P316',2,5,'8/25/2006 4:18:27 PM',2,'')
 INSERT INTO [T_MTS_MT_DBs] VALUES (1309,'MT_P_Ubique_P317',2,5,'9/8/2006 4:52:26 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1310,'MT_Human_P318',2,5,'9/22/2006 5:52:36 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1311,'MT_Mouse_Y_pestis_P319',1,5,'9/25/2006 10:55:57 AM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1312,'MT_Mouse_Tcells_P320',1,5,'9/25/2006 11:49:21 AM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1313,'MT_A_Dehalogenans_P321',3,5,'9/25/2006 6:39:35 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1314,'MT_Arthrobacter_P322',3,5,'9/25/2006 6:42:05 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1315,'MT_D_Vulgaris_P323',2,5,'9/25/2006 7:20:43 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1316,'MT_E_chaffeensis_P324',3,5,'9/25/2006 7:30:52 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1317,'MT_P_aeruginosa_P325',3,5,'9/25/2006 7:33:03 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1318,'MT_M_barkeri_P326',3,5,'9/25/2006 7:45:41 PM',2,'')
+INSERT INTO [T_MTS_MT_DBs] VALUES (1319,'MT_Shewanella_P327',3,5,'10/23/2006 4:10:01 PM',2,'')
