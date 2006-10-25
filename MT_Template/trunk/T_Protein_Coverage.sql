@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_Protein_Coverage](
 (
 	[Ref_ID] ASC,
 	[PMT_Quality_Score_Minimum] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

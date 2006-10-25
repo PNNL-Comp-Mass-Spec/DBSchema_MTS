@@ -15,15 +15,17 @@ CREATE PROCEDURE dbo.GetMassTagToProteinNameMap
 **
 **  Auth:	mem
 **	Date:	12/31/2004
-**			02/05/2005 mem - Added @MinimumHighDiscriminantScore
+**			02/05/2005 mem - Added parameter @MinimumHighDiscriminantScore
 **			07/25/2006 mem - Updated to utilize new columns in V_IFC_Mass_Tag_to_Protein_Name_Map
+**			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability and updated @ScoreFilteringSQL to match GetMassTagsGANETParam
 **  
 ****************************************************************/
 (
 	@ConfirmedOnly tinyint = 0,					-- Mass Tag must have Is_Confirmed = 1
 	@MinimumHighNormalizedScore float = 0,		-- The minimum value required for High_Normalized_Score; 0 to allow all
 	@MinimumPMTQualityScore float = 0,			-- The minimum PMT_Quality_Score to allow; 0 to allow all
-	@MinimumHighDiscriminantScore real = 0		-- The minimum High_Discriminant_Score to allow; 0 to allow all
+	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
+	@MinimumPeptideProphetProbability real = 0	-- The minimum High_Peptide_Prophet_Probability to allow; 0 to allow all
 )
 As
 	Set NoCount On
@@ -33,31 +35,33 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	Declare @S nvarchar(1024),
-			@IsCriteriaSQL varchar(1024),
-			@ScoreFilteringSQL varchar(256)
-
+	Declare @S nvarchar(1024)
+	Declare @ScoreFilteringSQL varchar(256)
 
 	---------------------------------------------------	
-	-- Build criteria based on Is_* columns
+	-- Define the score filtering SQL
 	---------------------------------------------------	
-	Set @IsCriteriaSQL = ''
-	If @ConfirmedOnly <> 0
-		Set @IsCriteriaSQL = ' (Is_Confirmed=1) '
 
-	---------------------------------------------------	
-	-- Build critera for High_Discriminant_Score and PMT_Quality_Score
-	---------------------------------------------------	
 	Set @ScoreFilteringSQL = ''
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' (IsNull(High_Discriminant_Score, 0) >= ' + CAST(@MinimumHighDiscriminantScore as varchar(11)) + ') '
-	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(PMT_Quality_Score, 0) >= ' + CAST(@MinimumPMTQualityScore as varchar(11)) + ') '
+	
+	If @MinimumPMTQualityScore <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.PMT_Quality_Score, 0) >= ' +  Convert(varchar(11), @MinimumPMTQualityScore) + ') '
 
-	---------------------------------------------------	
-	-- Possibly add High Normalized Score
-	-- It isn't indexed; thus only add it to @ScoreFilteringSQL if it is non-zero
-	---------------------------------------------------	
+	If @MinimumHighDiscriminantScore <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Discriminant_Score, 0) >= ' + Convert(varchar(11), @MinimumHighDiscriminantScore) + ') '
+
+	If @MinimumPeptideProphetProbability <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Peptide_Prophet_Probability, 0) >= ' + Convert(varchar(11), @MinimumPeptideProphetProbability) + ') '
+
 	If @MinimumHighNormalizedScore <> 0
-		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(High_Normalized_Score, 0) >= ' + CAST(@MinimumHighNormalizedScore as varchar(11)) + ') '
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Normalized_Score, 0) >= ' +  Convert(varchar(11), @MinimumHighNormalizedScore) + ') '
+	
+	If @ConfirmedOnly <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (MT.Is_Confirmed=1) '
+
+	-- Remove ' AND' from the start of @ScoreFilteringSQL if non-blank
+	If Len(@ScoreFilteringSQL) > 0
+		Set @ScoreFilteringSQL = Substring(@ScoreFilteringSQL, 5, LEN(@ScoreFilteringSQL))
 
 	---------------------------------------------------	
 	-- Construct the Base Sql
@@ -65,18 +69,15 @@ As
 	Set @S = ''
 	Set @S = @S + ' SELECT PNM.Mass_Tag_ID,'
 	Set @S = @S +        ' CASE WHEN IsNull(PNM.Protein_DB_ID, -1) = 0'
-	Set @S = @S +        ' THEN PNM.External_Protein_ID'
+	Set @S = @S +  ' THEN PNM.External_Protein_ID'
 	Set @S = @S +        ' ELSE PNM.External_Reference_ID'
 	Set @S = @S +        ' END AS Protein_ID,'
 	Set @S = @S +        ' PNM.Reference'
 	Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN'
-    Set @S = @S + ' V_IFC_Mass_Tag_to_Protein_Name_Map PNM ON '
-    Set @S = @S + ' MT.Mass_Tag_ID = PNM.Mass_Tag_ID'
-	Set @S = @S + ' WHERE ' + @ScoreFilteringSQL
-    
-	-- Possibly narrow down the listing using Is Criteria
-	If Len(@IsCriteriaSQL) > 0
-		Set @S = @S + ' AND ' + @IsCriteriaSQL    
+    Set @S = @S +      ' V_IFC_Mass_Tag_to_Protein_Name_Map PNM ON '
+    Set @S = @S +      ' MT.Mass_Tag_ID = PNM.Mass_Tag_ID'
+	If Len(@ScoreFilteringSQL) > 0    
+		Set @S = @S + ' WHERE ' + @ScoreFilteringSQL
 
 	-- Execute the Sql to return the results
 	EXECUTE sp_executesql @S

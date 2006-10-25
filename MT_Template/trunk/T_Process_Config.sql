@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[T_Process_Config](
  CONSTRAINT [PK_T_Process_Config] PRIMARY KEY NONCLUSTERED 
 (
 	[Process_Config_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -22,7 +22,7 @@ CREATE UNIQUE CLUSTERED INDEX [IX_T_Process_Config_UniqueNameValue] ON [dbo].[T_
 (
 	[Name] ASC,
 	[Value] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Trigger [dbo].[trig_iu_T_Process_Config] ******/

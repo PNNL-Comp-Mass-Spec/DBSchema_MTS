@@ -49,7 +49,7 @@ CREATE TABLE [dbo].[T_Quantitation_Results](
  CONSTRAINT [PK_T_Quantitation_Results] PRIMARY KEY NONCLUSTERED 
 (
 	[QR_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -58,183 +58,15 @@ GO
 CREATE CLUSTERED INDEX [IX_T_Quantitation_Results] ON [dbo].[T_Quantitation_Results] 
 (
 	[Quantitation_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
-GO
-GRANT INSERT ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 GRANT DELETE ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
 GO
+GRANT INSERT ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
+GO
+GRANT SELECT ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
+GO
 GRANT UPDATE ON [dbo].[T_Quantitation_Results] TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([QR_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([QR_ID]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Quantitation_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Quantitation_ID]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Ref_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Ref_ID]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([MDID_Match_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([MDID_Match_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([MassTagCountUniqueObserved]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([MassTagCountUniqueObserved]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([InternalStdCountUniqueObserved]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([InternalStdCountUniqueObserved]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([MassTagCountUsedForAbundanceAvg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([MassTagCountUsedForAbundanceAvg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([MassTagMatchingIonCount]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([MassTagMatchingIonCount]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([FractionScansMatchingSingleMassTag]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([FractionScansMatchingSingleMassTag]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Abundance_Average]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Abundance_Average]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Abundance_Minimum]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Abundance_Minimum]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Abundance_Maximum]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Abundance_Maximum]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Abundance_StDev]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Abundance_StDev]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ER_Average]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ER_Average]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ER_Minimum]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ER_Minimum]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ER_Maximum]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ER_Maximum]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ER_StDev]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ER_StDev]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountAvg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountAvg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountStDev]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountStDev]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountMin]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountMin]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountMax]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([UMCMultipleMTHitCountMax]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ReplicateCountAvg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ReplicateCountAvg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ReplicateCountStDev]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ReplicateCountStDev]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ReplicateCountMax]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ReplicateCountMax]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([FractionCountAvg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([FractionCountAvg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([FractionCountMax]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([FractionCountMax]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([TopLevelFractionCountAvg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([TopLevelFractionCountAvg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([TopLevelFractionCountMax]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([TopLevelFractionCountMax]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Meets_Minimum_Criteria]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Meets_Minimum_Criteria]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Mass_Error_PPM_Avg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Mass_Error_PPM_Avg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ORF_Count_Avg]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ORF_Count_Avg]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Full_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Full_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Full_Enzyme_No_Missed_Cleavage_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Full_Enzyme_No_Missed_Cleavage_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Partial_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Partial_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Residue_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Residue_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Fraction]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Fraction]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Potential_Full_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Potential_Full_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Potential_Partial_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Potential_Partial_Enzyme_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Potential_ORF_Coverage_Residue_Count]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Potential_ORF_Coverage_Residue_Count]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Potential_ORF_Coverage_Fraction]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Potential_ORF_Coverage_Fraction]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Fraction_High_Abundance]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([ORF_Coverage_Fraction_High_Abundance]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Quantitation_Results] ([Match_Score_Average]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Quantitation_Results] ([Match_Score_Average]) TO [DMS_SP_User]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Results]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_Results_T_Proteins] FOREIGN KEY([Ref_ID])
 REFERENCES [T_Proteins] ([Ref_ID])

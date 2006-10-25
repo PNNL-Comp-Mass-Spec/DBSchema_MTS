@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[T_Histogram_Cache_Data](
 (
 	[Histogram_Cache_ID] ASC,
 	[Bin] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_FTICR_UMC_InternalStdDetails](
  CONSTRAINT [PK_T_FTICR_UMC_InternalStdDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_InternalStdDetails_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -24,7 +24,7 @@ GO
 CREATE CLUSTERED INDEX [IX_T_FTICR_UMC_InternalStdDetails] ON [dbo].[T_FTICR_UMC_InternalStdDetails] 
 (
 	[UMC_Results_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_InternalStdDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_InternalStdDetails_T_FPR_State_Name] FOREIGN KEY([Match_State])
 REFERENCES [T_FPR_State_Name] ([Match_State])

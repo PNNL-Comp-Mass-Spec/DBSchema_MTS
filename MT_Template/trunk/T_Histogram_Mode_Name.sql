@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_Histogram_Mode_Name](
  CONSTRAINT [PK_T_Histogram_Mode_Name] PRIMARY KEY CLUSTERED 
 (
 	[Histogram_Mode] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

@@ -20,7 +20,7 @@ CREATE TABLE [dbo].[T_Mass_Tag_Peptide_Prophet_Stats](
  CONSTRAINT [PK_T_Mass_Tag_Peptide_Prophet_Stats] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

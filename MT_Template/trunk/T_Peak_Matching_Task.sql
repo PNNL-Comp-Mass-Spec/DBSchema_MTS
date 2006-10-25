@@ -32,7 +32,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
  CONSTRAINT [PK_T_Peak_Matching_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -168,113 +168,13 @@ AS
 	End
 
 GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
 GO
 GRANT INSERT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
 GO
-GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
 GO
 GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Task_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Task_ID]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Job]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Job]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Confirmed_Only]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Confirmed_Only]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Mod_List]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Mod_List]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Normalized_Score]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Normalized_Score]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Discriminant_Score]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_High_Discriminant_Score]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_Peptide_Prophet_Probability]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_Peptide_Prophet_Probability]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Minimum_PMT_Quality_Score]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Minimum_PMT_Quality_Score]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Experiment_Filter]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Experiment_Filter]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Experiment_Exclusion_Filter]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Experiment_Exclusion_Filter]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Limit_To_PMTs_From_Dataset]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Limit_To_PMTs_From_Dataset]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Internal_Std_Explicit]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Internal_Std_Explicit]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([NET_Value_Type]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([NET_Value_Type]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Ini_File_Name]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Ini_File_Name]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Output_Folder_Name]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Output_Folder_Name]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Processing_State]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Processing_State]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Priority]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Priority]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Processing_Error_Code]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Processing_Error_Code]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Processing_Warning_Code]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Processing_Warning_Code]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([PM_Created]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([PM_Created]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([PM_Start]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([PM_Start]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([PM_Finish]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([PM_Finish]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([PM_AssignedProcessorName]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([PM_AssignedProcessorName]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([MD_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([MD_ID]) TO [DMS_SP_User]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] ([Entered_By]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] ([Entered_By]) TO [DMS_SP_User]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_FTICR_Analysis_Description] ([Job])

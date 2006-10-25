@@ -48,6 +48,7 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			08/29/2006 mem - Updated call to AddDefaultPeakMatchingTasks to use @SetStateToHolding = 0
 **			09/15/2006 mem - Added call to UpdateMassTagPeptideProphetStats
+**			10/06/2006 mem - No longer posting the message returned by ComputeProteinCoverage to the log since ComputeProteinCoverage is now doing that itself
 **    
 *****************************************************/
 (
@@ -804,26 +805,37 @@ DoMSJobs:
 			set @result = 0
 			SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ComputeProteinCoverageResidueLevel')
 			
-			If @logLevel >= 2
+			if @logLevel >= 2
 				execute PostLogEntry 'Normal', 'Begin ComputeProteinCoverage', 'MasterUpdateMassTags'
 
 			if @result > 0
 				Exec @result = ComputeProteinCoverage 1, 0, @message OUTPUT
-			Else
-				Exec @result = ComputeProteinCoverage 0, 0, @message OUTPUT
-			
-			if @result = 0
-				set @message = 'Complete ComputeProteinCoverage: ' + @message
 			else
+				Exec @result = ComputeProteinCoverage 0, 0, @message OUTPUT
+
+
+			if @result <> 0
+			begin
 				set @message = 'Complete ComputeProteinCoverage: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
-				
+				If @logLevel >= 1
+					execute PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+			end
+			else
+			begin
+				set @message = 'Complete ComputeProteinCoverage: ' + @message
+				if @logLevel >= 2
+					execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+			end
+
 			Set @ProteinCoverageComputed = 1
 		end
 		else
+		begin
 			set @message = 'Skipped ComputeProteinCoverage'
-		--
-		If @logLevel >= 1
-			execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+			If @logLevel >= 1
+				execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		end
+
 	End
 
 	-- Validate that updating is enabled, abort if not enabled

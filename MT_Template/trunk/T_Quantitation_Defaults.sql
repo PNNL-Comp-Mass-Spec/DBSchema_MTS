@@ -26,12 +26,12 @@ CREATE TABLE [dbo].[T_Quantitation_Defaults](
  CONSTRAINT [PK_T_Quantitation_Defaults] PRIMARY KEY CLUSTERED 
 (
 	[Default_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY],
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY],
  CONSTRAINT [IX_T_Quantitation_Defaults] UNIQUE NONCLUSTERED 
 (
 	[Instrument_Name] ASC,
 	[Dataset_Name_Filter] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

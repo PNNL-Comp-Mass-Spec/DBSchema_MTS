@@ -15,9 +15,6 @@ CREATE PROCEDURE dbo.ParseFilterList
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters: 
-**
-**
 **	Auth:	mem
 **	Date:	10/01/2004
 **			03/07/2005 mem - Ported to the Peptide Database

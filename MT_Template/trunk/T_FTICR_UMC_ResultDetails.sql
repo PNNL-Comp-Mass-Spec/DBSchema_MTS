@@ -17,7 +17,7 @@ CREATE TABLE [dbo].[T_FTICR_UMC_ResultDetails](
  CONSTRAINT [PK_T_FTICR_UMC_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_ResultDetails_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -26,21 +26,21 @@ GO
 CREATE CLUSTERED INDEX [IX_T_FTICR_UMC_ResultDetails] ON [dbo].[T_FTICR_UMC_ResultDetails] 
 (
 	[UMC_Results_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_FTICR_UMC_ResultDetails_Mass_Tag_ID] ******/
 CREATE NONCLUSTERED INDEX [IX_T_FTICR_UMC_ResultDetails_Mass_Tag_ID] ON [dbo].[T_FTICR_UMC_ResultDetails] 
 (
 	[Mass_Tag_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_FTICR_UMC_ResultDetails_MatchState] ******/
 CREATE NONCLUSTERED INDEX [IX_T_FTICR_UMC_ResultDetails_MatchState] ON [dbo].[T_FTICR_UMC_ResultDetails] 
 (
 	[Match_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_ResultDetails_T_FPR_State_Name] FOREIGN KEY([Match_State])
 REFERENCES [T_FPR_State_Name] ([Match_State])

@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[T_Peptide_Load_Stats](
  CONSTRAINT [PK_T_Peptide_Load_Stats] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -25,19 +25,19 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Peptide_Load_Stats_Discriminant_Score_Minimum] ON [dbo].[T_Peptide_Load_Stats] 
 (
 	[Discriminant_Score_Minimum] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Peptide_Load_Stats_Entry_Date] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Peptide_Load_Stats_Entry_Date] ON [dbo].[T_Peptide_Load_Stats] 
 (
 	[Entry_Date] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Peptide_Load_Stats_Peptide_Prophet_Minimum] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Peptide_Load_Stats_Peptide_Prophet_Minimum] ON [dbo].[T_Peptide_Load_Stats] 
 (
 	[Peptide_Prophet_Minimum] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO

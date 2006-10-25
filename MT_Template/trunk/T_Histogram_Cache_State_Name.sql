@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_Histogram_Cache_State_Name](
  CONSTRAINT [PK_T_Histogram_Cache_State_Name] PRIMARY KEY CLUSTERED 
 (
 	[Histogram_Cache_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

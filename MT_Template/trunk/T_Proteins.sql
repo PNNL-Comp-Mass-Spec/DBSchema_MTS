@@ -18,7 +18,7 @@ CREATE TABLE [dbo].[T_Proteins](
  CONSTRAINT [PK_T_Proteins] PRIMARY KEY CLUSTERED 
 (
 	[Ref_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 
 GO
@@ -27,19 +27,19 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Proteins_External_Reference_ID] ON [dbo].[T_Proteins] 
 (
 	[External_Reference_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Proteins_Protein_Collection_ID] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Proteins_Protein_Collection_ID] ON [dbo].[T_Proteins] 
 (
 	[Protein_Collection_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Proteins_Reference] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Proteins_Reference] ON [dbo].[T_Proteins] 
 (
 	[Reference] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO

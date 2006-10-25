@@ -26,6 +26,7 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **			07/27/2006 mem - Updated to utilize the new column names in T_Proteins
 **						   - Updated to work with Protein Collection Lists (the V_DMS_Protein_Collection views in MT_Main)
 **			08/16/2006 mem - Added option @SwitchFromLegacyDBToProteinCollection
+**			09/29/2006 mem - Now verifying that each protein database actually exists on this server.  If it doesn't, then posts an error message if the name is not 'na', '(na)', 'none', or blank
 **    
 *****************************************************/
 (
@@ -299,7 +300,7 @@ As
     						 @AllowImportAllProteins = Import_All_Proteins
     			FROM #T_Tmp_Protein_Collection_List
     			WHERE Protein_Collection_ID > @CurrentID
-    			ORDER BY Protein_Collection_ID
+			ORDER BY Protein_Collection_ID
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
@@ -569,7 +570,10 @@ As
 
 		declare @ProteinDBName varchar(128)
 		declare @ProteinDBID int
-		declare @MissingProteinDB tinyint
+		declare @UndefinedProteinDBID tinyint
+		declare @ProteinDBExists tinyint
+		Set @UndefinedProteinDBID = 0
+		Set @ProteinDBExists = 0
 		
 		-- Loop through the Legacy Protein database(s) and add or update the protein entries
 		--
@@ -599,95 +603,122 @@ As
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
 				If @myRowCount = 0
-					Set @MissingProteinDB = 1
+					Set @UndefinedProteinDBID = 1
 				Else
-					Set @MissingProteinDB = 0
+					Set @UndefinedProteinDBID = 0
 				
 				Set @DBIDString = Convert(nvarchar(25), @ProteinDBID)
-				
-				---------------------------------------------------
-				-- Construct the Sql to populate T_Proteins
-				---------------------------------------------------
-				
-				Set @S = ''
 
-				---------------------------------------------------
-				-- add new entries
-				---------------------------------------------------
-				If @importAllProteins <> 0
-				Begin -- <d1>
-					--
-					If @infoOnly = 0
-					Begin
-						Set @S = @S + 'INSERT INTO T_Proteins '
-						Set @S = @S + ' (Reference, Description, Protein_Sequence, Protein_Residue_Count, Monoisotopic_Mass, Protein_DB_ID, External_Reference_ID, External_Protein_ID) '
-					End
-					--
-					Set @S = @S + ' SELECT '
-					Set @S = @S + '  P.Reference, P.Description_from_Fasta, P.Protein_Sequence, P.Amino_Acid_Count, P.Monoisotopic_Mass, ' + @DBIDString + ' AS Protein_DB_ID, P.ORF_ID, P.ORF_ID'
-					Set @S = @S + ' FROM '
-					Set @S = @S +   '[' + @ProteinDBName + '].dbo.T_ORF AS P LEFT OUTER JOIN '
-					Set @S = @S + '  T_Proteins ON P.Reference = T_Proteins.Reference '
-					Set @S = @S + ' WHERE T_Proteins.Reference IS NULL AND Protein_DB_ID IS NULL'
-					--
-					exec @result = sp_executesql @S
-					--
-					select @myError = @result, @myRowcount = @@rowcount
-					--
-					If @myError  <> 0
-					Begin
-						Set @message = 'Could not add new Protein entries'
-						goto Done
-					End
+				
+				-- Make sure the DB exists on this server
+				--
+				Set @myRowCount = 0
+				SELECT @myRowCount = COUNT(*) 
+				FROM master.dbo.sysdatabases
+				WHERE [NAME] = @ProteinDBName
+				
+				If @myRowCount = 0
+					Set @ProteinDBExists = 0
+				Else
+					Set @ProteinDBExists = 1
+				
+				If @ProteinDBExists = 1
+				Begin -- <d>
+					---------------------------------------------------
+					-- Construct the Sql to populate T_Proteins
+					---------------------------------------------------
 					
-					Set @numAdded = @numAdded + @myRowCount
-				End -- </d1>
-
-
-				If @infoOnly = 0 
-				Begin -- <d2>
-
-					---------------------------------------------------
-					-- update existing entries
-					---------------------------------------------------
 					Set @S = ''
 
-					Set @S = @S + ' UPDATE T_Proteins '
-					Set @S = @S + ' Set '
-					Set @S = @S + '  Description = P.Description_From_Fasta, Protein_Sequence = P.Protein_Sequence, '
-					Set @S = @S + '  Protein_Residue_Count = P.Amino_Acid_Count, Monoisotopic_Mass = P.Monoisotopic_Mass, '
-					Set @S = @S + '  Protein_DB_ID = ' + @DBIDString + ', External_Reference_ID = P.ORF_ID, '
-					Set @S = @S + '  External_Protein_ID = P.ORF_ID, Last_Affected = GetDate()'
-					Set @S = @S + ' FROM '
-					Set @S = @S + '  T_Proteins INNER JOIN '
-					Set @S = @S +    '[' + @ProteinDBName + '].dbo.T_ORF AS P ON '
-					Set @S = @S + ' T_Proteins.Reference = P.Reference AND'
-					Set @S = @S + '  IsNull(Protein_DB_ID, ' + @DBIDString + ') = ' + @DBIDString
-					Set @S = @S + ' WHERE T_Proteins.Protein_Residue_Count <> P.Amino_Acid_Count OR'
-					Set @S = @S +       ' T_Proteins.Monoisotopic_Mass <> P.Monoisotopic_Mass OR'
-					Set @S = @S +       ' T_Proteins.External_Reference_ID <> P.ORF_ID'
-					--
-					exec @result = sp_executesql @S
-					--
-					select @myError = @result, @myRowcount = @@rowcount
-					--
-					If @myError  <> 0
-					Begin
-						Set @message = 'Could not update Protein entries'
-						goto Done
-					End
+					---------------------------------------------------
+					-- add new entries
+					---------------------------------------------------
+					If @importAllProteins <> 0
+					Begin -- <e1>
+						--
+						If @infoOnly = 0
+						Begin
+							Set @S = @S + 'INSERT INTO T_Proteins '
+							Set @S = @S + ' (Reference, Description, Protein_Sequence, Protein_Residue_Count, Monoisotopic_Mass, Protein_DB_ID, External_Reference_ID, External_Protein_ID) '
+						End
+						--
+						Set @S = @S + ' SELECT '
+						Set @S = @S + '  P.Reference, P.Description_from_Fasta, P.Protein_Sequence, P.Amino_Acid_Count, P.Monoisotopic_Mass, ' + @DBIDString + ' AS Protein_DB_ID, P.ORF_ID, P.ORF_ID'
+						Set @S = @S + ' FROM '
+						Set @S = @S +   '[' + @ProteinDBName + '].dbo.T_ORF AS P LEFT OUTER JOIN '
+						Set @S = @S + '  T_Proteins ON P.Reference = T_Proteins.Reference '
+						Set @S = @S + ' WHERE T_Proteins.Reference IS NULL AND Protein_DB_ID IS NULL'
+						--
+						exec @result = sp_executesql @S
+						--
+						select @myError = @result, @myRowcount = @@rowcount
+						--
+						If @myError  <> 0
+						Begin
+							Set @message = 'Could not add new Protein entries'
+							goto Done
+						End
+						
+						Set @numAdded = @numAdded + @myRowCount
+					End -- </e1>
 
-					
-					If @myRowCount > 0 and @infoOnly = 0 And @MissingProteinDB = 1
+
+					If @infoOnly = 0 
+					Begin -- <e2>
+
+						---------------------------------------------------
+						-- update existing entries
+						---------------------------------------------------
+						Set @S = ''
+
+						Set @S = @S + ' UPDATE T_Proteins '
+						Set @S = @S + ' Set '
+						Set @S = @S + '  Description = P.Description_From_Fasta, Protein_Sequence = P.Protein_Sequence, '
+						Set @S = @S + '  Protein_Residue_Count = P.Amino_Acid_Count, Monoisotopic_Mass = P.Monoisotopic_Mass, '
+						Set @S = @S + '  Protein_DB_ID = ' + @DBIDString + ', External_Reference_ID = P.ORF_ID, '
+						Set @S = @S + '  External_Protein_ID = P.ORF_ID, Last_Affected = GetDate()'
+						Set @S = @S + ' FROM '
+						Set @S = @S + '  T_Proteins INNER JOIN '
+						Set @S = @S +    '[' + @ProteinDBName + '].dbo.T_ORF AS P ON '
+						Set @S = @S + ' T_Proteins.Reference = P.Reference AND'
+						Set @S = @S + '  IsNull(Protein_DB_ID, ' + @DBIDString + ') = ' + @DBIDString
+						Set @S = @S + ' WHERE T_Proteins.Protein_Residue_Count <> P.Amino_Acid_Count OR'
+						Set @S = @S +       ' T_Proteins.Monoisotopic_Mass <> P.Monoisotopic_Mass OR'
+						Set @S = @S +       ' T_Proteins.External_Reference_ID <> P.ORF_ID'
+						--
+						exec @result = sp_executesql @S
+						--
+						select @myError = @result, @myRowcount = @@rowcount
+						--
+						If @myError  <> 0
+						Begin
+							Set @message = 'Could not update Protein entries'
+							goto Done
+						End
+
+						
+						If @myRowCount > 0 and @infoOnly = 0 And @UndefinedProteinDBID = 1
+						Begin
+							-- New proteins were added, but the Protein DB was unknown
+							-- Post an entry to the log, but do not return an error
+							Set @message = 'Protein database ' + @ProteinDBName + ' was not found in MT_Main..T_ORF_Database_List; newly imported Proteins have been assigned a Protein_DB_ID value of 0'
+							execute PostLogEntry 'Error', @message, 'RefreshLocalProteinTable'
+							Set @message = ''
+						End
+					End -- </e2>
+				End -- </d>
+				Else
+				Begin
+					-- Database does not exist
+					-- Post an error message if @ProteinDBName is not blank, 'none', 'na', or '(na)'
+					If Not (@ProteinDBName = '' Or @ProteinDBName = 'none' Or @ProteinDBName = 'na' Or @ProteinDBName = '(na)')
 					Begin
-						-- New proteins were added, but the Protein DB was unknown
-						-- Post an entry to the log, but do not return an error
-						Set @message = 'Protein database ' + @ProteinDBName + ' was not found in MT_Main..T_ORF_Database_List; newly imported Proteins have been assigned a Protein_DB_ID value of 0'
+						Set @message = 'Protein database ' + @ProteinDBName + ' was not found on this server'
 						execute PostLogEntry 'Error', @message, 'RefreshLocalProteinTable'
 						Set @message = ''
 					End
-				End -- </d2>
-			
+				End
+				
 				DELETE FROM #T_Tmp_Protein_Database_List
 				WHERE ProteinDBName = @ProteinDBName
 				

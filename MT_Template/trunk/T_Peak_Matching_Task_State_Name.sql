@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task_State_Name](
  CONSTRAINT [PK_T_Peak_Matching_Task_State_Name] PRIMARY KEY CLUSTERED 
 (
 	[Processing_State] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

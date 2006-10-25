@@ -35,6 +35,7 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **			01/14/2006 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_Orb intact
 **			07/01/2007 mem - Removed check for jobs in T_GANET_Update_Task since NET alignment now occurs in the Peptide DB
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
+**			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **    
 *****************************************************/
 (
@@ -51,6 +52,7 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 	@modList varchar(128)='' output,
 	@MinimumHighNormalizedScore real=0 output,
 	@MinimumHighDiscriminantScore real=0 output,
+	@MinimumPeptideProphetProbability real=0 output,
 	@MinimumPMTQualityScore real=0 output,
 	@ExperimentFilter varchar(64)='' output,
 	@ExperimentExclusionFilter varchar(64)='' output,
@@ -88,6 +90,7 @@ As
 	set @modList = ''
 	set @MinimumHighNormalizedScore = 0
 	set @MinimumHighDiscriminantScore = 0
+	set @MinimumPeptideProphetProbability = 0
 	set @MinimumPMTQualityScore = 0
 	set @ExperimentFilter = ''
 	set @ExperimentExclusionFilter = ''
@@ -348,6 +351,7 @@ As
 		@modList = Mod_List, 
 		@MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
 		@MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score,
+		@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
 		@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
 		@ExperimentFilter = Experiment_Filter,
 		@ExperimentExclusionFilter = Experiment_Exclusion_Filter,

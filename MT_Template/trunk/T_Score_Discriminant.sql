@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[T_Score_Discriminant](
  CONSTRAINT [PK_T_Score_Discriminant] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -23,7 +23,7 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Score_Discriminant] ON [dbo].[T_Score_Discriminant] 
 (
 	[DiscriminantScoreNorm] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Score_Discriminant]  WITH CHECK ADD  CONSTRAINT [FK_T_Score_Discriminant_T_Peptides] FOREIGN KEY([Peptide_ID])
 REFERENCES [T_Peptides] ([Peptide_ID])

@@ -24,7 +24,7 @@ CREATE TABLE [dbo].[T_Histogram_Cache](
  CONSTRAINT [PK_T_Histogram_Cache] PRIMARY KEY CLUSTERED 
 (
 	[Histogram_Cache_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -33,14 +33,14 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Histogram_Mode] ON [dbo].[T_Histogram_Cache] 
 (
 	[Histogram_Mode] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Histogram_Cache_Query_Date] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Query_Date] ON [dbo].[T_Histogram_Cache] 
 (
 	[Query_Date] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Histogram_Cache_Score_Min_Max] ******/
@@ -48,7 +48,7 @@ CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Score_Min_Max] ON [dbo].[T_Histo
 (
 	[Score_Minimum] ASC,
 	[Score_Maximum] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Cache_State_Name] FOREIGN KEY([Histogram_Cache_State])
 REFERENCES [T_Histogram_Cache_State_Name] ([Histogram_Cache_State])

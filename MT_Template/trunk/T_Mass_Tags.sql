@@ -25,7 +25,7 @@ CREATE TABLE [dbo].[T_Mass_Tags](
  CONSTRAINT [PK_T_Mass_Tags] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -34,33 +34,33 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags] ON [dbo].[T_Mass_Tags] 
 (
 	[Peptide] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Mass_Tags_DiscriminantScore] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_DiscriminantScore] ON [dbo].[T_Mass_Tags] 
 (
 	[High_Discriminant_Score] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Mass_Tags_ModCount] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_ModCount] ON [dbo].[T_Mass_Tags] 
 (
 	[Mod_Count] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Mass_Tags_PeptideProphetProbability] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PeptideProphetProbability] ON [dbo].[T_Mass_Tags] 
 (
 	[High_Peptide_Prophet_Probability] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Mass_Tags_PMTQS] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PMTQS] ON [dbo].[T_Mass_Tags] 
 (
 	[PMT_Quality_Score] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO

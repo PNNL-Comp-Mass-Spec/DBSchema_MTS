@@ -27,6 +27,7 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 **			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
 **						   - Added calls to AddPeptideLoadStatEntry after loading peptides from each job
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
+**			10/10/2006 mem - Decreased the number of calls made to AddPeptideLoadStatEntry
 **    
 *****************************************************/
 (
@@ -53,6 +54,7 @@ As
 	Set @message = ''
 	
 	Declare @count int
+	Declare @ValidRowCount int
 	Declare @result int
 	Declare @job int
 	Declare @PDB_ID int
@@ -224,11 +226,19 @@ As
 				
 			End -- <c>
 			
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.5, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+			-- Only call AddPeptideLoadStatEntry with Discriminant Score thresholds for the first job
+			--  processed and for each 25th job after that
+			-- Always call AddPeptideLoadStatEntry with Peptide Prophet thresholds
+			
+			If @numJobsProcessed % 25 = 0
+			Begin
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.5, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.95,@PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+			End
+
 			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.5, @AnalysisStateMatch=@MassTagUpdatedState
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
 			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.9, @AnalysisStateMatch=@MassTagUpdatedState
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.95,@PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
 			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.99,@AnalysisStateMatch=@MassTagUpdatedState
 
 			-- Increment number of jobs processed

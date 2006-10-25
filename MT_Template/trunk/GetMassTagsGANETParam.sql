@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **			06/08/2006 mem - Now returning Mod_Count and Mod_Description as the 10th and 11th columns
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **						   - Updated parsing of @ExperimentFilter and @ExperimentExclusionFilter to check for percent signs in the parameter; if no percent signs are present, then auto-adds them at the beginning and end
+**			10/09/2006 mem - Now returning Peptide Prophet Probability in the 12th column (where the 1st column is column 1)
 **  
 ****************************************************************/
 (
@@ -393,7 +394,8 @@ As
 				MT.High_Discriminant_Score, 
 				MT.Peptide_Obs_Count_Passing_Filter,
 				MT.Mod_Count,
-				MT.Mod_Description
+				MT.Mod_Description,
+				MT.High_Peptide_Prophet_Probability
 		FROM #TmpMassTags
 			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
 			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
@@ -403,7 +405,8 @@ As
 				P.Max_Obs_Area_In_Job = 1
 		GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, 
 					MT.High_Normalized_Score, MT.High_Discriminant_Score, 
-					MT.Peptide_Obs_Count_Passing_Filter, MT.Mod_Count, MT.Mod_Description, MTN.PNET
+					MT.Peptide_Obs_Count_Passing_Filter, MT.Mod_Count, MT.Mod_Description, 
+					MTN.PNET, MT.High_Peptide_Prophet_Probability
 		ORDER BY MT.Monoisotopic_Mass
 	Else
 		-- Return Avg_GANET as Net_Value_To_Use
@@ -421,7 +424,8 @@ As
 			MT.High_Discriminant_Score,
 			MT.Peptide_Obs_Count_Passing_Filter,
 			MT.Mod_Count,
-			MT.Mod_Description
+			MT.Mod_Description,
+			MT.High_Peptide_Prophet_Probability
 		FROM #TmpMassTags 
 			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID

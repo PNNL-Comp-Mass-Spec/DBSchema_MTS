@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_Mass_Tag_to_Protein_Map](
 (
 	[Mass_Tag_ID] ASC,
 	[Ref_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -30,14 +30,14 @@ CREATE NONCLUSTERED INDEX [IX_T_Mass_Tag_to_Protein_Map_Cleavage_And_Terminus_St
 	[Mass_Tag_ID] ASC,
 	[Cleavage_State] ASC,
 	[Terminus_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Mass_Tag_to_Protein_Map_CleavageState] ON [dbo].[T_Mass_Tag_to_Protein_Map] 
 (
 	[Cleavage_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Mass_Tag_to_Protein_Map_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
