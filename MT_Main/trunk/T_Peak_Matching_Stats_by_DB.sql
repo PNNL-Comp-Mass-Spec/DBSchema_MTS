@@ -32,7 +32,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Stats_by_DB](
 	[MTDB] ASC,
 	[Job] ASC,
 	[MDID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

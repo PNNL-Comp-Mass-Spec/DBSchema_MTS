@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_Current_Activity](
 (
 	[Database_ID] ASC,
 	[Type] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -28,7 +28,7 @@ GO
 CREATE CLUSTERED INDEX [IX_T_Current_Activity] ON [dbo].[T_Current_Activity] 
 (
 	[Database_Name] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Current_Activity]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Current_Activity_T_Update_State_Name] FOREIGN KEY([Update_State])
 REFERENCES [T_Update_State_Name] ([ID])

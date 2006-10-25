@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[T_Internal_Std_Composition](
 (
 	[Internal_Std_Mix_ID] ASC,
 	[Seq_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

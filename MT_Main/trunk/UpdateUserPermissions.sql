@@ -59,8 +59,6 @@ AS
 	End
 	Else
 	Begin
-		SELECT 'Uncomment the following code to run on Sql Server 2005' As TheMessage
-/*
 		if exists (select * from sys.schemas where name = 'MTUser')
 			drop schema MTUser
 		if exists (select * from sys.sysusers where name = 'MTUser')
@@ -116,7 +114,6 @@ AS
 		
 		exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
-*/
 	End
 
 	exec sp_addrolemember 'db_datareader', 'MTUser'

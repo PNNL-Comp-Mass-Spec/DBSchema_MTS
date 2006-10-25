@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[T_Internal_Standards](
  CONSTRAINT [PK_T_Internal_Standards] PRIMARY KEY CLUSTERED 
 (
 	[Internal_Std_Mix_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -20,7 +20,7 @@ GO
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Internal_Standards] ON [dbo].[T_Internal_Standards] 
 (
 	[Name] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Internal_Standards]  WITH NOCHECK ADD  CONSTRAINT [CK_T_Internal_Standards] CHECK  (([Type] = 'All' or ([Type] = 'Postdigest' or [Type] = 'Predigest')))
 GO

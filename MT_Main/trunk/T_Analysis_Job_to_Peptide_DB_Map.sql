@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map](
 (
 	[Job] ASC,
 	[PDB_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -24,7 +24,7 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Analysis_Job_to_Peptide_DB_Map] ON [dbo].
 (
 	[PDB_ID] ASC,
 	[Job] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_Peptide_Database_List] FOREIGN KEY([PDB_ID])
 REFERENCES [T_Peptide_Database_List] ([PDB_ID])

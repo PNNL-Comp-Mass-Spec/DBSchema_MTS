@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[T_Internal_Std_Proteins](
  CONSTRAINT [PK_T_Internal_Std_Proteins] PRIMARY KEY CLUSTERED 
 (
 	[Internal_Std_Protein_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 
 GO

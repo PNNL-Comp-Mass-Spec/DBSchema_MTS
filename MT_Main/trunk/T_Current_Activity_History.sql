@@ -17,7 +17,7 @@ CREATE TABLE [dbo].[T_Current_Activity_History](
  CONSTRAINT [PK_T_Current_Activity_History] PRIMARY KEY NONCLUSTERED 
 (
 	[History_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -26,12 +26,12 @@ GO
 CREATE CLUSTERED INDEX [IX_T_Current_Activity_History] ON [dbo].[T_Current_Activity_History] 
 (
 	[Database_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Current_Activity_History_Snapshot_Date] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Current_Activity_History_Snapshot_Date] ON [dbo].[T_Current_Activity_History] 
 (
 	[Snapshot_Date] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO

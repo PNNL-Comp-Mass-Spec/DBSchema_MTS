@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_Process_Step_Control_States](
  CONSTRAINT [PK_T_Process_Step_Control_States] PRIMARY KEY CLUSTERED 
 (
 	[Execution_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

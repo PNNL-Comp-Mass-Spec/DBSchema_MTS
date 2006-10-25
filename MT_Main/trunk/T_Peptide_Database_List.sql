@@ -22,7 +22,7 @@ CREATE TABLE [dbo].[T_Peptide_Database_List](
  CONSTRAINT [PK_T_Peptide_Database_List] PRIMARY KEY CLUSTERED 
 (
 	[PDB_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -31,7 +31,7 @@ GO
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Peptide_Database_List] ON [dbo].[T_Peptide_Database_List] 
 (
 	[PDB_Name] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name] FOREIGN KEY([PDB_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])

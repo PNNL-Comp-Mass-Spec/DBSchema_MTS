@@ -18,7 +18,7 @@ CREATE TABLE [dbo].[T_Internal_Std_to_Protein_Map](
 (
 	[Seq_ID] ASC,
 	[Internal_Std_Protein_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
