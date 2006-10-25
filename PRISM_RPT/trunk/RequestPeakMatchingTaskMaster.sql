@@ -41,6 +41,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 **			12/11/2005 mem - Moved call to CheckStalledPeakMatchingProcessors to the end of this SP
 **			12/22/2005 mem - Added output parameters @LimitToPMTsFromDataset and @InternalStdExplicit
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled on each server to verify that updating is enabled
+**			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **
 *****************************************************/
 (
@@ -74,7 +75,8 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 	@taskAvailable tinyint = 0 output,
 	@message varchar(512) = '' output,
 	@DBSchemaVersion real = 1 output,
-	@toolVersion varchar(128) = 'Unknown'
+	@toolVersion varchar(128) = 'Unknown',
+	@MinimumPeptideProphetProbability real=0 output
 )
 As
 	set nocount on
@@ -103,9 +105,11 @@ As
 	declare @ActivityRowCount int
 	declare @SPRowCount int
 	declare @UpdateEnabled tinyint
+	declare @DBCountChecked int
 
 	set @ActivityRowCount = 0
 	set @SPRowCount = 0
+	set @DBCountChecked = 0
 	
 	declare @PMHistoryID int
 	declare @TimeStarted datetime
@@ -148,6 +152,7 @@ As
 	set @modList = ''
 	set @MinimumHighNormalizedScore = 0
 	set @MinimumHighDiscriminantScore = 0
+	set @MinimumPeptideProphetProbability = 0
 	set @MinimumPMTQualityScore = 0
 	set @ExperimentFilter = ''
 	set @ExperimentExclusionFilter = ''
@@ -352,6 +357,7 @@ As
 						Begin
 							-- The following are not used in schema version 1
 							Set @MinimumHighDiscriminantScore = 0
+							Set @MinimumPeptideProphetProbability = 0
 							Set @ExperimentFilter = ''
 							Set @ExperimentExclusionFilter = ''
 							Set @InternalStdExplicit = ''
@@ -400,6 +406,7 @@ As
 														@modList = @modList output,
 														@MinimumHighNormalizedScore = @MinimumHighNormalizedScore output,
 														@MinimumHighDiscriminantScore = @MinimumHighDiscriminantScore output,
+														@MinimumPeptideProphetProbability = @MinimumPeptideProphetProbability output,
 														@MinimumPMTQualityScore = @MinimumPMTQualityScore output,
 														@ExperimentFilter = @ExperimentFilter output,
 														@ExperimentExclusionFilter = @ExperimentExclusionFilter output,
@@ -420,6 +427,8 @@ As
 							Goto Done
 						End
 						
+						set @DBCountChecked = @DBCountChecked  + 1
+
 						-- If a task was found, and no error occurred, then set @done = 1 so that
 						-- the while loop exits
 						If @TaskAvailable = 1 And @myError = 0
@@ -519,6 +528,14 @@ As
 			Set @done = 1
 				   
 	END -- </a>
+
+	Set @message = IsNull(@message, '')
+	If Len(@message) > 0
+		Set @message = @message + '; '
+	
+	Set @message = @message + 'Checked ' + Convert(varchar(9), @DBCountChecked) + ' DB'
+	If @DBCountChecked > 1
+		Set @message = @message + 's'
 
 	If @TaskAvailable = 0 And @myError = 0
 	Begin
