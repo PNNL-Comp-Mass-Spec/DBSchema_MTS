@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[T_Seq_Candidate_ModDetails](
  CONSTRAINT [PK_T_Seq_Candidate_ModDetails] PRIMARY KEY CLUSTERED 
 (
 	[Seq_Candidate_ModDetail_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

@@ -15,15 +15,14 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters: 
-**
-**
 **	Auth:	mem
 **	Date:	04/6/2005
 **			11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
 **			06/08/2005 mem - Added parameter @Delimiter
+**			09/25/2006 mem - Now including ORDER BY Process_Config_ID in the SELECT TOP 1 query to ensure that all entries are processed
 **    
 *****************************************************/
+(
 	@filterValue varchar(128) = 'Campaign_and_Experiment',
 	@filterValueLookupTableName varchar(256) = 'MT_Main.dbo.V_DMS_Analysis_Job_Import',
 	@filterValueLookupColumn1Name varchar(128) = 'Campaign',		-- Look for data in this column, and
@@ -32,6 +31,7 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
 	@filterMatchCount int = 0 OUTPUT,
 	@Delimiter varchar(2) = ','
+)
 As
 	set nocount on
 
@@ -97,6 +97,7 @@ As
 			WHERE [Name] = @filterValue AND
 				Value Like '%' + @Delimiter + '%' AND 
 				Process_Config_ID > @ProcessConfigID
+			ORDER BY Process_Config_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 

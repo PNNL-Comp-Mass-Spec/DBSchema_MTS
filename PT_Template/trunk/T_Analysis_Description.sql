@@ -47,7 +47,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -56,14 +56,14 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Instrument] ON [dbo].[T_Analysis_Description] 
 (
 	[Instrument] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Analysis_Description_Process_State] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Process_State] ON [dbo].[T_Analysis_Description] 
 (
 	[Process_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Trigger [dbo].[trig_i_AnalysisJob] ******/

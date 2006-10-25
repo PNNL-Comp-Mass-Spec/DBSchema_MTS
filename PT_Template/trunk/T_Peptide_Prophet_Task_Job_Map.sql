@@ -10,7 +10,7 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map](
 (
 	[Task_ID] ASC,
 	[Job] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

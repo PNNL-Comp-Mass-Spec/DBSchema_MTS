@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[T_Process_Config_Parameters](
  CONSTRAINT [PK_T_Process_Config_Parameters] PRIMARY KEY CLUSTERED 
 (
 	[Name] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

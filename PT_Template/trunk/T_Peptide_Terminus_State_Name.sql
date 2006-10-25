@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_Peptide_Terminus_State_Name](
  CONSTRAINT [PK_T_Peptide_Terminus_State_Name] PRIMARY KEY CLUSTERED 
 (
 	[Terminus_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

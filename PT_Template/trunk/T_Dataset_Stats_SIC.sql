@@ -34,7 +34,7 @@ CREATE TABLE [dbo].[T_Dataset_Stats_SIC](
 	[Job] ASC,
 	[Parent_Ion_Index] ASC,
 	[Frag_Scan_Number] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -45,14 +45,14 @@ CREATE NONCLUSTERED INDEX [IX_T_Dataset_Stats_SIC_FragScan_Job_OptimalPeakApex] 
 	[Frag_Scan_Number] ASC,
 	[Job] ASC,
 	[Optimal_Peak_Apex_Scan_Number] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Dataset_Stats_SIC_MZ] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Dataset_Stats_SIC_MZ] ON [dbo].[T_Dataset_Stats_SIC] 
 (
 	[MZ] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_SIC]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Dataset_Stats_SIC_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])

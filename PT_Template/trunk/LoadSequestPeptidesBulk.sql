@@ -43,6 +43,7 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 **			08/10/2006 mem - Added parameters @SeqCandidateFilesFound and @PepProphetFileFound
 **						   - Added warning if peptide prophet results file does not contain the same number of rows as the synopsis file
 **			08/14/2006 mem - Updated peptide prophet results processing to consider charge state when counting the number of null entries
+**			10/10/2006 mem - Now checking for protein names longer than 34 characters
 **
 *****************************************************/
 (
@@ -91,6 +92,9 @@ As
 	declare @RowCountNullCharge5OrLess int
 	declare @MessageType varchar(32)
 
+	declare @LongProteinNameCount int
+	set @LongProteinNameCount = 0
+	
 	If @UsingPhysicalTempTables = 1
 	Begin
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_Filter_Flags]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
@@ -875,6 +879,35 @@ As
 	If @myRowCount > 0
 	Begin
 		Set @message = 'Newly imported peptides found with Null reference values for job ' + @jobStr + ' (' + convert(varchar(11), @myRowCount) + ' peptides)'
+		execute PostLogEntry 'Error', @message, 'LoadSequestPeptidesBulk'
+		Set @message = ''
+	End	
+
+	-----------------------------------------------
+	-- Check for proteins with long names
+	-- MTS can handle protein names up to 255 characters long
+	--  but SEQUEST will truncate protein names over 34 or 40 characters
+	--  long (depending on the version) so we're checking here to notify
+	--  the DMS admins if long protein names are encountered
+	-----------------------------------------------
+	If @ResultToSeqMapCountLoaded > 0
+	Begin
+		SELECT @LongProteinNameCount = COUNT(Distinct Reference)
+		FROM #Tmp_Peptide_SeqToProteinMap
+		WHERE Len(Reference) > 34
+	End
+	Else
+	Begin
+		SELECT @LongProteinNameCount = COUNT(Distinct Reference)
+		FROM #Tmp_Peptide_Import
+		WHERE Len(Reference) > 34
+	End
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @LongProteinNameCount > 0
+	Begin
+		Set @message = 'Newly imported peptides found with protein names longer than 34 characters for job ' + @jobStr + ' (' + convert(varchar(11), @LongProteinNameCount) + ' distinct proteins)'
 		execute PostLogEntry 'Error', @message, 'LoadSequestPeptidesBulk'
 		Set @message = ''
 	End	

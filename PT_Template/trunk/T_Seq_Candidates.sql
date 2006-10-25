@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[T_Seq_Candidates](
 (
 	[Job] ASC,
 	[Seq_ID_Local] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -25,14 +25,14 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Seq_Candidates_CleanSequence] ON [dbo].[T_Seq_Candidates] 
 (
 	[Clean_Sequence] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Seq_Candidates_ModCount] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Seq_Candidates_ModCount] ON [dbo].[T_Seq_Candidates] 
 (
 	[Mod_Count] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 GRANT UPDATE ON [dbo].[T_Seq_Candidates] ([Seq_ID]) TO [DMS_SP_User]
 GO

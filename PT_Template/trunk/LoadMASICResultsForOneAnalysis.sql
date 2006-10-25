@@ -22,6 +22,7 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			12/13/2005 mem - Updated to support XTandem results
 **			06/04/2006 mem - Now passing @ScanStatsLineCountToSkip as an output parameter to let ValidateDelimitedFile determine whether or not a header row is present
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
+**			09/26/2006 mem - Now passing @ScanStatsColumnCount to LoadMASICScanStatsBulk
 **    
 *****************************************************/
 (
@@ -146,7 +147,7 @@ AS
 			End
 			Else
 			Begin
-				Set @message = 'ScanStats file only contains ' + convert(varchar(11), @ScanStatsColumnCount) + ' columns for job ' + @jobStr + ' (Expecting 8 columns)'
+				Set @message = 'ScanStats file only contains ' + convert(varchar(11), @ScanStatsColumnCount) + ' columns for job ' + @jobStr + ' (Expecting 8 or 10 columns)'
 				set @myError = 60003
 			End
 		end
@@ -204,6 +205,7 @@ AS
 	exec @result = LoadMASICScanStatsBulk
 						@ScanStatsFilePath,
 						@job,
+						@ScanStatsColumnCount,
 						@ScanStatsLineCountToSkip,
 						@ScanStatsLoaded output,
 						@message output

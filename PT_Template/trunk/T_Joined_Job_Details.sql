@@ -20,12 +20,12 @@ CREATE TABLE [dbo].[T_Joined_Job_Details](
 (
 	[Joined_Job_ID] ASC,
 	[Section] ASC
-) ON [PRIMARY],
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY],
  CONSTRAINT [IX_T_Joined_Job_Details] UNIQUE NONCLUSTERED 
 (
 	[Joined_Job_ID] ASC,
 	[Source_Job] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

@@ -1,4 +1,6 @@
 /****** Object:  UserDefinedFunction [dbo].[udfParseKeyValueList] ******/
+SET ANSI_NULLS OFF
+GO
 SET QUOTED_IDENTIFIER ON
 GO
 

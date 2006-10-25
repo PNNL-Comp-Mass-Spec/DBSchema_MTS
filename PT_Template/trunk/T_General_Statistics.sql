@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[T_General_Statistics](
  CONSTRAINT [PK_T_General_Statistics] PRIMARY KEY CLUSTERED 
 (
 	[sequence] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

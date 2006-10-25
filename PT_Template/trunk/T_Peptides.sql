@@ -21,7 +21,7 @@ CREATE TABLE [dbo].[T_Peptides](
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY NONCLUSTERED 
 (
 	[Peptide_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -31,21 +31,21 @@ CREATE CLUSTERED INDEX [IX_T_Peptides_AnalysisID_PeptideID] ON [dbo].[T_Peptides
 (
 	[Analysis_ID] ASC,
 	[Peptide_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Peptides_Scan_Number] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Peptides_Scan_Number] ON [dbo].[T_Peptides] 
 (
 	[Scan_Number] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Peptides_Seq_ID] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Peptides_Seq_ID] ON [dbo].[T_Peptides] 
 (
 	[Seq_ID] ASC
-)WITH FILLFACTOR = 90 ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Peptides]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptides_T_Analysis_Description] FOREIGN KEY([Analysis_ID])
 REFERENCES [T_Analysis_Description] ([Job])

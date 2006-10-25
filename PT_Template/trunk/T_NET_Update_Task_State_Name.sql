@@ -9,7 +9,7 @@ CREATE TABLE [dbo].[T_NET_Update_Task_State_Name](
  CONSTRAINT [PK_T_NET_Update_Task_State_Name] PRIMARY KEY CLUSTERED 
 (
 	[Processing_State] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO

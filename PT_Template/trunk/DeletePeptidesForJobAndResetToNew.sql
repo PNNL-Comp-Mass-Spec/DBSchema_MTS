@@ -33,6 +33,7 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			08/26/2006 mem - Now also clearing T_NET_Update_Task_Job_Map and T_Peptide_Prophet_Task_Job_Map
 **			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
 **						   - Now posting a log entry for the processed jobs
+**			09/26/2006 mem - Updated to only post a log entry if data is actually deleted
 **    
 *****************************************************/
 (
@@ -55,6 +56,9 @@ AS
 	Declare @Message varchar(512)
 	Declare @JobListProcessed varchar(512)
 	Set @JobListProcessed = ''
+	
+	Declare @DataDeleted tinyint
+	Set @DataDeleted = 0
 	
 	-- Create a temporary table to hold the jobs to delete
 	CREATE TABLE #JobListToDelete (
@@ -172,7 +176,8 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
+	
 	DELETE T_Score_XTandem
 	FROM T_Peptides P INNER JOIN 
 		 T_Score_XTandem XT ON P.Peptide_ID = XT.Peptide_ID INNER JOIN
@@ -182,6 +187,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Score_Discriminant
 	FROM T_Peptides P INNER JOIN
@@ -192,7 +198,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Peptide_to_Protein_Map
 	FROM T_Peptides P INNER JOIN 
@@ -203,7 +209,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Peptide_Filter_Flags
 	FROM T_Peptides P INNER JOIN
@@ -214,7 +220,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-	
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Seq_Candidate_to_Peptide_Map
 	FROM T_Seq_Candidate_to_Peptide_Map SCPM INNER JOIN
@@ -224,7 +230,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-	
+	If @myRowCount <> 0 Set @DataDeleted = 1
 	
 	DELETE T_Seq_Candidate_ModDetails
 	FROM T_Seq_Candidate_ModDetails SCMD INNER JOIN
@@ -234,7 +240,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-		 
+	If @myRowCount <> 0 Set @DataDeleted = 1
     
 	DELETE T_Seq_Candidates
 	FROM T_Seq_Candidates SC INNER JOIN 
@@ -244,7 +250,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 	
 	DELETE T_Peptides
 	FROM T_Peptides P INNER JOIN 
@@ -254,7 +260,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	If @DeleteUnusedSequences <> 0
 	Begin
@@ -266,6 +272,7 @@ AS
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
 		If @myError <> 0 Goto DefineConstraints
+		If @myRowCount <> 0 Set @DataDeleted = 1
 	End
 
 
@@ -277,7 +284,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_NET_Update_Task_Job_Map
 	FROM T_NET_Update_Task_Job_Map TJM INNER JOIN
@@ -286,7 +293,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Peptide_Prophet_Task_Job_Map
 	FROM T_Peptide_Prophet_Task_Job_Map TJM INNER JOIN
@@ -295,7 +302,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Dataset_Stats_Scans
 	FROM T_Analysis_Description TAD INNER JOIN
@@ -305,7 +312,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	DELETE T_Dataset_Stats_SIC
 	FROM T_Analysis_Description TAD INNER JOIN
@@ -315,7 +322,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 
 	UPDATE T_Datasets
 	SET SIC_Job = Null
@@ -324,7 +331,7 @@ AS
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0 Goto DefineConstraints
-
+	If @myRowCount <> 0 Set @DataDeleted = 1
 	
 	-- Prepare the log message
 	Set @message = 'Deleted data for jobs ' + @JobListProcessed
@@ -351,8 +358,11 @@ AS
 		Set @message = @message + '; Job states have been reset to 10'
 	End
 
-	exec PostLogEntry 'Normal', @message, 'DeletePeptidesForJobAndResetToNew'
-	SELECT @message
+	If @DataDeleted <> 0
+	Begin
+		exec PostLogEntry 'Normal', @message, 'DeletePeptidesForJobAndResetToNew'
+		SELECT @message
+	End
 	
 DefineConstraints:
 	If @DropAndAddConstraints = 1

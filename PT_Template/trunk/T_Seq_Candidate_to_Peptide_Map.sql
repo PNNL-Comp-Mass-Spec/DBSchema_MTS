@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map](
 	[Job] ASC,
 	[Seq_ID_Local] ASC,
 	[Peptide_ID] ASC
-) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
