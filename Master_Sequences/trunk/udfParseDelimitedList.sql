@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE FUNCTION dbo.udfParseDelimitedList
 /****************************************************	
 **	Parses the text in @DelimitedList and returns a table
@@ -16,6 +15,7 @@ CREATE FUNCTION dbo.udfParseDelimitedList
 **
 **	Auth:	mem
 **	Date:	06/06/2006
+**			11/10/2006 mem - Updated to prevent blank values from being returned in the table
 **  
 ****************************************************/
 (
@@ -51,8 +51,9 @@ BEGIN
 			Begin -- <c>
 				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))
 				
-				INSERT INTO @tmpValues (Value)
-				VALUES (@Value)
+				If Len(@Value) > 0 
+					INSERT INTO @tmpValues (Value)
+					VALUES (@Value)
 			end -- </c>
 
 			Set @StartPosition = @DelimiterPos + 1
@@ -61,5 +62,6 @@ BEGIN
 	
 	RETURN
 END
+
 
 GO

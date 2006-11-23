@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE Procedure MoveHistoricLogEntries
+create Procedure MoveHistoricLogEntries
 /****************************************************
 **
 **	Desc: Move log entries from main log into the 
@@ -12,14 +11,14 @@ CREATE Procedure MoveHistoricLogEntries
 **        that are older then given by @intervalHrs
 **
 **	Return values: 0: success, otherwise, error code
-**
-**	Parameters: 
-**
 **	
 **
-**		Auth: grk
-**		Date: 08/29/2001
-**			  08/01/2004 - Updated @intervalHrs to 168 (1 week)
+**	Auth:	grk
+**	Date:	07/30/2003
+**			04/14/2004 grk - added log verbosity control
+**			08/13/2005 mem - Updated @intervalHrs to 168 (1 week)
+**			12/01/2005 mem - Increased size of @DBName from 64 to 128 characters
+**			08/17/2006 mem - Added support for column Entered_By
 **    
 *****************************************************/
 (
@@ -31,25 +30,29 @@ As
 	
 	set @cutoffDateTime = dateadd(hour, -1 * @intervalHrs, getdate())
 
-	declare @DBName varchar(64)
+	declare @DBName varchar(128)
 	set @DBName = DB_NAME()
 
-	set nocount off
+	declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
+	set @logVerbosity = 1
 	
+	---------------------------------------------------
 	-- Start transaction
+	---------------------------------------------------
 	--
 	declare @transName varchar(64)
 	set @transName = 'TRAN_MoveHistoricLogEntries'
 	begin transaction @transName
 
+	---------------------------------------------------
 	-- put entries into historic log
+	---------------------------------------------------
 	--
-	INSERT INTO MT_HistoricLog..T_Historic_Log_Entries
-		(Entry_ID, posted_by, posting_time, type, message, DBName) 
-	SELECT 
-		 Entry_ID, posted_by, posting_time, type, message, @DBName
-	FROM T_Log_Entries
-	WHERE posting_time < @cutoffDateTime
+	INSERT INTO MT_HistoricLog.dbo.T_Historic_Log_Entries
+		(Entry_ID, posted_by, posting_time, type, message, Entered_By, DBName) 
+	SELECT 	Entry_ID, posted_by, posting_time, type, message, Entered_By, @DBName
+	FROM 	T_Log_Entries
+	WHERE 	posting_time < @cutoffDateTime
 	
 	--
 	if @@error <> 0
@@ -60,7 +63,9 @@ As
 		return 51180
 	end
 
+	---------------------------------------------------
 	-- remove entries from main log
+	---------------------------------------------------
 	--
 	DELETE FROM T_Log_Entries
 	WHERE posting_time < @cutoffDateTime
@@ -73,14 +78,18 @@ As
 		return 51181
 	end
 	
---	declare @message varchar(255)
---	set @message = 'Exited'
---	execute PostLogEntry 'Normal', @message, 'MoveHistoricLogEntries'
-
+	if @logVerbosity > 1
+	begin
+		declare @message varchar(255)
+		set @message = 'Cleaned up T_Log_Entries'
+		execute PostLogEntry 'Normal', @message, 'MoveHistoricLogEntries'
+	end
 	
+	---------------------------------------------------
+	-- Commit transaction
+	---------------------------------------------------
 	commit transaction @transName
 	
 	return 0
-
 
 GO

@@ -41,17 +41,9 @@ CREATE NONCLUSTERED INDEX [IX_T_Sequence_Monoisotopic_Mass] ON [dbo].[T_Sequence
 GO
 GRANT INSERT ON [dbo].[T_Sequence] TO [DMS_SP_User]
 GO
-GRANT INSERT ON [dbo].[T_Sequence] TO [MTUser]
-GO
 GRANT UPDATE ON [dbo].[T_Sequence] ([Seq_ID]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Sequence] ([Seq_ID]) TO [MTUser]
 GO
 GRANT UPDATE ON [dbo].[T_Sequence] ([GANET_Predicted]) TO [DMS_SP_User]
 GO
-GRANT UPDATE ON [dbo].[T_Sequence] ([GANET_Predicted]) TO [MTUser]
-GO
 GRANT UPDATE ON [dbo].[T_Sequence] ([Last_Affected]) TO [DMS_SP_User]
-GO
-GRANT UPDATE ON [dbo].[T_Sequence] ([Last_Affected]) TO [MTUser]
 GO
