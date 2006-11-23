@@ -6,8 +6,8 @@ GO
 
 create view V_Cell_Culture_Datasets_Import
 AS
-SELECT     CellCulture, CellCultureID, DatasetID
-FROM
-OPENROWSET('SQLOLEDB', 'gigasax'; 'DMSWebUser'; 'icr4fun', 'SELECT * FROM dms5.dbo.V_Export_Cell_Culture_Datasets')
+SELECT CellCulture, CellCultureID, DatasetID
+FROM Gigasax.DMS5.dbo.V_Export_Cell_Culture_Datasets
+
 
 GO

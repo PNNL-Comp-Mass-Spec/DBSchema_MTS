@@ -37,6 +37,7 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			01/18/2006 mem - Added logging statements when @logLevel >= 1
 **			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
 **			06/08/2006 mem - Now using GetOrganismDBFileInfo to lookup the OrganismDBFileID or ProteinCollectionFileID value for the given job
+**			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **    
 *****************************************************/
 (
@@ -57,7 +58,7 @@ As
 	set @message = ''
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'Daffy'
+	set @MasterSequencesServerName = 'ProteinSeqs'
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -143,8 +144,8 @@ As
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 	--
-	-- Warning: Update @MasterSequencesServerName above if changing from Daffy to another computer
-	exec Daffy.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
+	-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
+	exec ProteinSeqs.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
 	--
 	SELECT @myRowcount = @@rowcount, @myError = @@error
 	--
@@ -189,7 +190,7 @@ As
 	If @logLevel >= 1
 		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 	--
-	exec @myError = Daffy.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
+	exec @myError = ProteinSeqs.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
 															 @PeptideSequencesTableName, @UniqueSequencesTableName, @processCount output, @message output
 	--
 	if @myError <> 0
@@ -286,7 +287,7 @@ Done:
 	-----------------------------------------------------------
 	--
 	If @DeleteTempTables = 1
-		exec Daffy.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
+		exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
 
 	Return @myError
 

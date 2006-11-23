@@ -24,6 +24,7 @@ CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
 **			06/07/2006 mem - Now creating temporary tables in the Master_Sequences DB for transferring candidate sequences to process
 **			06/08/2006 mem - Now using GetOrganismDBFileInfo to lookup the OrganismDBFileID or ProteinCollectionFileID value for the given job
 **			06/21/2006 mem - Now checking for sequences modified two or more times on the same residue with the same modification; if found, posting a Warning entry to the log
+**			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **    
 *****************************************************/
 (
@@ -47,7 +48,7 @@ As
 	set @message = ''
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'Daffy'
+	set @MasterSequencesServerName = 'ProteinSeqs'
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -127,8 +128,8 @@ As
 		--
 		Set @CandidateTablesContainJobColumn = 0
 		
-		-- Warning: Update @MasterSequencesServerName above if changing from Daffy to another computer
-		exec Daffy.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidatesSequencesTableName output, @CandidateModDetailsTableName output
+		-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
+		exec ProteinSeqs.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidatesSequencesTableName output, @CandidateModDetailsTableName output
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
@@ -236,7 +237,7 @@ As
 	If @logLevel >= 1
 		execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
 	--
-	exec @myError = Daffy.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
+	exec @myError = ProteinSeqs.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
 															 @CandidatesSequencesTableName, @CandidateModDetailsTableName, 
 															 @CandidateTablesContainJobColumn = @CandidateTablesContainJobColumn,
 															 @Job = @Job, 
@@ -442,7 +443,7 @@ Done:
 	-----------------------------------------------------------
 	--
 	If @CreateTempCandidateSequenceTables <> 0 And @DeleteTempTables = 1
-		exec Daffy.Master_Sequences.dbo.DropTempSequenceTables @CandidatesSequencesTableName, @CandidateModDetailsTableName
+		exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @CandidatesSequencesTableName, @CandidateModDetailsTableName
 
 	Return @myError
 

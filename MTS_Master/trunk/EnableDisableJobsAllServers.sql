@@ -6,21 +6,21 @@ GO
 CREATE PROCEDURE dbo.EnableDisableJobsAllServers
 /****************************************************
 ** 
-**		Desc: 
-**		Call EnableDisableJobs on each server listed in T_MTS_Servers
-**		Additionally, calls SP on PrismDev
+**	Desc: Call EnableDisableJobs on each server listed in T_MTS_Servers
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
 ** 
-**		Auth: mem
-**		Date: 1/18/2005
+**	Auth:	mem
+**	Date:	01/18/2005
+**			11/14/2006 mem - Removed Prismdev from @AdditionalServers
+**			
 **    
 *****************************************************/
 	@EnableJobs tinyint,										-- 0 to disable, 1 to enable
 	@CategoryName varchar(255) = 'MTS Auto Update Continuous',
 	@Preview tinyint = 0,										-- 1 to preview jobs that would be affected, 0 to actually make changes
-	@AdditionalServers varchar(512) = 'PrismDev',				-- Additional servers to poll besides those in T_MTS_Servers
+	@AdditionalServers varchar(512) = '',						-- Additional servers to poll besides those in T_MTS_Servers
 	@SPName varchar(128) = 'MT_Main.dbo.EnableDisableJobs',
 	@message varchar(255) = '' OUTPUT
 AS

@@ -27,6 +27,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			11/16/2005 mem - Added IsNull() checking around all of the fields being compared to DMS
 **			12/15/2005 mem - Now updating PreDigest_Internal_Std, PostDigest_Internal_Std, & Dataset_Internal_Std (previously named Internal_Standard)
 **			03/08/2006 mem - Now updating column Campaign
+**			11/15/2006 mem - Now updating columns Parameter_File_Name & Settings_File_Name
 **    
 *****************************************************/
 (
@@ -70,9 +71,8 @@ As
 	
 	If GetDate() > DateAdd(hour, @UpdateInterval, @LastUpdated) OR @myRowCount = 0
 	Begin
-
 		--------------------------------------------------------------
-		-- First update information in T_Analysis_Description
+		-- Step 1: Update job information in T_Analysis_Description
 		--------------------------------------------------------------
 		--
 		UPDATE T_Analysis_Description
@@ -84,6 +84,8 @@ As
 			Dataset_Folder = P.DatasetFolder, 
 			Results_Folder = P.ResultsFolder,
 			Completed = P.Completed,
+			Parameter_File_Name = P.ParameterFileName,
+			Settings_File_Name = P.SettingsFileName,
 			Separation_Sys_Type = P.SeparationSysType,
 			PreDigest_Internal_Std = P.[PreDigest Int Std],
 			PostDigest_Internal_Std = P.[PostDigest Int Std],
@@ -93,6 +95,7 @@ As
 		FROM T_Analysis_Description AS TAD INNER JOIN (
 			SELECT L.Job, R.Campaign, R.VolClient, R.VolServer, R.StoragePath, 
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
+				R.ParameterFileName, R.SettingsFileName,
 				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
 				R.EnzymeID, R.Labelling
 			FROM T_Analysis_Description AS L INNER JOIN
@@ -105,6 +108,8 @@ As
 					IsNull(L.Dataset_Folder, '') <> R.DatasetFolder OR 
 					IsNull(L.Results_Folder, '') <> R.ResultsFolder OR
 					IsNull(L.Completed, '1/1/1980') <> R.Completed OR
+					IsNull(L.Parameter_File_Name,'') <> IsNull(R.ParameterFileName,'') OR
+					IsNull(L.Settings_File_Name,'') <> IsNull(R.SettingsFileName,'') OR
 					IsNull(L.Separation_Sys_Type,'') <> IsNull(R.SeparationSysType,'') OR
 					IsNull(L.PreDigest_Internal_Std,'') <> IsNull(R.[PreDigest Int Std], '') OR
 					IsNull(L.PostDigest_Internal_Std,'') <> IsNull(R.[PostDigest Int Std], '') OR
@@ -132,7 +137,7 @@ As
 			End
 
 		--------------------------------------------------------------
-		-- Now update information in T_Datasets
+		-- Step 2: Update dataset information in T_Datasets
 		--------------------------------------------------------------
 		--
 		UPDATE T_Datasets

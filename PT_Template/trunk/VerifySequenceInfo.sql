@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.VerifySequenceInfo
+CREATE Procedure dbo.VerifySequenceInfo
 /****************************************************
 **
 **	Desc: 
@@ -33,6 +33,7 @@ CREATE PROCEDURE dbo.VerifySequenceInfo
 **			03/18/2006 mem - Changed @NextProcessState from 40 to 33
 **						   - No longer checking for jobs in T_Joined_Job_Details; moved that logic to MasterUpdateProcessBackground
 **			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
+**			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **    
 *****************************************************/
 (
@@ -94,7 +95,7 @@ AS
 				) AS SequenceQ ON 
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
 				(	SELECT Monoisotopic_Mass, Seq_ID
-					FROM Daffy.Master_Sequences.dbo.T_Sequence
+					FROM ProteinSeqs.Master_Sequences.dbo.T_Sequence
 				) M ON S.Seq_ID = M.Seq_ID
 		WHERE S.Monoisotopic_Mass IS NULL AND 
 			  NOT (M.Monoisotopic_Mass IS NULL)
@@ -109,7 +110,7 @@ AS
 		FROM T_Sequence INNER JOIN
 		(
 			SELECT Monoisotopic_Mass, Seq_ID
-			FROM Daffy.Master_Sequences.dbo.T_Sequence
+			FROM ProteinSeqs.Master_Sequences.dbo.T_Sequence
 		) AS M ON T_Sequence.Seq_ID = M.Seq_ID
 		WHERE T_Sequence.Monoisotopic_Mass IS NULL AND
 			NOT M.Monoisotopic_Mass IS NULL

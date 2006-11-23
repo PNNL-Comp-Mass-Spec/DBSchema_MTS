@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.BackupMTSDBs
+CREATE PROCEDURE [dbo].[BackupMTSDBs]
 /****************************************************
 **
 **	Desc: Uses Red-Gate's SQL Backup software to backup the specified databases
@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **			05/25/2006 mem - Expanded functionality
 **			07/02/2006 mem - Now combining the status log files created by SQL Backup into a single text file for each backup session
 **			08/26/2006 mem - Updated to use GetServerVersionInfo
+**			10/27/2006 mem - Added parameter @DaysToKeepOldBackups
 **    
 *****************************************************/
 (
@@ -25,8 +26,9 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 	@DBNameMatchList varchar(2048) = 'MT[_]%',		-- Comma-separated list of databases on this server to include; can include wildcard symbols since used with a LIKE clause.  Leave blank to ignore this parameter
 	@TransactionLogBackup tinyint = 0,				-- Set to 0 for a full backup, 1 for a transaction log backup
 	@IncludeMTSInterfaceAndControlDBs tinyint = 0,	-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
-	@IncludeSystemDBs tinyint = 0,
+	@IncludeSystemDBs tinyint = 0,					-- Set to 1 to include master, model and MSDB databases; these always get full DB backups since transaction log backups are not allowed
 	@FileAndThreadCount tinyint = 1,				-- Set to 2 or 3 to backup the database to multiple files and thus use multiple compression threads
+	@DaysToKeepOldBackups smallint = 20,			-- Defines the number of days worth of backup files to retain; files older than @DaysToKeepOldBackups days prior to the present will be deleted; minimum value is 3
 	@Verify tinyint = 1,							-- Set to 1 to verify each backup
 	@InfoOnly tinyint = 1,							-- Set to 1 to display the Backup SQL that would be run
 	@message varchar(255) = '' OUTPUT
@@ -59,6 +61,10 @@ As
 
 	Set @Verify = IsNull(@Verify, 0)
 	Set @InfoOnly = IsNull(@InfoOnly, 0)
+
+	Set @DaysToKeepOldBackups = IsNull(@DaysToKeepOldBackups, 20)
+	If @DaysToKeepOldBackups < 3
+		Set @DaysToKeepOldBackups = 3
 
 	Set @message = ''
 
@@ -160,6 +166,7 @@ As
 
 	---------------------------------------
 	-- Optionally include the system databases
+	-- Note that system DBs are forced to perform a full backup, even if @TransactionLogBackup = 1
 	---------------------------------------
 	If @IncludeSystemDBs <> 0
 	Begin
@@ -355,7 +362,9 @@ As
 				Set @BackupFileList = @BackupFileList + ', DISK = ''' + @BackupFileBasePath + '_03.sqb'''
 			
 			Set @Sql = @Sql + @BackupFileList
-			Set @Sql = @Sql + N' WITH MAXDATABLOCK=524288, NAME=''<AUTO>'', DESCRIPTION=''<AUTO>'', ERASEFILES=20, COMPRESSION=3,'
+			Set @Sql = @Sql + N' WITH MAXDATABLOCK=524288, NAME=''<AUTO>'', DESCRIPTION=''<AUTO>'','
+			Set @Sql = @Sql + N' ERASEFILES=' + Convert(nvarchar(16), @DaysToKeepOldBackups) + N','
+			Set @Sql = @Sql + N' COMPRESSION=3,'
 			Set @Sql = @Sql + N' THREADS=' + Convert(nvarchar(4), @FileAndThreadCount) + N','
 			
 			Set @DBBackupStatusLogFileName = @DBBackupStatusLogPathBase + @BackupFileBaseName + '.log'

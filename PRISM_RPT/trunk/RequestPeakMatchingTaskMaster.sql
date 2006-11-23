@@ -227,7 +227,6 @@ As
 
 			If IsNull(@UpdateEnabled, 1) <> 1
 			Begin
-				print 'Deleting rows for ' + @CurrentServer
 				DELETE FROM #XMTDBNames
 				WHERE Server_Name = @CurrentServer
 			End

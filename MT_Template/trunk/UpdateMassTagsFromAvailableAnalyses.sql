@@ -8,15 +8,10 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 /****************************************************
 ** 
 **	Desc: 
-**		Gets list of LCQ analyses that are available
-**		 to have their peptides processed for mass tags,
-**		 and processes them.
-**
-**		Caller must assure that peptides satisfy
-**		 a minimum score threshold 
+**		Imports the peptides from the LC-MS/MS analyses
+**		in T_Analysis_Description with State 1=New
 **
 **	Return values: 0: success, otherwise, error code
-** 
 **
 **	Auth:	grk
 **	Date:	10/09/2001
@@ -28,6 +23,7 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 **						   - Added calls to AddPeptideLoadStatEntry after loading peptides from each job
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			10/10/2006 mem - Decreased the number of calls made to AddPeptideLoadStatEntry
+**			11/22/2006 mem - Now calling AddPeptideLoadStatEntry just once for each job, except for the first job loaded and for every 25th job loaded
 **    
 *****************************************************/
 (
@@ -37,10 +33,10 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 As
 	Set nocount on
 	
-	Declare @myRowCount int	
 	Declare @myError int
-	Set @myRowCount = 0
+	Declare @myRowCount int	
 	Set @myError = 0
+	Set @myRowCount = 0
 
 	Set @numJobsProcessed = 0
 	
@@ -226,20 +222,20 @@ As
 				
 			End -- <c>
 			
-			-- Only call AddPeptideLoadStatEntry with Discriminant Score thresholds for the first job
-			--  processed and for each 25th job after that
-			-- Always call AddPeptideLoadStatEntry with Peptide Prophet thresholds
+			-- Only call AddPeptideLoadStatEntry with detailed Discriminant Score and
+			--  Peptide Prophet thresholds for the first job processed and for each 25th job after that
+			-- Otherwise, only call AddPeptideLoadStatEntry once, using a Peptide Prophet threshold of 0.99
 			
 			If @numJobsProcessed % 25 = 0
 			Begin
 				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.5, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,  @AnalysisStateMatch=@MassTagUpdatedState
 				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.95,@PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.5, @AnalysisStateMatch=@MassTagUpdatedState
+				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.9, @AnalysisStateMatch=@MassTagUpdatedState
 			End
 
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.5, @AnalysisStateMatch=@MassTagUpdatedState
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.9, @AnalysisStateMatch=@MassTagUpdatedState
-			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.99,@AnalysisStateMatch=@MassTagUpdatedState
+			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.99, @AnalysisStateMatch=@MassTagUpdatedState
 
 			-- Increment number of jobs processed
 			--

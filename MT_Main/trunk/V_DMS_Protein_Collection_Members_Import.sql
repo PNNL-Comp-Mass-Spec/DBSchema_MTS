@@ -3,12 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE VIEW dbo.V_DMS_Protein_Collection_Members_Import
+create VIEW V_DMS_Protein_Collection_Members_Import
 AS
 SELECT *
 FROM GIGASAX.Protein_Sequences.dbo.V_Protein_Collection_Members_Export
      V_Protein_Collection_Members_Export_1
-
 
 GO

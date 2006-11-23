@@ -34,6 +34,8 @@ CREATE PROCEDURE MakeNewMassTagDB
 **			07/27/2006 mem - Updated to verify each campaign defined in @campaign
 **			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
+**			11/10/2006 mem - Updated check for valid peptide database to use V_MTS_PT_DBs if the peptide DB is not on this server
+**						   - Removed Sql Server 2000 support
 **    
 *****************************************************/
 (
@@ -69,7 +71,12 @@ AS
 	declare @hit int
 
 	Declare @sql varchar(1024)
+	Declare @ServerName varchar(128)
+	Set @ServerName = ''
 
+	Declare @S nvarchar(2048)
+	Declare @Params nvarchar(1024)
+	
 	If Len(LTrim(RTrim(IsNull(@proteinDBName, '')))) = 0
 		Set @proteinDBName = '(na)'
 
@@ -93,11 +100,61 @@ AS
 	
 	If @hit = 0
 	Begin
-		Set @message = 'Peptide database ' + @peptideDBName + ' not found in T_Peptide_Database_List'
-		Set @myError = 101
-		goto done
-	End
+		---------------------------------------------------
+		-- Peptide database is not on this server
+		-- See if it is located on another MTS server
+		---------------------------------------------------
+		
+		SELECT @hit = Peptide_DB_ID, @ServerName = Server_Name
+		FROM V_MTS_PT_DBs
+		WHERE Peptide_DB_Name = @peptideDBName		
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0
+		Begin
+			Set @message = 'Error verifying peptide database name against V_MTS_PT_DBs'
+			goto done
+		End
 
+		if @hit = 0
+		Begin
+			Set @message = 'Peptide database ' + @peptideDBName + ' not found in T_Peptide_Database_List or V_MTS_PT_DBs'
+			Set @myError = 101
+			goto done
+		End
+		Else
+		Begin
+			-- Determine the organism name for this Peptide DB (on server @ServerName)
+			Set @S = ''
+			Set @S = @S + '	SELECT @organism = PDB_Organism'
+			Set @S = @S + '	FROM ' + @ServerName + '.MT_Main.dbo.T_Peptide_Database_List'
+			Set @S = @S + '	WHERE PDB_Name = ''' + @peptideDBName + ''''
+			
+			-- Params string for sp_ExecuteSql
+			Set @Params = '@organism varchar(128) output'
+			
+			exec sp_executesql @S, @Params, @organism = @organism output
+			
+			If Len(IsNull(@organism, '')) = 0
+			Begin
+				Set @message = 'Organism not defined for Peptide DB ' + @peptideDBName + ' on server ' + @ServerName
+				Set @myError = 102
+				goto done
+			End
+		End			
+	End
+	Else
+	Begin
+		If Len(IsNull(@organism, '')) = 0
+		Begin
+			Set @message = 'Organism not defined for Peptide DB ' + @peptideDBName + ' on server ' + @@ServerName
+			Set @myError = 102
+			goto done
+		End
+	End
+	
+	
 	---------------------------------------------------
 	-- Verify Protein DB
 	---------------------------------------------------
@@ -183,7 +240,7 @@ AS
 	
 
    	---------------------------------------------------
-	-- Populate @dataStoragePath and @logStoragePath If required
+	-- Populate @dataStoragePath and @logStoragePath if required
 	---------------------------------------------------
 	Set @dataStoragePath = LTrim(RTrim(IsNull(@dataStoragePath, '')))
 	Set @logStoragePath = LTrim(RTrim(IsNull(@logStoragePath, '')))
@@ -375,47 +432,6 @@ AS
 	-- Make sure that GANET transfer folders exist
 	---------------------------------------------------
 	Exec @result = MakeGANETTransferFolderForDB @newDBName, @message output
-
-
-	---------------------------------------------------
-	-- Determine whether or not we're running Sql Server 2005 or newer
-	---------------------------------------------------
-	Declare @VersionMajor int
-	
-	exec GetServerVersionInfo @VersionMajor output
-
-	If @VersionMajor = 8
-	Begin
-		-- Sql Server 2000
-		
-		---------------------------------------------------
-		-- add new database to maintenance plan for MTDB
-		---------------------------------------------------
-
-		Declare @DBMaintPlanName varchar(128)
-		Declare @planID as UniqueIdentifier
-		
-		Set @DBMaintPlanName = 'DB Maintenance Plan - MT databases'
-		Set @planID = '{00000000-0000-0000-0000-000000000000}'
-
-		SELECT @planID = plan_ID
-		FROM msdb..sysdbmaintplans
-		WHERE plan_name = @DBMaintPlanName
-
-		If @planID <> '{00000000-0000-0000-0000-000000000000}'
-			Execute	msdb..sp_add_maintenance_plan_db @planID, @newDBName
-		Else
-		Begin
-			Set @message = 'Database maintenance plan ''' + @DBMaintPlanName + ''' not found in msdb..sysdbmaintplans'
-			Exec PostLogEntry 'Error', @message, 'MakeNewMassTagDB'
-		End
-	End
-	Else
-	Begin
-		-- Nothing to do since we're using SSIS to call SPs CheckMTSDBs & BackupMTSDBs 
-		--  on Sql Server 2005 for integrity checking and DB backup
-		Set @myError = 0
-	End	
 
 
 	---------------------------------------------------

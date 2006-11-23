@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.UpdateUserPermissions
+create PROCEDURE UpdateUserPermissions
 /****************************************************
 **
 **	Desc: Updates user permissions in the current DB
@@ -138,6 +137,5 @@ AS
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 
 	Return 0
-
 
 GO

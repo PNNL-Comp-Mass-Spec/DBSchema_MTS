@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.MassTagAccumulationTrend
+CREATE PROCEDURE MassTagAccumulationTrend
 /****************************************************
 **
 **	Desc: 
@@ -44,6 +44,7 @@ AS
 	Set @myError = @result
 Done:
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[MassTagAccumulationTrend] TO [DMS_SP_User]

@@ -20,7 +20,8 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 **			02/24/2005 mem - Moved Master_Sequences to Albert
 **			10/10/2005 mem - Removed PrismDev.Master_Sequences_T3
 **			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
-**			05/13/2006 mem - Moved Master_Sequences to Daffy
+**			05/13/2006 mem - Moved Master_Sequences from Albert to Daffy
+**			11/21/2006 mem - Moved Master_Sequences from Daffy to ProteinSeqs
 **    
 *****************************************************/
 (
@@ -307,15 +308,15 @@ As
 	End -- </A>
 	
 	-----------------------------------------------------------
-	-- Get errors from Daffy.Master_Sequences
+	-- Get errors from ProteinSeqs.Master_Sequences
 	-----------------------------------------------------------
 
 	Set @Sql = ''				
 	Set @Sql = @Sql + ' INSERT INTO #LE'
 	Set @Sql = @Sql + ' (Server_Name, DBName, Entry_ID, posted_by, posting_time, type, message)'
-	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''Daffy'', ''Master_Sequences'', '
+	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''ProteinSeqs'', ''Master_Sequences'', '
 	Set @Sql = @Sql + '   Entry_ID, posted_by, posting_time, type, message'
-	Set @Sql = @Sql + ' FROM Daffy.Master_Sequences.dbo.T_Log_Entries'
+	Set @Sql = @Sql + ' FROM ProteinSeqs.Master_Sequences.dbo.T_Log_Entries'
 	if @errorsOnly = 1
 	begin
 		Set @Sql = @Sql + ' WHERE type = ''error'''

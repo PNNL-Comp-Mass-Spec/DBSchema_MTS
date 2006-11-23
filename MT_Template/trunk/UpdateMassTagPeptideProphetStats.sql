@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
 **
 **	Auth:	mem
 **	Date:	09/14/2006 mem
+**			11/15/2006 mem - Replaced use of Truncate Table with Delete From
 **    
 *****************************************************/
 (
@@ -41,7 +42,7 @@ AS
 	-- counts and -100 for stats)
 	---------------------------------------------------
 	--
-	TRUNCATE TABLE T_Mass_Tag_Peptide_Prophet_Stats 
+	DELETE FROM T_Mass_Tag_Peptide_Prophet_Stats
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
