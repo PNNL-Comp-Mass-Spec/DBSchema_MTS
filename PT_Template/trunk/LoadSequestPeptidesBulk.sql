@@ -44,6 +44,7 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 **						   - Added warning if peptide prophet results file does not contain the same number of rows as the synopsis file
 **			08/14/2006 mem - Updated peptide prophet results processing to consider charge state when counting the number of null entries
 **			10/10/2006 mem - Now checking for protein names longer than 34 characters
+**			11/27/2006 mem - Now calling UpdatePeptideStateID
 **
 *****************************************************/
 (
@@ -1372,6 +1373,19 @@ As
 	-----------------------------------------------
 	--
 	commit transaction @transName
+
+
+	-----------------------------------------------
+	-- Update column State_ID in T_Peptides
+	-----------------------------------------------
+	exec @myError = UpdatePeptideStateID @job, @message output
+	
+	if @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling UpdatePeptideStateID for job ' + @jobStr
+		Goto Done
+	End
 
 
 	-----------------------------------------------

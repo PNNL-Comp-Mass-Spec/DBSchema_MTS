@@ -18,6 +18,7 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Peak_Area] [real] NULL,
 	[Peak_SN_Ratio] [real] NULL,
 	[Max_Obs_Area_In_Job] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0),
+	[State_ID] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_State_ID]  DEFAULT ((1)),
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY NONCLUSTERED 
 (
 	[Peptide_ID] ASC
@@ -51,6 +52,11 @@ ALTER TABLE [dbo].[T_Peptides]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptides_T_An
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Peptides] CHECK CONSTRAINT [FK_T_Peptides_T_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_Peptides]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptides_T_Peptide_State_Name] FOREIGN KEY([State_ID])
+REFERENCES [T_Peptide_State_Name] ([State_ID])
+GO
+ALTER TABLE [dbo].[T_Peptides] CHECK CONSTRAINT [FK_T_Peptides_T_Peptide_State_Name]
 GO
 ALTER TABLE [dbo].[T_Peptides]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptides_T_Sequence] FOREIGN KEY([Seq_ID])
 REFERENCES [T_Sequence] ([Seq_ID])

@@ -26,6 +26,7 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
 **			03/18/2006 mem - Now checking for jobs with Null Seq_ID values and skipping them since Seq_ID is required for populating ComputeMaxObsAreaByJob
 **						   - Now calling VerifyUpdateEnabled
 **			03/20/2006 mem - Now sorting on job when populating #T_Jobs_To_Update
+**			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **    
 *****************************************************/
 (
@@ -53,9 +54,11 @@ As
 
 	declare @result int
 	declare @UpdateEnabled tinyint
+	declare @SkipPeptidesFromReversedProteins tinyint
 	declare @JobsToUpdate int
 	
 	declare @S nvarchar(4000)
+	declare @SqlWhereClause nvarchar(500)
 	declare @MaxUniqueRowID int
 	declare @MinUniqueRowID int
 	declare @continue int
@@ -63,9 +66,9 @@ As
 	declare @MatchCount int
 	declare @JobStart int
 	declare @JobEnd int
-	
+		
 	---------------------------------------------------
-	-- Create a temporary tables
+	-- Create a temporary table
 	---------------------------------------------------
 	--
 	CREATE TABLE #T_Jobs_To_Update (
@@ -74,17 +77,46 @@ As
 		Null_Seq_ID_Count int NOT NULL
 	)
 
+	--------------------------------------------------------------
+	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
+	-- Assume skipping is enabled if the value is not present
+	--------------------------------------------------------------
+	--
+	SELECT @SkipPeptidesFromReversedProteins = Enabled
+	FROM T_Process_Step_Control
+	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
+	--
+	SELECT @myRowcount = @@rowcount, @myError = @@error
+	
+	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
+	
 	---------------------------------------------------
 	-- Look for jobs having Max_Obs_Area_In_Job=0 for all peptides
+	-- In addition, count the number of peptides with null Seq_ID values 
+	--  (skipping peptides with State_ID = 2 if @SkipPeptidesFromReversedProteins <> 0)
 	---------------------------------------------------
-	set @S = ''	
+	set @S = ''
+	set @SqlWhereClause = ''
 	set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job, Null_Seq_ID_Count)'
 	set @S = @S + ' SELECT Analysis_ID, SUM(CASE WHEN Seq_ID Is Null THEN 1 ELSE 0 END) AS Null_Seq_ID_Count'
 	set @S = @S + ' FROM T_Peptides'
 	If Len(@JobFilterList) > 0
-		Set @S = @S + ' WHERE Analysis_ID In (' + @JobFilterList + ')'
+		Set @SqlWhereClause = 'WHERE Analysis_ID In (' + @JobFilterList + ')'
+		
+	If @SkipPeptidesFromReversedProteins <> 0
+	Begin
+		If Len(@SqlWhereClause) = 0
+			Set @SqlWhereClause = 'WHERE '
+		Else
+			Set @SqlWhereClause = @SqlWhereClause + ' AND '
+		--
+		Set @SqlWhereClause = @SqlWhereClause + 'State_ID <> 2'
+	End
+	
+	Set @S = @S + ' ' + @SqlWhereClause
 	set @S = @S + ' GROUP BY Analysis_ID'
-	set @S = @S + ' HAVING SUM(Max_Obs_Area_In_Job) = 0'
+	If Len(@JobFilterList) = 0
+		set @S = @S + ' HAVING SUM(Max_Obs_Area_In_Job) = 0'
 	set @S = @S + ' ORDER BY Analysis_ID'
 
 	exec @result = sp_executesql @S
@@ -96,27 +128,6 @@ As
 		set @message = 'Error looking for Jobs with undefined Max_Obs_Area_In_Job values'
 		goto Done
 	end
-
-	If Len(@JobFilterList) > 0
-	Begin
-		---------------------------------------------------
-		-- Append the jobs in @JobFilterList to #T_Jobs_To_Update
-		---------------------------------------------------
-		set @S = ''	
-		set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job, Null_Seq_ID_Count)'
-		set @S = @S + ' SELECT TAD.Job, SUM(CASE WHEN Pep.Seq_ID Is Null THEN 1 ELSE 0 END) AS Null_Seq_ID_Count'
-		set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
-		set @S = @S +      ' T_Peptides Pep ON TAD.Job = Pep.Analysis_ID LEFT OUTER JOIN '
-		set @S = @S +      ' #T_Jobs_To_Update AS JTU ON TAD.Job = JTU.Job'
-		set @S = @S + ' WHERE TAD.Job In (' + @JobFilterList + ')'
-		set @S = @S +       ' AND JTU.Job Is Null'
-		set @S = @S + ' GROUP BY TAD.Job'
-		set @S = @S + ' ORDER BY TAD.Job'
-
-		exec @result = sp_executesql @S
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-	End
 
 	-- Count the number of jobs in #T_Jobs_To_Update	
 	SELECT @JobsToUpdate = COUNT(Job)
@@ -228,11 +239,12 @@ As
 			set @S = @S +      ' (	SELECT  Pep.Analysis_ID, Pep.Seq_ID, '
 			set @S = @S +                 ' MIN(Pep.Peptide_ID) AS Min_Peptide_ID'
 			set @S = @S +         ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +              ' (  SELECT Pep.Analysis_ID, Pep.Seq_ID,'
+			set @S = @S +           ' (  SELECT Pep.Analysis_ID, Pep.Seq_ID,'
 			set @S = @S +                        ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
 			set @S = @S +                 ' FROM T_Peptides AS Pep INNER JOIN'
 			set @S = @S +                      ' #T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job'
-			set @S = @S +                 ' WHERE (JTU.Unique_Row_ID BETWEEN ' + Convert(varchar(19), @MinUniqueRowID) + ' AND ' + Convert(varchar(19), @MaxUniqueRowID) + ')'
+			set @S = @S +                 ' WHERE NOT Pep.Seq_ID IS NULL AND '
+			set @S = @S +                       ' (JTU.Unique_Row_ID BETWEEN ' + Convert(varchar(19), @MinUniqueRowID) + ' AND ' + Convert(varchar(19), @MaxUniqueRowID) + ')'
 			set @S = @S +                 ' GROUP BY Pep.Analysis_ID, Pep.Seq_ID'
 			set @S = @S +              ' ) AS LookupQ ON'
 			set @S = @S +              ' Pep.Analysis_ID = LookupQ.Analysis_ID AND'

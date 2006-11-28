@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config] ******/
-/****** RowCount: 14 ******/
+/****** RowCount: 15 ******/
 SET IDENTITY_INSERT [T_Process_Config] ON
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (104,'DB_Schema_Version','2.0','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (110,'Enzyme_ID','10','9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -14,5 +14,6 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (101,'Organism_DB_File_Name','','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (103,'Peptide_Import_Filter_ID','149','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (111,'Protein_Collection_Filter','','9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (115,'Seq_Direction_Filter','decoy','11/27/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (112,'Seq_Direction_Filter','forward','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 SET IDENTITY_INSERT [T_Process_Config] OFF

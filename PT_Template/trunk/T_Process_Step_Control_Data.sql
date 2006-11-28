@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Step_Control] ******/
-/****** RowCount: 23 ******/
+/****** RowCount: 24 ******/
 /****** Columns: Processing_Step_Name, enabled, Last_Affected, Entered_By ******/
 INSERT INTO [T_Process_Step_Control] VALUES ('AssignMasterSequenceIDs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('CalculateCleavageState',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -21,6 +21,7 @@ INSERT INTO [T_Process_Step_Control] VALUES ('RefreshAnalysisDescriptionInfo',1,
 INSERT INTO [T_Process_Step_Control] VALUES ('RequireExistingDatasetForNewSICJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ResetChangedAnalysisJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('SkipConfidenceScoreRecalculation',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('SkipPeptidesFromReversedProteins',1,'11/26/2006 11:17:45 PM','PNL\D3L243')
 INSERT INTO [T_Process_Step_Control] VALUES ('UpdateDatasetToSICMapping',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('UpdatePeptideSICStats',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('VerifySequenceInfo',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')

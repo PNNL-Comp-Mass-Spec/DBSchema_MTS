@@ -38,6 +38,7 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
 **			06/08/2006 mem - Now using GetOrganismDBFileInfo to lookup the OrganismDBFileID or ProteinCollectionFileID value for the given job
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
+**			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **    
 *****************************************************/
 (
@@ -70,7 +71,8 @@ As
 	declare @DeleteTempTables tinyint
 	declare @processCount int
 	declare @sequencesAdded int
-
+	declare @SkipPeptidesFromReversedProteins tinyint
+	
 	set @DeleteTempTables = 0
 	set @processCount = 0
 	set @sequencesAdded = 0
@@ -90,7 +92,19 @@ As
 	--
 	SELECT @logLevel = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LogLevel')
 
-
+	--------------------------------------------------------------
+	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
+	-- Assume skipping is enabled if the value is not present
+	--------------------------------------------------------------
+	--
+	SELECT @SkipPeptidesFromReversedProteins = Enabled
+	FROM T_Process_Step_Control
+	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
+	--
+	SELECT @myRowcount = @@rowcount, @myError = @@error
+	
+	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
+	
 	-----------------------------------------------------------
 	-- Get Analysis job information
 	-----------------------------------------------------------
@@ -170,6 +184,8 @@ As
 	Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
 	Set @Sql = @Sql + ' FROM T_Peptides'
 	Set @Sql = @Sql + ' WHERE Analysis_ID = ' + @jobStr
+	If @SkipPeptidesFromReversedProteins <> 0
+		Set @Sql = @Sql + ' AND State_ID <> 2'
 	--
 	Exec (@Sql)
 	--
@@ -180,7 +196,6 @@ As
 		set @message = 'Problem populating ' + @PeptideSequencesTableName + ' with the peptides to process for job ' + @jobStr
 		goto Done
 	end
-
 
 	-----------------------------------------------------------
 	-- Call GetIDsForRawSequences to process the data in the temporary sequence tables

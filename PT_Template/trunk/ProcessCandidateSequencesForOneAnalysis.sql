@@ -25,6 +25,7 @@ CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
 **			06/08/2006 mem - Now using GetOrganismDBFileInfo to lookup the OrganismDBFileID or ProteinCollectionFileID value for the given job
 **			06/21/2006 mem - Now checking for sequences modified two or more times on the same residue with the same modification; if found, posting a Warning entry to the log
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
+**			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **    
 *****************************************************/
 (
@@ -60,6 +61,7 @@ As
 	declare @processCount int
 	declare @sequencesAdded int
 	declare @UndefinedSeqIDCount int
+	declare @SkipPeptidesFromReversedProteins tinyint
 
 	set @DeleteTempTables = 0
 	set @processCount = 0
@@ -79,12 +81,88 @@ As
 	set @logLevel = 1		-- Default to normal logging
 
 	--------------------------------------------------------------
-	-- Lookup the LogLevel state
+	-- Lookup the LogLevel state 
 	-- 0=Off, 1=Normal, 2=Verbose, 3=Debug
 	--------------------------------------------------------------
 	--
 	SELECT @logLevel = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LogLevel')
 
+	--------------------------------------------------------------
+	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
+	-- Assume skipping is enabled if the value is not present
+	--------------------------------------------------------------
+	--
+	SELECT @SkipPeptidesFromReversedProteins = Enabled
+	FROM T_Process_Step_Control
+	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
+	--
+	SELECT @myRowcount = @@rowcount, @myError = @@error
+	
+	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
+	
+	If @SkipPeptidesFromReversedProteins <> 0
+	Begin
+		-- Need to delete entries from the T_Seq_Candidate tables that
+		-- map only to peptides with State_ID = 2 in T_Peptides
+
+		CREATE TABLE #Tmp_LocalSeqsToDelete (
+			Seq_ID_Local int NOT NULL
+		)
+		
+		INSERT INTO #Tmp_LocalSeqsToDelete (Seq_ID_Local)
+		SELECT Seq_ID_Local
+		FROM (	SELECT SC.Seq_ID_Local, COUNT(*) AS Peptide_Count, 
+					   SUM(CASE WHEN State_ID = 2 THEN 1 ELSE 0 END) AS Rev_Peptide_Count
+				FROM T_Peptides Pep INNER JOIN
+					 T_Seq_Candidate_to_Peptide_Map SCPM ON Pep.Peptide_ID = SCPM.Peptide_ID INNER JOIN
+					 T_Seq_Candidates SC ON SCPM.Job = SC.Job AND SCPM.Seq_ID_Local = SC.Seq_ID_Local
+				WHERE Pep.Analysis_ID = @Job
+				GROUP BY SC.Seq_ID_Local
+			  ) SeqCandidateQ
+		WHERE Rev_Peptide_Count > 0 AND
+			  Peptide_Count = Rev_Peptide_Count
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+
+		If @myError <> 0
+		Begin
+			Set @message = 'Error Populating #Tmp_LocalSeqsToDelete for job ' + @jobStr + '; error ' + Convert(varchar(12), @myError)
+			Goto Done
+		End
+		
+		If @myRowcount > 0
+		Begin
+			-- Found sequences to delete
+
+			DELETE T_Seq_Candidate_ModDetails
+			FROM T_Seq_Candidate_ModDetails SCMD INNER JOIN
+				 #Tmp_LocalSeqsToDelete ON SCMD.Seq_ID_Local = #Tmp_LocalSeqsToDelete.Seq_ID_Local
+			WHERE SCMD.Job = @Job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+
+			DELETE T_Seq_Candidate_to_Peptide_Map
+			FROM T_Seq_Candidate_to_Peptide_Map SCPM INNER JOIN
+				 #Tmp_LocalSeqsToDelete ON SCPM.Seq_ID_Local = #Tmp_LocalSeqsToDelete.Seq_ID_Local
+			WHERE SCPM.Job = @Job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+
+			DELETE T_Seq_Candidates
+			FROM T_Seq_Candidates SC INNER JOIN
+				 #Tmp_LocalSeqsToDelete ON SC.Seq_ID_Local = #Tmp_LocalSeqsToDelete.Seq_ID_Local
+			WHERE SC.Job = @Job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+			
+			-- Post a log entry
+			set @message = 'Skipping ' + Convert(varchar(12), @myRowcount) + ' unique peptides for job ' + @jobStr + ' since they map only to reversed or scrambled proteins'
+
+			execute PostLogEntry 'Warning', @message, 'ProcessCandidateSequencesForOneAnalysis'
+			set @message = ''
+			
+		End
+	End
 	
 	------------------------------------------------------------------
 	-- Lookup the number of proteins and residues in Organism DB file (aka the FASTA file)

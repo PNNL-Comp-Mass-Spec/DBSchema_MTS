@@ -34,6 +34,7 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
 **						   - Now posting a log entry for the processed jobs
 **			09/26/2006 mem - Updated to only post a log entry if data is actually deleted
+**			11/27/2006 mem - Now dropping the foreign key to T_Peptide_State_Name
 **    
 *****************************************************/
 (
@@ -124,6 +125,9 @@ AS
 			DROP CONSTRAINT FK_T_Peptides_T_Sequence
 		ALTER TABLE dbo.T_Peptides
 			DROP CONSTRAINT FK_T_Peptides_T_Analysis_Description
+		ALTER TABLE dbo.T_Peptides
+			DROP CONSTRAINT FK_T_Peptides_T_Peptide_State_Name
+			
 		ALTER TABLE dbo.T_Peptide_Filter_Flags
 			DROP CONSTRAINT FK_T_Peptide_Filter_Flags_T_Peptides
 		ALTER TABLE dbo.T_Score_Discriminant
@@ -382,6 +386,9 @@ DefineConstraints:
 			ADD CONSTRAINT FK_T_Peptides_T_Analysis_Description FOREIGN KEY(Analysis_ID) REFERENCES dbo.T_Analysis_Description(Job)
 		ALTER TABLE dbo.T_Peptides WITH NOCHECK
 			ADD CONSTRAINT FK_T_Peptides_T_Sequence FOREIGN KEY(Seq_ID) REFERENCES dbo.T_Sequence(Seq_ID)
+		ALTER TABLE dbo.T_Peptides WITH NOCHECK
+			ADD CONSTRAINT FK_T_Peptides_T_Peptide_State_Name FOREIGN KEY(State_ID) REFERENCES dbo.T_Peptide_State_Name(State_ID)
+			
 		ALTER TABLE dbo.T_Score_Discriminant WITH NOCHECK
 			ADD CONSTRAINT FK_T_Score_Discriminant_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
 		ALTER TABLE dbo.T_Score_Sequest WITH NOCHECK
