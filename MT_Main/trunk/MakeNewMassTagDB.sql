@@ -36,6 +36,8 @@ CREATE PROCEDURE MakeNewMassTagDB
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
 **			11/10/2006 mem - Updated check for valid peptide database to use V_MTS_PT_DBs if the peptide DB is not on this server
 **						   - Removed Sql Server 2000 support
+**			11/29/2006 mem - Updated validation of @peptideDBName to work properly if a list of DBs is provided
+**						   - Added parameter @InfoOnly
 **    
 *****************************************************/
 (
@@ -43,7 +45,7 @@ CREATE PROCEDURE MakeNewMassTagDB
 	@newDBNameType char(1) = 'Q',				-- e.g. P or X or Q
 	@description varchar(256),
 	@campaign varchar(128) = '',				-- e.g. Deinococcus				(Can be a comma separated list)
-	@peptideDBName varchar(128) = '',			-- e.g. PT_Deinococcus_A55
+	@peptideDBName varchar(1024) = '',			-- e.g. PT_Deinococcus_A55		(Can be a comma separated list)
 	@proteinDBName varchar(128) = '',			-- Leave blank If unknown or If using Protein Collections (i.e. using the Protein_Sequences DB)
 	@OrganismDBFileList varchar(1024) = '',		-- Optional, comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
 	@message varchar(512) = '' output,
@@ -51,7 +53,8 @@ CREATE PROCEDURE MakeNewMassTagDB
 	@dbState int = 1,
 	@dataStoragePath varchar(256) = '',			-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
 	@logStoragePath varchar(256) = '',			-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
-	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\MT_Template_01\MT_Template_01.bak'
+	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\MT_Template_01\MT_Template_01.bak',
+	@InfoOnly tinyint = 0						-- Set to 1 to validate the inputs and preview the values that will be used to create the new database
 )
 AS
 	Set nocount on
@@ -64,101 +67,164 @@ AS
 	Set @message = ''
 	Set @newDBName = ''
 	
+	declare @UnknownDBList varchar(1024)
+	declare @FirstPeptideDB varchar(128)
 	declare @organism varchar(64)
 	Set @organism = ''
 	
 	declare @result int
 	declare @hit int
-
+	declare @PeptideDBCount int
+	
 	Declare @sql varchar(1024)
-	Declare @ServerName varchar(128)
-	Set @ServerName = ''
+	Declare @PepDBServer varchar(128)
+	Set @PepDBServer = ''
 
 	Declare @S nvarchar(2048)
 	Declare @Params nvarchar(1024)
 	
+	-- Validate the input parameters
 	If Len(LTrim(RTrim(IsNull(@proteinDBName, '')))) = 0
 		Set @proteinDBName = '(na)'
+		
+	Set @InfoOnly = IsNull(@InfoOnly, 0)
 
 	---------------------------------------------------
-	-- Verify peptide DB and get its organism
+	-- Verify peptide DB (or DBs)
 	---------------------------------------------------
 
-	Set @hit = 0
-	--
-	SELECT @hit = PDB_ID, @organism = PDB_Organism
-	FROM T_Peptide_Database_List
-	WHERE PDB_Name = @peptideDBName
+	CREATE TABLE #TmpPeptideDBs (
+		Peptide_DB_Name varchar(128) NOT NULL,
+		Server_Name varchar(128) NULL
+	)
+	
+	-- Populate #TmpPeptideDBs using @peptideDBName
+	INSERT INTO #TmpPeptideDBs (Peptide_DB_Name)
+	SELECT Value
+	FROM dbo.udfParseDelimitedList(@peptideDBName, ',')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0
+	
+	Set @PeptideDBCount = @myRowCount
+
+	If @myError <> 0 OR @PeptideDBCount = 0
 	Begin
-		Set @message = 'Error verifying peptide database name against T_Peptide_Database_List'
+		Set @message = 'Error determining the Peptide DB(s) in @peptideDBName'
+		If @myError = 0
+			Set @myError = 115
 		goto done
 	End
-	
-	If @hit = 0
+
+	-- Look for matching Peptide DBs on this server
+	UPDATE #TmpPeptideDBs
+	SET  Server_Name = @@ServerName
+	FROM #TmpPeptideDBs INNER JOIN
+		 T_Peptide_Database_List Pep ON #TmpPeptideDBs.Peptide_DB_Name = PDB_Name
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	If @myError <> 0
 	Begin
-		---------------------------------------------------
-		-- Peptide database is not on this server
-		-- See if it is located on another MTS server
-		---------------------------------------------------
+		Set @message = 'Error verifying peptide database name(s) against T_Peptide_Database_List'
+		goto done
+	End
 		
-		SELECT @hit = Peptide_DB_ID, @ServerName = Server_Name
-		FROM V_MTS_PT_DBs
-		WHERE Peptide_DB_Name = @peptideDBName		
+	If @myRowCount < @PeptideDBCount
+	Begin
+		-- One or more entries in #TmpPeptideDBs didn't match with T_Peptide_Database_List
+		-- Try linking into V_MTS_PT_DBs
+
+		UPDATE #TmpPeptideDBs
+		SET  Server_Name = Pep.Server_Name
+		FROM #TmpPeptideDBs INNER JOIN
+			 V_MTS_PT_DBs Pep ON #TmpPeptideDBs.Peptide_DB_Name = Pep.Peptide_DB_Name
+		WHERE #TmpPeptideDBs.Server_Name IS NULL
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
+	
 		--
 		If @myError <> 0
 		Begin
-			Set @message = 'Error verifying peptide database name against V_MTS_PT_DBs'
+			Set @message = 'Error verifying peptide database name(s) against V_MTS_PT_DBs'
 			goto done
 		End
+	End
 
-		if @hit = 0
-		Begin
-			Set @message = 'Peptide database ' + @peptideDBName + ' not found in T_Peptide_Database_List or V_MTS_PT_DBs'
-			Set @myError = 101
-			goto done
-		End
-		Else
-		Begin
-			-- Determine the organism name for this Peptide DB (on server @ServerName)
-			Set @S = ''
-			Set @S = @S + '	SELECT @organism = PDB_Organism'
-			Set @S = @S + '	FROM ' + @ServerName + '.MT_Main.dbo.T_Peptide_Database_List'
-			Set @S = @S + '	WHERE PDB_Name = ''' + @peptideDBName + ''''
+	---------------------------------------------------
+	-- Make sure each entry in #TmpPeptideDBs has the server defined
+	-- Any that do not are unknown DBs
+	---------------------------------------------------
+	--
+	Set @UnknownDBList = ''
+	SELECT @UnknownDBList = @UnknownDBList + Peptide_DB_Name + ','
+	FROM #TmpPeptideDBs
+	WHERE Server_Name IS NULL
+	ORDER BY Peptide_DB_Name
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @myRowCount > 0
+	Begin
+		-- Remove the trailing comma
+		Set @UnknownDBList = Left(@UnknownDBList, Len(@UnknownDBList)-1)
 			
-			-- Params string for sp_ExecuteSql
-			Set @Params = '@organism varchar(128) output'
-			
-			exec sp_executesql @S, @Params, @organism = @organism output
-			
-			If Len(IsNull(@organism, '')) = 0
-			Begin
-				Set @message = 'Organism not defined for Peptide DB ' + @peptideDBName + ' on server ' + @ServerName
-				Set @myError = 102
-				goto done
-			End
-		End			
+		Set @message = 'Peptide database'
+		If @myRowCount > 1
+			Set @message = @message + 's'
+		Set @message = @message + ' not found in T_Peptide_Database_List or V_MTS_PT_DBs: ' + @UnknownDBList
+		Set @myError = 101
+		goto done
+	End
+	
+	---------------------------------------------------
+	-- All of the peptide DBs are valid
+	-- Determine the organism for the first one
+	---------------------------------------------------
+	--
+	SELECT @FirstPeptideDB = Peptide_DB_Name,
+		   @PepDBServer = Server_Name
+	FROM #TmpPeptideDBs INNER JOIN 
+			(SELECT MIN(Peptide_DB_Name) AS Peptide_DB_First
+			FROM #TmpPeptideDBs
+		 ) LookupQ ON #TmpPeptideDBs.Peptide_DB_Name = LookupQ.Peptide_DB_First
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @PepDBServer = @@ServerName
+	Begin
+		SELECT @Organism = PDB_Organism
+		FROM T_Peptide_Database_List
+		WHERE PDB_Name = @FirstPeptideDB
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 	Else
 	Begin
-		If Len(IsNull(@organism, '')) = 0
-		Begin
-			Set @message = 'Organism not defined for Peptide DB ' + @peptideDBName + ' on server ' + @@ServerName
-			Set @myError = 102
-			goto done
-		End
+		Set @S = ''
+		Set @S = @S + '	SELECT @organism = PDB_Organism'
+		Set @S = @S + '	FROM ' + @PepDBServer + '.MT_Main.dbo.T_Peptide_Database_List'
+		Set @S = @S + '	WHERE PDB_Name = ''' + @FirstPeptideDB + ''''
+		
+		-- Params string for sp_ExecuteSql
+		Set @Params = '@organism varchar(128) output'
+		
+		exec sp_executesql @S, @Params, @organism = @organism output
+	End
+
+	If Len(IsNull(@organism, '')) = 0
+	Begin
+		Set @message = 'Organism not defined for Peptide DB ' + @FirstPeptideDB + ' on server ' + @PepDBServer
+		Set @myError = 102
+		goto done
 	End
 	
+	If @InfoOnly <> 0
+		SELECT * FROM #TmpPeptideDBs ORDER BY Peptide_DB_Name
 	
 	---------------------------------------------------
 	-- Verify Protein DB
 	---------------------------------------------------
-
+	--
 	If @proteinDBName <> '(na)'
 	Begin
 		Set @hit = 0
@@ -290,6 +356,20 @@ AS
 		End
 	End
 	
+	If @InfoOnly <> 0
+	Begin
+		SELECT	@newDBNameRoot AS DB_Name_Root, 
+				@newDBNameType AS DB_Name_Type, 
+				@description AS Description, 
+				@Organism AS Organism, 
+				@campaign AS Campaign_List,
+				@peptideDBName AS Peptide_DB_List, 
+				@proteinDBName AS Protein_DB_List, 
+				@OrganismDBFileList AS Organism_DB_or_Protein_Collection_List,
+				@dataStoragePath AS Data_Storage_Path,
+				@logStoragePath AS Log_Storage_Path
+		GOTO Done
+	End
 	
 	---------------------------------------------------
 	-- Get name for new database by

@@ -36,8 +36,12 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
 **			04/12/2006 mem - Now calling ShrinkTempDBLogIfRequired if any DB update lasts more than one minute
 **			07/24/2006 mem - Now passing parameters @PeptideDBList and @ProteinDBList to GetMTAssignedDBs, then checking the update state of all peptide DBs mapped to a given PMT Tag DB
+**			11/28/2006 mem - Added parameter @JobMapUpdateHoldoff
 **    
 *****************************************************/
+(
+	@JobMapUpdateHoldoff int = 18		-- Hours between call to UpdateAnalysisJobToMTDBMap
+)
 As
 	set nocount on
 	
@@ -499,12 +503,14 @@ As
 
 	-----------------------------------------------------------
 	-- Update T_Analysis_Job_to_MT_DB_Map for all MT Databases (with MTL_State < 10)
-	-- However, only call this SP once every 18 hours since it can take a while to run
+	-- However, only call this SP once every @JobMapUpdateHoldoff hours since it can take a while to run
 	-----------------------------------------------------------
 	--
-	declare @PostingTime datetime
+	Declare @PostingTime datetime
 	Set @PostingTime = '1/1/2000'
-	
+
+	Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 18)
+			
 	SELECT TOP 1 @PostingTime = Posting_Time
 	FROM T_Log_Entries
 	WHERE Message LIKE 'UpdateAnalysisJobToMTDBMap Complete%'
@@ -512,31 +518,35 @@ As
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
-	If DateDiff(hour, @PostingTime, GetDate()) >= 18 OR @myRowCount = 0
+	If @JobMapUpdateHoldoff <=0 Or DateDiff(hour, @PostingTime, GetDate()) >= @JobMapUpdateHoldoff OR @myRowCount = 0
 	Begin
 		set @message = 'UpdateAnalysisJobToMTDBMap Starting'
-		execute PostLogEntry 'Normal', @message, 'UpdateAllActiveMTDatabases'
+		If @logVerbosity > 0
+			execute PostLogEntry 'Normal', @message, 'UpdateAllActiveMTDatabases'
 
 		Set @message = ''
 		Exec @result = UpdateAnalysisJobToMTDBMap @message = @message Output
 
 		if @result <> 0
 		begin
-			If @result = -1
+			If @result = 55000
 			Begin
 				set @message = 'Call to UpdateAnalysisJobToMTDBMap aborted'
-				execute PostLogEntry 'Warning', @message, 'UpdateAllActiveMTDatabases'
+				If @logVerbosity > 0
+					execute PostLogEntry 'Warning', @message, 'UpdateAllActiveMTDatabases'
 			End
 			Else
 			Begin
 				set @message = 'Error calling UpdateAnalysisJobToMTDBMap: ' + @message + ' (error code ' + convert(varchar(11), @result) + ')'
-				execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases'
+				If @logVerbosity > 0
+					execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases'
 			End
 		end
 		else
 		begin
 			set @message = 'UpdateAnalysisJobToMTDBMap Complete; ' + @message
-			execute PostLogEntry 'Normal', @message, 'UpdateAllActiveMTDatabases'
+			If @logVerbosity > 0
+				execute PostLogEntry 'Normal', @message, 'UpdateAllActiveMTDatabases'
 		end
 	End
 	

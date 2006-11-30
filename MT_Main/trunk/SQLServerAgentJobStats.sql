@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.SQLServerAgentJobStats
 /****************************************************
 ** 
@@ -18,11 +19,13 @@ CREATE PROCEDURE dbo.SQLServerAgentJobStats
 **	Auth:	mem
 **	Date:	03/10/2006
 **			03/14/2006 mem - Added parameter @JobCategoryExclusionFilter
+**			11/12/2006 mem - Added parameter @IgnoreReplicationJobs
 **    
 *****************************************************/
 (
 	@JobNameExclusionFilter varchar(128) = '%Unpause%',			-- Will ignore jobs with names matching this filter when counting the number of running jobs
 	@JobCategoryExclusionFilter varchar(128) = '%Continuous%',	-- Will ignore jobs with job categories matching this filter when counting the number of running jobs
+	@IgnoreReplicationJobs tinyint = 1,
 	@JobRunningCount int = 0 output
 )
 As
@@ -203,7 +206,8 @@ As
 		WHERE (fj.current_execution_status IN (1,2,3))
 		) LookupQ
 	WHERE NOT [Name] LIKE @JobNameExclusionFilter AND
-		  NOT [Category] LIKE @JobCategoryExclusionFilter
+		  NOT [Category] LIKE @JobCategoryExclusionFilter AND
+		  (@IgnoreReplicationJobs = 0 OR @IgnoreReplicationJobs <> 0 AND NOT [Category] LIKE 'REPL-%')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -215,5 +219,6 @@ Done:
 	DROP TABLE #xp_results
 
 	return @myError
+
 
 GO

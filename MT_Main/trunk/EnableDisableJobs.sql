@@ -15,8 +15,8 @@ CREATE PROCEDURE dbo.EnableDisableJobs
 ** 
 **	Auth:	mem
 **	Date:	01/18/2005
-**			11/21/2006 mem - Now including server name in the status message
-**			11/21/2006 mem - Updated to use 
+**			11/21/2006 mem - Updated to use master.dbo.xp_sqlagent_notify
+**						   - Now including server name in the status message
 **    
 *****************************************************/
 (

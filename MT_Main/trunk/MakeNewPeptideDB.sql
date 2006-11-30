@@ -36,6 +36,7 @@ CREATE PROCEDURE MakeNewPeptideDB
 **			07/27/2006 mem - Updated to use @OrganismDBFileList to also populate Protein_Collection_Filter
 **			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
+**			11/29/2006 mem - Added parameter @InfoOnly
 **    
 *****************************************************/
 (
@@ -43,12 +44,13 @@ CREATE PROCEDURE MakeNewPeptideDB
 	@newDBNameType char(1) = 'A',
 	@description varchar(256) = 'Main database for Borrelia',
 	@organism varchar(64) = 'Borrelia',
-	@OrganismDBFileList varchar(1024) = '',				-- Optional, comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
+	@OrganismDBFileList varchar(1024) = '',		-- Optional, comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
 	@message varchar(512) = '' output,
 	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\PT_Template_01\PT_Template_01.bak',
-	@dataStoragePath varchar(256) = '',					-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
-	@logStoragePath varchar(256) = '',					-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
-	@dbState int = 1
+	@dataStoragePath varchar(256) = '',			-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
+	@logStoragePath varchar(256) = '',			-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
+	@dbState int = 1,
+	@InfoOnly tinyint = 0						-- Set to 1 to validate the inputs and preview the values that will be used to create the new database
 )
 AS
 	Set nocount on
@@ -140,7 +142,19 @@ AS
 			goto done
 		End
 	End
-	
+
+	If @InfoOnly <> 0
+	Begin
+		SELECT	@newDBNameRoot AS DB_Name_Root, 
+				@newDBNameType AS DB_Name_Type, 
+				@description AS Description, 
+				@Organism AS Organism, 
+				@OrganismDBFileList AS Organism_DB_or_Protein_Collection_List,
+				@dataStoragePath AS Data_Storage_Path,
+				@logStoragePath AS Log_Storage_Path
+		GOTO Done
+	End
+
 	
 	---------------------------------------------------
 	-- Get name for new database by

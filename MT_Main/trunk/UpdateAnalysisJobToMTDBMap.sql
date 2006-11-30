@@ -21,6 +21,7 @@ CREATE Procedure UpdateAnalysisJobToMTDBMap
 **			03/10/2006 mem - Changed from T_Analysis_Description.Created to T_Analysis_Description.Created_PMT_Tag_DB
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			09/07/2006 mem - Now populating column Process_State
+**			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
 **    
 *****************************************************/
 (
@@ -279,7 +280,11 @@ As
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled 'PMT_Tag_DB_Update', 'UpdateAnalysisJobToMTDBMap', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 		If @UpdateEnabled = 0
+		Begin
+			-- Note: The calling procedure recognizes error 55000 as "Update Aborted"
+			Set @myError = 55000
 			Goto Done
+		End
 
 	End -- </A>
 

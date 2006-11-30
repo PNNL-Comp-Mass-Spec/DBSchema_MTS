@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE VIEW dbo.V_Current_Activity
 AS
 SELECT TOP 100 PERCENT *
@@ -79,5 +80,6 @@ FROM (SELECT CA.Database_Name AS Name, CA.Type,
           CA.Update_State = T_Update_State_Name.ID
       WHERE (CA.Type = 'MSeq')) M
 ORDER BY Began DESC
+
 
 GO

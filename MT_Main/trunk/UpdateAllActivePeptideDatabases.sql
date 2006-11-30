@@ -38,8 +38,12 @@ CREATE Procedure UpdateAllActivePeptideDatabases
 **			04/12/2006 mem - Now calling ShrinkTempDBLogIfRequired if any DB update lasts more than one minute
 **			07/15/2006 mem - Updated list of database states to process to include state 7
 **						   - Removed support for DB Schema Version 1
+**			11/28/2006 mem - Added parameter @JobMapUpdateHoldoff
 **    
 *****************************************************/
+(
+	@JobMapUpdateHoldoff int = 12		-- Hours between call to UpdateAnalysisJobToMTDBMap
+)
 As	
 	set nocount on
 	
@@ -519,25 +523,52 @@ As
 
 	-----------------------------------------------------------
 	-- Update T_Analysis_Job_to_Peptide_DB_Map for all Peptide Databases (with PDB_State < 10)
+	-- However, only call this SP once every 12 hours since it can take a while to run
 	-----------------------------------------------------------
 	--
-	declare @JobMappingRowCountAdded int
-	Set @JobMappingRowCountAdded = 0
-	Set @message = ''
-	Exec @result = UpdateAnalysisJobToPeptideDBMap @RowCountAdded = @JobMappingRowCountAdded OUTPUT, @message = @message Output
-
-	if @result <> 0 and @logVerbosity > 0
-	begin
-		set @message = 'Error calling UpdateAnalysisJobToPeptideDBMap: ' + @message + ' (error code ' + convert(varchar(11), @result) + ')'
-		execute PostLogEntry 'Error', @message, 'UpdateAllActivePeptideDatabases'
-	end
-	else
-		if @logVerbosity > 1 OR (@logVerbosity > 0 AND @JobMappingRowCountAdded > 0)
-		begin
-			set @message = 'UpdateAnalysisJobToPeptideDBMap; Rows updated: ' + Convert(varchar(11), @JobMappingRowCountAdded)
+	Declare @PostingTime datetime
+	Set @PostingTime = '1/1/2000'
+	
+	Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 12)
+	
+	SELECT TOP 1 @PostingTime = Posting_Time
+	FROM T_Log_Entries
+	WHERE Message LIKE 'UpdateAnalysisJobToPeptideDBMap Complete%'
+	ORDER BY Entry_ID DESC
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @JobMapUpdateHoldoff <=0 Or DateDiff(hour, @PostingTime, GetDate()) >= @JobMapUpdateHoldoff OR @myRowCount = 0
+	Begin
+		set @message = 'UpdateAnalysisJobToPeptideDBMap Starting'
+		If @logVerbosity > 0
 			execute PostLogEntry 'Normal', @message, 'UpdateAllActivePeptideDatabases'
-		end
 
+		Set @message = ''
+		Exec @result = UpdateAnalysisJobToPeptideDBMap @message = @message Output
+
+		if @result <> 0
+		begin
+			If @result = 55000
+			Begin
+				set @message = 'Call to UpdateAnalysisJobToPeptideDBMap aborted'
+				If @logVerbosity > 0
+					execute PostLogEntry 'Warning', @message, 'UpdateAllActivePeptideDatabases'
+			End
+			Else
+			Begin
+				set @message = 'Error calling UpdateAnalysisJobToPeptideDBMap: ' + @message + ' (error code ' + convert(varchar(11), @result) + ')'
+				If @logVerbosity > 0
+					execute PostLogEntry 'Error', @message, 'UpdateAllActivePeptideDatabases'
+			End
+		end
+		else
+		begin
+			set @message = 'UpdateAnalysisJobToPeptideDBMap Complete; ' + @message
+			If @logVerbosity > 0
+				execute PostLogEntry 'Normal', @message, 'UpdateAllActivePeptideDatabases'
+		end
+	End
 
 	-----------------------------------------------------------
 	-- log successful completion of master update process

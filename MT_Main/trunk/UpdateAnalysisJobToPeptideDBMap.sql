@@ -21,6 +21,7 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 **						   - Added support for Peptide DBs with @DBSchemaVersion < 2
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			09/07/2006 mem - Now populating column Process_State
+**			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
 **    
 *****************************************************/
 (
@@ -250,7 +251,11 @@ As
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled 'Peptide_DB_Update', 'UpdateAnalysisJobToPeptideDBMap', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 		If @UpdateEnabled = 0
+		Begin
+			-- Note: The calling procedure recognizes error 55000 as "Update Aborted"
+			Set @myError = 55000
 			Goto Done
+		End
 
 	End -- </A>
 
