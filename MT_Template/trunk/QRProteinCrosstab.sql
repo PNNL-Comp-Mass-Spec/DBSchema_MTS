@@ -15,7 +15,6 @@ CREATE Procedure dbo.QRProteinCrosstab
 **
 **  Auth:	mem
 **	Date:	07/30/2003
-**
 **			08/08/2003
 **			08/14/2003
 **			08/15/2003
@@ -26,6 +25,7 @@ CREATE Procedure dbo.QRProteinCrosstab
 **			05/24/2005 mem - Updated protein description linking method
 **			09/22/2005 mem - Now limiting the data returned when @SeparateReplicateDataIDs=1 to only include those proteins that would be seen if @SeparateReplicateDataIDs=0
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
+**			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **
 ****************************************************/
 (
@@ -33,17 +33,22 @@ CREATE Procedure dbo.QRProteinCrosstab
 	@SeparateReplicateDataIDs tinyint = 1,				-- For quantitation ID's with replicates, separates the resultant crosstab table into a separate column for each replicate
 	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return; valid columns include Abundance_Average, MassTagCountUniqueObserved, MassTagCountUsedForAbundanceAvg, FractionScansMatchingSingleMassTag, etc.
 	@AggregateColName varchar(128) = 'AvgAbu',
-	@AverageAcrossColumns tinyint = 0					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
+	@SortMode tinyint=0									-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 )
 AS
 
 	Set NoCount On
 
+	Declare @myError int
+	Declare @myRowcount int
+	Set @myRowcount = 0
+	Set @myError = 0
+
 	Declare @sql varchar(8000)
 
 	Declare @CrossTabSql varchar(7000),			-- Note: This cannot be any larger than 7000 since we add it plus some other text to @sql
 			@CrossTabSqlGroupBy varchar(8000),
-			@QuantitationIDListSql varchar(1024),
 			@ColumnListToShow varchar(700),
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
@@ -54,16 +59,26 @@ AS
 	Set @QuantitationIDListClean = ''
 
 	--------------------------------------------------------------
+	-- Create a temporary table to hold the QIDs and sorting info
+	--------------------------------------------------------------
+			
+	CREATE TABLE #TmpQIDSortInfo (
+		SortKey int identity (1,1),
+		QID int NOT NULL)
+
+	--------------------------------------------------------------
 	-- Call QRGenerateCrosstabSql to populate CrossTabSql and QuantitationIDListSql
+	-- This SP also populates @ModsPresent
 	--------------------------------------------------------------
 	Exec QRGenerateCrosstabSql	@QuantitationIDList, 
 								@SourceColName,
 								@AggregateColName,
 								@AverageAcrossColumns,				-- When @AverageAcrossColumns = 1, then set @NullWhenMissing = 1
 								@SeparateReplicateDataIDs,
+								@SortMode,
+								@SkipCrossTabSqlGeneration = 0,
 								@CrossTabSql = @CrossTabSql Output, 
 								@CrossTabSqlGroupBy = @CrossTabSqlGroupBy Output,
-								@QuantitationIDListSql = @QuantitationIDListSql Output,
 								@ERValuesPresent = @ERValuesPresent Output,
 								@ModsPresent = @ModsPresent Output,
 								@QuantitationIDListClean = @QuantitationIDListClean output
@@ -76,9 +91,9 @@ AS
 	Set @sql = @sql + ' SELECT SubQ.Ref_ID,T_Proteins.Reference,'
 	Set @sql = @sql + ' T_Proteins.Description As Protein_Description,'
 	Set @sql = @sql + @CrossTabSql
-	Set @sql = @sql + ' FROM (SELECT Quantitation_ID, Ref_ID, ' + @SourceColName
-	Set @sql = @sql +       ' FROM   T_Quantitation_Results '
-	Set @sql = @sql +       ' WHERE  Quantitation_ID IN (' + @QuantitationIDListSql + ')'
+	Set @sql = @sql + ' FROM (SELECT QR.Quantitation_ID, QR.Ref_ID, QR.' + @SourceColName
+	Set @sql = @sql +       ' FROM  #TmpQIDSortInfo INNER JOIN '
+	Set @sql = @sql +             ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID'
 	Set @sql = @sql +       ') AS SubQ'
 
 	If @SeparateReplicateDataIDs <> 0 And Len(@QuantitationIDListClean) > 0
@@ -93,20 +108,25 @@ AS
 	Set @sql = @sql + ' GROUP BY SubQ.Ref_ID, T_Proteins.Reference, T_Proteins.Description'
 
 	If @AverageAcrossColumns = 0
-	  Begin
+	Begin
 		Set @sql = @sql + ' ORDER BY T_Proteins.Reference'
 		Exec (@sql)
-	  End
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
 	Else
-	  Begin
+	Begin
 		Set @ColumnListToShow = 'Ref_ID, Reference, Protein_Description '
 		
 		-- Note: @CrossTabSqlGroupBy and @Sql could be quite long
 		--       Thus, we'll concatenate during the Exec statement
 		Exec ('SELECT ' + @ColumnListToShow + ',' + @CrossTabSqlGroupBy + ' FROM (' + @Sql + ') AS OuterQuery' + ' GROUP BY ' + @ColumnListToShow + ' ORDER BY ' + @AggregateColName + ' DESC, Reference')
-	  End
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
 
-	Return @@Error
+Done:
+	Return @myError
 
 
 GO

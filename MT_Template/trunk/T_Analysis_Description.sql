@@ -39,8 +39,8 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Labelling] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Created_Peptide_DB] [datetime] NOT NULL,
 	[Created_PMT_Tag_DB] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Created_PMT_Tag_DB]  DEFAULT (getdate()),
-	[State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_State]  DEFAULT (1),
-	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT (5),
+	[State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_State]  DEFAULT ((1)),
+	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)),
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,
@@ -53,7 +53,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -63,7 +63,7 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Analysis_Description_Job_Dataset_ID] ON [
 (
 	[Job] ASC,
 	[Dataset_ID] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Analysis_Description_Organism_DB_Name] ******/
@@ -71,7 +71,7 @@ CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Organism_DB_Name] ON [dbo].
 (
 	[Job] ASC,
 	[Organism_DB_Name] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
 /****** Object:  Trigger [dbo].[trig_i_AnalysisDescription] ******/
@@ -80,7 +80,6 @@ GO
 
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE Trigger trig_i_AnalysisDescription on dbo.T_Analysis_Description
 For Insert
@@ -92,7 +91,6 @@ AS
 	SELECT 1, inserted.Job, inserted.State, 0, GetDate()
 	FROM inserted
 
-
 GO
 
 /****** Object:  Trigger [dbo].[trig_u_AnalysisDescription] ******/
@@ -101,7 +99,6 @@ GO
 
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE Trigger trig_u_AnalysisDescription on dbo.T_Analysis_Description
 For Update
@@ -113,7 +110,6 @@ AS
 		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
 		SELECT 1, inserted.Job, inserted.State, deleted.State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
-
 
 GO
 ALTER TABLE [dbo].[T_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Analysis_State_Name] FOREIGN KEY([State])

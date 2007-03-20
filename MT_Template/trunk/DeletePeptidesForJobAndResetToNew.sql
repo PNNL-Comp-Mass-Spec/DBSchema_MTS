@@ -1,9 +1,8 @@
 /****** Object:  StoredProcedure [dbo].[DeletePeptidesForJobAndResetToNew] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
-
 CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
@@ -24,6 +23,7 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
 **						   - Now posting a log entry for the processed jobs
 **			09/09/2006 mem - Updated to post a log entry only if rows were deleted from T_Peptides
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListToDelete
 **    
 *****************************************************/
 (
@@ -57,7 +57,7 @@ AS
 	-- Populate #JobListToDelete with the jobs in @JobListToDelete
 	INSERT INTO #JobListToDelete (Job)
 	SELECT value
-	FROM dbo.udfParseDelimitedList(@JobListToDelete, ',')
+	FROM dbo.udfParseDelimitedIntegerList(@JobListToDelete, ',')
 	ORDER BY value
 	
 	-- Look for jobs not present in T_Analysis_Description
@@ -172,7 +172,7 @@ AS
 		--
 		If @myError <> 0 Goto Done
 		
-		Set @message = @message + '; Job states have been reset to 10'
+		Set @message = @message + '; Job states have been reset to 1'
 	End
 
 	If @DataDeleted <> 0

@@ -39,16 +39,22 @@ CREATE Procedure dbo.QRSummary
 **			03/13/2006 mem - Now sorting on Sample Name rather than QID
 **			07/11/2006 mem - Now displaying the list of QIDs in the same order as defined in @QuantitationIDList (by default); set parameter @SortBySampleName to 1 to sort the list by sample name
 **			09/14/2006 mem - Switched from SELECT DISTINCT to SELECT ... GROUP BY when populating @ExperimentList
+**			11/29/2006 mem - Replaced parameter @SortBySampleName with parameter @SortMode, which affects the order in which the results are returned
 **
 ****************************************************/
 (
 	@QuantitationIDList varchar(1024),			-- Comma separated list of Quantitation ID's
 	@VerboseColumnOutput tinyint = 1,			-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
-	@SortBySampleName tinyint = 0				-- Set to 1 to sort by sample name; otherwise, retains order given in @QuantitationIDList
+	@SortMode tinyint=2							-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 )
 AS 
 
 	Set NoCount On
+
+	Declare @myError int
+	Declare @myRowcount int
+	Set @myRowcount = 0
+	Set @myError = 0
 
 	Declare @WorkingList varchar(1024),
 			@JobList varchar(1024),
@@ -64,8 +70,6 @@ AS
 			@ScanStartMin int,
 			@ScanEndMax int
 	
-	Declare @Sql varchar(2048)	
-
 	-- For each QuantitationID in @QuantitationIDList, determine the number of MDID's that were used
 	-- If the MDID count is 1, then use a simple Select query
 	-- If the MDID count is >1, then must use a Group By query
@@ -127,7 +131,9 @@ AS
 			WHERE	QD.Quantitation_ID = Convert(int, @QuantitationID)
 			ORDER BY MD_Reference_Job
 			--
-			Set @JobListCount = @@RowCount
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			Set @JobListCount = @myRowCount
 			
 			If @JobListCount <= 0
 			Begin
@@ -188,6 +194,8 @@ AS
 				    T_FTICR_Analysis_Description AS FAD ON 
 				    MMD.MD_Reference_Job = FAD.Job
 				WHERE (QD.Quantitation_ID = @QuantitationID)
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
 			  End
 			Else
 			  Begin
@@ -208,6 +216,8 @@ AS
 				WHERE	QD.Quantitation_ID = Convert(int, @QuantitationID)
 				GROUP BY FAD.Experiment
 				ORDER BY FAD.Experiment
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
 
 				-- Remove the leading comma
 				IF Len(@ExperimentList) > 0
@@ -230,7 +240,9 @@ AS
 					    T_FTICR_Analysis_Description AS FAD ON 
 					    MMD.MD_Reference_Job = FAD.Job
 				WHERE	QD.Quantitation_ID = Convert(int, @QuantitationID)
-								
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+
 				
 				INSERT INTO #QIDSummary
 					(	[Quantitation ID], [Sample Name], [Comment], [Experiments], 
@@ -279,6 +291,8 @@ AS
 				    QD.UniqueMassTagCount,
 				    QD.UniqueInternalStdCount,
 					QD.ReplicateNormalizationStats
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
 			  End
 		    --End If
 		    
@@ -326,6 +340,8 @@ AS
 							LEN(MT.Peptide) >= QD.Minimum_Peptide_Length
 						GROUP BY LookupQ.MD_ID
 					) OuterQ
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
 
 				/*			
 				** Old Method: Faster, but doesn't account for filters that may have been applied
@@ -360,37 +376,93 @@ AS
 		Set @CommaLoc = CharIndex(',', @WorkingList)
 	END
 
-	Set @Sql = ''
+	--------------------------------------------------------------
+	-- Create two temporary tables
+	--------------------------------------------------------------
+	
+	CREATE TABLE #TmpQIDValues (
+		UniqueRowID int identity(1,1),
+		QID int NOT NULL)
+	
+	CREATE TABLE #TmpQIDSortInfo (
+		SortKey int identity (1,1),
+		QID int NOT NULL)
+
+	--------------------------------------------------------------
+	-- Populate #TmpQIDValues with the values in @QuantitationIDList
+	-- If @QuantitationIDList contains any non-numeric values, then this will throw an error
+	--------------------------------------------------------------
+	--
+	INSERT INTO #TmpQIDValues (QID)
+	SELECT [Quantitation ID]
+	FROM #QIDSummary
+	ORDER BY UniqueRowID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @myError <> 0
+	Begin
+		Goto Done
+	End
+
+	If @myRowCount = 0
+	Begin
+		-- No Data Found
+		Set @myError = 50001
+		Goto Done
+	End
+	
+	--------------------------------------------------------------
+	-- Populate #TmpQIDSortInfo based on @SortMode (using #TmpQIDValues)
+	--------------------------------------------------------------
+	Exec @myError = QRDetermineSortOrder @SortMode
+	
 	If @VerboseColumnOutput <> 0
 	Begin
-		Set @Sql = @Sql + ' SELECT *'
-		Set @Sql = @Sql + ' FROM #QIDSummary'
+		SELECT 	[Quantitation ID],
+				[Sample Name], [Comment], [Experiments],
+				[Jobs], [MDIDs],
+				[Results Folder Path],
+				[Fraction Highest Abu To Use],
+				[Feature (UMC) Count],
+				[Feature Count With Hits], [Percent Features With Hits],
+				[Unique PMT Tag Count Matched], [Unique Internal Std Count Matched],
+				[Comparison PMT Tag Count],
+				[MD UMC TolerancePPM],
+				[MD NetAdj NET Min], [MD NetAdj NET Max],
+				[MD MMA TolerancePPM], [MD NET Tolerance],
+				[Refine Mass Cal PPMShift],
+				[Total_Scans_Avg], [Scan_Start], [Scan_End],
+				[ReplicateNormalizationStats]
+		FROM #QIDSummary INNER JOIN 
+			 #TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+		ORDER BY #TmpQIDSortInfo.SortKey
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 	Else
 	Begin
-		Set @Sql = @Sql + ' SELECT 	[Quantitation ID],'
-		Set @Sql = @Sql +   ' [Sample Name], [Experiments],'
-		Set @Sql = @Sql +   ' [Jobs], [MDIDs],'
-		Set @Sql = @Sql +   ' [Feature (UMC) Count],'
-		Set @Sql = @Sql +   ' [Feature Count With Hits],'
-		Set @Sql = @Sql +   ' [Unique PMT Tag Count Matched],'
-		Set @Sql = @Sql +   ' [Unique Internal Std Count Matched],'
-		Set @Sql = @Sql +   ' [Comparison PMT Tag Count],'
-		Set @Sql = @Sql +   ' [Total_Scans_Avg],'
-		Set @Sql = @Sql +   ' [MD NetAdj NET Min], [MD NetAdj NET Max],'
-		Set @Sql = @Sql +   ' [Refine Mass Cal PPMShift]'
-		Set @Sql = @Sql + ' FROM #QIDSummary'
+		SELECT 	[Quantitation ID],
+				[Sample Name], [Experiments],
+				[Jobs], [MDIDs],
+				[Feature (UMC) Count],
+				[Feature Count With Hits],
+				[Unique PMT Tag Count Matched],
+				[Unique Internal Std Count Matched],
+				[Comparison PMT Tag Count],
+				[Total_Scans_Avg],
+				[MD NetAdj NET Min], [MD NetAdj NET Max],
+				[Refine Mass Cal PPMShift]
+		FROM #QIDSummary INNER JOIN 
+			 #TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+		ORDER BY #TmpQIDSortInfo.SortKey
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
-	
-	If IsNull(@SortBySampleName, 0) = 0
-		Set @Sql = @Sql + ' ORDER BY UniqueRowID'
-	Else
-		Set @Sql = @Sql + ' ORDER BY [Sample Name] + '' '' + Convert(varchar(12), [Quantitation ID])'
-	
-	Exec (@Sql)
-	
+
+Done:
 	--
-	Return @@Error
+	Return @myError
 
 
 GO

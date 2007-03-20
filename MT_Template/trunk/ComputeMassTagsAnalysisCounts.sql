@@ -26,6 +26,7 @@ CREATE PROCEDURE dbo.ComputeMassTagsAnalysisCounts
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/10/2006 mem - Updated to support Peptide Prophet values
 **			09/06/2006 mem - Now posting a log entry on success
+**			02/07/2007 mem - Switched to using sp_executesql
 **    
 *****************************************************/
 (
@@ -72,36 +73,41 @@ AS
 		SET Number_Of_Peptides = IsNull(StatsQ.ObservationCount, 0),
 			High_Normalized_Score = IsNull(StatsQ.Normalized_Score_Max, 0),
 			High_Discriminant_Score = IsNull(StatsQ.Discriminant_Score_Max, 0),
-			High_Peptide_Prophet_Probability = IsNull(StatsQ.Peptide_Prophet_Probability_Max, 0)
+			High_Peptide_Prophet_Probability = IsNull(StatsQ.Peptide_Prophet_Probability_Max, 0),
+			Min_Log_EValue = IsNull(StatsQ.Log_Evalue_Min, 0)
 		FROM T_Mass_Tags LEFT OUTER JOIN
 			(
 				SELECT	Mass_Tag_ID, 
 						COUNT(*) AS ObservationCount, 
 						MAX(Normalized_Score_Max) AS Normalized_Score_Max,
 						MAX(Discriminant_Score_Max) AS Discriminant_Score_Max,
-						MAX(Peptide_Prophet_Probability_Max) AS Peptide_Prophet_Probability_Max
+						MAX(Peptide_Prophet_Probability_Max) AS Peptide_Prophet_Probability_Max,
+						MIN(Log_Evalue_Min) AS Log_Evalue_Min
 				FROM (	SELECT Dataset_ID, Mass_Tag_ID, Scan_Number,
 							   MAX(Normalized_Score) AS Normalized_Score_Max, 
 							   MAX(Discriminant_Score) AS Discriminant_Score_Max,
-								MAX(Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Max
+							   MAX(Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Max,
+							   MIN(Log_Evalue) AS Log_Evalue_Min
 						FROM (	SELECT	TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, 
 										ISNULL(SS.XCorr, 0) AS Normalized_Score,
 										ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,
-										ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability
+										ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+										0 AS Log_Evalue
 								FROM T_Peptides AS P INNER JOIN 
-									T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN 
-									T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID LEFT OUTER JOIN 
-									T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID
+									 T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN 
+									 T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID LEFT OUTER JOIN 
+									 T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID
 								WHERE TAD.ResultType = 'Peptide_Hit'
 								UNION
 								SELECT	TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, 
 										ISNULL(X.Normalized_Score, 0) AS Normalized_Score,
 										ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,
-										ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability
+										ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+										ISNULL(X.Log_Evalue, 0) AS Log_Evalue
 								FROM T_Peptides AS P INNER JOIN 
-									T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN 
-									T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID LEFT OUTER JOIN 
-									T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID
+									 T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN 
+									 T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID LEFT OUTER JOIN 
+									 T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID
 								WHERE TAD.ResultType = 'XT_Peptide_Hit'
 							 ) AS SourceQ						
 						GROUP BY Dataset_ID, Mass_Tag_ID, Scan_Number
@@ -134,7 +140,7 @@ AS
 	-----------------------------------------------------------
 	--
 
-	Declare @Sql varchar(4000)
+	Declare @Sql nvarchar(max)
 	Declare @ConfigValue varchar(128)
 	Declare @FilterSetID int
 	
@@ -333,7 +339,7 @@ AS
 					Set @Sql = @sql +   ' IsNull(MT.Multiple_Proteins, 0) + 1 ' + @ProteinCountComparison + Convert(varchar(11), @ProteinCountThreshold)
 					Set @Sql = @Sql + ' GROUP BY MT.Mass_Tag_ID, Dataset_ID, Scan_Number'
 
-					Exec (@Sql)
+					Exec sp_executesql @Sql
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
 				End -- </d>
@@ -382,7 +388,7 @@ AS
 					Set @Sql = @sql +   ' IsNull(MT.Multiple_Proteins, 0) + 1 ' + @ProteinCountComparison + Convert(varchar(11), @ProteinCountThreshold)
 					Set @Sql = @Sql + ' GROUP BY MT.Mass_Tag_ID, Dataset_ID, Scan_Number'
 
-					Exec (@Sql)
+					Exec sp_executesql @Sql
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
 				End -- </d>

@@ -35,12 +35,14 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			03/13/2006 mem - Now calling UpdateCachedHistograms
 **			07/10/2006 mem - Added support for Peptide Prophet scores
 **			08/26/2006 mem - Added support for RankScore (aka RankXc for Sequest); currently only used with Sequest results
+**			02/07/2007 mem - Added parameter @PreviewSql and switched to using sp_executesql
 **
 ****************************************************/
 (
 	@message varchar(255)='' Output,
-	@infoOnly int = 0,
-	@ResetScoresToZero tinyint = 1			-- By default, will reset all of the PMT_Quality_Scores to 0 before applying the above filter; set to 0 to not reset the scores
+	@InfoOnly tinyint = 0,
+	@ResetScoresToZero tinyint = 1,			-- By default, will reset all of the PMT_Quality_Scores to 0 before applying the above filter; set to 0 to not reset the scores
+	@PreviewSql tinyint = 0
 )
 As
 	Set NoCount On
@@ -60,7 +62,7 @@ As
 			@FilterSetsEvaluated int
 
 	Declare @WarningMessage varchar(75),
-			@Sql varchar(4000),
+			@Sql nvarchar(max),
 			@ObsSql varchar(64),
 			@FilterSetList varchar(128)
 			
@@ -72,6 +74,15 @@ As
 	declare @ResultType varchar(64)
 	Set @ResultType = 'Unknown'
 
+	-----------------------------------------------
+	-- Validate the inputs
+	-----------------------------------------------
+	Set @InfoOnly = IsNull(@InfoOnly, 0)
+	Set @PreviewSql = IsNull(@PreviewSql, 0)
+	
+	If @PreviewSql <> 0
+		Set @InfoOnly = 1
+		
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types
 	-----------------------------------------------
@@ -85,7 +96,7 @@ As
 
 	-----------------------------------------------------------
 	-- Create a temporary table to store the new PMT Quality Score values
-	-- Necessary if @infoOnly = 1, and also useful to reduce the total additions to the database's transaction log
+	-- Necessary if @InfoOnly = 1, and also useful to reduce the total additions to the database's transaction log
 	-----------------------------------------------------------
 
 	CREATE TABLE #NewMassTagScores (
@@ -95,31 +106,34 @@ As
 
 	CREATE UNIQUE INDEX #IX_NewMassTagScores ON #NewMassTagScores (Mass_Tag_ID ASC)
 	
-	if IsNull(@ResetScoresToZero, 0) <> 0
-	 Begin
-		INSERT INTO #NewMassTagScores
-		SELECT Mass_Tag_ID, 0
-		FROM T_Mass_Tags
-		WHERE Internal_Standard_Only = 0
-		ORDER BY Mass_Tag_ID
-	 End
-	Else
-	 Begin
-		INSERT INTO #NewMassTagScores
-		SELECT Mass_Tag_ID, IsNull(PMT_Quality_Score, 0) AS PMT_Quality_Score
-		FROM T_Mass_Tags
-		WHERE Internal_Standard_Only = 0
-		ORDER BY Mass_Tag_ID
-	 End
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
-	--
-	If @myError <> 0
+	If @PreviewSql = 0
 	Begin
-		Set @Message = 'Error populating #NewMassTagScores'
-		Goto Done
+		If IsNull(@ResetScoresToZero, 0) <> 0
+		Begin
+			INSERT INTO #NewMassTagScores
+			SELECT Mass_Tag_ID, 0
+			FROM T_Mass_Tags
+			WHERE Internal_Standard_Only = 0
+			ORDER BY Mass_Tag_ID
+		End
+		Else
+		Begin
+			INSERT INTO #NewMassTagScores
+			SELECT Mass_Tag_ID, IsNull(PMT_Quality_Score, 0) AS PMT_Quality_Score
+			FROM T_Mass_Tags
+			WHERE Internal_Standard_Only = 0
+			ORDER BY Mass_Tag_ID
+		End
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+		--
+		If @myError <> 0
+		Begin
+			Set @Message = 'Error populating #NewMassTagScores'
+			Goto Done
+		End
 	End
-	 
+		 
 	-----------------------------------------------------------
 	-- Create the Peptide Stats temporary table
 	-----------------------------------------------------------
@@ -488,7 +502,7 @@ As
 							-- Do not consider DeltaCN or RankScore for XTandem results
 							If @SavedResultType <> @ResultType OR
 							   @SavedDeltaCn2Comparison <> @DeltaCn2Comparison OR @SavedDeltaCn2Threshold <> @DeltaCn2Threshold OR
-							   @SavedExperimentFilter <> @FilterSetExperimentFilter OR
+							 @SavedExperimentFilter <> @FilterSetExperimentFilter OR
 							   @SavedPeptideStatsRowCount = 0
 							Set @PopulatePeptideStats = 1
 						End
@@ -625,7 +639,10 @@ As
 							Set @Sql = @sql +   ' StatsQ.Charge_State'
 							Set @Sql = @sql + ' ORDER BY MT.Mass_Tag_ID'
 
-							Exec (@Sql)
+							if @PreviewSql <> 0
+								Print @Sql
+							else
+								Exec sp_executesql @Sql
 							--
 							SELECT @myError = @@error, @SavedPeptideStatsRowCount = @@RowCount
 							--
@@ -680,10 +697,13 @@ As
 						Set @Sql = @sql +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold)
 						Set @Sql = @Sql +   ' ) AS CompareQ'
 						Set @Sql = @Sql +   ' WHERE #NewMassTagScores.Mass_Tag_ID = CompareQ.Mass_Tag_ID AND '
-						Set @Sql = @Sql +           Convert(varchar(11), @FilterSetScore) + ' > PMT_Quality_Score'
+						Set @Sql = @Sql +     Convert(varchar(11), @FilterSetScore) + ' > PMT_Quality_Score'
 
 						-- Execute the Sql to update the PMT_Quality_Score column
-						Exec (@Sql)
+						if @PreviewSql <> 0
+							Print @Sql
+						else
+							Exec sp_executesql @Sql
 						--
 						SELECT @myError = @@error, @myRowCount = @@RowCount
 						
@@ -759,18 +779,26 @@ As
 	-- Calculate some stats
 	-----------------------------------------------------------
 	
-	SELECT @MassTagCountNonZero = COUNT(Mass_Tag_ID)
-	FROM #NewMassTagScores
-	WHERE PMT_Quality_Score > 0
+	If @PreviewSql = 0
+	Begin
+		SELECT @MassTagCountNonZero = COUNT(Mass_Tag_ID)
+		FROM #NewMassTagScores
+		WHERE PMT_Quality_Score > 0
 
-	SELECT @MassTagCountZero = COUNT(Mass_Tag_ID)
-	FROM #NewMassTagScores
-	WHERE PMT_Quality_Score <=0
-	
-	If IsNull(@infoOnly,0) <> 0
-		Set @message = 'Preview of update to PMT_Quality_Score values: '
+		SELECT @MassTagCountZero = COUNT(Mass_Tag_ID)
+		FROM #NewMassTagScores
+		WHERE PMT_Quality_Score <=0
+	End
+		
+	If @InfoOnly <> 0
+	Begin
+		If @PreviewSql <> 0
+			Set @message = 'Preview of SQL for updating PMT_Quality_Score values'
+		Else
+			Set @message = 'Preview of update to PMT_Quality_Score values: '
+	End
 	Else
-	 Begin
+	Begin
 
 		-----------------------------------------------------------
 		-- Store the newly computed scores
@@ -810,10 +838,13 @@ As
 		-----------------------------------------------------------
 		Exec UpdateCachedHistograms @HistogramModeFilter = 4, @InvalidateButDoNotProcess=1
 		
-	 End
+	End
 	
-	Set @message = @message + convert(varchar(11), @MassTagCountNonZero) + ' mass tags have scores > 0; '
-	Set @message = @message + convert(varchar(11), @MassTagCountZero) + ' mass tags have scores <= 0'
+	If @PreviewSql = 0
+	Begin
+		Set @message = @message + convert(varchar(11), @MassTagCountNonZero) + ' mass tags have scores > 0; '
+		Set @message = @message + convert(varchar(11), @MassTagCountZero) + ' mass tags have scores <= 0'
+	End
 	Set @message = @message + '; ' + @FilterSetList
 	
 	If Len(@WarningMessage) > 0
@@ -825,7 +856,8 @@ As
 	-----------------------------------------------
 	-- Post @message to the log
 	-----------------------------------------------
-	EXEC PostLogEntry 'Normal', @message, 'ComputePMTQualityScore'
+	If @InfoOnly = 0
+		EXEC PostLogEntry 'Normal', @message, 'ComputePMTQualityScore'
 
 Done:	
 	DROP INDEX #PeptideStats.#IX_PeptideStats

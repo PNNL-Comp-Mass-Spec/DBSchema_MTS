@@ -39,6 +39,9 @@ CREATE PROCEDURE dbo.QRRetrievePeptidesMultiQID
 **			01/31/2006 mem - Now returning 'Unknown' if the Cleavage_State value is null
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			09/07/2006 mem - Now returning column High_Peptide_Prophet_Probability
+**			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
+**						   - Now using @SkipCrossTabSqlGeneration=1 when calling QRGenerateCrosstabSql
+**			12/06/2006 mem - No longer using @SortMode if @IncludeRefColumn = 0 (see explanation regarding #TmpQIDSortInfo.SortKey and SELECT DISTINCT)
 **
 ****************************************************/
 (
@@ -47,14 +50,20 @@ CREATE PROCEDURE dbo.QRRetrievePeptidesMultiQID
 	@IncludeRefColumn tinyint = 1,
 	@Description varchar(32)='' OUTPUT,
 	@VerboseColumnOutput tinyint = 1,					-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
-	@IncludePrefixAndSuffixResidues tinyint = 0			-- The query is slower if this is enabled
+	@IncludePrefixAndSuffixResidues tinyint = 0,		-- The query is slower if this is enabled
+	@SortMode tinyint=2									-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 )
 AS 
 
 	Set NoCount On
 
+	Declare @myError int
+	Declare @myRowcount int
+	Set @myRowcount = 0
+	Set @myError = 0
+
 	Declare @QRDsql varchar(2000),
-			@sql varchar(8000),
+			@Sql varchar(8000),
 			@ORFColumnSql varchar(2048),
 			@ReplicateAndFractionSql varchar(1024)
 
@@ -69,12 +78,9 @@ AS
 			@ModsPresent tinyint,
 			@DescriptionLong varchar(1024)
 
-	Declare @CrossTabSql varchar(7000),
-			@CrossTabSqlGroupBy varchar(7000),
-			@QuantitationIDListSql varchar(1024),
-			@SourceColName varchar(128),
+	Declare @SourceColName varchar(128),
 			@AggregateColName varchar(128),
-			@NullWhenMissing tinyint
+			@AverageAcrossColumnsEnabled tinyint
 
 	Set @HighestReplicateCount = 0
 	Set @HighestFractionCount = 0
@@ -82,12 +88,19 @@ AS
 
 	Set @SourceColName = 'MT_Abundance'		-- The SourceColName doesn't really matter, but must be defined
 	Set @AggregateColName = 'AvgAbu'		-- The AggregateColName doesn't really matter, but must be defined
-	Set @NullWhenMissing = 0
+	Set @AverageAcrossColumnsEnabled = 0
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
 
-	Declare @WorkingList varchar(1024),
-			@CommaLoc int
+	Declare @continue int
+
+	--------------------------------------------------------------
+	-- Create a temporary table to hold the QIDs and sorting info
+	--------------------------------------------------------------
+			
+	CREATE TABLE #TmpQIDSortInfo (
+		SortKey int identity (1,1),
+		QID int NOT NULL)
 
 	--------------------------------------------------------------
 	-- Call QRGenerateCrosstabSql to populate CrossTabSql and QuantitationIDListSql
@@ -95,43 +108,63 @@ AS
 	--  if any of the QID's have peptides with modifications
 	-- We only need QuantitationIDListSql for this stored procedure, but QRGenerateCrosstabSql returns it and CrossTabSql
 	-- We have to define @SourceColName and a few other variables before calling the SP
+	-- This SP also populates the #TmpQIDSortInfo temporary table using @QuantitationIDList
 	--------------------------------------------------------------
-	Exec QRGenerateCrosstabSql	@QuantitationIDList, 
+	Exec @myError = QRGenerateCrosstabSql	
+								@QuantitationIDList, 
 								@SourceColName,
 								@AggregateColName,
-								@NullWhenMissing,
+								@AverageAcrossColumnsEnabled,
 								@SeparateReplicateDataIDs,
-								@CrossTabSql = @CrossTabSql Output, 
-								@CrossTabSqlGroupBy = @CrossTabSqlGroupBy Output,
-								@QuantitationIDListSql = @QuantitationIDListSql Output,
+								@SortMode,
+								@SkipCrossTabSqlGeneration = 1,
 								@ERValuesPresent = @ERValuesPresent Output, 
 								@ModsPresent = @ModsPresent Output
 
+	If @myError <> 0
+	Begin
+		print 'Error calling QRGenerateCrosstabSql: ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
+
+	--------------------------------------------------------------
 	-- Determine if any of the QID's have multiple replicates, fractions, or TopLevelFractions
-	-- We have to step through the values in @QuantitationIDListSql to do this
-	Set @WorkingList = @QuantitationIDListSql + ','
-	Set @CommaLoc = CharIndex(',', @WorkingList)
-	WHILE @CommaLoc > 1
+	-- We have to step through the values in #TmpQIDSortInfo
+	--------------------------------------------------------------
+	--
+	SELECT @QuantitationID = MIN(QID)-1
+	FROM #TmpQIDSortInfo
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	Set @continue = 1
+	WHILE @continue = 1
 	BEGIN
+		SELECT TOP 1 @QuantitationID = QID
+		FROM #TmpQIDSortInfo
+		WHERE QID > @QuantitationID
+		ORDER BY QID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		If @myRowCount <> 1
+			Set @continue = 0
+		Else
+		Begin
+			-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
+			-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
+			-- the count variable greater than 1 so that the columns get displayed anyway
+			Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
 
-		Set @QuantitationID = LTrim(Left(@WorkingList, @CommaLoc-1))
-		Set @WorkingList = SubString(@WorkingList, @CommaLoc+1, Len(@WorkingList))
+			If @ReplicateCount > @HighestReplicateCount
+				Set @HighestReplicateCount = @ReplicateCount
 
-		-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
-		-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
-		-- the count variable greater than 1 so that the columns get displayed anyway
-		Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
+			If @FractionCount > @HighestFractionCount
+				Set @HighestFractionCount = @FractionCount
 
-		If @ReplicateCount > @HighestReplicateCount
-			Set @HighestReplicateCount = @ReplicateCount
-
-		If @FractionCount > @HighestFractionCount
-			Set @HighestFractionCount = @FractionCount
-
-		If @TopLevelFractionCount > @HighestTopLevelFractionCount
-			Set @HighestTopLevelFractionCount = @TopLevelFractionCount
-
-		Set @CommaLoc = CharIndex(',', @WorkingList)
+			If @TopLevelFractionCount > @HighestTopLevelFractionCount
+				Set @HighestTopLevelFractionCount = @TopLevelFractionCount
+		End
 	END
 
 	Set @ReplicateAndFractionSql = ''
@@ -156,8 +189,11 @@ AS
 		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QRD.TopLevelFractionMax, '
 	End
 	
+	--------------------------------------------------------------
+	-- Populate @Description
+	--------------------------------------------------------------
 	If CharIndex(',', @QuantitationIDList) > 1
-	 Begin
+	Begin
 		-- User provided a list of Quantitation ID's
 		
 		Set @Description = 'QIDs '
@@ -168,15 +204,18 @@ AS
 
 		-- Append @QuantitationIDList to @Description
 		Set @Description = @Description + @QuantitationIDList + ';Pep'
-	 End
+	End
 	Else
-	 Begin
+	Begin
 		-- User provided a single quantitation ID
 		-- Generate a description for this QuantitationID using the job numbers that its
 		-- MDID's correspond plus the text 'Pep' = Peptide
 		Exec QRGenerateDescription @QuantitationID, 'Pep', @Description = @Description OUTPUT
-	 End
+	End
 	
+	--------------------------------------------------------------
+	-- Generate the SQL to return the results
+	--------------------------------------------------------------
 	Set @QRDsql = ''
 	Set @QRDsql = @QRDsql + ' QRD.Mass_Tag_ID, CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 	Set @QRDsql = @QRDsql + ' Round(QRD.MT_Abundance,4) As MT_Abundance, Round(QRD.MT_Abundance_StDev,4) As MT_Abundance_StDev,'
@@ -223,18 +262,18 @@ AS
 	
 	Set @QRDsql = @QRDsql + ' ' + @ReplicateAndFractionSql					-- Note, if this variable has text, it will end in a comma
 	If @IncludeRefColumn <> 0 AND @VerboseColumnOutput <> 0
-		Set @QRDsql = @QRDsql + '  QRD.Used_For_Abundance_Computation'		-- Can only display the Used_For_Abundance_Computation column if displaying protein Refs; otherwise, this doesn't make sense
-	Else
+		Set @QRDsql = @QRDsql + '  QRD.Used_For_Abundance_Computation,'		-- Can only display the Used_For_Abundance_Computation column if displaying protein Refs; otherwise, this doesn't make sense
+	
+	If @VerboseColumnOutput <> 0
+		Set @QRDsql = @QRDsql + ' QD.Quantitation_ID'
+	else
 		Set @QRDsql = SubString(@QRDsql, 0, Len(@QRDsql))					-- Need to remove the trailing comma
 		
-	Set @QRDsql = @QRDsql + ' FROM T_Quantitation_Description AS QD INNER JOIN'
-	Set @QRDsql = @QRDsql + ' T_Quantitation_Results As QR ON '
-	Set @QRDsql = @QRDsql + ' QD.Quantitation_ID = QR.Quantitation_ID '
-	Set @QRDsql = @QRDsql + '  INNER JOIN'
-	Set @QRDsql = @QRDsql + ' T_Quantitation_ResultDetails As QRD ON '
-	Set @QRDsql = @QRDsql + ' QR.QR_ID = QRD.QR_ID INNER JOIN'
-	Set @QRDsql = @QRDsql + ' T_Mass_Tags AS MT ON'
-	Set @QRDsql = @QRDsql + ' QRD.Mass_Tag_ID = MT.Mass_Tag_ID LEFT OUTER JOIN'
+	Set @QRDsql = @QRDsql + ' FROM #TmpQIDSortInfo INNER JOIN '
+	Set @QRDsql = @QRDsql +      ' T_Quantitation_Description QD ON #TmpQIDSortInfo.QID = QD.Quantitation_ID INNER JOIN'
+	Set @QRDsql = @QRDsql +      ' T_Quantitation_Results QR ON QD.Quantitation_ID = QR.Quantitation_ID INNER JOIN'
+	Set @QRDsql = @QRDsql +      ' T_Quantitation_ResultDetails QRD ON QR.QR_ID = QRD.QR_ID INNER JOIN'
+	Set @QRDsql = @QRDsql +      ' T_Mass_Tags MT ON QRD.Mass_Tag_ID = MT.Mass_Tag_ID LEFT OUTER JOIN'
 	
 	If @IncludePrefixAndSuffixResidues <> 0
 	Begin
@@ -250,40 +289,44 @@ AS
 	Set @QRDsql = @QRDsql + ' LEFT OUTER JOIN T_Peptide_Cleavage_State_Name AS CSN ON'
 	Set @QRDsql = @QRDsql + ' MTPM.Cleavage_State = CSN.Cleavage_State'
 
-        		
+	--------------------------------------------------------------
 	-- Construct the sql to return the data
-	Set @sql = ''
+	--------------------------------------------------------------
+	Set @Sql = ''
 	If @IncludeRefColumn <> 0
 	  Begin	
 
 		-- Generate the sql for the ORF columns in T_Quantitation_Results
 		Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT
 
-		Set @sql = @OrfColumnSql 
+		Set @Sql = @OrfColumnSql 
 
 		-- Future: Return a protein confidence value here
 		--			We used to return Meets_Minimum_Criteria, but that column is no longer used
-		-- Set @sql = @sql + '  QR.Meets_Minimum_Criteria,'
-		Set @sql = @sql +    @QRDsql
-		Set @sql = @sql + '   LEFT OUTER JOIN'
-		Set @sql = @sql + '  T_Proteins ON'
-		Set @sql = @sql + '  QR.Ref_ID = T_Proteins.Ref_ID'
-		Set @sql = @sql + ' WHERE QD.Quantitation_ID IN (' + @QuantitationIDListSql + ')'
-		Set @sql = @sql + ' ORDER BY QD.SampleName, T_Proteins.Reference, QRD.Mass_Tag_ID'
+		-- Set @Sql = @Sql + '  QR.Meets_Minimum_Criteria,'
+		Set @Sql = @Sql +    @QRDsql
+		Set @Sql = @Sql + '   LEFT OUTER JOIN'
+		Set @Sql = @Sql + '  T_Proteins ON'
+		Set @Sql = @Sql + '  QR.Ref_ID = T_Proteins.Ref_ID'
+		Set @Sql = @Sql + ' ORDER BY #TmpQIDSortInfo.SortKey, T_Proteins.Reference, QRD.Mass_Tag_ID'
 	  End
 	Else
 	  Begin
-		Set @sql = @sql + ' SELECT DISTINCT'
-		Set @sql = @sql + '  QD.SampleName,'
-		Set @sql = @sql +    @QRDsql
-		Set @sql = @sql + ' WHERE QD.Quantitation_ID IN (' + @QuantitationIDListSql + ')'
-		Set @sql = @sql + ' ORDER BY QD.SampleName, QRD.Mass_Tag_ID'
+		-- Note: We cannot order by #TmpQIDSortInfo.SortKey since we're using SELECT DISTINCT here
+		--  and Sql server cannot order by a column if the column is not included in the output
+		Set @Sql = @Sql + ' SELECT DISTINCT'
+		Set @Sql = @Sql + '  QD.SampleName,'
+		Set @Sql = @Sql +    @QRDsql
+		Set @Sql = @Sql + ' ORDER BY QRD.Mass_Tag_ID'
 	  End
 
-	Exec (@sql)
-
+	Exec (@Sql)
 	--
-	Return @@Error
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+Done:
+	--
+	Return @myError
 
 
 GO

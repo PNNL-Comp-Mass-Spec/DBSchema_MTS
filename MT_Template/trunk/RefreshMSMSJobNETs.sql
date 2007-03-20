@@ -1,9 +1,8 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSJobNETs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
-
 CREATE Procedure dbo.RefreshMSMSJobNETs
 /****************************************************
 **
@@ -31,6 +30,7 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @peptideDBName from 64 to 128 characters
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
+**			12/14/2006 mem - Updated @PostLogEntryOnSuccess to 1 and switched from using exec sp_executesql @S to Exec (@S)
 **    
 *****************************************************/
 (
@@ -39,7 +39,7 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
  	@message varchar(255) = '' output,
  	@JobFilterList varchar(1024) = '',
  	@infoOnly tinyint = 0,
- 	@PostLogEntryOnSuccess tinyint = 0
+ 	@PostLogEntryOnSuccess tinyint = 1
 )
 As
 	Set nocount on
@@ -218,7 +218,7 @@ As
 			Set @S = @S + ' SELECT LookupQ.Job'
 			Set @S = @S + ' FROM (SELECT TAD.Job,'
 			Set @S = @S +              ' COUNT(TP.Peptide_ID) AS NullScanTimeCount'
-			Set @S = @S +              ' FROM T_Analysis_Description AS TAD INNER JOIN'
+			Set @S = @S +    ' FROM T_Analysis_Description AS TAD INNER JOIN'
 			Set @S = @S + ' T_Peptides AS TP ON TAD.Job = TP.Analysis_ID'
 			Set @S = @S +              ' WHERE TP.Scan_Time_Peak_Apex IS NULL AND TAD.State > 1'
 			Set @S = @S +              ' GROUP BY TAD.Job'

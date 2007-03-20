@@ -35,8 +35,8 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
 	[Dataset_Internal_Std] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Labelling] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_FTICR_Analysis_Description_Created]  DEFAULT (getdate()),
-	[Auto_Addition] [tinyint] NOT NULL CONSTRAINT [DF_T_FTICR_Analysis_Description_Auto_Addition]  DEFAULT (0),
-	[State] [int] NOT NULL CONSTRAINT [DF_T_FTICR_Analysis_Description_State]  DEFAULT (1),
+	[Auto_Addition] [tinyint] NOT NULL CONSTRAINT [DF_T_FTICR_Analysis_Description_Auto_Addition]  DEFAULT ((0)),
+	[State] [int] NOT NULL CONSTRAINT [DF_T_FTICR_Analysis_Description_State]  DEFAULT ((1)),
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,
@@ -47,7 +47,7 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
  CONSTRAINT [PK_T_FTICR_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -59,7 +59,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE Trigger trig_i_FTICRAnalysisDescription on dbo.T_FTICR_Analysis_Description
 For Insert
 AS
@@ -70,7 +69,6 @@ AS
 	SELECT 2, inserted.Job, inserted.State, 0, GetDate()
 	FROM inserted
 
-
 GO
 
 /****** Object:  Trigger [dbo].[trig_u_FTICRAnalysisDescription] ******/
@@ -79,7 +77,6 @@ GO
 
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE Trigger trig_u_FTICRAnalysisDescription on dbo.T_FTICR_Analysis_Description
 For Update
@@ -91,7 +88,6 @@ AS
 		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
 		SELECT 2, inserted.Job, inserted.State, deleted.State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
-
 
 GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])

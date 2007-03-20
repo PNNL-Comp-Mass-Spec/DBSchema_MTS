@@ -22,7 +22,8 @@ CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDList
 **	Parameters: 
 **
 **	Auth:	mem
-**	Date:	06/18/2006
+**	Date:	06/18/2006 mem - Matt's 31st Birthday
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @MDIDList
 **
 *****************************************************/
 (
@@ -80,8 +81,8 @@ AS
 	)
 	
 	INSERT INTO #TmpMDIDList (MDID)
-	SELECT Convert(int, Value)
-	FROM dbo.udfParseDelimitedList(@MDIDList, ',')
+	SELECT Value
+	FROM dbo.udfParseDelimitedIntegerList(@MDIDList, ',')
 	--
 	SELECT @myError = @@Error, @myRowCount = @@RowCount
 	--

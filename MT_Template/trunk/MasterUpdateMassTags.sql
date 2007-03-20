@@ -1,9 +1,8 @@
 /****** Object:  StoredProcedure [dbo].[MasterUpdateMassTags] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
-
 CREATE PROCEDURE dbo.MasterUpdateMassTags
 /****************************************************
 ** 
@@ -49,6 +48,7 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			08/29/2006 mem - Updated call to AddDefaultPeakMatchingTasks to use @SetStateToHolding = 0
 **			09/15/2006 mem - Added call to UpdateMassTagPeptideProphetStats
 **			10/06/2006 mem - No longer posting the message returned by ComputeProteinCoverage to the log since ComputeProteinCoverage is now doing that itself
+**			12/14/2006 mem - Now sending @PostLogEntryOnSuccess=0 to RefreshMSMSJobNETs
 **    
 *****************************************************/
 (
@@ -149,7 +149,7 @@ As
 		--
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshMSMSJobNETs', 'MasterUpdateMassTags'
-		EXEC @result = RefreshMSMSJobNETs @jobNETsUpdated OUTPUT, @peptideRowsUpdated OUTPUT, @message OUTPUT
+		EXEC @result = RefreshMSMSJobNETs @jobNETsUpdated OUTPUT, @peptideRowsUpdated OUTPUT, @message OUTPUT, @PostLogEntryOnSuccess=0
 		set @message = 'Complete ' + @message
 	end
 	else

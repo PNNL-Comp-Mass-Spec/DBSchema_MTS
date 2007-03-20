@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[AddDefaultPeakMatchingTasks] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
+CREATE PROCEDURE AddDefaultPeakMatchingTasks
 /****************************************************
 **
 **	Desc: 
@@ -38,12 +38,14 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			07/31/2006 mem - Increased size of @JobListFilter parameter to 2048 characters and added check for trailing comma
 **			08/29/2006 mem - Updated the default value for @SetStateToHolding to now be 1
 **			09/06/2006 mem - Added support for Minimum_Peptide_Prophet_Probability
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListFilter
+**			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
 **     
 *****************************************************/
 (
 	@message varchar(255)='' output,
 	@jobCountAdded int = 0 output,				-- Number of jobs added
-	@JobListFilter varchar(4096) = '',			-- Optional parameter: a comma separated list of Job Numbers; will only add the given jobs numbers
+	@JobListFilter varchar(max) = '',			-- Optional parameter: a comma separated list of Job Numbers; will only add the given jobs numbers
 	@IniFileOverride varchar(255) = '',			-- Optional parameter: Ini FileName to use instead of the default one
 	@SetStateToHolding tinyint = 1				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
 )
@@ -115,8 +117,8 @@ AS
 		)
 		
 		INSERT INTO #T_Tmp_JobListFilter (JobFilter)
-		SELECT Convert(int, Value)
-		FROM dbo.udfParseDelimitedList(@JobListFilter, ',')
+		SELECT Value
+		FROM dbo.udfParseDelimitedIntegerList(@JobListFilter, ',')
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -136,7 +138,7 @@ AS
 
 	If @UsingJobListFilter = 1
 	Begin
-		-- Get list of jobs that match @JobListFilter
+		-- Get list of jobs that match @JobListFilter (stored in table #T_Tmp_JobListFilter)
 		INSERT INTO #XAJ
 		SELECT	T.Job,
 				T.Instrument,
@@ -440,7 +442,6 @@ AS
 Done:
 
 	RETURN @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[AddDefaultPeakMatchingTasks] TO [DMS_SP_User]

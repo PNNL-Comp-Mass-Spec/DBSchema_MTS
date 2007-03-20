@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.ValidateNewAnalysesUsingProteinCollectionFilters
 **
 **	Auth:	mem
 **	Date:	06/10/2006
+**			11/29/2006 mem - Updated to set #TmpNewAnalysisJobs.Valid to >= 250 for invalid jobs if @PreviewSql <> 0.  If @PreviewSql is 0, then deletes invalid jobs
 **    
 *****************************************************/
 (
@@ -111,7 +112,7 @@ As
 				UPDATE #TmpNewAnalysisJobs
 				SET Valid = 1
 				FROM #TmpNewAnalysisJobs NAJ INNER JOIN
-						#TmpJobsMatchingProteinCollectionCriteria JMPCC ON NAJ.Job = JMPCC.Job
+					 #TmpJobsMatchingProteinCollectionCriteria JMPCC ON NAJ.Job = JMPCC.Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
@@ -125,7 +126,7 @@ As
 	End -- </b>
 	
 	---------------------------------------------------
-	-- See if #TmpNewAnalysisJobs contains any jobs that still have Valid = 0
+	-- See if #TmpNewAnalysisJobs still contains any jobs that still have Valid = 0
 	---------------------------------------------------
 	Set @MatchCount = 0
 	SELECT @MatchCount = COUNT(*)
@@ -253,16 +254,32 @@ As
 
 				-- Delete jobs from #TmpNewAnalysisJobs that are defined in #TmpNewAnalysisJobProteinCollectionNames
 				--  but do not have any valid collection names
-				DELETE #TmpNewAnalysisJobs
-				FROM #TmpNewAnalysisJobs NAJ INNER JOIN 
-					(	SELECT Job
-						FROM #TmpNewAnalysisJobProteinCollectionNames
-						GROUP BY Job
-						HAVING MAX(Valid) = 0
-					) JobsToDelete ON NAJ.Job = JobsToDelete.Job
-				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error
-				
+				-- However, if @PreviewSql is non-zero, then update Valid to 250
+				If @PreviewSql <> 0
+				Begin
+					UPDATE #TmpNewAnalysisJobs
+					SET Valid = 250
+					FROM #TmpNewAnalysisJobs NAJ INNER JOIN 
+						(	SELECT Job
+							FROM #TmpNewAnalysisJobProteinCollectionNames
+							GROUP BY Job
+							HAVING MAX(Valid) = 0
+						) JobsToDelete ON NAJ.Job = JobsToDelete.Job
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+				End
+				Else
+				Begin
+					DELETE #TmpNewAnalysisJobs
+					FROM #TmpNewAnalysisJobs NAJ INNER JOIN 
+						(	SELECT Job
+							FROM #TmpNewAnalysisJobProteinCollectionNames
+							GROUP BY Job
+							HAVING MAX(Valid) = 0
+						) JobsToDelete ON NAJ.Job = JobsToDelete.Job
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+				End				
 			End -- </d2>
 
 			---------------------------------------------------
@@ -293,20 +310,33 @@ As
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 
 				-- Delete entries from #TmpNewAnalysisJobProteinOptions that have 
-				-- unknown keywords or keywords that we do not filter on
+				--  unknown keywords or keywords that we do not filter on
 				DELETE FROM #TmpNewAnalysisJobProteinOptions
 				WHERE NOT Keyword IN ('seq_direction')
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 
 				-- Delete jobs from #TmpNewAnalysisJobs that have non-valid entries in #TmpNewAnalysisJobProteinOptions
-				DELETE #TmpNewAnalysisJobs
-				FROM #TmpNewAnalysisJobs NAJ INNER JOIN
-					#TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
-				WHERE NAJPO.Valid = 0
-				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error
-				
+				-- However, if @PreviewSql is non-zero, then update Valid to 251
+				If @PreviewSql <> 0
+				Begin
+					UPDATE #TmpNewAnalysisJobs
+					SET Valid = 251
+					FROM #TmpNewAnalysisJobs NAJ INNER JOIN
+						 #TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
+					WHERE NAJPO.Valid = 0
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+				End
+				Else				
+				Begin
+					DELETE #TmpNewAnalysisJobs
+					FROM #TmpNewAnalysisJobs NAJ INNER JOIN
+						 #TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
+					WHERE NAJPO.Valid = 0
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+				End				
 			End -- </d3>
 
 			---------------------------------------------------
@@ -323,13 +353,26 @@ As
 		End -- </c>
 	End -- </b>		
 
+
 	---------------------------------------------------
 	-- Delete any jobs in #TmpNewAnalysisJobs that still have Valid = 0
+	-- However, if @PreviewSql is non-zero, then update Valid to 252
 	---------------------------------------------------
-	DELETE #TmpNewAnalysisJobs
-	WHERE Valid = 0
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
+	If @PreviewSql <> 0
+	Begin
+		UPDATE #TmpNewAnalysisJobs
+		SET Valid = 252
+		WHERE Valid = 0
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+	End
+	Else				
+	Begin
+		DELETE #TmpNewAnalysisJobs
+		WHERE Valid = 0
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+	End				
 
 Done:
 	Return @myError

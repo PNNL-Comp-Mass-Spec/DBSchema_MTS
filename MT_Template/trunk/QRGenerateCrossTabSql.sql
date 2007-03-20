@@ -6,50 +6,67 @@ GO
 
 CREATE Procedure dbo.QRGenerateCrossTabSql
 /****************************************************	
-**  Desc: Parses the values in @QuantitationIDList (separated by commas)
-**		    to construct appropriate Sql for a crosstab query
-**		  Also populates QuantitationIDListSql
-**		  If @SeparateReplicateDataIDs = 1, then for QuantitationID's involving 
-**          replicates, determines the most appropriate individual QuantitationID 
-**          values for each of the replicates
-**		  Lastly, populates @ERValuesPresent and @ModsPresent
-**		    by calling QRLookupOptionalColumns
+**  Desc:	Parses the values in @QuantitationIDList (separated by commas)
+**		     to construct appropriate Sql for a crosstab query
+**			Also populates QuantitationIDListSql
+**			If @SeparateReplicateDataIDs = 1, then for QuantitationID's involving 
+**           replicates, determines the most appropriate individual QuantitationID 
+**           values for each of the replicates
+**			Lastly, populates @ERValuesPresent and @ModsPresent
+**		     by calling QRLookupOptionalColumns
 **
-**  Return values:	@CrossTabSql and @QuantitationIDListSql are output parameters
-**					Returns the number of Quantitation ID's found
+**			Note: the calling procedure needs to create this table, which is populated by this SP using @QuantitationIDList:
+**
+**			CREATE TABLE #TmpQIDSortInfo (
+**				SortKey int identity (1,1),
+**				QID int NOT NULL)
+
+**
+**  Return values:	0 if success, otherwise, error code 
 **
 **  Parameters: QuantitationID List to parse
 **
-**  Auth: mem
-**	Date: 07/30/2003
-**
-**  Updated: 08/14/2003
-**			 08/15/2003
-**			 08/18/2003
-**			 08/26/2003
-**			 09/16/2003
-**           12/13/2003 mem - Added logic to assure that @CrossTabSql and @CrossTabSqlGroupBy stay under 7000 and 8000 characters, respectively
-**			 06/06/2004 mem - Now populating @ERValuesPresent, @DynamicModsPresent, and @StaticModsPresent
-**			 07/01/2004 mem - Fixed bug during population of @QIDListUnique
-**			 10/05/2004 mem - Updated for new MTDB schema
-**			 05/24/2005 mem - Now checking for invalid QuantitationID values in @QuantitationIDList
-**			 09/22/2005 mem - Added parameters @QuantitationIDListClean and updated to use QRCollapseToUniqueList
+**  Auth:	mem
+**	Date:	07/30/2003
+**			08/14/2003
+**			08/15/2003
+**			08/18/2003
+**			08/26/2003
+**			09/16/2003
+**          12/13/2003 mem - Added logic to assure that @CrossTabSql and @CrossTabSqlGroupBy stay under 7000 and 8000 characters, respectively
+**			06/06/2004 mem - Now populating @ERValuesPresent, @DynamicModsPresent, and @StaticModsPresent
+**			07/01/2004 mem - Fixed bug during population of @QIDListUnique
+**			10/05/2004 mem - Updated for new MTDB schema
+**			05/24/2005 mem - Now checking for invalid QuantitationID values in @QuantitationIDList
+**			09/22/2005 mem - Added parameters @QuantitationIDListClean and updated to use QRCollapseToUniqueList
+**			11/28/2006 mem - Fixed bug that failed to populate @QuantitationIDListToUseClean if @SeparateReplicateDataIDs = 0
+**						   - Added parameter @SkipCrossTabSqlGeneration
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @QIDListUnique
 **
 ****************************************************/
 (
 	@QuantitationIDList varchar(1024),			-- Comma separated list of Quantitation ID's (duplicates are allowed)
 	@SourceColName varchar(128),
 	@AggregateColName varchar(128) = 'AbuAvg', 
-	@AverageAcrossColumnsEnabled tinyint = 0,	-- If 1, then record Null when missing, otherwise record '''' when missing
-	@SeparateReplicateDataIDs tinyint = 1,
+	@AverageAcrossColumnsEnabled tinyint = 0,			-- If 1, then record Null when missing, otherwise record '''' when missing
+	@SeparateReplicateDataIDs tinyint = 1,					-- Only applies to the generation of @CrossTabSql
+	@SortMode tinyint = 2,
+	@SkipCrossTabSqlGeneration tinyint = 0,					-- If 1, then doesn't populate @CrossTabSql or @CrossTabSqlGroupBy, which allows one to process longer lists of QID values
 	@CrossTabSql varchar(7000) = '' Output,
 	@CrossTabSqlGroupBy varchar(8000) = '' Output,
-	@QuantitationIDListSql varchar(1024) = '' Output,
+	@QuantitationIDListSql varchar(1024) = '' Output,		-- List of QID values determined using @QuantitationIDList
 	@ERValuesPresent tinyint=0 Output,
 	@ModsPresent tinyint=0 Output,
-	@QuantitationIDListClean varchar(1024)='' Output	-- Reduction of @QuantitationIDList into a unique list of numbers; additionally, is not affected by @SeparateReplicateDataIDs in that @QuantitationIDListClean will still contain replicate-based QIDs if present in @QuantitationIDList
+	@QuantitationIDListClean varchar(1024)='' Output		-- Reduction of @QuantitationIDList into a unique list of numbers; additionally, is not affected by @SeparateReplicateDataIDs in that @QuantitationIDListClean will still contain replicate-based QIDs if present in @QuantitationIDList
 )
 AS
+	Set NoCount On
+
+	Declare @myError int
+	Declare @myRowcount int
+	Set @myRowcount = 0
+	Set @myError = 0
+
 	Declare @CommaLoc int,
 			@MDIDCommaLoc int,
 			@MatchCount int,
@@ -59,10 +76,20 @@ AS
 	Set @MDIDCommaLoc = 0
 	Set @MatchCount = 0
 	Set @ReplicateCount = 0
-		
+
+
+	-- Clear the outputs
+	Set @CrossTabSql = ''
+	Set @CrossTabSqlGroupBy = ''
+	Set @QuantitationIDListSql = ''
+	Set @ERValuesPresent = 0
+	Set @ModsPresent = 0
+	Set @QuantitationIDListClean = ''
+
+
 	Declare	@WorkingQIDList varchar(1024),
 			@QIDListUnique varchar(1024),
-			@QuantitationID varchar(19),
+			@QuantitationIDText varchar(19),
 			@MaxQuantitationID varchar(19),
 			@WorkingList varchar(4000),
 			@MDIDList varchar(1024),
@@ -83,21 +110,24 @@ AS
 			@MaxCharLengthPerTerm int,								-- Number of characters added to @CrossTabSql for each term (estimate)
 			@MaxCharLengthGroupByTerm int,
 			@CrossTabSqlReachedMaxLength tinyint,
-			@CrossTabSqlGroupByReachedMaxLength tinyint
-
+			@CrossTabSqlGroupByReachedMaxLength tinyint,
+			@QuantitationID int,
+			@CurrentSortKey int,
+			@continue tinyint
 
 	-- Assure that the following are blank
-	Set @CrossTabSql = ''
-	Set @CrossTabSqlGroupBy = ''
 	Set @AggregateFnSum = ''
 	Set @AggregateFnCount = ''
-	Set @QuantitationIDListSql = ''
 	Set @MaxQuantitationID = '1'
 	
 	-- Copy from @QuantationIDList into @WorkingQIDList and add a trailing comma (to make parsing easier)
 	Set @WorkingQIDList = @QuantitationIDList + ','
 	
-	If @SeparateReplicateDataIDs <> 0
+	If @SeparateReplicateDataIDs = 0
+	Begin
+		Set @QuantitationIDListClean = @QuantitationIDList
+	End
+	Else
 	Begin
 		-- Examine T_Quantitation_MDIDs to determine the individual Quantitation_ID numbers 
 		-- for the MDIDs defined for each  
@@ -113,13 +143,13 @@ AS
 		WHILE @CommaLoc > 1
 		BEGIN
 
-			Set @QuantitationID = LTrim(Left(@WorkingList, @CommaLoc-1))
+			Set @QuantitationIDText = LTrim(Left(@WorkingList, @CommaLoc-1))
 			Set @WorkingList = SubString(@WorkingList, @CommaLoc+1, Len(@WorkingList))
 			
-			If IsNumeric(@QuantitationID) = 1
+			If IsNumeric(@QuantitationIDText) = 1
 			Begin
 				-- This is a valid QID value; append to @QuantitationIDListClean
-				Set @QuantitationIDListClean = @QuantitationIDListClean + @QuantitationID + ','
+				Set @QuantitationIDListClean = @QuantitationIDListClean + @QuantitationIDText + ','
 				
 				-- Determine if this is actually a QuantitationID with replicates
 				-- Do this using the following query, then checking @@RowCount
@@ -127,7 +157,7 @@ AS
 				Set @MDIDList = ''
 				SELECT @MDIDList = @MDIDList + Convert(varchar(19), MD_ID) + ','
 				FROM T_Quantitation_MDIDs
-				WHERE Quantitation_ID = @QuantitationID
+				WHERE Quantitation_ID = @QuantitationIDText
 				ORDER BY [Replicate]
 				--
 				Set @ReplicateCount = @@RowCount
@@ -135,7 +165,7 @@ AS
 				If @ReplicateCount > 0
 				Begin
 					If @ReplicateCount <= 1
-						Set @CorrespondingQIDList = @QuantitationID + ','
+						Set @CorrespondingQIDList = @QuantitationIDText + ','
 					Else
 						Begin
 
@@ -147,7 +177,7 @@ AS
 									@StandardAbundanceMin = Standard_Abundance_Min, 
 									@StandardAbundanceMax = Standard_Abundance_Max
 							FROM T_Quantitation_Description
-							WHERE Quantitation_ID = @QuantitationID
+							WHERE Quantitation_ID = @QuantitationIDText
 							
 							-- Generate a comma delimited list of the most appropriate QuantitationID
 							--  for each MDID in @MDIDList
@@ -213,7 +243,7 @@ AS
 		END		
 	End
 
-	-- Make sure no duplicates are present in @WorkingList
+	-- Make sure no duplicates are present in @WorkingQIDList
 	Exec QRCollapseToUniqueList @WorkingQIDList, @QIDListUnique OUTPUT
 	
 	-- Make sure @QIDListUnique is not zero-length
@@ -224,14 +254,14 @@ AS
 	If SubString(@QIDListUnique, Len(@QIDListUnique), 1) <> ','
 		Set @QIDListUnique = @QIDListUnique + ','
 
-	-- Make sure no duplicates are presesnt in @QuantitationIDListClean
+	-- Make sure no duplicates are present in @QuantitationIDListClean
 	Exec QRCollapseToUniqueList @QuantitationIDListClean, @QuantitationIDListClean OUTPUT
 		
 	-- Compute @MaxCharLengthPerTerm
 	-- Do this by composing the default CrossTabSql term, using @MaxQuantitationID, then finding its length
-	Set @QuantitationID = @MaxQuantitationID
-	Set @QIDColName = '[Jobs 12345, 12346, 12347, 12348, 12349, 12350 (QID' + @QuantitationID + ')]'
-	Set @CrossTabSql = @CrossTabSql + ' MAX(CASE WHEN Quantitation_ID=' + @QuantitationID
+	Set @QuantitationIDText = @MaxQuantitationID
+	Set @QIDColName = '[Jobs 12345, 12346, 12347, 12348, 12349, 12350 (QID' + @QuantitationIDText + ')]'
+	Set @CrossTabSql = @CrossTabSql + ' MAX(CASE WHEN Quantitation_ID=' + @QuantitationIDText
 	Set @CrossTabSql = @CrossTabSql + ' THEN convert(varchar(19), ' + @SourceColName + ')'
 	Set @CrossTabSql = @CrossTabSql + ' ELSE'
 	If @AverageAcrossColumnsEnabled = 1
@@ -258,113 +288,172 @@ AS
 	Set @AggregateFnSum = ''
 	Set @AggregateFnCount = ''
 
-	-- Construct CrossTabSql
-	-- Copy from @WorkingQIDList into @WorkingList
-	Set @WorkingList = @QidListUnique
-	Set @CommaLoc = CharIndex(',', @WorkingList)
-	WHILE @CommaLoc > 1
-	BEGIN
 
-		Set @QuantitationID = LTrim(Left(@WorkingList, @CommaLoc-1))
-		Set @WorkingList = SubString(@WorkingList, @CommaLoc+1, Len(@WorkingList))
+	--------------------------------------------------------------
+	-- Populate #TmpQIDValues with the values in @QIDListUnique
+	-- If @QIDListUnique contains any non-numeric values, then this will throw an error
+	--------------------------------------------------------------
+	--
+	CREATE TABLE #TmpQIDValues (
+			UniqueRowID int identity(1,1),
+			QID int NOT NULL)
+	--
+	INSERT INTO #TmpQIDValues (QID)
+	SELECT Value
+	FROM dbo.udfParseDelimitedIntegerList(@QIDListUnique, ',')
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @myError <> 0
+	Begin
+		Print 'Error parsing @QIDListUnique with udfParseDelimitedIntegerList: ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
+
+	If @myRowCount = 0
+	Begin
+		-- No Data Found
+		Set @myError = 50001
+		Goto Done
+	End
+
+	--------------------------------------------------------------
+	-- Populate #TmpQIDSortInfo based on @SortMode (using #TmpQIDValues)
+	--------------------------------------------------------------
+	Exec @myError = QRDetermineSortOrder @SortMode
+	If @myError <> 0
+	Begin
+		Print 'Error calling QRDetermineSortOrder: ' + Convert(varchar(12), @myError)
+		Goto Done
+	End
 		
-		-- See if @CrossTabSql has gotten too long
-		If Len(@CrossTabSql) + @MaxCharLengthPerTerm > 6990
-			Set @CrossTabSqlReachedMaxLength = 1
-			
-		-- Continue if QuantitationID is numeric
-		If IsNumeric(@QuantitationID) = 1 And @CrossTabSqlReachedMaxLength = 0
-		Begin
-			If Len(@CrossTabSql) > 0
-			Begin
-				Set @CrossTabSql = @CrossTabSql + ','
-				Set @QuantitationIDListSql = @QuantitationIDListSql + ','
-			End
+	--------------------------------------------------------------
+	-- Construct @CrossTabSql (unless @SkipCrossTabSqlGeneration <> 0)
+	-- Do this by iterating through #TmpQIDSortInfo
+	-- In addition, determine if any of the Quantitation ID's have any ER values or modifications
+	--------------------------------------------------------------
+
+	Set @CurrentSortKey = -1
+	Set @continue = 1
+	While @continue = 1
+	Begin -- <a>
+		SELECT TOP 1 @QuantitationID = QID, @CurrentSortKey = SortKey
+		FROM #TmpQIDSortInfo
+		WHERE SortKey > @CurrentSortKey
+		ORDER BY SortKey
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 		
-			-- Lookup the job numbers that this QuantitationID corresponds to
-			Set @JobList = ''
+		If @myRowCount <> 1
+			Set @continue = 0
+		Else
+		Begin -- <b>
+			Set @QuantitationIDText = Convert(varchar(19), @QuantitationID)
 			
-			SELECT	@JobList = @JobList + ',' + LTrim(RTrim(Convert(varchar(19), T_Match_Making_Description.MD_Reference_Job)))
-			FROM	T_Quantitation_Description INNER JOIN
-					T_Quantitation_MDIDs ON 
-					T_Quantitation_Description.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
-					  INNER JOIN
-					T_Match_Making_Description ON 
-					T_Quantitation_MDIDs.MD_ID = T_Match_Making_Description.MD_ID
-			WHERE	T_Quantitation_Description.Quantitation_ID = Convert(int, @QuantitationID)
-			ORDER BY MD_Reference_Job
-			--
-			Set @JobListCount = @@RowCount
-			
-			If @JobListCount <= 0
-				-- This shouldn't happen
-				Set @JobList = 'Job 0'
-			Else
-			  Begin
-				-- Remove the leading ,
-				Set @JobList = SubString(@JobList, 2, Len(@JobList)-1)
+			-- See if @CrossTabSql has gotten too long
+			If Len(@CrossTabSql) + @MaxCharLengthPerTerm > 6990
+				Set @CrossTabSqlReachedMaxLength = 1
 				
-				If @JobListCount = 1
-					-- Just one jobs
-					Set @JobList = 'Job ' + @JobList
+			If @CrossTabSqlReachedMaxLength = 0
+			Begin -- <c>
+				If Len(@CrossTabSql) > 0
+					Set @CrossTabSql = @CrossTabSql + ','
+
+				if Len(@QuantitationIDListSql) > 0
+					Set @QuantitationIDListSql = @QuantitationIDListSql + ','
+			
+				-- Lookup the job numbers that this QuantitationID corresponds to
+				Set @JobList = ''
+				
+				SELECT	@JobList = @JobList + ',' + LTrim(RTrim(Convert(varchar(19), T_Match_Making_Description.MD_Reference_Job)))
+				FROM	T_Quantitation_Description INNER JOIN
+						T_Quantitation_MDIDs ON 
+						T_Quantitation_Description.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
+						INNER JOIN
+						T_Match_Making_Description ON 
+						T_Quantitation_MDIDs.MD_ID = T_Match_Making_Description.MD_ID
+				WHERE	T_Quantitation_Description.Quantitation_ID = @QuantitationID
+				ORDER BY MD_Reference_Job
+				--
+				Set @JobListCount = @@RowCount
+				
+				If @JobListCount <= 0
+					-- This shouldn't happen
+					Set @JobList = 'Job 0'
 				Else
-					-- Multiple jobs
-					Set @JobList = 'Jobs ' + @JobList
-			  End
-			
-			-- Make sure @JobList isn't too long
-			If Len(@JobList) > 45
-				Set @JobList = SubString(@JobList, 1, 42) + '...'
-			
-			-- Define @QIDColName, surrounding with brackets, and appending a space
-			Set @QIDColName = '[' + @JobList + ' (QID' + @QuantitationID + ')]'
-			
-			-- Add the next term onto @CrossTabSql
-			Set @CrossTabSql = @CrossTabSql + 'MAX(CASE WHEN Quantitation_ID=' + @QuantitationID 
-			Set @CrossTabSql = @CrossTabSql + ' THEN convert(varchar(19), ' + @sourceColName + ')'
-			Set @CrossTabSql = @CrossTabSql + ' ELSE'
-			If @AverageAcrossColumnsEnabled = 1
-				Set @CrossTabSql = @CrossTabSql + ' NULL'
-			Else
-				Set @CrossTabSql = @CrossTabSql + ' '''''
-			Set @CrossTabSql = @CrossTabSql + ' END) AS ' + @QIDColName
-			Set @QuantitationIDListSql = @QuantitationIDListSql + @QuantitationID
-
-
-			Set @AggregateFn = '(' + @AggregateFnSum + ') / (' + @AggregateFnCount + ') AS ' + @AggregateColName
-			
-			-- See if @CrossTabSqlGroupBy has gotten too long
-			If Len(@CrossTabSqlGroupBy + ', ' + @AggregateFn) + @MaxCharLengthGroupByTerm > 7990
-				Set @CrossTabSqlGroupByReachedMaxLength = 1
+				Begin
+					-- Remove the leading ,
+					Set @JobList = SubString(@JobList, 2, Len(@JobList)-1)
+					
+					If @JobListCount = 1
+						-- Just one jobs
+						Set @JobList = 'Job ' + @JobList
+					Else
+						-- Multiple jobs
+						Set @JobList = 'Jobs ' + @JobList
+				End
 				
-			If @CrossTabSqlGroupByReachedMaxLength = 0
-			 Begin
-				If Len(@CrossTabSqlGroupBy) > 0
-				 Begin
-					Set @CrossTabSqlGroupBy = @CrossTabSqlGroupBy + ','
-					Set @AggregateFnSum = @AggregateFnSum + '+'
-					Set @AggregateFnCount = @AggregateFnCount + '+'
-				 End
-
-				-- Add the next term onto @CrossTabSqlGroupBy
-				Set @CrossTabSqlGroupBy = @CrossTabSqlGroupBy + 'ISNULL(MAX(' + @QIDColName + '),'''') AS ' + @QIDColName
-			
-				-- Add the next term onto @AggregateFnSum
-				Set @AggregateFnSum = @AggregateFnSum + 'ISNULL(CONVERT(float, MAX(' + @QIDColName + ')),0)'
+				-- Make sure @JobList isn't too long
+				If Len(@JobList) > 45
+					Set @JobList = SubString(@JobList, 1, 42) + '...'
 				
-				-- Add the next term onto @AggregateFnCount
-				Set @AggregateFnCount = @AggregateFnCount + 'COUNT(' + @QIDColName + ')'
+				-- Define @QIDColName, surrounding with brackets, and appending a space
+				Set @QIDColName = '[' + @JobList + ' (QID' + @QuantitationIDText + ')]'
 
-			  End
-			 
-			  
-			 Set @MatchCount = @MatchCount + 1
-		End
+				Set @QuantitationIDListSql = @QuantitationIDListSql + @QuantitationIDText
+				
+				If @SkipCrossTabSqlGeneration = 0
+				Begin -- <d>
+					-- Add the next term onto @CrossTabSql
+					Set @CrossTabSql = @CrossTabSql + 'MAX(CASE WHEN Quantitation_ID=' + @QuantitationIDText 
+					Set @CrossTabSql = @CrossTabSql + ' THEN convert(varchar(19), ' + @sourceColName + ')'
+					Set @CrossTabSql = @CrossTabSql + ' ELSE'
+					If @AverageAcrossColumnsEnabled = 1
+						Set @CrossTabSql = @CrossTabSql + ' NULL'
+					Else
+						Set @CrossTabSql = @CrossTabSql + ' '''''
+					Set @CrossTabSql = @CrossTabSql + ' END) AS ' + @QIDColName
+					
+					Set @AggregateFn = '(' + @AggregateFnSum + ') / (' + @AggregateFnCount + ') AS ' + @AggregateColName
+					
+					-- See if @CrossTabSqlGroupBy has gotten too long
+					If Len(@CrossTabSqlGroupBy + ', ' + @AggregateFn) + @MaxCharLengthGroupByTerm > 7990
+						Set @CrossTabSqlGroupByReachedMaxLength = 1
+						
+					If @CrossTabSqlGroupByReachedMaxLength = 0
+					Begin -- <e>
+						If Len(@CrossTabSqlGroupBy) > 0
+						Begin
+							Set @CrossTabSqlGroupBy = @CrossTabSqlGroupBy + ','
+							Set @AggregateFnSum = @AggregateFnSum + '+'
+							Set @AggregateFnCount = @AggregateFnCount + '+'
+						End
 
-		Set @CommaLoc = CharIndex(',', @WorkingList)
-	END
+						-- Add the next term onto @CrossTabSqlGroupBy
+						Set @CrossTabSqlGroupBy = @CrossTabSqlGroupBy + 'ISNULL(MAX(' + @QIDColName + '),'''') AS ' + @QIDColName
+					
+						-- Add the next term onto @AggregateFnSum
+						Set @AggregateFnSum = @AggregateFnSum + 'ISNULL(CONVERT(float, MAX(' + @QIDColName + ')),0)'
+						
+						-- Add the next term onto @AggregateFnCount
+						Set @AggregateFnCount = @AggregateFnCount + 'COUNT(' + @QIDColName + ')'
 
-	If @MatchCount > 0
+					End -- </e>
+				End -- </d>
+
+				-- Determine if this QuantitationID has any nonzero ER values or modified mass tags
+				-- Note that QRLookupOptionalColumns leaves @ERValuesPresent or @ModsPresent at a non-zero
+				--  value if they are non-zero when passed into the SP
+				Exec QRLookupOptionalColumns @QuantitationID, 
+						@ERValuesPresent = @ERValuesPresent OUTPUT, 
+						@ModsPresent = @ModsPresent OUTPUT
+
+				Set @MatchCount = @MatchCount + 1
+			End -- </c>
+		End -- </b>
+	End -- </a>
+
+	If @MatchCount > 0 And @SkipCrossTabSqlGeneration = 0
 	Begin
 		-- If @CrossTabSqlGroupBy and @CrossTabSql reached the maximum length, then cannot compute the aggregate
 		-- value since we run the risk of a divide by zero error
@@ -376,25 +465,8 @@ AS
 		Set @CrossTabSqlGroupBy = @CrossTabSqlGroupBy + ', ' + @AggregateFn
 	End
 
-	-- Determine if any of the Quantitation ID's in @QidListUnique have any ER values or modifications
-	Set @WorkingList = @QidListUnique
-	Set @CommaLoc = CharIndex(',', @WorkingList)
-	WHILE @CommaLoc > 1
-	BEGIN
-
-		Set @QuantitationID = LTrim(Left(@WorkingList, @CommaLoc-1))
-		Set @WorkingList = SubString(@WorkingList, @CommaLoc+1, Len(@WorkingList))
-
-		If IsNumeric(@QuantitationID) = 1
-			-- Determine if this QuantitationID has any nonzero ER values or modified mass tags
-			Exec QRLookupOptionalColumns @QuantitationID, 
-					@ERValuesPresent = @ERValuesPresent OUTPUT, 
-					@ModsPresent = @ModsPresent OUTPUT
-
-		Set @CommaLoc = CharIndex(',', @WorkingList)
-	END
-
-	Return @MatchCount
+Done:
+	Return @myError
 
 
 GO
