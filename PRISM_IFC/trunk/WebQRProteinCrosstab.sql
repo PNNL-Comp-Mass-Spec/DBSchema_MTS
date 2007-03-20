@@ -1,8 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[WebQRProteinCrosstab] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
+
+
 CREATE PROCEDURE dbo.WebQRProteinCrosstab
 /****************************************************	
 **  Desc: Calls QRProteinCrosstab in the specified mass tag database
@@ -11,11 +13,12 @@ CREATE PROCEDURE dbo.WebQRProteinCrosstab
 **
 **  Parameters: Mass Tag DB name, Source column name, and QID list
 **
-**  Auth: jee
-**	Date:	 04/15/2004
-**			 10/22/2004 mem - Added PostUsageLogEntry
-**			 11/19/2004 mem - Added three parameters: @SeparateReplicateDataIDs, @AggregateColName, and @AverageAcrossColumns
-**			 11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**  Auth: 	jee
+**	Date:	04/15/2004
+**			10/22/2004 mem - Added PostUsageLogEntry
+**			11/19/2004 mem - Added three parameters: @SeparateReplicateDataIDs, @AggregateColName, and @AverageAcrossColumns
+**			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
+**			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **
 ****************************************************/
 (
@@ -25,7 +28,8 @@ CREATE PROCEDURE dbo.WebQRProteinCrosstab
 	@message varchar(512) = '' output,
 	@SeparateReplicateDataIDs tinyint=1,
 	@AggregateColName varchar(128) = '',
-	@AverageAcrossColumns tinyint=1						-- The query is slower if this is enabled
+	@AverageAcrossColumns tinyint=1,					-- The query is slower if this is enabled
+	@SortMode tinyint=0									-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 )
 AS
 	SET NOCOUNT ON
@@ -37,9 +41,9 @@ AS
 	If Len(IsNull(@AggregateColName, '')) = 0
 		set @AggregateColName = @SourceColName + '_Avg'
 		
-	set @stmt = N'exec [' + @MTDBName + N'].dbo.QRProteinCrosstab @QuantitationIDList, @SeparateReplicateDataIDs, @SourceColName, @AggregateColName, @AverageAcrossColumns'
-	set @params = N'@QuantitationIDList varchar(1024),@SeparateReplicateDataIDs tinyint,@SourceColName varchar(128),@AggregateColName varchar(128),@AverageAcrossColumns tinyint'
-	exec @result = sp_executesql @stmt, @params, @QuantitationIDList = @QuantitationIDList, @SeparateReplicateDataIDs = @SeparateReplicateDataIDs, @SourceColName = @SourceColName, @AggregateColName = @AggregateColName, @AverageAcrossColumns = @AverageAcrossColumns
+	set @stmt = N'exec [' + @MTDBName + N'].dbo.QRProteinCrosstab @QuantitationIDList, @SeparateReplicateDataIDs, @SourceColName, @AggregateColName, @AverageAcrossColumns, @SortMode'
+	set @params = N'@QuantitationIDList varchar(1024),@SeparateReplicateDataIDs tinyint,@SourceColName varchar(128),@AggregateColName varchar(128),@AverageAcrossColumns tinyint,@SortMode tinyint'
+	exec @result = sp_executesql @stmt, @params, @QuantitationIDList = @QuantitationIDList, @SeparateReplicateDataIDs = @SeparateReplicateDataIDs, @SourceColName = @SourceColName, @AggregateColName = @AggregateColName, @AverageAcrossColumns = @AverageAcrossColumns, @SortMode = @SortMode
 	--
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = @QuantitationIDList + '; ' + @SourceColName
@@ -47,6 +51,7 @@ AS
 
 	set @message = ''
 	RETURN @result
+
 
 GO
 GRANT EXECUTE ON [dbo].[WebQRProteinCrosstab] TO [DMS_SP_User]
