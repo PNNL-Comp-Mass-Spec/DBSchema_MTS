@@ -1,6 +1,6 @@
 /****** Object:  Database [PT_Template_01] ******/
 CREATE DATABASE [PT_Template_01] ON  PRIMARY 
-( NAME = N'PT_Template_01_dat', FILENAME = N'F:\SQLServerData\PT_Template_01_data.mdf' , SIZE = 38912KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'PT_Template_01_dat', FILENAME = N'F:\SQLServerData\PT_Template_01_data.mdf' , SIZE = 38912KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
 ( NAME = N'PT_Template_01_log', FILENAME = N'F:\SQLServerData\PT_Template_01_log.ldf' , SIZE = 111616KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS

@@ -16,6 +16,7 @@ CREATE Procedure dbo.CheckPeptideProphetUpdateRequired
 **
 **	Auth:	mem
 **	Date:	07/05/2006
+**			02/06/2007 mem - Now ignoring charge states >= 6 when looking for rows with null Peptide_Prophet_Probability values
 **    
 *****************************************************/
 (
@@ -77,8 +78,8 @@ As
 			NOT Job IN (
 				SELECT DISTINCT TAD.Job
 				FROM T_Analysis_Description TAD INNER JOIN
-					T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
-					T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
+					 T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
+					 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 				WHERE TAD.Job = @JobFilter AND
 					  SD.Peptide_Prophet_Probability IS NULL
 				)
@@ -112,10 +113,11 @@ As
 			NOT Job IN (
 				SELECT DISTINCT TAD.Job
 				FROM T_Analysis_Description TAD INNER JOIN
-					T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
-					T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
+					 T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
+					 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 				WHERE TAD.Process_State = @ProcessStateMatch AND
-					SD.Peptide_Prophet_Probability IS NULL
+					  SD.Peptide_Prophet_Probability IS NULL AND
+					  P.Charge_State < 6
 				)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount

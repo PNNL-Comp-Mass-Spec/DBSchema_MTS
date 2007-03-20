@@ -17,6 +17,7 @@ CREATE Procedure dbo.SetReversedAndScrambledJobsToHolding
 **
 **	Auth:	mem
 **	Date:	08/02/2006
+**			02/07/2007 -- Now calling DeleteSeqCandidateDataForSkippedJobs
 **    
 *****************************************************/
 (
@@ -32,7 +33,7 @@ As
 	Set @myRowCount = 0
 	Set @myError = 0
 
-	Declare @message varchar(255)
+	Declare @message varchar(512)
 	Set @message = ''
 
 
@@ -56,6 +57,9 @@ As
 	Else
 		Set @numJobsProcessed = @myRowCount
 
+	-- Now delete any data in the T_Seq_Candidate tables that is mapped to any old jobs that are in state @NextProcessState
+	exec DeleteSeqCandidateDataForSkippedJobs @ProcessStateMatch = @NextProcessState, @InfoOnly = 0, @message = @message output
+	
 Done:
 	return @myError
 

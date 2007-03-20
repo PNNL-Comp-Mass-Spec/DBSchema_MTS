@@ -30,6 +30,7 @@ CREATE Procedure dbo.UpdateSequenceModsForAvailableAnalyses
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			06/08/2006 mem - Now checking for 'Error calling GetOrganismDBFileInfo%' in the error string returned by the processing SPs
 **			06/09/2006 mem - Added 6 hour delay for resetting jobs that have 1 or more peptides with Seq_ID values = 0
+**			11/30/2006 mem - Updated to record a Warning in PostLogEntry for Deadlock errors
 **    
 *****************************************************/
 (
@@ -52,7 +53,6 @@ AS
 	declare @firstJobFound int
 	set @firstJobFound = 0
 	
-	declare @result int
 	declare @UpdateEnabled tinyint
 	declare @message varchar(255)
 	set @message = ''
@@ -135,8 +135,8 @@ AS
 	set @jobAvailable = 1
 	set @numJobsProcessed = 0
 	
-	while @jobAvailable > 0 and @myError = 0 and @numJobsProcessed < @numJobsToProcess
-	begin -- <a>
+	While @jobAvailable > 0 and @myError = 0 and @numJobsProcessed < @numJobsToProcess
+	Begin -- <a>
 		-- Look up the next available job
 		SELECT	TOP 1 @Job = Job
 		FROM	T_Analysis_Description
@@ -151,10 +151,10 @@ AS
 			goto done
 		end
 
-		if @myRowCount <> 1
+		If @myRowCount <> 1
 			Set @jobAvailable = 0
-		else
-		begin -- <b>
+		Else
+		Begin -- <b>
 			-- Job is available to process
 			
 			if @firstJobFound = 0
@@ -180,40 +180,40 @@ AS
 
 			If @JobMatch = @Job
 				-- Process sequences using the T_Seq_Candidate tables
-				exec @result = ProcessCandidateSequencesForOneAnalysis
+				exec @myError = ProcessCandidateSequencesForOneAnalysis
 										@NextProcessState,
 										@job,
 										@count output,
 										@message output
-			else
+			Else
 				-- Process the sequences one row at a time
-				exec @result = UpdateSequenceModsForOneAnalysisBulk
+				exec @myError = UpdateSequenceModsForOneAnalysisBulk
 										@NextProcessState,
 										@job,
 										@count output,
 										@message output
 
-			if @result = 0
-				execute PostLogEntry 'Normal', @message, 'UpdateSequenceModsForAvailableAnalyses'
-			else
+			If @myError = 0
 			Begin
-				If Not @message Like 'Error calling GetOrganismDBFileInfo%'
+				execute PostLogEntry 'Normal', @message, 'UpdateSequenceModsForAvailableAnalyses'
+				set @numJobsProcessed = @numJobsProcessed + 1
+			End
+			Else
+			Begin
+				-- Do not call PostLogEntry if the error involved calling GetOrganismDBFileInfo or if it starts with 'Error caught'
+				If Not @message Like 'Error calling GetOrganismDBFileInfo%' And Not @message Like 'Error caught%'
 					execute PostLogEntry 'Error', @message, 'UpdateSequenceModsForAvailableAnalyses'
 			End
-						
-			-- check number of jobs processed
-			--
-			set @numJobsProcessed = @numJobsProcessed + 1
-		end -- </b>
+		End -- </b>
 
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled @CallingFunctionDescription = 'UpdateSequenceModsForAvailableAnalyses', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 		If @UpdateEnabled = 0
 			Goto Done
 
-	end -- </a>
+	End -- </a>
 
-	if @numJobsProcessed = 0
+	If @numJobsProcessed = 0
 		set @message = 'no analyses were available'
 
 Done:

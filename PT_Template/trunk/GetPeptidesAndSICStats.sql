@@ -23,13 +23,18 @@ CREATE Procedure dbo.GetPeptidesAndSICStats
 **			03/17/2006 mem - Updated to work with XTandem results
 **			09/15/2006 mem - Added parameters @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, and @MinXCorrPartiallyTrypticCharge3
 **						   - Renamed parameters @MinXCorrCharge1, @MinXCorrCharge2, and @MinXCorrCharge3 to @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, and @MinXCorrFullyTrypticCharge3
+**			02/03/2007 mem - Removed invalid Group By on XCorr when flagging the row with the highest value for each Seq_ID, as specified by @MaxValueSelectionMode
+**						   - Added parameter @ReportHighestScoreStatsInJob
+**			02/11/2007 mem - Added parameter @GroupByChargeState
 **    
 *****************************************************/
 (
 	@JobList varchar(4000),							-- Comma separated list of Sequest job numbers
 	@CleavageStateMinimum tinyint = 2,
 	@GroupByPeptide tinyint = 1,					-- If 1, then group by peptide, returning the max value (specified by @MaxValueSelectionMode) for each sequence in each job
+	@GroupByChargeState tinyint = 0,				-- If 1, then reports separate values for each charge state; only valid if @GroupByPeptide = 1
 	@MaxValueSelectionMode tinyint = 0,				-- 0 means use Peak_Area, 1 means use Peak_SN_Ratio, 2 means use StatMoments_Area, 3 means use XCorr or Hyperscore, 4 means Log_Evalue (only applicable for XTandem)
+	@ReportHighestScoreStatsInJob tinyint = 1,		-- Only applicable if @GroupByPeptide = 1 and if @MaxValueSelectionMode is not 3 or 4; when 1, then finds the entry with the max area or SN_Ratio, but updates the Sequest/X!Tandem score stats to reflect the highest scores in the analysis job
 	@MinXCorrFullyTrypticCharge1 real = 1.9,		-- Only used for fully tryptic peptides
 	@MinXCorrFullyTrypticCharge2 real = 2.2,		-- Only used for fully tryptic peptides
 	@MinXCorrFullyTrypticCharge3 real = 3.75,		-- Only used for fully tryptic peptides
@@ -61,13 +66,16 @@ As
 	
 	Set @CleavageStateMinimum = IsNull(@CleavageStateMinimum, 2)
 	Set @GroupByPeptide = IsNull(@GroupByPeptide, 1)
+	Set @GroupByChargeState = IsNull(@GroupByChargeState, 0)
 
 	Set @MaxValueSelectionMode = IsNull(@MaxValueSelectionMode, 0)
 	If @MaxValueSelectionMode < 0
 		Set @MaxValueSelectionMode = 0
-	if @MaxValueSelectionMode > 3
-		Set @MaxValueSelectionMode = 3
+	if @MaxValueSelectionMode > 4
+		Set @MaxValueSelectionMode = 4
 
+	Set @ReportHighestScoreStatsInJob = IsNull(@ReportHighestScoreStatsInJob, 1)
+	
 	Set @MinXCorrFullyTrypticCharge1 = IsNull(@MinXCorrFullyTrypticCharge1, 1.9)
 	Set @MinXCorrFullyTrypticCharge2 = IsNull(@MinXCorrFullyTrypticCharge2, 2.2)
 	Set @MinXCorrFullyTrypticCharge3 = IsNull(@MinXCorrFullyTrypticCharge3, 3.75)
@@ -192,6 +200,7 @@ As
 		DeltaCn2 real NULL ,
 		Charge_State smallint NULL,
 		Discriminant real NULL ,
+		Peptide_Prophet_Prob real NULL ,
 		Optimal_Scan_Number real NULL ,
 		Elution_Time real NULL,
 		Intensity float NULL,
@@ -227,6 +236,7 @@ As
 		Peptide varchar(850) ,
 		Monoisotopic_Mass float NULL,
 		DiscriminantScoreNorm real NULL ,
+		Peptide_Prophet_Probability real NULL ,
 		XCorr real NULL ,
 
 		DeltaCn2 real NULL ,
@@ -313,13 +323,13 @@ As
 		Set @S = ''
 		Set @S = @S + ' INSERT INTO #TmpPeptidesAndSICStats ('
 		Set @S = @S +   ' SIC_Job, Job, Dataset_ID, Dataset, Reference, Seq_ID, Peptide, Monoisotopic_Mass,'
-		Set @S = @S +   ' DiscriminantScoreNorm, XCorr, '
+		Set @S = @S +   ' DiscriminantScoreNorm, Peptide_Prophet_Probability, XCorr, '
 		If @Loop = 2
 			Set @S = @S +   ' Hyperscore, Log_EValue, '
 
 		Set @S = @S + ' DeltaCn2, Charge_State, Scan_Number, Cleavage_State)'
 		Set @S = @S + ' SELECT DISTINCT DS.SIC_Job, TAD.Job, DS.Dataset_ID, TAD.Dataset, Pro.Reference,'
-		Set @S = @S +   ' Pep.Seq_ID, Pep.Peptide, S.Monoisotopic_Mass, SD.DiscriminantScoreNorm,'
+		Set @S = @S +   ' Pep.Seq_ID, Pep.Peptide, S.Monoisotopic_Mass, SD.DiscriminantScoreNorm, SD.Peptide_Prophet_Probability,'
 		If @Loop = 1
 			Set @S = @S +   ' SS.XCorr, SS.DeltaCn2,'
 		If @Loop = 2
@@ -396,7 +406,8 @@ As
 		Set @S = @S +   ' Monoisotopic_Mass, XCorr,'
 		If @Loop = 2
 			Set @S = @S +   ' Hyperscore, Log_Evalue,'
-		Set @S = @S +   ' DeltaCn2, Charge_State, Discriminant,'
+		Set @S = @S +   ' DeltaCn2, Charge_State,'
+		Set @S = @S +   ' Discriminant, Peptide_Prophet_Prob,'
 		Set @S = @S +   ' Optimal_Scan_Number, Elution_Time, '
 		Set @S = @S +   ' Intensity, SN, FWHM, Area,'
 
@@ -404,7 +415,7 @@ As
 		Set @S = @S +   ' Parent_Ion_MZ,'
 		Set @S = @S +   ' Peak_Baseline_Noise_Level,'
 		Set @S = @S +   ' Peak_Baseline_Noise_StDev,'
-		Set @S = @S +   ' Peak_Baseline_Points_Used,'
+		Set @S = @S +  ' Peak_Baseline_Points_Used,'
 
 		Set @S = @S +   ' StatMoments_Area,'
 		Set @S = @S +   ' CenterOfMass_Scan,'
@@ -536,7 +547,7 @@ As
 				Begin -- <d>
 					--------------------------------------------------------------
 					-- Group By the metric indicated by @MaxValueSelectionMode
-					-- First, need to flag the row with the highest XCorr for each Seq_ID
+					-- First, need to flag the row with the highest given value for each Seq_ID
 					--------------------------------------------------------------
 					
 					Set @UseValueMinimum = 1
@@ -556,7 +567,7 @@ As
 
 					If @JobIsPeptideHit = 1
 					Begin
-						If @MaxValueSelectionMode = 3
+						If @MaxValueSelectionMode >= 3
 							Set @SelectionField = 'XCorr'
 					End
 
@@ -576,13 +587,21 @@ As
 					Set @S = @S +    ' ( SELECT MIN(S.Unique_Row_ID) AS Unique_Row_ID_Min'
 					Set @S = @S +      ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
 					Set @S = @S +       ' ( SELECT SIC_Job, Seq_ID, MAX(' + @SelectionField + ') AS Value_Max'
+					If @GroupByChargeState <> 0
+						Set @S = @S +			  ', Charge_State'
 					Set @S = @S +         ' FROM #TmpPeptidesAndSICStats'
-					Set @S = @S +         ' GROUP BY SIC_Job, Seq_ID, XCorr'
+					Set @S = @S +         ' GROUP BY SIC_Job, Seq_ID'
+					If @GroupByChargeState <> 0
+						Set @S = @S +				', Charge_State'
 					Set @S = @S +       ' ) LookupQ ON'
 					Set @S = @S +       ' S.SIC_Job = LookupQ.SIC_Job AND'
 					Set @S = @S +       ' S.Seq_ID = LookupQ.Seq_ID AND'
+					If @GroupByChargeState <> 0
+						Set @S = @S +   ' S.Charge_State = LookupQ.Charge_State AND'
 					Set @S = @S +       ' S.' + @SelectionField + ' = LookupQ.Value_Max'
-					Set @S = @S +       ' GROUP BY S.Seq_ID'
+					Set @S = @S +      ' GROUP BY S.Seq_ID'
+					If @GroupByChargeState <> 0
+						Set @S = @S +				', S.Charge_State'
 					Set @S = @S +    ' ) UniqueRowQ ON'
 					Set @S = @S +    ' S.Unique_Row_ID = UniqueRowQ.Unique_Row_ID_Min'
 					
@@ -613,7 +632,8 @@ As
 			If @JobIsXTPeptideHit = 1
 				Set @S = @S +   ' S.Hyperscore,S.Log_Evalue,'
 
-			Set @S = @S +   ' S.DeltaCn2, S.Charge_State, S.DiscriminantScoreNorm,'
+			Set @S = @S +   ' S.DeltaCn2, S.Charge_State,'
+			Set @S = @S +   ' S.DiscriminantScoreNorm, S.Peptide_Prophet_Probability,'
 			Set @S = @S +   ' S.Optimal_Peak_Apex_Scan_Number, DS_Scans.Scan_Time,'
 			Set @S = @S +   ' S.Peak_Intensity, S.Peak_SN_Ratio, S.FWHM_In_Scans, S.Peak_Area,'
 
@@ -642,6 +662,94 @@ As
 				exec sp_ExecuteSql @S
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error	
+			
+			If @GroupByPeptide <> 0 And @ReportHighestScoreStatsInJob <> 0
+			Begin
+				-- Update the data in #TmpPeptidesAndSICStats_Results for this job to reflect the maximum scores for each peptide
+
+				If @JobIsPeptideHit = 1
+					Set @SelectionField = 'XCorr'
+
+				If @JobIsXTPeptideHit = 1
+					Set @SelectionField = 'Hyperscore'
+			
+				If @MaxValueSelectionMode < 3
+				Begin
+					Set @S = ''
+					Set @S = @S + ' UPDATE #TmpPeptidesAndSICStats_Results'
+					Set @S = @S + ' SET XCorr = MaxValuesQ.XCorr,'
+					Set @S = @S +     ' DeltaCn2 = MaxValuesQ.DeltaCn2,'
+					Set @S = @S +     ' Charge_State = MaxValuesQ.Charge_State'
+					If @JobIsXTPeptideHit = 1
+					Begin
+						Set @S = @S + ' , Hyperscore = MaxValuesQ.Hyperscore'
+						Set @S = @S + ' , Log_EValue = MaxValuesQ.Log_EValue'
+					End
+					Set @S = @S + ' FROM #TmpPeptidesAndSICStats_Results Target INNER JOIN'
+					Set @S = @S + ' ( SELECT S.SIC_Job, S.Seq_ID, S.XCorr, S.DeltaCn2, S.Charge_State'
+					If @JobIsXTPeptideHit = 1
+						Set @S = @S +    ' , S.Hyperscore, S.Log_EValue'
+
+					Set @S = @S +   ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
+					Set @S = @S +      ' ( SELECT MIN(S.Unique_Row_ID) AS Unique_Row_ID_Min'
+					Set @S = @S +        ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
+					Set @S = @S +         ' ( SELECT SIC_Job, Seq_ID, MAX(' + @SelectionField + ') AS Value_Max'
+					If @GroupByChargeState <> 0
+						Set @S = @S +			  ', Charge_State'
+					Set @S = @S +           ' FROM #TmpPeptidesAndSICStats'
+					Set @S = @S +           ' GROUP BY SIC_Job, Seq_ID'
+					If @GroupByChargeState <> 0
+						Set @S = @S +				', Charge_State'
+					Set @S = @S +         ' ) LookupQ ON'
+					Set @S = @S +         ' S.SIC_Job = LookupQ.SIC_Job AND'
+					Set @S = @S +         ' S.Seq_ID = LookupQ.Seq_ID AND'
+					If @GroupByChargeState <> 0
+						Set @S = @S +     ' S.Charge_State = LookupQ.Charge_State AND'
+					Set @S = @S +         ' S.' + @SelectionField + ' = LookupQ.Value_Max'
+					Set @S = @S +         ' GROUP BY S.Seq_ID'
+					If @GroupByChargeState <> 0
+						Set @S = @S +				', S.Charge_State'
+					Set @S = @S +      ' ) UniqueRowQ ON'
+					Set @S = @S +      ' S.Unique_Row_ID = UniqueRowQ.Unique_Row_ID_Min'
+					Set @S = @S +   ' ) MaxValuesQ ON Target.Seq_ID = MaxValuesQ.Seq_ID AND Target.SIC_Job = MaxValuesQ.SIC_Job'
+					If @GroupByChargeState <> 0
+						Set @S = @S +   ' AND Target.Charge_State = MaxValuesQ.Charge_State'
+														
+					If @PreviewSql <> 0
+						Print @S
+					Else
+						exec sp_ExecuteSql @S
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+				End
+
+				Set @S = ''
+				Set @S = @S + ' UPDATE #TmpPeptidesAndSICStats_Results'
+				Set @S = @S + ' SET Discriminant = MaxValuesQ.DiscriminantScoreNorm,'
+				Set @S = @S +     ' Peptide_Prophet_Prob = MaxValuesQ.Peptide_Prophet_Probability'
+				Set @S = @S + ' FROM #TmpPeptidesAndSICStats_Results Target INNER JOIN'
+				Set @S = @S + ' ( SELECT SIC_Job, Seq_ID,'
+				Set @S = @S +          ' MAX(DiscriminantScoreNorm) AS DiscriminantScoreNorm,'
+				Set @S = @S +          ' MAX(Peptide_Prophet_Probability) AS Peptide_Prophet_Probability'
+				If @GroupByChargeState <> 0
+					Set @S = @S +      ', Charge_State'
+				Set @S = @S +   ' FROM #TmpPeptidesAndSICStats'
+				Set @S = @S +   ' GROUP BY SIC_Job, Seq_ID'
+				If @GroupByChargeState <> 0
+					Set @S = @S +         ', Charge_State'
+				Set @S = @S + ' ) MaxValuesQ ON Target.Seq_ID = MaxValuesQ.Seq_ID AND Target.SIC_Job = MaxValuesQ.SIC_Job'
+				If @GroupByChargeState <> 0
+					Set @S = @S + ' AND Target.Charge_State = MaxValuesQ.Charge_State'
+									
+				If @PreviewSql <> 0
+					Print @S
+				Else
+					exec sp_ExecuteSql @S
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
+					
+			End
+			
 		End -- </b>
 	End -- </a>
 
@@ -672,4 +780,6 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [DMS_SP_User]
+GO
+GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [MTUser]
 GO

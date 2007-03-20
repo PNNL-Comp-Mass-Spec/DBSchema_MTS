@@ -38,6 +38,7 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			07/06/2006 mem - Added call to ProcessPeptideProphetTasks and updated call to CheckAllFiltersForAvailableAnalyses
 **			08/02/2006 mem - Added call to SetReversedAndScrambledJobsToHolding
 **			08/25/2006 mem - Now posting log entry before calling UpdatePeptideSICStats if any jobs are in state 20
+**			12/02/2006 mem - Added a second call to CheckStaleJobs
 **    
 *****************************************************/
 (
@@ -631,8 +632,6 @@ CalculateStatistics:
 	Declare @JobProcessingStateMin int
 	Declare @JobProcessingStateMax int
 	set @maxHoursProcessing = 48
-	set @JobProcessingStateMin = 10
-	set @JobProcessingStateMax = 69
 
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'CheckStaleJobs')
@@ -640,7 +639,17 @@ CalculateStatistics:
 	begin
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin CheckStaleJobs', 'MasterUpdateProcessBackground'
+		
+		-- Call CheckStaleJobs for states 10 to 69
+		set @JobProcessingStateMin = 10
+		set @JobProcessingStateMax = 69
 		exec @result = CheckStaleJobs @maxHoursProcessing, @JobProcessingStateMin, @JobProcessingStateMax, @message = @message OUTPUT
+
+		-- Call CheckStaleJobs agains for states 90 to 150
+		set @JobProcessingStateMin = 90
+		set @JobProcessingStateMax = 150
+		exec @result = CheckStaleJobs @maxHoursProcessing, @JobProcessingStateMin, @JobProcessingStateMax, @message = @message OUTPUT
+		
 		set @message = 'Complete ' + @message
 	end
 	else

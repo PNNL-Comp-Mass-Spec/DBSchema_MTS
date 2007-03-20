@@ -39,6 +39,7 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			06/08/2006 mem - Now using GetOrganismDBFileInfo to lookup the OrganismDBFileID or ProteinCollectionFileID value for the given job
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
+**			11/30/2006 mem - Implemented Try...Catch error handling
 **    
 *****************************************************/
 (
@@ -54,6 +55,10 @@ As
 	declare @myError int
 	set @myRowCount = 0
 	set @myError = 0
+
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 	
 	set @count = 0	
 	set @message = ''
@@ -85,216 +90,236 @@ As
 	declare @logLevel int
 	set @logLevel = 1		-- Default to normal logging
 
-	--------------------------------------------------------------
-	-- Lookup the LogLevel state
-	-- 0=Off, 1=Normal, 2=Verbose, 3=Debug
-	--------------------------------------------------------------
-	--
-	SELECT @logLevel = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LogLevel')
+	Begin Try
+		Set @CurrentLocation = 'Lookup settings in T_Process_Step_Control and T_Analysis_Description'
+		
+		--------------------------------------------------------------
+		-- Lookup the LogLevel state
+		-- 0=Off, 1=Normal, 2=Verbose, 3=Debug
+		--------------------------------------------------------------
+		--
+		SELECT @logLevel = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LogLevel')
 
-	--------------------------------------------------------------
-	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
-	-- Assume skipping is enabled if the value is not present
-	--------------------------------------------------------------
-	--
-	SELECT @SkipPeptidesFromReversedProteins = Enabled
-	FROM T_Process_Step_Control
-	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
-	--
-	SELECT @myRowcount = @@rowcount, @myError = @@error
-	
-	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
-	
-	-----------------------------------------------------------
-	-- Get Analysis job information
-	-----------------------------------------------------------
-	--
-	-- get parameters from analysis table, 
-	--
-	set @parameterFileName = ''
-	
-	SELECT	@parameterFileName = Parameter_File_Name
-	FROM	T_Analysis_Description
-	WHERE	Job = @job
-	--
-	SELECT @myRowcount = @@rowcount, @myError = @@error
-	--
-	if @parameterFileName = ''
-	begin
-		set @message = 'Could not get analysis parameter file information for job ' + @jobStr
-		set @myError = 51111
-		goto Done
-	end
+		--------------------------------------------------------------
+		-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
+		-- Assume skipping is enabled if the value is not present
+		--------------------------------------------------------------
+		--
+		SELECT @SkipPeptidesFromReversedProteins = Enabled
+		FROM T_Process_Step_Control
+		WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+		
+		Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
+		
+		-----------------------------------------------------------
+		-- Get Analysis job information
+		-----------------------------------------------------------
+		--
+		-- get parameters from analysis table, 
+		--
+		set @parameterFileName = ''
+		
+		SELECT	@parameterFileName = Parameter_File_Name
+		FROM	T_Analysis_Description
+		WHERE	Job = @job
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+		--
+		if @parameterFileName = ''
+		begin
+			set @message = 'Could not get analysis parameter file information for job ' + @jobStr
+			set @myError = 51111
+			goto Done
+		end
 
-	------------------------------------------------------------------
-	-- Lookup the number of proteins and residues in Organism DB file (aka the FASTA file)
-	--  or Protein Collection used for this analysis job
-	-- Note that GetOrganismDBFileInfo will post an error to the log if the job
-	--  has an unknown Fasta file or Protein Collection List
-	------------------------------------------------------------------
-	--
-	Exec  @myError = GetOrganismDBFileInfo @job, 
-							   @OrganismDBFileID  = @OrganismDBFileID OUTPUT,
-							   @ProteinCollectionFileID = @ProteinCollectionFileID OUTPUT
-	
-	If @myError <> 0
-	Begin
-		-- GetOrganismDBFileInfo returned an error: abort processing 
-		-- Note that UpdateSequenceModsForAvailableAnalyses looks for the text "Error calling GetOrganismDBFileInfo"
-		-- If found, it will not re-post an error to the log
-		Set @myError = 51112
-		Set @message = 'Error calling GetOrganismDBFileInfo (Code ' + Convert(varchar(12), @myError) + ')'
-		Goto Done
-	End
+		------------------------------------------------------------------
+		-- Lookup the number of proteins and residues in Organism DB file (aka the FASTA file)
+		--  or Protein Collection used for this analysis job
+		-- Note that GetOrganismDBFileInfo will post an error to the log if the job
+		--  has an unknown Fasta file or Protein Collection List
+		------------------------------------------------------------------
+		--
+		Set @CurrentLocation = 'Call GetOrganismDBFileInfo for job ' + @jobStr
+		
+		Exec  @myError = GetOrganismDBFileInfo @job, 
+								@OrganismDBFileID  = @OrganismDBFileID OUTPUT,
+								@ProteinCollectionFileID = @ProteinCollectionFileID OUTPUT
+		
+		If @myError <> 0
+		Begin
+			-- GetOrganismDBFileInfo returned an error: abort processing 
+			-- Note that UpdateSequenceModsForAvailableAnalyses looks for the text "Error calling GetOrganismDBFileInfo"
+			-- If found, it will not re-post an error to the log
+			Set @myError = 51112
+			Set @message = 'Error calling GetOrganismDBFileInfo (Code ' + Convert(varchar(12), @myError) + ')'
+			Goto Done
+		End
 
-	Set @OrganismDBFileID = IsNull(@OrganismDBFileID, 0)
-	Set @ProteinCollectionFileID = IsNull(@ProteinCollectionFileID, 0)
+		Set @OrganismDBFileID = IsNull(@OrganismDBFileID, 0)
+		Set @ProteinCollectionFileID = IsNull(@ProteinCollectionFileID, 0)
 
-	-----------------------------------------------------------
-	-- Create two tables on the master sequences server to cache the data to update
-	-----------------------------------------------------------
-	--
-	set @message = 'Call Master_Sequences.dbo.CreateTempSequenceTables for job ' + @jobStr
-	If @logLevel >= 2
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--
-	-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
-	exec ProteinSeqs.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
-	--
-	SELECT @myRowcount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		set @message = 'Problem calling CreateTempSequenceTables to create the temporary sequence tables for job ' + @jobStr
-		goto Done
-	end
-	else
-		set @DeleteTempTables = 1
-
-	-----------------------------------------------------------
-	-- Populate @PeptideSequencesTableName with the data to parse
-	-----------------------------------------------------------
-	--
-	set @message = 'Populate the TempSequenceTables with the data to parse for job ' + @jobStr
-	If @logLevel >= 2
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--
-	Set @Sql = ''
-	Set @Sql = @Sql + ' INSERT INTO ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' (Peptide_ID, Peptide)'
-	Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
-	Set @Sql = @Sql + ' FROM T_Peptides'
-	Set @Sql = @Sql + ' WHERE Analysis_ID = ' + @jobStr
-	If @SkipPeptidesFromReversedProteins <> 0
-		Set @Sql = @Sql + ' AND State_ID <> 2'
-	--
-	Exec (@Sql)
-	--
-	SELECT @myRowcount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		set @message = 'Problem populating ' + @PeptideSequencesTableName + ' with the peptides to process for job ' + @jobStr
-		goto Done
-	end
-
-	-----------------------------------------------------------
-	-- Call GetIDsForRawSequences to process the data in the temporary sequence tables
-	-----------------------------------------------------------
-	--
-	set @message = 'Call Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr
-	If @logLevel >= 1
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--
-	exec @myError = ProteinSeqs.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
-															 @PeptideSequencesTableName, @UniqueSequencesTableName, @processCount output, @message output
-	--
-	if @myError <> 0
-	begin
-		If Len(@message) = 0
-			set @message = 'Error calling Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr + ': ' + convert(varchar(12), @myError)
+		-----------------------------------------------------------
+		-- Create two tables on the master sequences server to cache the data to update
+		-----------------------------------------------------------
+		--
+		Set @message = 'Call Master_Sequences.dbo.CreateTempSequenceTables for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 2
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--
+		-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
+		exec ProteinSeqs.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Problem calling CreateTempSequenceTables to create the temporary sequence tables for job ' + @jobStr
+			goto Done
+		end
 		else
-			set @message = 'Error calling Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr + ': ' + @message
-			
-		goto Done
-	end
+			set @DeleteTempTables = 1
 
-	-----------------------------------------------------------
-	-- Add the new sequences to T_Sequence
-	-----------------------------------------------------------
-	--
-	set @message = 'Add new sequences to T_Sequence for job ' + @jobStr
-	If @logLevel >= 1
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--
-	Set @Sql = ''
-	Set @Sql = @Sql + ' INSERT INTO T_Sequence (Seq_ID, Clean_Sequence, Mod_Count, Mod_Description)'
-	Set @Sql = @Sql + ' SELECT S.Seq_ID, S.Clean_Sequence, S.Mod_Count, S.Mod_Description'
-	Set @Sql = @Sql + ' FROM ' + @MasterSequencesServerName + '.' + @UniqueSequencesTableName + ' AS S' 
-	Set @Sql = @Sql + '    LEFT OUTER JOIN T_Sequence ON S.Seq_ID = T_Sequence.Seq_ID'
-	Set @Sql = @Sql + ' WHERE T_Sequence.Seq_ID IS NULL'
-	--
-	Exec (@Sql)
-	--
-	SELECT @myError = @@error, @myRowcount = @@rowcount
-	--
-	Set @sequencesAdded = @myRowCount
+		-----------------------------------------------------------
+		-- Populate @PeptideSequencesTableName with the data to parse
+		-----------------------------------------------------------
+		--
+		Set @message = 'Populate ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' with candidate sequences for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 2
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--
+		Set @Sql = ''
+		Set @Sql = @Sql + ' INSERT INTO ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' (Peptide_ID, Peptide)'
+		Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
+		Set @Sql = @Sql + ' FROM T_Peptides'
+		Set @Sql = @Sql + ' WHERE Analysis_ID = ' + @jobStr
+		If @SkipPeptidesFromReversedProteins <> 0
+			Set @Sql = @Sql + ' AND State_ID <> 2'
+		--
+		Exec (@Sql)
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Problem populating ' + @PeptideSequencesTableName + ' with the peptides to process for job ' + @jobStr
+			goto Done
+		end
+
+		-----------------------------------------------------------
+		-- Call GetIDsForRawSequences to process the data in the temporary sequence tables
+		-----------------------------------------------------------
+		--
+		set @message = 'Call Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 1
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--
+		exec @myError = ProteinSeqs.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
+																@PeptideSequencesTableName, @UniqueSequencesTableName, @processCount output, @message output
+		--
+		if @myError <> 0
+		begin
+			If Len(@message) = 0
+				set @message = 'Error calling Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr + ': ' + convert(varchar(12), @myError)
+			else
+				set @message = 'Error calling Master_Sequences.dbo.GetIDsForRawSequences for job ' + @jobStr + ': ' + @message
+				
+			goto Done
+		end
+
+		-----------------------------------------------------------
+		-- Add the new sequences to T_Sequence
+		-----------------------------------------------------------
+		--
+		set @message = 'Add new sequences to T_Sequence for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 1
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--
+		Set @Sql = ''
+		Set @Sql = @Sql + ' INSERT INTO T_Sequence (Seq_ID, Clean_Sequence, Mod_Count, Mod_Description)'
+		Set @Sql = @Sql + ' SELECT S.Seq_ID, S.Clean_Sequence, S.Mod_Count, S.Mod_Description'
+		Set @Sql = @Sql + ' FROM ' + @MasterSequencesServerName + '.' + @UniqueSequencesTableName + ' AS S' 
+		Set @Sql = @Sql + '    LEFT OUTER JOIN T_Sequence ON S.Seq_ID = T_Sequence.Seq_ID'
+		Set @Sql = @Sql + ' WHERE T_Sequence.Seq_ID IS NULL'
+		--
+		Exec (@Sql)
+		--
+		SELECT @myError = @@error, @myRowcount = @@rowcount
+		--
+		Set @sequencesAdded = @myRowCount
+		
+		
+		-----------------------------------------------------------
+		-- Update T_Peptides
+		-----------------------------------------------------------
+		--
+		set @message = 'Update Seq_ID in T_Peptides for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 1
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--
+		Set @Sql = ''
+		Set @Sql = @Sql + ' UPDATE T_Peptides'
+		Set @Sql = @Sql + ' SET Seq_ID = P.Seq_ID'
+		Set @Sql = @Sql + ' FROM ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' AS P' 
+		Set @Sql = @Sql + '    INNER JOIN T_Peptides ON T_Peptides.Peptide_ID = P.Peptide_ID'
+		--
+		Exec (@Sql)
+		--
+		SELECT @myError = @@error, @myRowcount = @@rowcount
+
+		Set @processCount = @myRowCount
+
+
+		-----------------------------------------------------------
+		-- Update Cleavage_State_Max in T_Sequence for the peptides present in this job
+		-----------------------------------------------------------
+		--	
+		set @message = 'Update Cleavage_State_Max in T_Sequence for job ' + @jobStr
+		Set @CurrentLocation = @message
+		If @logLevel >= 1
+			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+		--	
+		UPDATE T_Sequence
+		SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
+		FROM T_Sequence Seq INNER JOIN (
+			SELECT Pep.Seq_ID, MAX(ISNULL(PPM.Cleavage_State, 0)) AS Cleavage_State_Max
+			FROM T_Peptides Pep INNER JOIN
+				T_Peptide_to_Protein_Map PPM ON 
+				Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
+				T_Sequence ON Pep.Seq_ID = T_Sequence.Seq_ID
+			WHERE Pep.Analysis_ID = @job
+			GROUP BY Pep.Seq_ID
+			) LookupQ ON Seq.Seq_ID = LookupQ.Seq_ID
+		WHERE LookupQ.Cleavage_State_Max > Seq.Cleavage_State_Max OR
+			Seq.Cleavage_State_Max IS NULL
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+
+
+		-----------------------------------------------------------
+		-- Update state of analysis job
+		-----------------------------------------------------------
+		--
+		Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
+		Exec SetProcessState @job, @NextProcessState
+
+		set @count = @processCount
+		set @message = 'Peptide sequence mods updated for job ' + @jobStr + '; Sequences processed: ' + convert(varchar(11), @processCount) + '; New sequences added: ' + convert(varchar(11), @sequencesAdded)
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'UpdateSequenceModsForOneAnalysisBulk')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done
+	End Catch		
 	
-	
-	-----------------------------------------------------------
-	-- Update T_Peptides
-	-----------------------------------------------------------
-	--
-	set @message = 'Update Seq_ID in T_Peptides for job ' + @jobStr
-	If @logLevel >= 1
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--
-	Set @Sql = ''
-	Set @Sql = @Sql + ' UPDATE T_Peptides'
-	Set @Sql = @Sql + ' SET Seq_ID = P.Seq_ID'
-	Set @Sql = @Sql + ' FROM ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' AS P' 
-	Set @Sql = @Sql + '    INNER JOIN T_Peptides ON T_Peptides.Peptide_ID = P.Peptide_ID'
-	--
-	Exec (@Sql)
-	--
-	SELECT @myError = @@error, @myRowcount = @@rowcount
-
-	Set @processCount = @myRowCount
-
-
-	-----------------------------------------------------------
-	-- Update Cleavage_State_Max in T_Sequence for the peptides present in this job
-	-----------------------------------------------------------
-	--	
-	set @message = 'Update Cleavage_State_Max in T_Sequence for job ' + @jobStr
-	If @logLevel >= 1
-		execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
-	--	
-	UPDATE T_Sequence
-	SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
-	FROM T_Sequence Seq INNER JOIN (
-          SELECT Pep.Seq_ID, MAX(ISNULL(PPM.Cleavage_State, 0)) AS Cleavage_State_Max
-		  FROM T_Peptides Pep INNER JOIN
-			 T_Peptide_to_Protein_Map PPM ON 
-			 Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
-			 T_Sequence ON Pep.Seq_ID = T_Sequence.Seq_ID
-		  WHERE Pep.Analysis_ID = @job
-		  GROUP BY Pep.Seq_ID
-		) LookupQ ON Seq.Seq_ID = LookupQ.Seq_ID
-	WHERE LookupQ.Cleavage_State_Max > Seq.Cleavage_State_Max OR
-		  Seq.Cleavage_State_Max IS NULL
-	--
-	SELECT @myRowcount = @@rowcount, @myError = @@error
-
-
-	-----------------------------------------------------------
-	-- Update state of analysis job
-	-----------------------------------------------------------
-	--
-	Exec SetProcessState @job, @NextProcessState
-
-	set @count = @processCount
-	set @message = 'Peptide sequence mods updated for job ' + @jobStr + '; Sequences processed: ' + convert(varchar(11), @processCount) + '; New sequences added: ' + convert(varchar(11), @sequencesAdded)
-
 Done:
 	
 	-----------------------------------------------------------
@@ -302,7 +327,18 @@ Done:
 	-----------------------------------------------------------
 	--
 	If @DeleteTempTables = 1
-		exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
+	Begin
+		Begin Try
+			Set @CurrentLocation = 'Delete temporary tables ' + @PeptideSequencesTableName + ' and ' + @UniqueSequencesTableName
+			exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
+		End Try
+		Begin Catch
+			-- Error caught
+			Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'UpdateSequenceModsForOneAnalysisBulk')
+			exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+									@ErrorNum = @myError output, @message = @message output
+		End Catch
+	End
 
 	Return @myError
 

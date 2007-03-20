@@ -45,6 +45,7 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 **			08/14/2006 mem - Updated peptide prophet results processing to consider charge state when counting the number of null entries
 **			10/10/2006 mem - Now checking for protein names longer than 34 characters
 **			11/27/2006 mem - Now calling UpdatePeptideStateID
+**			03/06/2007 mem - Now considering @PeptideProphet and @RankScore when filtering
 **
 *****************************************************/
 (
@@ -95,6 +96,9 @@ As
 
 	declare @LongProteinNameCount int
 	set @LongProteinNameCount = 0
+	
+	declare @UsePeptideProphetFilter tinyint
+	declare @UseRankScoreFilter tinyint
 	
 	If @UsingPhysicalTempTables = 1
 	Begin
@@ -631,7 +635,11 @@ As
 			@XTandemHyperscoreComparison varchar(2),	-- Not used in this SP
 			@XTandemHyperscoreThreshold real,			-- Not used in this SP
 			@XTandemLogEValueComparison varchar(2),		-- Not used in this SP
-			@XTandemLogEValueThreshold real				-- Not used in this SP
+			@XTandemLogEValueThreshold real,			-- Not used in this SP
+			@PeptideProphetComparison varchar(2),		-- Only used if @PeptideProphetCountLoaded > 0
+			@PeptideProphetThreshold float,				-- Only used if @PeptideProphetCountLoaded > 0
+			@RankScoreComparison varchar(2),
+			@RankScoreThreshold smallint
 
 	-----------------------------------------------------------
 	-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -655,7 +663,9 @@ As
 									@ProteinCountComparison OUTPUT, @ProteinCountThreshold OUTPUT,
 									@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 									@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
-									@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT
+									@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
+									@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+									@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
 	
 	if @myError <> 0
 	begin
@@ -692,6 +702,33 @@ As
 
 	While @CriteriaGroupMatch > 0
 	Begin
+		Set @UsePeptideProphetFilter = 0
+		If @PeptideProphetCountLoaded > 0
+		Begin
+			If @PeptideProphetComparison = '>' AND @PeptideProphetThreshold >= 0
+				Set @UsePeptideProphetFilter = 1
+			
+			If @PeptideProphetComparison = '>=' AND @PeptideProphetThreshold > 0
+				Set @UsePeptideProphetFilter = 1
+					
+			If @PeptideProphetComparison = '=' AND @PeptideProphetThreshold >= 0
+				Set @UsePeptideProphetFilter = 1
+
+
+			If @PeptideProphetComparison = '<' AND @PeptideProphetThreshold <= 1
+				Set @UsePeptideProphetFilter = 1
+			
+			If @PeptideProphetComparison = '<=' AND @PeptideProphetThreshold < 1
+				Set @UsePeptideProphetFilter = 1					
+		End
+		
+		Set @UseRankScoreFilter = 1
+		If @RankScoreComparison = '>=' AND @RankScoreThreshold <= 1
+			Set @UseRankScoreFilter = 0
+			
+		If @RankScoreComparison = '>' AND @RankScoreThreshold <= 0
+			Set @UseRankScoreFilter = 0
+
 		-- Construct the Sql Update Query
 		--
 		Set @Sql = ''
@@ -700,6 +737,10 @@ As
 		Set @Sql = @Sql + ' FROM #Tmp_Peptide_Filter_Flags TFF INNER JOIN'
 		Set @Sql = @Sql +      ' #Tmp_Peptide_Import TPI ON TFF.Result_ID = TPI.Result_ID INNER JOIN'
 		Set @Sql = @Sql +      ' #Tmp_Peptide_Cleavage_State PCS ON TPI.Result_ID = PCS.Result_ID'
+		
+		If @UsePeptideProphetFilter = 1
+			Set @Sql = @Sql +      ' INNER JOIN #Tmp_PepProphet_Results PPR ON TPI.Result_ID = PPR.Result_ID '
+			 
 		Set @Sql = @Sql + ' WHERE '
 		Set @Sql = @Sql +	' PCS.Cleavage_State ' + @CleavageStateComparison + Convert(varchar(6), @CleavageStateThreshold) + ' AND '
 		Set @Sql = @Sql +	' PCS.Terminus_State ' + @TerminusStateComparison + Convert(varchar(6), @TerminusStateThreshold) + ' AND '
@@ -708,6 +749,13 @@ As
 		Set @Sql = @Sql +	' TPI.MH ' + @MassComparison + Convert(varchar(11), @MassThreshold) + ' AND '
 		Set @Sql = @Sql +	' TPI.DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
 		Set @Sql = @Sql +   ' TPI.PassFilt ' + @DiscriminantInitialFilterComparison + Convert(varchar(11), @DiscriminantInitialFilterThreshold)
+		
+		If @UseRankScoreFilter = 1
+			Set @Sql = @Sql + ' AND TPI.RankXc ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
+
+		If @UsePeptideProphetFilter = 1
+			Set @Sql = @Sql + ' AND PPR.Probability ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold)
+		
 
 		-- Execute the Sql to update the matching entries
 		Exec (@Sql)
@@ -741,7 +789,9 @@ As
 										@ProteinCountComparison OUTPUT, @ProteinCountThreshold OUTPUT,
 										@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 										@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
-										@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT
+										@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
+										@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
 		If @myError <> 0
 		Begin
 			Set @Message = 'Error retrieving next entry from GetThresholdsForFilterSet in LoadSequestPeptidesBulk'

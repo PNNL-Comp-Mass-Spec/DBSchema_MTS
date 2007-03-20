@@ -33,8 +33,8 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Labelling] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Created] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Created]  DEFAULT (getdate()),
 	[Last_Affected] [datetime] NULL,
-	[Process_State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Process_State]  DEFAULT (0),
-	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT (5),
+	[Process_State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Process_State]  DEFAULT ((0)),
+	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)),
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,
@@ -47,7 +47,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -56,14 +56,14 @@ GO
 CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Instrument] ON [dbo].[T_Analysis_Description] 
 (
 	[Instrument] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Analysis_Description_Process_State] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Process_State] ON [dbo].[T_Analysis_Description] 
 (
 	[Process_State] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
 /****** Object:  Trigger [dbo].[trig_i_AnalysisJob] ******/

@@ -1,10 +1,10 @@
 /****** Object:  UserDefinedFunction [dbo].[udfParseKeyValueList] ******/
-SET ANSI_NULLS OFF
+SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE FUNCTION dbo.udfParseKeyValueList
+CREATE FUNCTION udfParseKeyValueList
 /****************************************************	
 **	Parses the text in @KeyValueList and returns a table
 **	containing the keywords and values
@@ -13,10 +13,11 @@ CREATE FUNCTION dbo.udfParseKeyValueList
 **
 **	Auth:	mem
 **	Date:	06/06/2006
+**			03/14/2007 mem - Changed @KeyValueList parameter from varchar(4000) to varchar(max)
 **  
 ****************************************************/
 (
-	@KeyValueList varchar(4000),
+	@KeyValueList varchar(max),
 	@ListDelimiter varchar(2) = ',',
 	@KeyValueDelimiter varchar(2) = '='
 )
@@ -28,7 +29,7 @@ BEGIN
 	Declare @Delimiter1Pos int
 	Declare @Delimiter2Pos int
 	
-	Declare @KeyValuePair varchar(4000)
+	Declare @KeyValuePair varchar(4096)
 	Declare @Keyword varchar(2048)
 	Declare @Value varchar(2048)
 	
@@ -73,6 +74,5 @@ BEGIN
 
 	RETURN
 END
-
 
 GO
