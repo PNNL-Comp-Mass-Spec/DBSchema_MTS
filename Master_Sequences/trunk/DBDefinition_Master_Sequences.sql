@@ -1,8 +1,8 @@
 /****** Object:  Database [Master_Sequences] ******/
 CREATE DATABASE [Master_Sequences] ON  PRIMARY 
-( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 78914944KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 104639424KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 204032KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 153216KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 EXEC dbo.sp_dbcmptlevel @dbname=N'Master_Sequences', @new_cmptlevel=90
