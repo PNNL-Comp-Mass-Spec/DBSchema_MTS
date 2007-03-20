@@ -27,15 +27,17 @@ CREATE PROCEDURE dbo.GetAllMassTagDatabasesStatisticsReport
 **	Date:	10/23/2004
 **			12/06/2004 mem - Ported to MTS_Master
 **			07/25/2006 mem - Updated to exclude databases with state 15 and state 100 when @IncludeUnused = 'True'
-**    
+**			12/08/2006 mem - Added parameter @AddWildcardChars
+**						   - Now returning [Protein Collections], [Seq Directions], and [MSMS Result Types] in the output
 *****************************************************/
 (
-	@ConfigurationSettingsOnly varchar(32) = 'False',
+	@ConfigurationSettingsOnly varchar(32) = 'False',		-- Ths will be set to 'False' if @ConfigurationCrosstabMode = 'True'
 	@ConfigurationCrosstabMode varchar(32) = 'True',
 	@DBNameFilter varchar(2048) = '',
 	@IncludeUnused varchar(32) = 'False',
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
-	@message varchar(512) = '' output
+	@message varchar(512) = '' output,
+	@AddWildcardChars tinyint = 1			-- If 1, then adds percent signs to the beginning and end of @DBNameFilter if it does not contain a percent sign
 )
 As
 	set nocount on
@@ -44,10 +46,6 @@ As
 	declare @myRowCount int
 	set @myError = 0
 	set @myRowCount = 0
-
-	-- Validate or clear the input/output parameters
-	Set @ServerFilter = IsNull(@ServerFilter, '')
-	Set @message = ''
 
 	declare @result int
 	declare @continue int
@@ -62,10 +60,25 @@ As
 	declare @ParamList nvarchar(512)
 	Set @ParamList = N'@Organism varchar(255) OUTPUT, @Campaign varchar(255) OUTPUT, @State varchar(50) OUTPUT, @LastUpdate datetime OUTPUT, @Description varchar(2048) OUTPUT'
 
+	-----------------------------------------------------------
+	-- Validate the inputs
+	-----------------------------------------------------------
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @ConfigurationSettingsOnly OUTPUT, 0
 	Exec CleanupTrueFalseParameter @ConfigurationCrosstabMode OUTPUT, 1
 	Exec CleanupTrueFalseParameter @IncludeUnused OUTPUT, 0
+	
+	Set @DBNameFilter = IsNull(@DBNameFilter, '')
+	Set @ServerFilter = IsNull(@ServerFilter, '')
+	Set @message = ''
+
+	If Len(@DBNameFilter) > 0
+	Begin
+		If @AddWildcardChars <> 0
+			If CharIndex('%', @DBNameFilter) = 0
+				Set @DBNameFilter = '%' + @DBNameFilter + '%'
+	End
+		
 	
 	---------------------------------------------------
 	-- Create the temporary tables
@@ -92,19 +105,22 @@ As
 
 	CREATE TABLE #ConfigurationCrosstab (
 		[Database Name] varchar(128) NOT Null,
+		[Database Description] varchar(2048) NULL,
 		[Server Name] [varchar] (64) NOT NULL,
 		[Database Campaign] varchar(255) NULL,
 		[Organism] varchar(128) NULL,
 		[Peptide DB] varchar(255) NULL,
 		[Protein DB] varchar(255) NULL,
 		[Organism DB Files] varchar(255) NULL,
+		[Protein Collections] varchar(255) NULL,
+		[Seq Directions] varchar(255) NULL,
 		[Parameter Files] varchar(255) NULL,
 		[Settings Files] varchar(255) NULL,
+		[MSMS Result Types] varchar(255) NULL,
 		[Separation Types] varchar(255) NULL,
 		[Experiments] varchar(255) NULL,
 		[State] varchar(50) NULL,
-		[Last Update] datetime NULL,
-		[Database Description] varchar(2048) NULL
+		[Last Update] datetime NULL
 	)
 	
 	
@@ -116,6 +132,9 @@ As
 	Declare @Peptide_DB varchar(255)
 	Declare @Protein_DB varchar(255)
 	Declare @Organism_DB_File varchar(255)
+	Declare @Protein_Collection_Filter varchar(255)
+	Declare @Seq_Direction_Filter varchar(255)
+	Declare @MSMS_Result_Type varchar(255)
 	Declare @Parameter_File varchar(255)
 	Declare @Settings_File_Name varchar(255)
 	Declare @Separation_Type varchar(255) 
@@ -235,6 +254,9 @@ As
 					set @Peptide_DB = ''
 					set @Protein_DB = ''
 					set @Organism_DB_File = ''
+					set @Protein_Collection_Filter = ''
+					set @Seq_Direction_Filter = ''
+					set @MSMS_Result_Type = ''
 					set @Parameter_File = ''
 					set @Settings_File_Name = ''
 					set @Separation_Type = '' 
@@ -290,6 +312,11 @@ As
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Peptide_DB_Name', @ValueList = @Peptide_DB OUTPUT
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Protein_DB_Name', @ValueList = @Protein_DB OUTPUT
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Organism_DB_File_Name', @ValueList = @Organism_DB_File OUTPUT
+						
+						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Protein_Collection_Filter', @ValueList = @Protein_Collection_Filter OUTPUT
+						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Seq_Direction_Filter', @ValueList = @Seq_Direction_Filter OUTPUT
+						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'MSMS_Result_Type', @ValueList = @MSMS_Result_Type OUTPUT
+
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Parameter_File_Name', @ValueList = @Parameter_File OUTPUT
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Settings_File_Name', @ValueList = @Settings_File_Name OUTPUT
 						Exec ConstructGeneralStatisticsValueList @Server, @DBName, 'Separation_Type', @ValueList = @Separation_Type OUTPUT
@@ -301,11 +328,19 @@ As
 					-- Add a new row to #ConfigurationCrosstab
 					--
 					INSERT INTO #ConfigurationCrosstab (
-								[Database Name], [Server Name], [Database Campaign], Organism, [Peptide DB], [Protein DB], [Organism DB Files], 
-								[Parameter Files], [Settings Files], [Separation Types], Experiments, State, [Last Update], [Database Description]
+								[Database Name], [Server Name], [Database Campaign], Organism, 
+								[Peptide DB], [Protein DB], [Organism DB Files], 
+								[Protein Collections], [Seq Directions],
+								[Parameter Files], [Settings Files], 
+								[MSMS Result Types], [Separation Types], 
+								Experiments, State, [Last Update], [Database Description]
 						)
-					SELECT	@DBName, @Server, @Campaign, @Organism, @Peptide_DB, @Protein_DB, @Organism_DB_File, 
-							@Parameter_File, @Settings_File_Name, @Separation_Type, @Experiment, @State, @LastUpdate, @Description
+					SELECT	@DBName, @Server, @Campaign, @Organism, 
+							@Peptide_DB, @Protein_DB, @Organism_DB_File, 
+							@Protein_Collection_Filter, @Seq_Direction_Filter,
+							@Parameter_File, @Settings_File_Name, 
+							@MSMS_Result_Type, @Separation_Type, @Experiment, 
+							@State, @LastUpdate, @Description
 					--	
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 
