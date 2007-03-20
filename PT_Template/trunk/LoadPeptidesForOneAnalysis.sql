@@ -40,6 +40,7 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			08/01/2006 mem - Updated to define the Peptide Prophet results file path
 **			08/10/2006 mem - Now updating the status message if using the Seq_Candidate tables and/or if Peptide Prophet data was loaded
+**			03/19/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
 **
 *****************************************************/
 (
@@ -104,20 +105,25 @@ AS
 	-----------------------------------------------
 	declare @ResultType varchar(64)
 	declare @Dataset  varchar(128)
-	declare @Path varchar(255)
+	declare @StoragePath varchar(255)
 	declare @DatasetFolder varchar(255)
 	declare @ResultsFolder varchar(255)
 	declare @VolClient varchar(255)
 	declare @VolServer varchar(255)
-	declare @StoragePath varchar(255)
-	
+
+	declare @FolderExists tinyint
+	declare @StoragePathClient varchar(512)
+	declare @StoragePathServer varchar(512)
+	declare @StoragePathResults varchar(512)
+
+		
 	set @Dataset = ''
 
 	SELECT	@ResultType = ResultType,
 			@Dataset = Dataset, 
 			@VolClient = Vol_Client, 
 			@VolServer = Vol_Server,
-			@Path = Storage_Path,
+			@StoragePath = Storage_Path,
 			@DatasetFolder = Dataset_Folder,  
 			@ResultsFolder = Results_Folder
 	FROM T_Analysis_Description
@@ -165,18 +171,38 @@ AS
 		goto Done
 	End
 
+	---------------------------------------------------
+	-- Get path to the analysis job results folder
+	---------------------------------------------------
+	--	
+	set @StoragePathClient = dbo.udfCombinePaths(
+							 dbo.udfCombinePaths(
+							 dbo.udfCombinePaths(@VolClient, @StoragePath), @DatasetFolder), @ResultsFolder)
+	
+	set @StoragePathServer = dbo.udfCombinePaths(
+							 dbo.udfCombinePaths(
+							 dbo.udfCombinePaths(@VolServer, @StoragePath), @DatasetFolder), @ResultsFolder)
 
-	If @clientStoragePerspective <> 0
-		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolClient, @Path), @DatasetFolder)
+	If @clientStoragePerspective = 0
+		set @StoragePathResults = @StoragePathServer
 	Else
-		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolServer, @Path), @DatasetFolder)
+	Begin
+		---------------------------------------------------
+		-- See if folder @StoragePathServer exists
+		-- If it does, preferentially use it
+		---------------------------------------------------
+		exec ValidateFolderExists @StoragePathServer, @CreateIfMissing = 0, @FolderExists = @FolderExists output
+		If @FolderExists <> 0
+			Set @StoragePathResults = @StoragePathServer
+		Else
+			Set @StoragePathResults = @StoragePathClient
+	End
 
 	-----------------------------------------------
 	-- Set up input file names and paths
 	-----------------------------------------------
 
 	declare @RootFileName varchar(128)
-	declare @ResultsPath varchar(512)
  	declare @PeptideSynFilePath varchar(512)
 
 	declare @PeptideResultToSeqMapFilePath varchar(512)
@@ -186,14 +212,13 @@ AS
 	declare @PeptideProphetResultsFilePath varchar(512)
 
 	set @RootFileName = @Dataset
-	set @ResultsPath = dbo.udfCombinePaths(@StoragePath, @ResultsFolder)
-	set @PeptideSynFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @SynFileExtension)
+	set @PeptideSynFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SynFileExtension)
 
-	set @PeptideResultToSeqMapFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @ResultToSeqMapFileExtension)
-	set @PeptideSeqInfoFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @SeqInfoFileExtension)
-	set @PeptideSeqModDetailsFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @SeqModDetailsFileExtension)
-	set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @SeqToProteinMapFileExtension)
-	set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@ResultsPath, @RootFileName + @PeptideProphetFileExtension)
+	set @PeptideResultToSeqMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @ResultToSeqMapFileExtension)
+	set @PeptideSeqInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqInfoFileExtension)
+	set @PeptideSeqModDetailsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqModDetailsFileExtension)
+	set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqToProteinMapFileExtension)
+	set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @PeptideProphetFileExtension)
 
 	Declare @fileExists tinyint
 	Declare @columnCount int

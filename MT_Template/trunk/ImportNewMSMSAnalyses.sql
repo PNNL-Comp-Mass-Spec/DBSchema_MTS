@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[ImportNewMSMSAnalyses] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.ImportNewMSMSAnalyses
+CREATE Procedure ImportNewMSMSAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -47,13 +47,17 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			06/13/2006 mem - Updated to recognize Protein_Collection_List jobs by only testing the Protein_Collection_List field in the source tablet for 'na' or '' rather than also testing the Organism_DB_Name field
 **			08/01/2006 mem - Increased size of @JobListOverride and switched to use udfParseDelimitedList to parse the list
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB Name
+**			11/29/2006 mem - Now adding a line feed character in key places to aid readability when using @PreviewSql = 1
+**						   - Updated to support ValidateNewAnalysesUsingProteinCollectionFilters setting Valid to >= 250 if @PreviewSql <> 0
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
+**			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
 **
 *****************************************************/
 (
 	@entriesAdded int = 0 output,
 	@message varchar(512) = '' output,
 	@infoOnly int = 0,
-	@JobListOverride varchar(4096) = '',
+	@JobListOverride varchar(max) = '',
 	@PreviewSql tinyint = 0					-- Set to 1 to display the table population Sql statements; if this is 1, then forces @infoOnly to be 1
 )
 As
@@ -105,8 +109,9 @@ As
 	declare @datasetListCount int
 	declare @datasetListCountExcluded int
 
-	declare @MatchCount int
-
+	declare @Lf char(1)
+	Set @Lf = char(10)
+	
 	declare @CrLf char(2)
 	Set @CrLf = char(10) + char(13)
 
@@ -193,8 +198,8 @@ As
 		)
 		
 		INSERT INTO #T_Tmp_JobListOverride (JobOverride)
-		SELECT Convert(int, Value)
-		FROM dbo.udfParseDelimitedList(@JobListOverride, ',')
+		SELECT Value
+		FROM dbo.udfParseDelimitedIntegerList(@JobListOverride, ',')
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -378,34 +383,33 @@ As
 	set @SCampaign = ''
 	set @SCampaign = @SCampaign + ' Campaign IN ('
 	set @SCampaign = @SCampaign +   ' SELECT Value FROM T_Process_Config'
-	set @SCampaign = @SCampaign +   ' WHERE [Name] = ''Campaign'' AND Len(Value) > 0)'
+	set @SCampaign = @SCampaign +   ' WHERE [Name] = ''Campaign'' AND Len(Value) > 0)' + @Lf
 	
 	set @SAddnl = ''
-	set @SAddnl = @SAddnl + ' (Process_State = 70)'
+	set @SAddnl = @SAddnl + ' (Process_State = 70)' + @Lf
 	
 	If @minGANETFit >= 0
-		set @SAddnl = @SAddnl + ' AND (ISNULL(GANET_Fit, 0) >= ' + convert(varchar(12), @minGANETFit) + ')'  
+		set @SAddnl = @SAddnl + ' AND (ISNULL(GANET_Fit, 0) >= ' + convert(varchar(12), @minGANETFit) + ')' + @Lf
 	Else
-		set @SAddnl = @SAddnl + ' AND (ISNULL(GANET_RSquared, 0) >= ' + convert(varchar(12), @minGANETRSquared) + ')'  
+		set @SAddnl = @SAddnl + ' AND (ISNULL(GANET_RSquared, 0) >= ' + convert(varchar(12), @minGANETRSquared) + ')' + @Lf
 		
-	set @SAddnl = @SAddnl + ' AND ((Protein_Collection_List <> ''na'' AND Protein_Collection_List <> '''')'
-	set @SAddnl = @SAddnl +      ' OR Organism_DB_Name IN (SELECT Value FROM T_Process_Config'
-	set @SAddnl = @SAddnl +      ' WHERE [Name] = ''Organism_DB_File_Name'' AND Len(Value) > 0)'
-	set @SAddnl = @SAddnl +  ')'
+	set @SAddnl = @SAddnl + ' AND ((Protein_Collection_List <> ''na'' AND Protein_Collection_List <> '''')' + @Lf
+	set @SAddnl = @SAddnl + '       OR Organism_DB_Name IN (SELECT Value FROM T_Process_Config'
+	set @SAddnl = @SAddnl +       ' WHERE [Name] = ''Organism_DB_File_Name'' AND Len(Value) > 0))' + @Lf
 
 	set @SAddnl = @SAddnl + ' AND Parameter_File_Name IN (SELECT Value FROM T_Process_Config'
-	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Parameter_File_Name'' AND Len(Value) > 0)'
+	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Parameter_File_Name'' AND Len(Value) > 0)' + @Lf
 
 	set @SAddnl = @SAddnl + ' AND Separation_Sys_Type IN (SELECT Value FROM T_Process_Config'
-	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Separation_Type'' AND Len(Value) > 0)'
+	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Separation_Type'' AND Len(Value) > 0)' + @Lf
 
 	set @SAddnl = @SAddnl + ' AND ResultType IN (SELECT Value FROM T_Process_Config'
-	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Result_Type'' AND Len(Value) > 0)'
+	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Result_Type'' AND Len(Value) > 0)' + @Lf
 
 	if @FilterOnEnzymeID = 1
 	Begin
 		Set @SAddnl = @SAddnl + ' AND Enzyme_ID IN (SELECT Value FROM T_Process_Config'
-		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Enzyme_ID'' AND Len(Value) > 0)'
+		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Enzyme_ID'' AND Len(Value) > 0)' + @Lf
 	End
 
 	-- Combine the Campaign filter with the additional filters
@@ -707,33 +711,33 @@ As
 			set @S = @S + ' Enzyme_ID, Labelling, Created_Peptide_DB, State, '
 			set @S = @S + ' GANET_Fit, GANET_Slope, GANET_Intercept, GANET_RSquared,'
 			set @S = @S + ' ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit'
-			set @S = @S + ') '
+			set @S = @S + ') ' + @Lf
 			set @S = @S + 'SELECT DISTINCT * '
-			set @S = @S + 'FROM ('
-			set @S = @S + 'SELECT '
-			set @S = @S + '	PT.Job, PT.Dataset, PT.Dataset_ID,'
-			set @S = @S + ' DS.Created_DMS, DS.Acq_Time_Start, DS.Acq_Time_End, DS.Scan_Count,'
-			set @S = @S + '	PT.Experiment, PT.Campaign, ' + Convert(varchar(11), @peptideDBID) + ' AS PDB_ID,'
-			set @S = @S + ' DS.SIC_Job, PT.Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,'
-			set @S = @S + '	PT.Parameter_File_Name,	PT.Settings_File_Name,'
-			set @S = @S + '	PT.Organism_DB_Name, PT.Protein_Collection_List, PT.Protein_Options_List,'
-			set @S = @S + '	PT.Vol_Client, PT.Vol_Server, PT.Storage_Path, PT.Dataset_Folder, PT.Results_Folder,'
-			set @S = @S + '	PT.Completed, PT.ResultType, PT.Separation_Sys_Type,'
-			set @S = @S + ' PT.PreDigest_Internal_Std, PT.PostDigest_Internal_Std, PT.Dataset_Internal_Std,'
-			set @S = @S + '	PT.Enzyme_ID, PT.Labelling, PT.Created, 1 AS StateNew,'
-			set @S = @S + '	PT.GANET_Fit, PT.GANET_Slope, PT.GANET_Intercept, PT.GANET_RSquared,'
-			set @S = @S + '	ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit '
-			set @S = @S + 'FROM '
-			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT LEFT OUTER JOIN '
-			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID '
+			set @S = @S + 'FROM (' + @Lf
+			set @S = @S + 'SELECT'
+			set @S = @S + '	 PT.Job, PT.Dataset, PT.Dataset_ID,' + @Lf
+			set @S = @S + '  DS.Created_DMS, DS.Acq_Time_Start, DS.Acq_Time_End, DS.Scan_Count,' + @Lf
+			set @S = @S + '  PT.Experiment, PT.Campaign, ' + Convert(varchar(11), @peptideDBID) + ' AS PDB_ID,' + @Lf
+			set @S = @S + '  DS.SIC_Job, PT.Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,' + @Lf
+			set @S = @S + '  PT.Parameter_File_Name,	PT.Settings_File_Name,' + @Lf
+			set @S = @S + '  PT.Organism_DB_Name, PT.Protein_Collection_List, PT.Protein_Options_List,' + @Lf
+			set @S = @S + '  PT.Vol_Client, PT.Vol_Server, PT.Storage_Path, PT.Dataset_Folder, PT.Results_Folder,' + @Lf
+			set @S = @S + '  PT.Completed, PT.ResultType, PT.Separation_Sys_Type,' + @Lf
+			set @S = @S + '  PT.PreDigest_Internal_Std, PT.PostDigest_Internal_Std, PT.Dataset_Internal_Std,' + @Lf
+			set @S = @S + '  PT.Enzyme_ID, PT.Labelling, PT.Created, 1 AS StateNew,' + @Lf
+			set @S = @S + '  PT.GANET_Fit, PT.GANET_Slope, PT.GANET_Intercept, PT.GANET_RSquared,' + @Lf
+			set @S = @S + '  ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit ' + @Lf
+			set @S = @S + 'FROM ' + @Lf
+			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT LEFT OUTER JOIN ' + @Lf
+			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID ' + @Lf
 
 			If @UsingJobListOverride = 1
 			Begin
-				set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON PT.Job = JobListQ.JobOverride'
+				set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON PT.Job = JobListQ.JobOverride ' + @Lf
 			End
 			Else			
 			Begin
-				set @S = @S + ' WHERE ('
+				set @S = @S + 'WHERE (' + @Lf
 					set @S = @S + @SCampaignAndAddnl
 					
 					if @expListCount > 0
@@ -741,7 +745,7 @@ As
 						set @S = @S + 'AND PT.Experiment IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-						set @S = @S + ') '
+						set @S = @S + ') ' + @Lf
 					end
 					
 					if @expListCountExcluded > 0
@@ -749,7 +753,7 @@ As
 						set @S = @S + 'AND NOT PT.Experiment IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-						set @S = @S + ') '
+						set @S = @S + ') ' + @Lf
 					End
 
 					if @datasetListCount > 0
@@ -757,7 +761,7 @@ As
 						set @S = @S + 'AND PT.Dataset IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
-						set @S = @S + ') '
+						set @S = @S + ') ' + @Lf
 					end
 
 					if @datasetListCountExcluded > 0
@@ -765,22 +769,22 @@ As
 						set @S = @S + 'AND NOT PT.Dataset IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
-						set @S = @S + ') '
+						set @S = @S + ') ' + @Lf
 					end
 				set @S = @S + ')'
 					
 				-- Now add jobs found using the alternate job selection method
 				If @JobsByDualKeyFilters > 0
 				Begin
-					set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) '
+					set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) ' + @Lf
 				End
 			End
 			
-			set @S = @S + ') As LookupQ'
-			set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description)'
+			set @S = @S + ') As LookupQ' + @Lf
+			set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description)' + @Lf
 			
 			If @UsingJobListOverride = 0 And Len(@DateText) > 0
-				set @S = @S + ' AND Created_DMS >= ''' + @DateText + ''''
+				set @S = @S + ' AND Created_DMS >= ''' + @DateText + '''' + @Lf
 				
 			set @S = @S +  ' ORDER BY Job'
 
@@ -789,7 +793,7 @@ As
 				Print '-- Sql used to import new MS/MS analyses from "' + @peptideDBPath + '"'
 				Print @S + @CrLf
 			End
-			--			
+			--	
 			exec (@S)
 			--
 			SELECT @myError = @result, @myRowcount = @@rowcount
@@ -823,18 +827,32 @@ As
 
 			-- Validate all jobs with Valid = 0 against the Protein Collection 
 			--  filters defined in T_Process_Config
+			-- If @PreviewSql is non-zero, then will update Valid to 1 for Valid jobs and to a valid >= 250 for Invalid jobs
 			Exec @myError = ValidateNewAnalysesUsingProteinCollectionFilters @PreviewSql, @message = @message output
 			
 			If @myError <> 0
 				Goto Done
 
-
-			-- Count the number of jobs present in #TmpNewAnalysisJobs
-			SELECT @MatchCount = COUNT(*)
-			FROM #TmpNewAnalysisJobs
-
-			If @MatchCount > 0
+			-- Display the contents of #TmpNewAnalysisJobs (if not empty)
+			If Exists (SELECT TOP 1 * FROM #TmpNewAnalysisJobs)
 			Begin
+				If @PreviewSql <> 0
+				Begin
+					If Exists (SELECT TOP 1 * FROM #TmpNewAnalysisJobs WHERE Valid >= 250)
+					Begin
+						SELECT CASE WHEN Valid = 250 THEN 'No Valid Collection Names'
+									WHEN Valid = 251 THEN 'Incompatible Protein Options'
+									ELSE 'Unknown exclusion reason'
+								END As Exclusion_Reason, *
+						FROM #TmpNewAnalysisJobs
+						WHERE Valid >= 250
+						ORDER BY Job
+						
+						DELETE FROM #TmpNewAnalysisJobs
+						WHERE Valid >= 250
+					End
+				End
+
 				If @infoOnly = 0
 					-- Copy the new jobs from #TmpNewAnalysisJobs to T_Analysis_Description
 					INSERT INTO T_Analysis_Description (
@@ -874,7 +892,7 @@ As
 				
 				Set @entriesAdded = @entriesAdded + @myRowCount
 				
-				IF @myRowCount > 0 and @infoOnly = 0 And @peptideDBID = 0
+				If @myRowCount > 0 and @infoOnly = 0 And @peptideDBID = 0
 				Begin
 					-- New jobs were added, but the Peptide DB ID was unknown
 					-- Post an entry to the log, but do not return an error
@@ -889,10 +907,7 @@ As
 			
 			If @PreviewSql <> 0
 			Begin
-				SELECT @MatchCount = Count(*)
-				FROM #PreviewSqlData
-				
-				If @MatchCount > 0
+				If Exists (SELECT TOP 1 * FROM #PreviewSqlData)
 				Begin
 					SELECT * 
 					FROM #PreviewSqlData
@@ -920,7 +935,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User]

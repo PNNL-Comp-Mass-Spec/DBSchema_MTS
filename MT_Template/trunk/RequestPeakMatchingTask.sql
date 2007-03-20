@@ -36,6 +36,10 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **			07/01/2007 mem - Removed check for jobs in T_GANET_Update_Task since NET alignment now occurs in the Peptide DB
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**			12/29/2006 mem - Updated to allow @TaskID values of 0
+**			03/17/2007 mem - Updated to preferentially use Instrument to determine the output folder prefix
+**						   - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
+**						   - Added parameter @infoOnly
 **    
 *****************************************************/
 (
@@ -47,7 +51,7 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 	@taskPriority tinyint=0 output,				-- the actual priority of the task
 	@analysisJob int=0 output,
 	@analysisResultsFolderPath varchar(256)='' output,
-	@mtdbName varchar(128)='' output,				-- if provided, will preferentially query that mass tag database first
+	@mtdbName varchar(128)='' output,
 	@confirmedOnly tinyint=0 output,
 	@modList varchar(128)='' output,
 	@MinimumHighNormalizedScore real=0 output,
@@ -63,7 +67,8 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 	@outputFolderPath varchar(255)='' output,
 	@logFilePath varchar(255)='' output,
 	@taskAvailable tinyint=0 output,
-	@message varchar(512)='' output
+	@message varchar(512)='' output,
+	@infoOnly tinyint=0						-- Set to 1 to preview the next peak matching task that would be assigned
 )
 As
 	set nocount on
@@ -72,9 +77,8 @@ As
 	set @IniFileName = ''
 	
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -104,6 +108,8 @@ As
 	set @TaskAvailable = 0
 	set @message = ''
 
+	set @infoOnly = IsNull(@infoOnly, 0)
+	
 	---------------------------------------------------
 	-- Do not assign a task if any jobs in T_Analysis_Description have a state of 1
 	---------------------------------------------------
@@ -132,7 +138,7 @@ As
 	-- temporary table to hold candidate requests
 	---------------------------------------------------
 
-	Create TABLE #XPD (
+	CREATE TABLE #XPD (
 		ID  int, 
 		Job int
 	) 
@@ -157,7 +163,7 @@ As
 	--
 	if @myError <> 0
 	begin
-		set @message = 'could not load temporary table'
+		set @message = 'Could not load temporary table #XPD'
 		goto done
 	end
 	
@@ -167,7 +173,7 @@ As
 	
 	if @myRowCount = 0
 	begin
-		set @message = 'no candidate tasks found'
+		set @message = 'No candidate tasks found'
 		goto done
 	end
 
@@ -183,13 +189,13 @@ As
 		@parRootPathClient = Client_Path, 
 		@parRootPathServer = Server_Path
 	FROM MT_Main.dbo.V_Folder_Paths
-	WHERE     ([Function] = 'Peak Matching Results')
+	WHERE ([Function] = 'Peak Matching Results')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0
 	begin
-		set @message = 'could not get root path for Peak Matching Parameters'
+		set @message = 'Could not get root path for Peak Matching Parameters'
 		goto done
 	end
 
@@ -200,14 +206,14 @@ As
 	SELECT     
 		@iniRootPathClient = Client_Path, 
 		@iniRootPathServer = Server_Path
-	FROM         MT_Main.dbo.V_Folder_Paths
+	FROM MT_Main.dbo.V_Folder_Paths
 	WHERE ([Function] = 'Peak Matching Parameters')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0
 	begin
-		set @message = 'could not get root path for Peak Matching Results'
+		set @message = 'Could not get root path for Peak Matching Results'
 		goto done
 	end
 
@@ -246,7 +252,7 @@ As
 		 INNER JOIN #XPD ON #XPD.ID = T_Peak_Matching_Task.Task_ID 
 	WHERE Processing_State = 1
 	--
-	SELECT @myError = @@error
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0
 	begin
@@ -259,7 +265,7 @@ As
 	-- bail if no task found
 	---------------------------------------------------
 
-	if @taskID = 0
+	if @myRowCount = 0
 	begin
 		rollback transaction @transName
 		set @message = 'Could not find viable record'
@@ -270,78 +276,110 @@ As
 	-- generate folder and file names and set paths
 	---------------------------------------------------
 
-	Declare @OutputFolderPrefix varchar(128)
-	Declare @UnderscoreLoc int
+	Declare @OutputFolderPrefix varchar(256)
+	Declare @Instrument varchar(128)
+	Declare @StoragePathClient varchar(256)
+	Declare @LegacyStoragePath varchar(256)
+	
+	Declare @CharLoc int
 	Declare @StartPos int
-
-	SELECT	@OutputFolderPrefix = IsNull(T_FTICR_Analysis_Description.Storage_Path, 'Unknown')
-	FROM	T_Peak_Matching_Task LEFT OUTER JOIN
+	
+	SELECT	@Instrument = Instrument,
+			@StoragePathClient = IsNull(T_FTICR_Analysis_Description.Vol_Client, ''),
+			@LegacyStoragePath = IsNull(T_FTICR_Analysis_Description.Storage_Path, '')
+	FROM	T_Peak_Matching_Task INNER JOIN
 			T_FTICR_Analysis_Description ON 
 			T_Peak_Matching_Task.Job = T_FTICR_Analysis_Description.Job
 	WHERE (Task_ID = @taskID)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
-	if @myError <> 0
+	if @myError <> 0 OR @myRowCount = 0
 	begin
 		set @myError = 111
-		set @message = 'Could not get Storage_Path name'
+		set @message = 'Could not get Storage_Path'
 		goto done
 	end
 
-	If Len(@OutputFolderPrefix) = 0
+	If Len(@Instrument) > 0
+		Set @OutputFolderPrefix = @Instrument
+	Else
+	Begin
+		If Len(@LegacyStoragePath) > 0
+			Set @OutputFolderPrefix = @LegacyStoragePath
+		Else
+		Begin
+			-- See if @StoragePathClient contains a server name plus a share and folder name
+			-- If it does, extract out the final folder name
+			-- For example, given "\\n2.emsl.pnl.gov\dmsarch\LTQ_FT1_2\" extract out "LTQ_FT1_2"
+			set @CharLoc = CharIndex('\', Reverse(@StoragePathClient), 2)
+			
+			If @CharLoc > 0
+			Begin
+				Set @OutputFolderPrefix = Substring(@StoragePathClient, Len(@StoragePathClient) - @CharLoc + 2, 128) 
+			End
+		End
+	End
+	
+	If Len(IsNull(@OutputFolderPrefix, '')) = 0
 		Set @OutputFolderPrefix = 'Unknown'
 		
 	-- Truncate @OutputFolderPrefix following the _ (if present)
-	-- If @OutputFolderPrefix contains LTQ_FT, then skip the first underscore
+	-- If @OutputFolderPrefix contains LTQ_FT or LTQ_Orb, then skip the first underscore
 	Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
 	If @StartPos >= 1
 		Set @StartPos = @StartPos + 5
 	Else
 	Begin
-		Set @StartPos = CharIndex('LTQ_Orb', Upper(@OutputFolderPrefix))
+		Set @StartPos = CharIndex('LTQ_ORB', Upper(@OutputFolderPrefix))
 		If @StartPos >= 1
 			Set @StartPos = @StartPos + 5
 		Else
 			Set @StartPos = 0
 	End
 		
-	Set @UnderscoreLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
-	If @UnderscoreLoc > 2
-		Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @UnderscoreLoc-1)
+	Set @CharLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
+	If @CharLoc > 2
+		Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @CharLoc-1)
 	
-	declare @Output_Folder_Name varchar (255)
-	set @Output_Folder_Name = DB_Name() + '_Job' + cast(@analysisJob as varchar(12)) + '_auto_pm_' + cast(@taskID as varchar(12))
+	declare @Output_Folder_Name varchar(255)
+	set @Output_Folder_Name = DB_Name() + '_Job' + convert(varchar(12), @analysisJob) + '_auto_pm_' + convert(varchar(12), @taskID)
 	set @Output_Folder_Name = dbo.udfCombinePaths(@OutputFolderPrefix, @Output_Folder_Name)
 
 	set @outputFolderPath = dbo.udfCombinePaths(dbo.udfCombinePaths(@outputFolderPath, DB_Name()), @Output_Folder_Name)
 	
-	---------------------------------------------------
-	-- set state and path for task
-	---------------------------------------------------
-
-	UPDATE T_Peak_Matching_Task
-	SET 
-		Processing_State = 2, 
-		PM_Start = GETDATE(),
-		PM_AssignedProcessorName = @ProcessorName, 
-		Output_Folder_Name = @Output_Folder_Name
-	WHERE (Task_ID = @taskID)
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Update operation failed'
-		goto done
-	end
 	
-	---------------------------------------------------
-	-- commit transaction
-	---------------------------------------------------
-	commit transaction @transName
+	If @infoOnly = 0
+	Begin
+		---------------------------------------------------
+		-- set state and path for task
+		---------------------------------------------------
 
+		UPDATE T_Peak_Matching_Task
+		SET 
+			Processing_State = 2, 
+			PM_Start = GETDATE(),
+			PM_AssignedProcessorName = @ProcessorName, 
+			Output_Folder_Name = @Output_Folder_Name
+		WHERE (Task_ID = @taskID)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0
+		begin
+			rollback transaction @transName
+			set @message = 'Update operation failed'
+			goto done
+		end
+	
+		---------------------------------------------------
+		-- commit transaction
+		---------------------------------------------------
+		commit transaction @transName
+	End
+	Else
+		rollback transaction @transName
+		
 	---------------------------------------------------
 	-- get task parameters
 	---------------------------------------------------
@@ -383,12 +421,18 @@ As
 	End
 	
 	---------------------------------------------------
-	-- get path to analysis job results folder
+	-- Get path to analysis job results folder
 	---------------------------------------------------
+	
+	Declare @analysisResultsFolderPathAlt varchar(255)
+	Declare @FolderExists tinyint
 	
 	SELECT @analysisResultsFolderPath = dbo.udfCombinePaths(
 										dbo.udfCombinePaths(
-										dbo.udfCombinePaths(Vol_Client, Storage_Path), Dataset_Folder), Results_Folder)
+										dbo.udfCombinePaths(Vol_Client, Storage_Path), Dataset_Folder), Results_Folder),
+		   @analysisResultsFolderPathAlt = dbo.udfCombinePaths(
+										dbo.udfCombinePaths(
+										dbo.udfCombinePaths(Vol_Server, Storage_Path), Dataset_Folder), Results_Folder)
 	FROM T_FTICR_Analysis_Description
 	WHERE (Job = @analysisJob)
 	--
@@ -401,24 +445,73 @@ As
 		goto done
 	end
 
-
+	---------------------------------------------------
+	-- See if folder @analysisResultsFolderPathAlt exists
+	-- If it does, preferentially use it
+	---------------------------------------------------
+	exec ValidateFolderExists @analysisResultsFolderPathAlt, @CreateIfMissing = 0, @FolderExists = @FolderExists output
+	If @FolderExists <> 0
+		Set @analysisResultsFolderPath = @analysisResultsFolderPathAlt
+	
 	---------------------------------------------------
 	-- Define the log file path
 	---------------------------------------------------
 
-	set @logFilePath = dbo.udfCombinePaths(@outputFolderPath, 'Job' + cast(@analysisJob as varchar(9)) + '_log.txt')
+	set @logFilePath = dbo.udfCombinePaths(@outputFolderPath, 'Job' + convert(varchar(12), @analysisJob) + '_log.txt')
 
 	---------------------------------------------------
 	-- If we get to this point, then all went fine
-	-- Update TaskAvailable
+	-- Update @TaskAvailable
 	---------------------------------------------------
 	Set @TaskAvailable = 1
-
+	
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------
 	--
 Done:
+
+	If @infoOnly <> 0
+	Begin
+		-- Display the status message and task parameters (if a task is available)
+		
+		If @myError <> 0
+			SELECT @Message AS Message, @myError AS ErrorCode
+		Else
+		Begin
+			If @taskAvailable = 0
+				SELECT @Message AS Message
+			Else
+			Begin
+				If Len(@Message) = 0
+					Set @Message = 'Task found'
+					
+				SELECT 
+					@Message AS Message, 
+					@taskID AS TaskID,
+					@taskPriority AS TaskPriority,
+					@analysisJob AS Job,
+					@analysisResultsFolderPath AS Results_Folder_Path,
+					@mtdbName AS Database_Name,
+					@confirmedOnly AS Confirmed_Only,
+					@modList AS Mod_List,
+					@MinimumHighNormalizedScore AS Minimum_High_Normalized_Score,
+					@MinimumHighDiscriminantScore AS Minimum_High_Discriminant_Score,
+					@MinimumPeptideProphetProbability AS Minimum_Peptide_Prophet_Probability,
+					@MinimumPMTQualityScore AS Minimum_PMT_Quality_Score,
+					@ExperimentFilter AS Experiment_Filter,
+					@ExperimentExclusionFilter AS Experiment_Exclusion_Filter,
+					@LimitToPMTsFromDataset AS Limit_To_PMTs_From_Dataset,
+					@InternalStdExplicit AS Internal_Std_Explicit,
+					@NETValueType AS NET_Value_Type,
+					@iniFilePath AS Ini_File_Path,
+					@outputFolderPath AS Output_Folder_Path,
+					@logFilePath AS Log_File_Path
+				End
+			End
+	
+	End
+
 	return @myError
 
 

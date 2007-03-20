@@ -47,13 +47,17 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			06/13/2006 mem - Updated to recognize Protein_Collection_List jobs by only testing the ProteinCollectionList field in V_Import_Analysis_Result_Type_List for 'na' or '' rather than also testing the OrganismDBName field
 **			07/18/2006 mem - Added support for Campaign_Exclusion in T_Process_Config
 **			07/31/2006 mem - Increased size of @JobListOverride and switched to use udfParseDelimitedList to parse the list
+**			11/29/2006 mem - Now adding a line feed character in key places to aid readability when using @PreviewSql = 1
+**			12/02/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
+**			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
+**			03/18/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **    
 *****************************************************/
 (
 	@NextProcessState int = 10,
 	@entriesAdded int = 0 output,
 	@infoOnly tinyint = 0,
-	@JobListOverride varchar(4096) = '',
+	@JobListOverride varchar(max) = '',
 	@PreviewSql tinyint = 0				-- Set to 1 to display the table population Sql statements; if this is 1, then forces @infoOnly to be 1
 )
 As
@@ -104,6 +108,9 @@ As
 	
 	Declare @S varchar(4096)
 	
+	Declare @Lf char(1)
+	Set @Lf = char(10)
+
 	Declare @CrLf char(2)
 	Set @CrLf = char(10) + char(13)
 
@@ -172,8 +179,8 @@ As
 		)
 		
 		INSERT INTO #T_Tmp_JobListOverride (JobOverride)
-		SELECT Convert(int, Value)
-		FROM dbo.udfParseDelimitedList(@JobListOverride, ',')
+		SELECT Value
+		FROM dbo.udfParseDelimitedIntegerList(@JobListOverride, ',')
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -474,11 +481,11 @@ As
 		Begin
 			-- Import Non-SIC Jobs and jobs in @JobListOverride if any are defined
 			-- Note: The Protein_Collectionst_List values will be compared to the Protein_Collection_Filter values after the jobs have been tentatively added to #TmpNewAnalysisJobs (see below)
-			Set @ResultTypeFilter = ' ResultType IN (SELECT Value FROM V_Import_Analysis_Result_Type_List) AND (ResultType <> ''SIC'')'
+			Set @ResultTypeFilter = ' ResultType IN (SELECT Value FROM V_Import_Analysis_Result_Type_List) ' + @Lf + '  AND (ResultType <> ''SIC'')'
 
 			Set @OrganismDBNameFilter = ' AND ((ProteinCollectionList <> ''na'' AND ProteinCollectionList <> '''')'
 			If @FilterOnOrgDB = 1
-				Set @OrganismDBNameFilter = @OrganismDBNameFilter + ' OR OrganismDBName IN (SELECT Value FROM V_Import_Organism_DB_File_List))'
+				Set @OrganismDBNameFilter = @OrganismDBNameFilter + @Lf + ' OR OrganismDBName IN (SELECT Value FROM V_Import_Organism_DB_File_List))'
 			Else
 				Set @OrganismDBNameFilter = @OrganismDBNameFilter + ')'
 
@@ -496,7 +503,7 @@ As
 			Begin
 				Set @SICDSFilter = ''
 				Set @SICDSFilter = @SICDSFilter + ' AND Dataset IN (SELECT DISTINCT Dataset FROM T_Analysis_Description'
-				Set @SICDSFilter = @SICDSFilter + ' UNION SELECT DISTINCT Dataset FROM #TmpNewAnalysisJobs)'
+				Set @SICDSFilter = @SICDSFilter +                 ' UNION SELECT DISTINCT Dataset FROM #TmpNewAnalysisJobs)'
 			End
 		End
 
@@ -510,68 +517,70 @@ As
 		Set @S = @S +  ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List, Vol_Client, Vol_Server, Storage_Path,'
 		Set @S = @S +  ' Dataset_Folder, Results_Folder, Settings_File_Name, Completed,'
 		Set @S = @S +  ' ResultType, Enzyme_ID, Labelling, Separation_Sys_Type,'
-		Set @S = @S +  ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std, Process_State) ' + Char(13)
+		Set @S = @S +  ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std, Process_State) ' + @Lf
   		Set @S = @S + ' SELECT'
-		Set @S = @S + ' Job, Dataset, DatasetID, Experiment, Campaign, Organism,  '
-		Set @S = @S +  ' InstrumentClass, InstrumentName, AnalysisTool, ParameterFileName,' 
-		Set @S = @S +  ' OrganismDBName, ProteinCollectionList, ProteinOptions, VolClient, VolServer, StoragePath,'
-		Set @S = @S +  ' DatasetFolder, ResultsFolder, SettingsFileName, Completed,'
-		Set @S = @S +  ' ResultType, EnzymeID, Labelling, SeparationSysType,'
-		Set @S = @S +  ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std], 0 AS Process_State'
-		Set @S = @S + ' FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI'
+		Set @S = @S + '  Job, Dataset, DatasetID, Experiment, Campaign, Organism,' + @Lf
+		Set @S = @S + '  InstrumentClass, InstrumentName, AnalysisTool, ParameterFileName,'  + @Lf
+		Set @S = @S + '  OrganismDBName, ProteinCollectionList, ProteinOptions, StoragePathClient, StoragePathServer, '''' AS StoragePath,' + @Lf
+		Set @S = @S + '  DatasetFolder, ResultsFolder, SettingsFileName, Completed,' + @Lf
+		Set @S = @S + '  ResultType, EnzymeID, Labelling, SeparationSysType,' + @Lf
+		Set @S = @S + '  [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std], 0 AS Process_State' + @Lf
+		Set @S = @S + ' FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI' + @Lf
 		
 		If @UsingJobListOverride = 1
 		Begin
-			set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride'
+			set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride' + @Lf
 		End
 
-		Set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description) '
+		Set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description) ' + @Lf
 
 		If @UsingJobListOverride = 0
 		Begin
-			Set @S = @S + ' AND ( '
-			Set @S = @S +   @ResultTypeFilter
-			Set @S = @S +   ' AND Organism = ''' + @organism + ''''
+			Set @S = @S + ' AND ( ' + @Lf
+			Set @S = @S +   ' ' + @ResultTypeFilter + @Lf
+			Set @S = @S +   '  AND Organism = ''' + @organism + '''' + @Lf
 
-			Set @S = @S + @OrganismDBNameFilter
+			If Len(@OrganismDBNameFilter) > 0
+				Set @S = @S + ' ' + @OrganismDBNameFilter + @Lf
 
-			Set @S = @S + @SICDSFilter
+			If Len(@SICDSFilter) > 0
+				Set @S = @S + ' ' + @SICDSFilter + @Lf
 			
 			if @FilterOnCampaign = 1
-				Set @S = @S + ' AND Campaign IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Campaign'')'
+				Set @S = @S + '  AND Campaign IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Campaign'')' + @Lf
 
 			if @FilterOnEnzymeID = 1
-				Set @S = @S + ' AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')'
+				Set @S = @S + '  AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')' + @Lf
 				
 			if @campaignListCountExcluded > 0
 			begin
-				set @S = @S + ' AND NOT Campaign IN '
+				set @S = @S + '  AND NOT Campaign IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Campaign FROM #TmpCampaignsExcluded '
-				set @S = @S + ')'
+				set @S = @S + ')' + @Lf
 			end
 			
 			if @expListCount > 0
 			begin
-				set @S = @S + ' AND Experiment IN '
+				set @S = @S + '  AND Experiment IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-				set @S = @S + ')'
+				set @S = @S + ')' + @Lf
 			end
 			
 			if @expListCountExcluded > 0
 			begin
-				set @S = @S + ' AND NOT Experiment IN '
+				set @S = @S + '  AND NOT Experiment IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-				set @S = @S + ')'
+				set @S = @S + ')' + @Lf
 			End
 
-			set @S = @S + ') '
+			set @S = @S + ' ) ' + @Lf
 		End
 		
 		If @UsingJobListOverride = 0 And Len(@DateText) > 0
-			set @S = @S + ' AND DS_Created >= ''' + @DateText + ''''
+			set @S = @S + ' AND DS_Created >= ''' + @DateText + '''' + @Lf
 			
 		Set @S = @S + ' ORDER BY Job'
 		
@@ -582,7 +591,7 @@ As
 				if @UsingJobListOverride = 1
 					Print '-- Sql to import jobs defined in @JobListOverride'
 				else
-					Print '-- Sql to import non-MASIC jobs (Note: this statement does not filter on Protein_Collection_List but the SP does)'
+					Print '-- Sql to import non-MASIC jobs (Note: this statement does not filter on Protein_Collection_List but the SP does when it calls ValidateNewAnalysesUsingProteinCollectionFilters)'
 			End
 			else
 				Print '-- Sql to import MASIC jobs'
@@ -718,24 +727,23 @@ As
 		Set @S = @S + ' Dataset_Folder, Results_Folder, Settings_File_Name,'
 		Set @S = @S + ' Completed, ResultType, Enzyme_ID, Labelling, Separation_Sys_Type,'
 		Set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
-		Set @S = @S + ' Created, Process_State, Last_Affected)' + Char(13)
+		Set @S = @S + ' Created, Process_State, Last_Affected)'
 	end
   	Set @S = @S + ' SELECT'
-	Set @S = @S +  ' Job, AJ.Dataset, AJ.Dataset_ID, Experiment, Campaign, Organism,'
-	Set @S = @S +  ' Instrument_Class, AJ.Instrument, Analysis_Tool, Parameter_File_Name,' 
-	Set @S = @S +  ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
-	Set @S = @S +  ' Vol_Client, Vol_Server, Storage_Path,'
-	Set @S = @S +  ' Dataset_Folder, Results_Folder, Settings_File_Name,'
-	Set @S = @S +  ' Completed, ResultType, Enzyme_ID, Labelling, Separation_Sys_Type,'
-	Set @S = @S +  ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
-	Set @S = @S + ' GetDate() AS Created, Process_State, GetDate() AS Last_Affected'
-	Set @S = @S + ' FROM #TmpNewAnalysisJobs as AJ'
+	Set @S = @S + '  Job, AJ.Dataset, AJ.Dataset_ID, Experiment, Campaign, Organism,' + @Lf
+	Set @S = @S + '  Instrument_Class, AJ.Instrument, Analysis_Tool, Parameter_File_Name,'  + @Lf
+	Set @S = @S + '  Organism_DB_Name, Protein_Collection_List, Protein_Options_List,' + @Lf
+	Set @S = @S + '  Vol_Client, Vol_Server, Storage_Path,' + @Lf
+	Set @S = @S + '  Dataset_Folder, Results_Folder, Settings_File_Name,' + @Lf
+	Set @S = @S + '  Completed, ResultType, Enzyme_ID, Labelling, Separation_Sys_Type,' + @Lf
+	Set @S = @S + '  PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,' + @Lf
+	Set @S = @S + '  GetDate() AS Created, Process_State, GetDate() AS Last_Affected' + @Lf
+	Set @S = @S + ' FROM #TmpNewAnalysisJobs as AJ' + @Lf
 	if @infoOnly = 0
 	begin
-		Set @S = @S + ' INNER JOIN T_Datasets ON AJ.Dataset_ID = T_Datasets.Dataset_ID'
+		Set @S = @S + ' INNER JOIN T_Datasets ON AJ.Dataset_ID = T_Datasets.Dataset_ID' + @Lf
 	end
-	Set @S = @S + ' WHERE AJ.Job NOT IN '
-	Set @S = @S + ' (SELECT Job FROM T_Analysis_Description)'
+	Set @S = @S + ' WHERE AJ.Job NOT IN (SELECT Job FROM T_Analysis_Description)' + @Lf
 	Set @S = @S + ' ORDER BY Job'
 
 	If @PreviewSql <> 0

@@ -23,6 +23,7 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			06/04/2006 mem - Now passing @ScanStatsLineCountToSkip as an output parameter to let ValidateDelimitedFile determine whether or not a header row is present
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			09/26/2006 mem - Now passing @ScanStatsColumnCount to LoadMASICScanStatsBulk
+**			03/17/2007 mem - Updated to use dbo.udfCombinePaths
 **    
 *****************************************************/
 (
@@ -88,11 +89,11 @@ AS
 		set @myError = 60001
 		goto Done
 	end
-	
+
 	If @clientStoragePerspective <> 0
-		set @StoragePath = @VolClient + @Path + @DatasetFolder
+		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolClient, @Path), @DatasetFolder)
 	Else
-		set @StoragePath = @VolServer + @Path + @DatasetFolder
+		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolServer, @Path), @DatasetFolder)
 
 	-----------------------------------------------
 	-- Set up input file names and paths

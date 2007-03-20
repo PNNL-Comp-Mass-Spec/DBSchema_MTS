@@ -28,6 +28,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			12/15/2005 mem - Now updating PreDigest_Internal_Std, PostDigest_Internal_Std, & Dataset_Internal_Std (previously named Internal_Standard)
 **			03/08/2006 mem - Now updating column Campaign
 **			11/15/2006 mem - Now updating columns Parameter_File_Name & Settings_File_Name
+**			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **    
 *****************************************************/
 (
@@ -78,9 +79,9 @@ As
 		UPDATE T_Analysis_Description
 		SET 
 			Campaign = P.Campaign,
-			Vol_Client = P.VolClient, 
-			Vol_Server = P.VolServer, 
-			Storage_Path = P.StoragePath, 
+			Vol_Client = P.StoragePathClient, 
+			Vol_Server = P.StoragePathServer, 
+			Storage_Path = '', 
 			Dataset_Folder = P.DatasetFolder, 
 			Results_Folder = P.ResultsFolder,
 			Completed = P.Completed,
@@ -93,7 +94,7 @@ As
 			Enzyme_ID = P.EnzymeID,
 			Labelling = P.Labelling
 		FROM T_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Campaign, R.VolClient, R.VolServer, R.StoragePath, 
+			SELECT L.Job, R.Campaign, R.StoragePathClient, R.StoragePathServer, 
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
 				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
@@ -102,9 +103,8 @@ As
 				MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex AS R ON 
 				L.Job = R.Job AND (
 					IsNull(L.Campaign, '') <> R.Campaign OR
-					IsNull(L.Vol_Client, '') <> R.VolClient OR 
-					IsNull(L.Vol_Server, '') <> R.VolServer OR 
-					IsNull(L.Storage_Path, '') <> R.StoragePath OR 
+					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
+					IsNull(L.Vol_Server, '') <> R.StoragePathServer OR 
 					IsNull(L.Dataset_Folder, '') <> R.DatasetFolder OR 
 					IsNull(L.Results_Folder, '') <> R.ResultsFolder OR
 					IsNull(L.Completed, '1/1/1980') <> R.Completed OR

@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.ResetChangedAnalysisJobs
 **			11/08/2005 mem - Now updating Vol_Client, Vol_Server, Storage_Path, and Dataset_Folder in addition to Results_Folder
 **			11/09/2005 mem - Now updating jobs in state 3 or with a state >= @NextProcessState; previously, was updating jobs with a state > @NextProcessState
 **			06/04/2006 mem - Now updating Protein_Collection_List and Protein_Options_List in T_Analysis_Description
+**			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import
 **    
 *****************************************************/
 (
@@ -77,9 +78,9 @@ As
 		Set @sql = @sql +     ' Organism_DB_Name = AJI.OrganismDBName,'
 		Set @sql = @sql +     ' Protein_Collection_List = AJI.ProteinCollectionList,'
 		Set @sql = @sql +     ' Protein_Options_List = AJI.ProteinOptions,'
-		Set @sql = @sql +     ' Vol_Client = AJI.VolClient,' 
-		Set @sql = @sql +     ' Vol_Server = AJI.VolServer,'
-		Set @sql = @sql +     ' Storage_Path = AJI.StoragePath,'
+		Set @sql = @sql +     ' Vol_Client = AJI.StoragePathClient,' 
+		Set @sql = @sql +     ' Vol_Server = AJI.StoragePathServer,'
+		Set @sql = @sql +     ' Storage_Path = '''','
 		Set @sql = @sql +     ' Dataset_Folder = AJI.DatasetFolder,'
 		Set @sql = @sql +     ' Results_Folder = AJI.ResultsFolder,'
 		Set @sql = @sql +     ' Completed = AJI.Completed,'

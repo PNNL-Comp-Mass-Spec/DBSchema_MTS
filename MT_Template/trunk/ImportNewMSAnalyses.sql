@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE Procedure dbo.ImportNewMSAnalyses
+CREATE Procedure ImportNewMSAnalyses
 /****************************************************
 **
 **	Desc: Imports LC-MS job entries from the analysis job table
@@ -37,13 +36,17 @@ CREATE Procedure dbo.ImportNewMSAnalyses
 **			03/02/2006 mem - Fixed bug that was posting a log entry when @infoOnly = 1 rather than when @infoOnly = 0
 **			06/04/2006 mem - Now populating T_Analysis_Description with Protein_Collection_List and Protein_Options_List
 **			08/01/2006 mem - Increased size of @JobListOverride and switched to use udfParseDelimitedList to parse the list
+**			11/29/2006 mem - Now adding a line feed character in key places to aid readability when using @PreviewSql = 1
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
+**			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
+**			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **    
 *****************************************************/
 (
 	@entriesAdded int = 0 output,
 	@message varchar(512) = '' output,
 	@infoOnly int = 0,
-	@JobListOverride varchar(4096) = '',
+	@JobListOverride varchar(max) = '',
 	@PreviewSql tinyint = 0						-- Set to 1 to display the table population Sql statements
 )
 As
@@ -79,6 +82,9 @@ As
 	
 	declare @datasetListCount int
 	declare @datasetListCountExcluded int
+
+	declare @Lf char(1)
+	Set @Lf = char(10)
 
 	declare @CrLf char(2)
 	Set @CrLf = char(10) + char(13)
@@ -159,8 +165,8 @@ As
 		)
 		
 		INSERT INTO #T_Tmp_JobListOverride (JobOverride)
-		SELECT Convert(int, Value)
-		FROM dbo.udfParseDelimitedList(@JobListOverride, ',')
+		SELECT Value
+		FROM dbo.udfParseDelimitedIntegerList(@JobListOverride, ',')
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -215,7 +221,7 @@ As
 	set @SCampaign = @SCampaign + ' SELECT Value '
 	set @SCampaign = @SCampaign + ' FROM T_Process_Config '
 	set @SCampaign = @SCampaign + ' WHERE [Name] = ''Campaign'' AND Len(Value) > 0'
-	set @SCampaign = @SCampaign + ')'
+	set @SCampaign = @SCampaign + ')' + @Lf
 	
 	set @SAddnl = ''
 	set @SAddnl = @SAddnl + ' InstrumentClass IN '
@@ -223,26 +229,26 @@ As
 	set @SAddnl = @SAddnl + ' SELECT Value '
 	set @SAddnl = @SAddnl + ' FROM T_Process_Config '
 	set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Instrument_Class'' AND Len(Value) > 0'
-	set @SAddnl = @SAddnl + ') '
+	set @SAddnl = @SAddnl + ') ' + @Lf
 	set @SAddnl = @SAddnl + ' AND SeparationSysType IN '
 	set @SAddnl = @SAddnl + '( '
 	set @SAddnl = @SAddnl + ' SELECT Value '
 	set @SAddnl = @SAddnl + ' FROM T_Process_Config '
 	set @SAddnl = @SAddnl + ' WHERE [Name] = ''Separation_Type'' AND Len(Value) > 0'
-	set @SAddnl = @SAddnl + ') '
+	set @SAddnl = @SAddnl + ') ' + @Lf
 	set @SAddnl = @SAddnl + ' AND ResultType IN '
 	set @SAddnl = @SAddnl + '( '
 	set @SAddnl = @SAddnl + ' SELECT Value '
 	set @SAddnl = @SAddnl + ' FROM T_Process_Config '
 	set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Result_Type'' AND Len(Value) > 0'
-	set @SAddnl = @SAddnl + ') '
+	set @SAddnl = @SAddnl + ') ' + @Lf
 
 	if Len(@DateText) > 0
-		set @SAddnl = @SAddnl + ' AND DS_Created >= ''' + @DateText + ''' '
+		set @SAddnl = @SAddnl + ' AND DS_Created >= ''' + @DateText + ''' ' + @Lf
 		
 
 	-- Combine the Campaign fitler with the additional filters
-	set @SCampaignAndAddnl = @SCampaign + ' AND ' + @SAddnl
+	set @SCampaignAndAddnl = @SCampaign + ' AND' + @SAddnl
 	
 	---------------------------------------------------
 	-- Define the table where we will look up jobs from
@@ -446,37 +452,37 @@ As
 		set @S = @S + '	Completed, ResultType, Separation_Sys_Type,'
 		set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
 		set @S = @S + ' Labelling, Created, Auto_Addition, State'
-		set @S = @S + ') '
+		set @S = @S + ') ' + @Lf
 	End
 	set @S = @S + 'SELECT DISTINCT * '
-	set @S = @S + 'FROM ('
+	set @S = @S + 'FROM (' + @Lf
 	set @S = @S +   'SELECT '
-	set @S = @S +   ' Job, Dataset, DatasetID, DS_Created,'
-	set @S = @S +   ' Experiment, Campaign, Organism,'
-	set @S = @S +   ' InstrumentClass, InstrumentName, AnalysisTool,'
-	set @S = @S +   ' ParameterFileName, SettingsFileName,'
-	set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions,'
-	set @S = @S +   ' VolClient, VolServer, StoragePath, DatasetFolder, ResultsFolder,'
-	set @S = @S +   ' Completed, ResultType, SeparationSysType,'
-	set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std],'
-	set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew '
-	set @S = @S +   'FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI '
+	set @S = @S +   ' Job, Dataset, DatasetID, DS_Created,' + @Lf
+	set @S = @S +   ' Experiment, Campaign, Organism,' + @Lf
+	set @S = @S +   ' InstrumentClass, InstrumentName, AnalysisTool,' + @Lf
+	set @S = @S +   ' ParameterFileName, SettingsFileName,' + @Lf
+	set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions,' + @Lf
+	set @S = @S +   ' StoragePathClient, StoragePathServer, '''' AS StoragePath, DatasetFolder, ResultsFolder,' + @Lf
+	set @S = @S +   ' Completed, ResultType, SeparationSysType,' + @Lf
+	set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std],' + @Lf
+	set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew ' + @Lf
+	set @S = @S +   'FROM MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex DAJI ' + @Lf
 
 	If @UsingJobListOverride = 1
 	Begin
-		set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride'
+		set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride' + @Lf
 	End
 	Else			
 	Begin
-		set @S = @S +   ' WHERE ('
-			set @S = @S +   @SCampaignAndAddnl
+		set @S = @S +   ' WHERE (' + @Lf
+			set @S = @S + @SCampaignAndAddnl
 			
 			if @expListCount > 0
 			begin
 				set @S = @S + 'AND Experiment IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-				set @S = @S + ') '
+				set @S = @S + ') ' + @Lf
 			end
 			
 			if @expListCountExcluded > 0
@@ -484,7 +490,7 @@ As
 				set @S = @S + 'AND NOT Experiment IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-				set @S = @S + ') '
+				set @S = @S + ') ' + @Lf
 			End
 
 			if @datasetListCount > 0
@@ -492,7 +498,7 @@ As
 				set @S = @S + 'AND Dataset IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
-				set @S = @S + ') '
+				set @S = @S + ') ' + @Lf
 			end
 
 			if @datasetListCountExcluded > 0
@@ -500,19 +506,19 @@ As
 				set @S = @S + 'AND NOT Dataset IN '
 				set @S = @S + '( '
 				set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
-				set @S = @S + ') '
+				set @S = @S + ') ' + @Lf
 			end
 		set @S = @S + ')'
 		
 		-- Now add jobs found using the alternate job selection method
 		If @JobsByDualKeyFilters > 0
 		Begin
-			set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) '
+			set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) ' + @Lf
 		End
 	End
 	
-	set @S = @S + ') As LookupQ'
-	set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_FTICR_Analysis_Description)'
+	set @S = @S + ') As LookupQ' + @Lf
+	set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_FTICR_Analysis_Description)' + @Lf
 	set @S = @S + ' ORDER BY Job'
 
 	If @PreviewSql <> 0
@@ -601,7 +607,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User]
