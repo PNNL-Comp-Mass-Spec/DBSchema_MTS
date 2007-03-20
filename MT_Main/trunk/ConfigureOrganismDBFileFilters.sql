@@ -16,6 +16,7 @@ CREATE PROCEDURE ConfigureOrganismDBFileFilters
 **
 **	Auth:	mem
 **	Date:	07/27/2006
+**			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @OrganismDBFileList
 **    
 *****************************************************/
 (

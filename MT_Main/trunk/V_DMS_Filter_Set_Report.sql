@@ -1,10 +1,10 @@
 /****** Object:  View [dbo].[V_DMS_Filter_Set_Report] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE VIEW [dbo].[V_DMS_Filter_Set_Report]
+CREATE view V_DMS_Filter_Set_Report
 AS
 SELECT TOP (100) PERCENT Filter_Type_Name, Filter_Set_ID, 
     Filter_Set_Name, Filter_Set_Description, 
@@ -16,6 +16,5 @@ SELECT TOP (100) PERCENT Filter_Type_Name, Filter_Set_ID,
     Peptide_Prophet_Probability, RankScore
 FROM GIGASAX.DMS5.dbo.V_Filter_Set_Report AS t1
 ORDER BY Filter_Set_ID, Filter_Criteria_Group_ID
-
 
 GO

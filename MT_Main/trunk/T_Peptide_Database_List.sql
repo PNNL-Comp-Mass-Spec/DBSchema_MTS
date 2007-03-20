@@ -7,7 +7,7 @@ CREATE TABLE [dbo].[T_Peptide_Database_List](
 	[PDB_ID] [int] NOT NULL,
 	[PDB_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PDB_Description] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[PDB_Organism] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[PDB_Organism] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PDB_Connection_String] [varchar](1024) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[PDB_NetSQL_Conn_String] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[PDB_NetOleDB_Conn_String] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -22,7 +22,7 @@ CREATE TABLE [dbo].[T_Peptide_Database_List](
  CONSTRAINT [PK_T_Peptide_Database_List] PRIMARY KEY CLUSTERED 
 (
 	[PDB_ID] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -31,7 +31,7 @@ GO
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Peptide_Database_List] ON [dbo].[T_Peptide_Database_List] 
 (
 	[PDB_Name] ASC
-)WITH (PAD_INDEX  = OFF, IGNORE_DUP_KEY = OFF, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name] FOREIGN KEY([PDB_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])

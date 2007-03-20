@@ -21,6 +21,7 @@ CREATE Procedure dbo.ValidateFolderExists
 **
 **	Auth:	mem
 **	Date:	07/18/2006
+**			03/17/2007 mem - Added Try/Catch error handling
 **
 *****************************************************/
 (
@@ -33,110 +34,144 @@ CREATE Procedure dbo.ValidateFolderExists
 AS
 	Set NoCount On
 	
-	declare @myRowCount int
 	declare @myError int
-	set @myRowCount = 0
+	declare @myRowCount int
 	set @myError = 0
+	set @myRowCount = 0
 
-	-----------------------------------------------
-	-- Clear the output parameters
-	-----------------------------------------------
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 
-	set @FolderExists = 0
-	set @FolderCreated = 0
-	set @message = ''
+	Begin Try
 	
-	declare @result int
+		-----------------------------------------------
+		-- Clear the output parameters
+		-----------------------------------------------
 
-	-----------------------------------------------
-	-- Create a FileSystemObject object.
-	-----------------------------------------------
-	
-	DECLARE @FSOObject int
-	DECLARE @TxSObject int
-	DECLARE @hr int
-	
-	EXEC @hr = sp_OACreate 'Scripting.FileSystemObject', @FSOObject OUT
-	IF @hr <> 0
-	BEGIN
-	    EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
-		If Len(IsNull(@message, '')) = 0
-			Set @message = 'Error creating FileSystemObject'
-		set @myError = 60000
-		goto Done
-	END
+		set @FolderPath = IsNull(@FolderPath, '')
+		set @FolderExists = 0
+		set @FolderCreated = 0
+		set @message = ''
+		
+		declare @result int
 
-
-	EXEC @hr = sp_OAMethod  @FSOObject, 'FolderExists', @result OUT, @FolderPath
-	IF @hr <> 0
-	BEGIN
-		EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
-		If Len(IsNull(@message, '')) = 0
-			Set @message = 'Error calling FolderExists for: ' + @FolderPath
-		set @myError = 60001
-		goto DestroyFSO
-	END
-	--
-	If @result <> 0
-	Begin
-		Set @FolderExists = 1
-	End
-	Else
-	Begin
-		If @CreateIfMissing = 0
+		If Len(LTrim(RTrim(@FolderPath))) = 0
 		Begin
-			set @myError = 60002
-			set @message = 'Folder not found: ' + @FolderPath
+			Set @message = 'Folder not found: Empty folder path'
+			Set @myError = 60010
+			Goto Done
+		End
+		
+		-----------------------------------------------
+		-- Create a FileSystemObject object
+		-----------------------------------------------
+		
+		DECLARE @FSOObject int
+		DECLARE @TxSObject int
+		DECLARE @hr int
+
+		Set @CurrentLocation =  'Create Scripting.FileSystemObject'
+		--
+		EXEC @hr = sp_OACreate 'Scripting.FileSystemObject', @FSOObject OUT
+		IF @hr <> 0
+		BEGIN
+			EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
+			If Len(IsNull(@message, '')) = 0
+				Set @message = 'Error creating FileSystemObject'
+			set @myError = 60000
+			goto Done
+		END
+
+		Set @CurrentLocation =  'Call FolderExists for ' + @FolderPath
+		--
+		EXEC @hr = sp_OAMethod  @FSOObject, 'FolderExists', @result OUT, @FolderPath
+		IF @hr <> 0
+		BEGIN
+			EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
+			If Len(IsNull(@message, '')) = 0
+				Set @message = 'Error calling FolderExists for: ' + @FolderPath
+			set @myError = 60001
+			goto DestroyFSO
+		END
+		--
+		If @result <> 0
+		Begin
+			Set @FolderExists = 1
 		End
 		Else
 		Begin
-			-- Folder not found; try to create it
-			EXEC @hr = sp_OAMethod  @FSOObject, 'CreateFolder', @result OUT, @FolderPath
-			IF @hr <> 0
-			BEGIN
-				EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
-				If Len(IsNull(@message, '')) = 0
-					Set @message = 'Error creating missing folder: ' + @FolderPath
-				set @myError = 60003
-				goto DestroyFSO
-			END
-
-			-- Creation appears successful; verify that the folder now exists
-			EXEC @hr = sp_OAMethod  @FSOObject, 'FolderExists', @result OUT, @FolderPath
-			IF @hr <> 0
-			BEGIN
-				EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
-				If Len(IsNull(@message, '')) = 0
-					Set @message = 'Error calling FolderExists for: ' + @FolderPath
-				set @myError = 60004
-				goto DestroyFSO
-			END
-			--
-			If @result <> 0
+			If @CreateIfMissing = 0
 			Begin
-				Set @FolderExists = 1
-				Set @FolderCreated = 1
+				set @myError = 60002
+				set @message = 'Folder not found: ' + @FolderPath
 			End
 			Else
 			Begin
-				set @myError = 60005
-				set @message = 'Tried to create folder since missing, but creation failed (' + @FolderPath + ')'
+				-- Folder not found; try to create it
+				
+				Set @CurrentLocation =  'Create folder ' + @FolderPath
+				--
+				EXEC @hr = sp_OAMethod  @FSOObject, 'CreateFolder', @result OUT, @FolderPath
+				IF @hr <> 0
+				BEGIN
+					EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
+					If Len(IsNull(@message, '')) = 0
+						Set @message = 'Error creating missing folder: ' + @FolderPath
+					set @myError = 60003
+					goto DestroyFSO
+				END
+
+				-- Creation appears successful; verify that the folder now exists
+
+				Set @CurrentLocation =  'Verify newly created folder ' + @FolderPath
+				--
+				EXEC @hr = sp_OAMethod  @FSOObject, 'FolderExists', @result OUT, @FolderPath
+				IF @hr <> 0
+				BEGIN
+					EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
+					If Len(IsNull(@message, '')) = 0
+						Set @message = 'Error calling FolderExists for: ' + @FolderPath
+					set @myError = 60004
+					goto DestroyFSO
+				END
+				--
+				If @result <> 0
+				Begin
+					Set @FolderExists = 1
+					Set @FolderCreated = 1
+				End
+				Else
+				Begin
+					set @myError = 60005
+					set @message = 'Tried to create folder since missing, but creation failed (' + @FolderPath + ')'
+				End
 			End
 		End
-	End
-	
-DestroyFSO:
-	-----------------------------------------------
-	-- Clean up the file system object
-	-----------------------------------------------
-	EXEC @hr = sp_OADestroy @FSOObject
-	IF @hr <> 0
-	BEGIN
-	    EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
-		set @myError = 60006
-		goto done
-	END
+		
+	DestroyFSO:
+		-----------------------------------------------
+		-- Clean up the file system object
+		-----------------------------------------------
 
+		Set @CurrentLocation =  'Destroy @FSOObject'
+		--
+		EXEC @hr = sp_OADestroy @FSOObject
+		IF @hr <> 0
+		BEGIN
+			EXEC LoadGetOAErrorMessage @FSOObject, @hr, @message OUT
+			set @myError = 60006
+			goto done
+		END
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'ValidateFolderExists')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done
+	End Catch		
+	
 	-----------------------------------------------
 	-- Exit
 	-----------------------------------------------

@@ -1,0 +1,121 @@
+/****** Object:  StoredProcedure [dbo].[RefreshCachedDMSMassCorrectionFactors] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
+/****************************************************
+**
+**	Desc:	Updates the data in T_DMS_Mass_Correction_Factors_Cached using DMS
+**
+**	Return values: 0: success, otherwise, error code
+**
+**
+**	Auth:	mem
+**	Date:	03/06/2007
+**
+*****************************************************/
+(
+	@message varchar(255) = ''
+)
+AS
+
+	Set NoCount On
+
+	Declare @myRowCount int
+	Declare @myError int
+	Set @myRowCount = 0
+	Set @myError = 0
+
+	set @message = ''
+
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
+
+	Begin Try
+		Set @CurrentLocation = 'Delete extra rows in T_DMS_Mass_Correction_Factors_Cached'
+		-- 
+		DELETE T_DMS_Mass_Correction_Factors_Cached
+		FROM T_DMS_Mass_Correction_Factors_Cached Target LEFT OUTER JOIN
+			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
+		WHERE (Src.Mass_Correction_ID IS NULL)
+		--
+		SELECT @myRowCount = @@RowCount, @myError = @@Error
+		
+		If @myRowCount > 0
+			Set @message = 'Deleted ' + convert(varchar(12), @myRowCount) + ' extra rows'
+			
+		Set @CurrentLocation = 'Update existing rows in T_DMS_Mass_Correction_Factors_Cached'
+		--
+		UPDATE T_DMS_Mass_Correction_Factors_Cached
+		SET Mass_Correction_Tag = Src.Mass_Correction_Tag, 
+			Description = Src.Description, 
+			Monoisotopic_Mass_Correction = Src.Monoisotopic_Mass_Correction,
+			Average_Mass_Correction = Src.Average_Mass_Correction, 
+			Affected_Atom = Src.Affected_Atom, 
+			Original_Source = Src.Original_Source, 
+			Original_Source_Name = Src.Original_Source_Name, 
+			Alternative_Name = Src.Alternative_Name
+		FROM T_DMS_Mass_Correction_Factors_Cached Target INNER JOIN
+			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
+		WHERE (Target.Mass_Correction_Tag <> Src.Mass_Correction_Tag) OR
+			  (Target.Description <> Src.Description) OR
+			  (Target.Monoisotopic_Mass_Correction <> Src.Monoisotopic_Mass_Correction) OR
+			  (Target.Average_Mass_Correction <> Src.Average_Mass_Correction) OR
+			  (Target.Affected_Atom <> Src.Affected_Atom)
+		--
+		SELECT @myRowCount = @@RowCount, @myError = @@Error
+		
+		If @myRowCount > 0
+		Begin
+			If Len(@message) > 0 
+				Set @message = @message + '; '
+			Set @message = @message + 'Updated ' + convert(varchar(12), @myRowCount) + ' rows'
+		End
+		
+		Set @CurrentLocation = 'Add new rows to T_DMS_Mass_Correction_Factors_Cached'
+		--
+		INSERT INTO T_DMS_Mass_Correction_Factors_Cached
+			(Mass_Correction_ID, Mass_Correction_Tag, Description, 
+			Monoisotopic_Mass_Correction, Average_Mass_Correction, 
+			Affected_Atom, Original_Source, Original_Source_Name, 
+			Alternative_Name)
+		SELECT Src.Mass_Correction_ID, Src.Mass_Correction_Tag, 
+			Src.Description, Src.Monoisotopic_Mass_Correction, 
+			Src.Average_Mass_Correction, Src.Affected_Atom, 
+			Src.Original_Source, Src.Original_Source_Name, 
+			Src.Alternative_Name
+		FROM T_DMS_Mass_Correction_Factors_Cached Target RIGHT OUTER JOIN
+			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
+		WHERE (Target.Mass_Correction_ID IS NULL)
+		--
+		SELECT @myRowCount = @@RowCount, @myError = @@Error
+		
+		If @myRowCount > 0
+		Begin
+			If Len(@message) > 0 
+				Set @message = @message + '; '
+			Set @message = @message + 'Added ' + convert(varchar(12), @myRowCount) + ' new rows'
+		End
+		
+		If Len(@message) > 0 
+		Begin	
+			Set @message = 'Updated T_DMS_Mass_Correction_Factors_Cached: ' + @message
+			execute PostLogEntry 'Normal', @message, 'RefreshCachedDMSMassCorrectionFactors'
+		End
+		
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSMassCorrectionFactors')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done		
+	End Catch
+			
+Done:
+	Return @myError
+
+
+GO

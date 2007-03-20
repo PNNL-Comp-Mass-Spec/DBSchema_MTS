@@ -75,6 +75,7 @@ AS
 	declare @result int
 	declare @hit int
 	declare @PeptideDBCount int
+	declare @PeptideDBCountInvalid int
 	
 	Declare @sql varchar(1024)
 	Declare @PepDBServer varchar(128)
@@ -93,13 +94,15 @@ AS
 	-- Verify peptide DB (or DBs)
 	---------------------------------------------------
 
-	CREATE TABLE #TmpPeptideDBs (
-		Peptide_DB_Name varchar(128) NOT NULL,
-		Server_Name varchar(128) NULL
+	CREATE TABLE #T_Peptide_Database_List (
+		PeptideDBName varchar(128) NULL,
+		PeptideDBID int NULL,
+		PeptideDBServer varchar(128) NULL,
+		PeptideDBPath varchar(256) NULL
 	)
 	
-	-- Populate #TmpPeptideDBs using @peptideDBName
-	INSERT INTO #TmpPeptideDBs (Peptide_DB_Name)
+	-- Populate #T_Peptide_Database_List using @peptideDBName
+	INSERT INTO #T_Peptide_Database_List (PeptideDBName)
 	SELECT Value
 	FROM dbo.udfParseDelimitedList(@peptideDBName, ',')
 	--
@@ -115,56 +118,38 @@ AS
 		goto done
 	End
 
-	-- Look for matching Peptide DBs on this server
-	UPDATE #TmpPeptideDBs
-	SET  Server_Name = @@ServerName
-	FROM #TmpPeptideDBs INNER JOIN
-		 T_Peptide_Database_List Pep ON #TmpPeptideDBs.Peptide_DB_Name = PDB_Name
+	---------------------------------------------------
+	-- Determine the ID and server for each Peptide DB in #T_Peptide_Database_List
+	---------------------------------------------------
 	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	exec @myError = PopulatePeptideDBLocationTable @PreferDBName = 1, @message = @message output
 
 	If @myError <> 0
 	Begin
-		Set @message = 'Error verifying peptide database name(s) against T_Peptide_Database_List'
-		goto done
-	End
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling PopulatePeptideDBLocationTable'
 		
-	If @myRowCount < @PeptideDBCount
-	Begin
-		-- One or more entries in #TmpPeptideDBs didn't match with T_Peptide_Database_List
-		-- Try linking into V_MTS_PT_DBs
-
-		UPDATE #TmpPeptideDBs
-		SET  Server_Name = Pep.Server_Name
-		FROM #TmpPeptideDBs INNER JOIN
-			 V_MTS_PT_DBs Pep ON #TmpPeptideDBs.Peptide_DB_Name = Pep.Peptide_DB_Name
-		WHERE #TmpPeptideDBs.Server_Name IS NULL
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-	
-		--
-		If @myError <> 0
-		Begin
-			Set @message = 'Error verifying peptide database name(s) against V_MTS_PT_DBs'
-			goto done
-		End
+		Set @message = @message + '; Error Code ' + Convert(varchar(12), @myError)
+		Goto Done
 	End
-
+	
 	---------------------------------------------------
-	-- Make sure each entry in #TmpPeptideDBs has the server defined
+	-- Make sure each entry in #T_Peptide_Database_List has PeptideDBID defined
 	-- Any that do not are unknown DBs
 	---------------------------------------------------
-	--
-	Set @UnknownDBList = ''
-	SELECT @UnknownDBList = @UnknownDBList + Peptide_DB_Name + ','
-	FROM #TmpPeptideDBs
-	WHERE Server_Name IS NULL
-	ORDER BY Peptide_DB_Name
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	
-	If @myRowCount > 0
+	Set @PeptideDBCountInvalid = 0
+	SELECT @PeptideDBCountInvalid = COUNT(*)
+	FROM #T_Peptide_Database_List
+	WHERE PeptideDBID Is Null
+
+	If @PeptideDBCountInvalid > 0
 	Begin
+		Set @UnknownDBList = ''
+		SELECT @UnknownDBList = @UnknownDBList + PeptideDBName + ','
+		FROM #T_Peptide_Database_List
+		WHERE PeptideDBID IS NULL
+		ORDER BY PeptideDBName
+
 		-- Remove the trailing comma
 		Set @UnknownDBList = Left(@UnknownDBList, Len(@UnknownDBList)-1)
 			
@@ -174,19 +159,20 @@ AS
 		Set @message = @message + ' not found in T_Peptide_Database_List or V_MTS_PT_DBs: ' + @UnknownDBList
 		Set @myError = 101
 		goto done
-	End
-	
+
+	End	
+
 	---------------------------------------------------
 	-- All of the peptide DBs are valid
 	-- Determine the organism for the first one
 	---------------------------------------------------
 	--
-	SELECT @FirstPeptideDB = Peptide_DB_Name,
-		   @PepDBServer = Server_Name
-	FROM #TmpPeptideDBs INNER JOIN 
-			(SELECT MIN(Peptide_DB_Name) AS Peptide_DB_First
-			FROM #TmpPeptideDBs
-		 ) LookupQ ON #TmpPeptideDBs.Peptide_DB_Name = LookupQ.Peptide_DB_First
+	SELECT @FirstPeptideDB = PeptideDBName,
+		   @PepDBServer = PeptideDBServer
+	FROM #T_Peptide_Database_List INNER JOIN 
+			(SELECT MIN(PeptideDBName) AS Peptide_DB_First
+			FROM #T_Peptide_Database_List
+		 ) LookupQ ON #T_Peptide_Database_List.PeptideDBName = LookupQ.Peptide_DB_First
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
@@ -219,7 +205,7 @@ AS
 	End
 	
 	If @InfoOnly <> 0
-		SELECT * FROM #TmpPeptideDBs ORDER BY Peptide_DB_Name
+		SELECT * FROM #T_Peptide_Database_List ORDER BY PeptideDBName
 	
 	---------------------------------------------------
 	-- Verify Protein DB

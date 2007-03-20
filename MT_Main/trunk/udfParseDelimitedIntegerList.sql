@@ -1,10 +1,10 @@
-/****** Object:  UserDefinedFunction [dbo].[udfParseDelimitedList] ******/
+/****** Object:  UserDefinedFunction [dbo].[udfParseDelimitedIntegerList] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE FUNCTION udfParseDelimitedList
+CREATE FUNCTION udfParseDelimitedIntegerList
 /****************************************************	
 **	Parses the text in @DelimitedList and returns a table
 **	containing the values
@@ -15,8 +15,7 @@ CREATE FUNCTION udfParseDelimitedList
 **
 **
 **	Auth:	mem
-**	Date:	06/06/2006
-**			11/10/2006 mem - Updated to prevent blank values from being returned in the table
+**	Date:	11/30/2006
 **			03/14/2007 mem - Changed @DelimitedList parameter from varchar(8000) to varchar(max)
 **  
 ****************************************************/
@@ -24,7 +23,7 @@ CREATE FUNCTION udfParseDelimitedList
 	@DelimitedList varchar(max),
 	@Delimiter varchar(2) = ','
 )
-RETURNS @tmpValues TABLE(Value varchar(2048))
+RETURNS @tmpValues TABLE(Value int)
 AS
 BEGIN
 	
@@ -53,9 +52,9 @@ BEGIN
 			Begin -- <c>
 				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))
 				
-				If Len(@Value) > 0 
+				If Len(@Value) > 0 And IsNumeric(@Value) = 1
 					INSERT INTO @tmpValues (Value)
-					VALUES (@Value)
+					VALUES (Convert(int, @Value))
 			end -- </c>
 
 			Set @StartPosition = @DelimiterPos + 1
