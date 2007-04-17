@@ -1,32 +1,20 @@
-/****** Object:  StoredProcedure [dbo].[GetMassTagsGANETParam] ******/
+/****** Object:  StoredProcedure [dbo].[GetMassTagsPlusPepProphetStats] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetMassTagsGANETParam
+CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 /****************************************************************
 **  Desc: Returns mass tags and NET values relevant for PMT peak matching
+**		  Also returns Peptide Prophet stats from T_Mass_Tag_Peptide_Prophet_Stats
 **
 **  Return values: 0 if success, otherwise, error code 
 **
 **  Parameters: See comments below
 **
 **  Auth:	mem
-**	Date:	01/06/2004
-**			02/02/2004 mem - Now returning High_Normalized_Score in the 6th column of the output
-**			07/27/2004 mem - Now returning StD_GANET in the 7th column of the output
-**			09/21/2004 mem - Changed format of @MassCorrectionIDFilterList and removed parameters @AmtsOnly and @LockersOnly
-**			01/12/2004 mem - Now returning High_Discriminant_Score in the 8th column of the output
-**			02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter
-**			09/08/2005 mem - Now returning Number_of_Peptides in the 9th column of the output
-**			09/28/2005 mem - Switched to using Peptide_Obs_Count_Passing_Filter instead of Number_of_Peptides for the 9th column of data
-**			12/22/2005 mem - Added parameter @JobToFilterOnByDataset
-**			06/08/2006 mem - Now returning Mod_Count and Mod_Description as the 10th and 11th columns
-**			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
-**						   - Updated parsing of @ExperimentFilter and @ExperimentExclusionFilter to check for percent signs in the parameter; if no percent signs are present, then auto-adds them at the beginning and end
-**			10/09/2006 mem - Now returning Peptide Prophet Probability in the 12th column (where the 1st column is column 1)
-**			04/06/2007 mem - Updated to call GetMassTagsPassingFiltersWork to populate #TmpMassTags with the PMTs to use
+**	Date:	04/06/2007 mem - Created this procedure by extending GetMassTagsGANETParam to include data in T_Mass_Tag_Peptide_Prophet_Stats
 **  
 ****************************************************************/
 (
@@ -90,8 +78,8 @@ As
 		Goto Done					
     
 	---------------------------------------------------
-	-- Join the data in #TmpMassTags with T_Mass_Tags
-	-- and T_Mass_Tags_NET
+	-- Join the data in #TmpMassTags with T_Mass_Tags,
+	-- T_Mass_Tags_NET, and T_Mass_Tag_Peptide_Prophet_Stats
 	---------------------------------------------------
 
 	If @NETValueType < 0 or @NETValueType > 1
@@ -112,12 +100,26 @@ As
 				MT.Peptide_Obs_Count_Passing_Filter,
 				MT.Mod_Count,
 				MT.Mod_Description,
-				MT.High_Peptide_Prophet_Probability
+				MT.High_Peptide_Prophet_Probability,
+				MTPPS.Mass_Tag_ID, 
+				MTPPS.ObsCount_CS1, 
+				MTPPS.ObsCount_CS2, 
+				MTPPS.ObsCount_CS3, 
+				MTPPS.PepProphet_FScore_Max_CS1, 
+				MTPPS.PepProphet_FScore_Max_CS2, 
+				MTPPS.PepProphet_FScore_Max_CS3, 
+				MTPPS.PepProphet_Probability_Max_CS1, 
+				MTPPS.PepProphet_Probability_Max_CS2, 
+				MTPPS.PepProphet_Probability_Max_CS3, 
+				MTPPS.PepProphet_Probability_Avg_CS1, 
+				MTPPS.PepProphet_Probability_Avg_CS2, 
+				MTPPS.PepProphet_Probability_Avg_CS3
 		FROM #TmpMassTags
 			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
 			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
 			 INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID 
 			 INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+			 LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
 		WHERE TAD.Dataset = @DatasetToFilterOn AND
 				P.Max_Obs_Area_In_Job = 1
 		GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, 
@@ -142,12 +144,25 @@ As
 			MT.Peptide_Obs_Count_Passing_Filter,
 			MT.Mod_Count,
 			MT.Mod_Description,
-			MT.High_Peptide_Prophet_Probability
+			MT.High_Peptide_Prophet_Probability,
+			MTPPS.Mass_Tag_ID, 
+			MTPPS.ObsCount_CS1, 
+			MTPPS.ObsCount_CS2, 
+			MTPPS.ObsCount_CS3, 
+			MTPPS.PepProphet_FScore_Max_CS1, 
+			MTPPS.PepProphet_FScore_Max_CS2, 
+			MTPPS.PepProphet_FScore_Max_CS3, 
+			MTPPS.PepProphet_Probability_Max_CS1, 
+			MTPPS.PepProphet_Probability_Max_CS2, 
+			MTPPS.PepProphet_Probability_Max_CS3, 
+			MTPPS.PepProphet_Probability_Avg_CS1, 
+			MTPPS.PepProphet_Probability_Avg_CS2, 
+			MTPPS.PepProphet_Probability_Avg_CS3
 		FROM #TmpMassTags 
 			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
+			LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
 		ORDER BY MT.Monoisotopic_Mass
-
 
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -158,5 +173,5 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetMassTagsGANETParam] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetMassTagsPlusPepProphetStats] TO [DMS_SP_User]
 GO

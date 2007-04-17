@@ -31,6 +31,7 @@ CREATE PROCEDURE dbo.GetQRollupsSummary
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **			09/07/2006 mem - Now returns [Min High Peptide Prophet Prob]
+**			04/10/2007 mem - Replaced ..V_QR_SummaryList with .dbo.V_QR_SummaryList
 **    
 *****************************************************/
 (
@@ -94,7 +95,7 @@ As
 	declare @s nvarchar(1024)
 	set @s = ''
 	--
-	set @s = replace(@sql, 'DATABASE..', '[' + @MTDBName + ']..')
+	set @s = replace(@sql, 'DATABASE..', '[' + @MTDBName + '].dbo.')
 
 	if @s = ''
 	begin
