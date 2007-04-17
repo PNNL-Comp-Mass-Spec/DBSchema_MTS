@@ -18,12 +18,14 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysisNoSeqID
 **
 **	Auth:	mem
 **	Date:	08/31/2006
+**			03/22/2007 mem - Added option @OnlyProcessPeptidesWithNullDiscriminant
 **    
 *****************************************************/
 (
 	@JobToProcess int,
 	@NextProcessState int = 90,
 	@NextProcessStateSkipPeptideProphet int = 60,
+	@OnlyProcessPeptidesWithNullDiscriminant tinyint = 1,			-- Set to 1 to only process entries that currently have a null discriminant score
 	@message varchar(255)='' OUTPUT
 )
 AS
@@ -37,10 +39,12 @@ AS
 	declare @DiscriminantTrans varchar(64)
 	set @DiscriminantTrans = 'DiscriminantCalc'
 	
+	set @JobToProcess = IsNull(@JobToProcess, 0)
 	set @message = ''
-
+	set @OnlyProcessPeptidesWithNullDiscriminant = IsNull(@OnlyProcessPeptidesWithNullDiscriminant, 0)
+	
 	declare @jobStr varchar(128)
-	set @jobStr = cast(@JobToProcess as varchar(12))
+	set @jobStr = Convert(varchar(12), @JobToProcess)
 	
 	declare	@MatchFound tinyint
 	declare @ProteinCount int
@@ -51,7 +55,7 @@ AS
 
 	declare @message2 varchar(256)
 	set @message2 = ''
-		
+	
 	Set @ProteinCount = 0
 	Set @ResidueCount = 0
 	
@@ -144,7 +148,8 @@ AS
 			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_Sequest S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
 			 T_Peptide_to_Protein_Map PPM ON P.Peptide_ID = PPM.Peptide_ID
-		WHERE P.Analysis_ID = @JobToProcess
+		WHERE P.Analysis_ID = @JobToProcess AND 
+			  (@OnlyProcessPeptidesWithNullDiscriminant = 0 OR SD.DiscriminantScoreNorm Is Null)
 		GROUP BY P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
 				 S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
 				 LEN(dbo.udfCleanSequence(P.Peptide)), SD.PassFilt, SD.MScore
@@ -171,7 +176,8 @@ AS
 			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_XTandem X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
 			 T_Peptide_to_Protein_Map PPM ON P.Peptide_ID = PPM.Peptide_ID
-		WHERE P.Analysis_ID = @JobToProcess
+		WHERE P.Analysis_ID = @JobToProcess AND 
+			  (@OnlyProcessPeptidesWithNullDiscriminant = 0 OR SD.DiscriminantScoreNorm Is Null)
 		GROUP BY P.Peptide_ID, X.Normalized_Score, X.DeltaCn2, X.DelM, P.GANET_Obs, 
 				 P.Charge_State, LEN(dbo.udfCleanSequence(P.Peptide)), SD.PassFilt, SD.MScore
 		--

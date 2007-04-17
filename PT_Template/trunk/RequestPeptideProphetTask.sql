@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RequestPeptideProphetTask
+CREATE Procedure dbo.RequestPeptideProphetTask
 /****************************************************
 **
 **	Desc: 
@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.RequestPeptideProphetTask
 **	Auth:	mem
 **	Date:	07/05/2006
 **			07/20/2006 mem - Removed Print statement for Sql populating T_Peptide_Prophet_Task_Job_Map
+**			04/16/2007 mem - Now calling PopulatePeptideProphetResultsFolderPaths to populate column Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map (Ticket #423)
 **
 *****************************************************/
 (
@@ -209,7 +210,7 @@ As
 
 	Set @S = ''
 	Set @S = @S + ' INSERT INTO T_Peptide_Prophet_Task_Job_Map (Task_ID, Job)'
-	Set @S = @S + ' SELECT ' + Convert(varchar(9), @TaskID) + ' AS Task_ID, A.Job'
+	Set @S = @S + ' SELECT ' + Convert(varchar(12), @TaskID) + ' AS Task_ID, A.Job'
 	Set @S = @S + ' FROM ('
 	Set @S = @S +   ' SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, IsNull(TAD.RowCount_Loaded,0) AS PeptideCount'
 	Set @S = @S +   ' FROM T_Analysis_Description TAD WITH (HoldLock) INNER JOIN'
@@ -245,7 +246,7 @@ As
 
 		Set @S = ''
 		Set @S = @S + ' INSERT INTO T_Peptide_Prophet_Task_Job_Map (Task_ID, Job)'
-		Set @S = @S + ' SELECT TOP 1 ' +  Convert(varchar(9), @TaskID) + ' AS Task_ID, Job'
+		Set @S = @S + ' SELECT TOP 1 ' +  Convert(varchar(12), @TaskID) + ' AS Task_ID, Job'
 		Set @S = @S + ' FROM T_Analysis_Description WITH (HoldLock)'
 		Set @S = @S + ' WHERE Process_State = ' + Convert(varchar(9), @ProcessStateMatch)
 		Set @S = @S + ' ORDER BY Job ASC'
@@ -287,6 +288,98 @@ As
 	---------------------------------------------------
 	commit transaction @transName
 
+	---------------------------------------------------
+	-- Populate Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map for the jobs mapped to state @TaskID
+	-- Use LookupCurrentResultsFolderPathsByJob	to determine the results folder path for each job
+	---------------------------------------------------
+	
+	CREATE TABLE #TmpResultsFolderPaths (
+		Job INT NOT NULL,
+		Results_Folder_Path varchar(512),
+		Source_Share varchar(128)
+	)
+	
+	INSERT INTO #TmpResultsFolderPaths (Job)
+	SELECT Job
+	FROM T_Peptide_Prophet_Task_Job_Map
+	WHERE @TaskID = @TaskID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	Exec LookupCurrentResultsFolderPathsByJob @ClientPerspective
+	
+	UPDATE T_Peptide_Prophet_Task_Job_Map
+	SET Results_Folder_Path = RFP.Results_Folder_Path
+	FROM T_Peptide_Prophet_Task_Job_Map PPTJM INNER JOIN
+		 #TmpResultsFolderPaths RFP ON PPTJM.Job = RFP.Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	DROP TABLE #TmpResultsFolderPaths
+
+	---------------------------------------------------
+	-- Look for any jobs for this task that still have null results folder paths
+	---------------------------------------------------
+	Declare @BadJobCount int
+	Declare @BadJobs varchar(512)
+	Set @BadJobs = ''
+
+	SELECT @BadJobs = @BadJobs + Convert(varchar(12), Job) + ','
+	FROM T_Peptide_Prophet_Task_Job_Map 
+	WHERE Task_ID = @TaskID AND Results_Folder_Path Is Null
+	ORDER BY Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	If @myRowCount > 0
+	Begin
+		Set @BadJobCount = @myRowCount
+		
+		-- Remove the comma and the end of @BadJobs
+		Set @BadJobs = Left(@BadJobs, Len(@BadJobs)-1)
+		
+		Set @message = 'Unable to determine the results folder path for ' + Convert(varchar(12), @BadJobCount) + ' job'
+		If @BadJobCount <> 1
+			set @message = @message + 's'
+		
+		set @message = @message + ' for Peptide Prophet task ' + Convert(varchar(12), @TaskID) + ': ' + @BadJobs
+		
+		-- Post an error log entry
+		Exec PostLogEntry 'Error', @message, 'RequestPeptideProphetTask'
+		Set @message = ''
+		
+		-- Change the job states to 6=Holding
+		UPDATE T_Analysis_Description
+		SET Process_State = 6, Last_Affected = GETDATE()
+		FROM T_Analysis_Description TAD INNER JOIN 
+			 T_Peptide_Prophet_Task_Job_Map TJM ON TAD.Job = TJM.Job
+		WHERE TJM.Task_ID = @TaskID AND Results_Folder_Path Is Null
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		-- Remove the extra entries from T_Peptide_Prophet_Task_Job_Map for this task
+		DELETE FROM T_Peptide_Prophet_Task_Job_Map
+		WHERE Task_ID = @TaskID AND Results_Folder_Path Is Null
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		-- See if this task has any entries remaining
+		SELECT @myRowCount = COUNT(*)
+		FROM T_Peptide_Prophet_Task_Job_Map
+		WHERE Task_ID = @TaskID
+		
+		If @myRowCount = 0
+		Begin
+			-- Advance Task_ID to state 6 = Failed
+
+			UPDATE T_Peptide_Prophet_Task
+			SET Processing_State = 6
+			WHERE Task_ID = @TaskID
+			
+			Set @message = 'Task ' + Convert(varchar(12), @TaskID) + ' no longer has any valid jobs; state set to 6=Failed'
+			Goto Done
+		End
+	End
 
 	---------------------------------------------------
 	-- Write the output files
@@ -308,7 +401,7 @@ As
 	else
 	begin
 		If Len(IsNull(@message, '')) = 0
-			Set @message = 'Error calling ExportPeptideProphetJobList for TaskID ' + Convert(varchar(9), @TaskID)
+			Set @message = 'Error calling ExportPeptideProphetJobList for TaskID ' + Convert(varchar(12), @TaskID)
 		
 		-- Error calling ExportPeptideProphetJobList
 		-- Post an error log entry

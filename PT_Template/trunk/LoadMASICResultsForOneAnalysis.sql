@@ -24,6 +24,8 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			09/26/2006 mem - Now passing @ScanStatsColumnCount to LoadMASICScanStatsBulk
 **			03/17/2007 mem - Updated to use dbo.udfCombinePaths
+**			03/20/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
+**			04/16/2007 mem - Now using LookupCurrentResultsFolderPathsByJob to determine the results folder path (Ticket #423)
 **    
 *****************************************************/
 (
@@ -57,27 +59,19 @@ AS
 	
 
 	-----------------------------------------------
-	-- Get file information from analysis
+	-- Get dataset name and ID
 	-----------------------------------------------
 	declare @Dataset  varchar(128)
 	declare @DatasetID int
-	declare @Path varchar(255)
-	declare @DatasetFolder varchar(255)
-	declare @ResultsFolder varchar(255)
-	declare @VolClient varchar(255)
-	declare @VolServer varchar(255)
-	declare @StoragePath varchar(255)
+
+	declare @StoragePathResults varchar(512)
+	declare @SourceServer varchar(255)
 	
 	set @Dataset = ''
 
 	SELECT 
 		@Dataset = Dataset, 
-		@DatasetID = Dataset_ID,
-		@VolClient = Vol_Client, 
-		@VolServer = Vol_Server,
-		@Path = Storage_Path,
-		@DatasetFolder = Dataset_Folder,  
-		@ResultsFolder = Results_Folder
+		@DatasetID = Dataset_ID
 	FROM T_Analysis_Description
 	WHERE (Job = @job)
 	--
@@ -85,34 +79,60 @@ AS
 	--
 	if @Dataset = ''
 	begin
-		set @message = 'Could not get file information for job ' + @jobStr
+		set @message = 'Could not get dataset information for job ' + @jobStr
 		set @myError = 60001
 		goto Done
 	end
 
-	If @clientStoragePerspective <> 0
-		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolClient, @Path), @DatasetFolder)
-	Else
-		set @StoragePath = dbo.udfCombinePaths(dbo.udfCombinePaths(@VolServer, @Path), @DatasetFolder)
+	---------------------------------------------------
+	-- Use LookupCurrentResultsFolderPathsByJob to get 
+	-- the path to the analysis job results folder
+	---------------------------------------------------
+	--	
+	CREATE TABLE #TmpResultsFolderPaths (
+		Job INT NOT NULL,
+		Results_Folder_Path varchar(512),
+		Source_Share varchar(128)
+	)
+
+	INSERT INTO #TmpResultsFolderPaths (Job)
+	VALUES (@Job)
+	
+	Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
+
+	SELECT	@StoragePathResults = Results_Folder_Path,
+			@SourceServer = Source_Share
+	FROM #TmpResultsFolderPaths
+	WHERE Job = @Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+
+	If Len(IsNull(@StoragePathResults, '')) = 0
+	Begin
+		-- Results path is null; unable to continue
+		Set @message = 'Unable to determine results folder path for job ' + @jobStr
+		Set @myError = 60009
+		Goto Done
+	End
+
+	DROP TABLE #TmpResultsFolderPaths
 
 	-----------------------------------------------
 	-- Set up input file names and paths
 	-----------------------------------------------
 
 	DECLARE @RootFileName varchar(128)
-	DECLARE @ResultsPath varchar(512)
  	DECLARE @ScanStatsFile varchar(255)
  	DECLARE @ScanStatsFilePath varchar(512)
  	DECLARE @SICStatsFile varchar(255)
  	DECLARE @SICStatsFilePath varchar(512)
 	
 	set @RootFileName = @Dataset
-	set @ResultsPath = dbo.udfCombinePaths(@StoragePath, @ResultsFolder)
     set @ScanStatsFile = @RootFileName + '_ScanStats.txt'
-	set @ScanStatsFilePath = dbo.udfCombinePaths(@ResultsPath, @ScanStatsFile)
+	set @ScanStatsFilePath = dbo.udfCombinePaths(@StoragePathResults, @ScanStatsFile)
 
     set @SICStatsFile = @RootFileName + '_SICStats.txt'
-	set @SICStatsFilePath = dbo.udfCombinePaths(@ResultsPath, @SICStatsFile)
+	set @SICStatsFilePath = dbo.udfCombinePaths(@StoragePathResults, @SICStatsFile)
 
 
 	Declare @ScanStatsFileExists tinyint
@@ -281,8 +301,12 @@ AS
 		End
 	End
 	Else
+	Begin
 		Set @message = @message + '; SIC Stats file was empty for job ' + @jobStr
-
+	End
+	
+	-- Append the name of the server where the data was loaded from
+	set @message = @message + '; Server: ' + IsNull(@SourceServer, '??')
 
 	-----------------------------------------------
 	-- If @completionCode = @NextProcessState then need to see if this job's dataset

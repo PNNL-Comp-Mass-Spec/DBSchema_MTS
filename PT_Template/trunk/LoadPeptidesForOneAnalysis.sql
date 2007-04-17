@@ -40,7 +40,8 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			08/01/2006 mem - Updated to define the Peptide Prophet results file path
 **			08/10/2006 mem - Now updating the status message if using the Seq_Candidate tables and/or if Peptide Prophet data was loaded
-**			03/19/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
+**			03/20/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
+**			04/16/2007 mem - Now using LookupCurrentResultsFolderPathsByJob to determine the results folder path (Ticket #423)
 **
 *****************************************************/
 (
@@ -101,31 +102,18 @@ AS
 	end
 	
 	-----------------------------------------------
-	-- Get file information from analysis
+	-- Get result type and dataset name
 	-----------------------------------------------
 	declare @ResultType varchar(64)
 	declare @Dataset  varchar(128)
-	declare @StoragePath varchar(255)
-	declare @DatasetFolder varchar(255)
-	declare @ResultsFolder varchar(255)
-	declare @VolClient varchar(255)
-	declare @VolServer varchar(255)
 
-	declare @FolderExists tinyint
-	declare @StoragePathClient varchar(512)
-	declare @StoragePathServer varchar(512)
 	declare @StoragePathResults varchar(512)
-
+	declare @SourceServer varchar(255)
 		
 	set @Dataset = ''
 
 	SELECT	@ResultType = ResultType,
-			@Dataset = Dataset, 
-			@VolClient = Vol_Client, 
-			@VolServer = Vol_Server,
-			@StoragePath = Storage_Path,
-			@DatasetFolder = Dataset_Folder,  
-			@ResultsFolder = Results_Folder
+			@Dataset = Dataset
 	FROM T_Analysis_Description
 	WHERE (Job = @job)
 	--
@@ -133,7 +121,7 @@ AS
 	--
 	If @myRowCount = 0 OR Len(IsNull(@Dataset, '')) = 0
 	Begin
-		set @message = 'Could not get file information for job ' + @jobStr
+		set @message = 'Could not get dataset information for job ' + @jobStr
 		set @myError = 60001
 		goto Done
 	End
@@ -172,31 +160,37 @@ AS
 	End
 
 	---------------------------------------------------
-	-- Get path to the analysis job results folder
+	-- Use LookupCurrentResultsFolderPathsByJob to get 
+	-- the path to the analysis job results folder
 	---------------------------------------------------
 	--	
-	set @StoragePathClient = dbo.udfCombinePaths(
-							 dbo.udfCombinePaths(
-							 dbo.udfCombinePaths(@VolClient, @StoragePath), @DatasetFolder), @ResultsFolder)
-	
-	set @StoragePathServer = dbo.udfCombinePaths(
-							 dbo.udfCombinePaths(
-							 dbo.udfCombinePaths(@VolServer, @StoragePath), @DatasetFolder), @ResultsFolder)
+	CREATE TABLE #TmpResultsFolderPaths (
+		Job INT NOT NULL,
+		Results_Folder_Path varchar(512),
+		Source_Share varchar(128)
+	)
 
-	If @clientStoragePerspective = 0
-		set @StoragePathResults = @StoragePathServer
-	Else
+	INSERT INTO #TmpResultsFolderPaths (Job)
+	VALUES (@Job)
+	
+	Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
+
+	SELECT	@StoragePathResults = Results_Folder_Path,
+			@SourceServer = Source_Share
+	FROM #TmpResultsFolderPaths
+	WHERE Job = @Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+
+	If Len(IsNull(@StoragePathResults, '')) = 0
 	Begin
-		---------------------------------------------------
-		-- See if folder @StoragePathServer exists
-		-- If it does, preferentially use it
-		---------------------------------------------------
-		exec ValidateFolderExists @StoragePathServer, @CreateIfMissing = 0, @FolderExists = @FolderExists output
-		If @FolderExists <> 0
-			Set @StoragePathResults = @StoragePathServer
-		Else
-			Set @StoragePathResults = @StoragePathClient
+		-- Results path is null; unable to continue
+		Set @message = 'Unable to determine results folder path for job ' + @jobStr
+		Set @myError = 60009
+		Goto Done
 	End
+
+	DROP TABLE #TmpResultsFolderPaths
 
 	-----------------------------------------------
 	-- Set up input file names and paths
@@ -335,6 +329,9 @@ AS
 		
 		if @PepProphetFileFound <> 0
 			set @message = @message + '; loaded Peptide Prophet data'
+
+		-- Append the name of the server where the data was loaded from
+		set @message = @message + '; Server: ' + IsNull(@SourceServer, '??')
 			
 		-- bump the load count
 		--

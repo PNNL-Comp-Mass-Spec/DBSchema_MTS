@@ -6,6 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map](
 	[Task_ID] [int] NOT NULL,
 	[Job] [int] NOT NULL,
+	[Results_Folder_Path] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Peptide_Prophet_Task_Job_Map] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC,
