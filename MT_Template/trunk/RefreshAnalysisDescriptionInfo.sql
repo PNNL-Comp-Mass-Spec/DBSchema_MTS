@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE Procedure RefreshAnalysisDescriptionInfo
+
+CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 /****************************************************
 **
 **	Desc: 
@@ -23,10 +24,11 @@ CREATE Procedure RefreshAnalysisDescriptionInfo
 **			03/08/2006 mem - Now updating column Campaign
 **			11/15/2006 mem - Now updating columns Parameter_File_Name & Settings_File_Name
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
+**			05/09/2007 mem - Now using T_DMS_Analysis_Job_Info_Cached and T_DMS_Dataset_Info_Cached in MT_Main (Ticket:422)
 **    
 *****************************************************/
 (
-	@UpdateInterval int = 96,			-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
+	@UpdateInterval int = 30,			-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
  	@message varchar(255) = '' output
 )
 As
@@ -94,7 +96,7 @@ As
 				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
 				R.EnzymeID, R.Labelling
 			FROM T_Analysis_Description AS L INNER JOIN
-				MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex AS R ON 
+				MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached AS R ON 
 				L.Job = R.Job AND (
 					IsNull(L.Campaign, '') <> R.Campaign OR
 					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
@@ -124,7 +126,7 @@ As
 		else
 			if @myError <> 0
 			Begin
-				Set @message = 'Error synchronizing T_Analysis_Description with V_DMS_Analysis_Job_Import_Ex'
+				Set @message = 'Error synchronizing T_Analysis_Description with T_DMS_Analysis_Job_Info_Cached'
 				Set @myError = 101
 				execute PostLogEntry 'Error', @message, 'RefreshAnalysisDescriptionInfo'
 				Goto Done
@@ -143,7 +145,7 @@ As
 		FROM T_Analysis_Description AS TAD INNER JOIN (
 			SELECT L.Dataset_ID, R.Created, R.[Acquisition Start], R.[Acquisition End], R.[Scan Count]
 			FROM T_Analysis_Description AS L INNER JOIN
-				MT_Main.dbo.V_DMS_Dataset_Import_Ex AS R ON 
+				MT_Main.dbo.T_DMS_Dataset_Info_Cached AS R ON 
 				L.Dataset_ID = R.ID AND (
 					L.Dataset_Created_DMS <> R.Created OR 
 					IsNull(L.Dataset_Acq_Time_Start,0) <> IsNull(R.[Acquisition Start],0) OR
@@ -163,7 +165,7 @@ As
 		else
 			if @myError <> 0
 			Begin
-				Set @message = 'Error synchronizing T_Analysis_Description with V_DMS_Dataset_Import_Ex'
+				Set @message = 'Error synchronizing T_Analysis_Description with T_DMS_Dataset_Info_Cached'
 				Set @myError = 102
 				execute PostLogEntry 'Error', @message, 'RefreshAnalysisDescriptionInfo'
 				Goto Done
@@ -197,7 +199,7 @@ As
 				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
 				R.Labelling
 			FROM T_FTICR_Analysis_Description AS L INNER JOIN
-				MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex AS R ON 
+				MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached AS R ON 
 				L.Job = R.Job AND (
 					IsNull(L.Campaign, '') <> R.Campaign OR
 					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
@@ -226,7 +228,7 @@ As
 		else
 			if @myError <> 0
 			Begin
-				Set @message = 'Error synchronizing T_FTICR_Analysis_Description with V_DMS_Analysis_Job_Import_Ex'
+				Set @message = 'Error synchronizing T_FTICR_Analysis_Description with T_DMS_Analysis_Job_Info_Cached'
 				Set @myError = 102
 				execute PostLogEntry 'Error', @message, 'RefreshAnalysisDescriptionInfo'
 				Goto Done
@@ -245,7 +247,7 @@ As
 		FROM T_FTICR_Analysis_Description AS TAD INNER JOIN (
 			SELECT L.Dataset_ID, R.Created, R.[Acquisition Start], R.[Acquisition End], R.[Scan Count]
 			FROM T_FTICR_Analysis_Description AS L INNER JOIN
-				MT_Main.dbo.V_DMS_Dataset_Import_Ex AS R ON 
+				MT_Main.dbo.T_DMS_Dataset_Info_Cached AS R ON 
 				L.Dataset_ID = R.ID AND (
 					L.Dataset_Created_DMS <> R.Created OR 
 					IsNull(L.Dataset_Acq_Time_Start,0) <> IsNull(R.[Acquisition Start],0) OR
@@ -265,7 +267,7 @@ As
 		else
 			if @myError <> 0
 			Begin
-				Set @message = 'Error synchronizing T_Analysis_Description with V_DMS_Dataset_Import_Ex'
+				Set @message = 'Error synchronizing T_Analysis_Description with T_DMS_Dataset_Info_Cached'
 				Set @myError = 102
 				execute PostLogEntry 'Error', @message, 'RefreshAnalysisDescriptionInfo'
 				Goto Done
@@ -291,5 +293,6 @@ As
 Done:
 	
 	return @myError
+
 
 GO

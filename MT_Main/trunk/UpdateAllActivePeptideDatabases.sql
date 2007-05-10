@@ -42,6 +42,7 @@ CREATE Procedure UpdateAllActivePeptideDatabases
 **			11/28/2006 mem - Added parameter @JobMapUpdateHoldoff
 **			01/17/2007 mem - Updated to skip DBs with state >= 15 even if MTL_Demand_Import is non-zero
 **			03/06/2007 mem - Switched to Try/Catch error handling
+**			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
 **    
 *****************************************************/
 (
@@ -384,6 +385,14 @@ As
 
 						declare @StoredProcFound int
 
+						If @importNeeded > 0
+						Begin
+							-----------------------------------------------------------
+							-- Make sure the cached DMS Job and Dataset info was refreshed less than 60 minutes ago
+							-----------------------------------------------------------
+							Exec RefreshCachedDMSInfoIfRequired @UpdateInterval=1.0
+						End
+						
 						if @DBSchemaVersion < 2
 						Begin -- <c>
 							set @message = 'Unable to update database ' + @PDB_Name + '; DB Schema Version 1 is no longer supported for peptide databases'
