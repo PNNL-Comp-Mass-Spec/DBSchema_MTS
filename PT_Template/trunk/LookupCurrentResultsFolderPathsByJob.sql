@@ -21,7 +21,7 @@ CREATE Procedure dbo.LookupCurrentResultsFolderPathsByJob
 **	Return values: 0: success, otherwise, error code
 **
 **	Auth:	mem
-**	Date:	04/16/2007 mem - Ticket #423
+**	Date:	04/17/2007 mem - Ticket #423
 **    
 *****************************************************/
 (
@@ -139,6 +139,11 @@ set nocount on
 												 dbo.udfCombinePaths(
 												 dbo.udfCombinePaths(@VolServer, @StoragePath), @DatasetFolder), @ResultsFolder)
 
+						If Right(@StoragePathClient, 1) <> '\'
+							Set @StoragePathClient = @StoragePathClient + '\'
+							
+						If Right(@StoragePathServer, 1) <> '\'
+							Set @StoragePathServer = @StoragePathServer + '\'
 
 						-- Use @CheckLocalServerFirst to determine which path to check first
 						-- If the first path checked isn't found, then try the other path

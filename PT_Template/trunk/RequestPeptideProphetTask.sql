@@ -21,7 +21,7 @@ CREATE Procedure dbo.RequestPeptideProphetTask
 **	Auth:	mem
 **	Date:	07/05/2006
 **			07/20/2006 mem - Removed Print statement for Sql populating T_Peptide_Prophet_Task_Job_Map
-**			04/16/2007 mem - Now calling PopulatePeptideProphetResultsFolderPaths to populate column Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map (Ticket #423)
+**			04/17/2007 mem - Now calling PopulatePeptideProphetResultsFolderPaths to populate column Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map (Ticket #423)
 **
 *****************************************************/
 (
@@ -302,7 +302,7 @@ As
 	INSERT INTO #TmpResultsFolderPaths (Job)
 	SELECT Job
 	FROM T_Peptide_Prophet_Task_Job_Map
-	WHERE @TaskID = @TaskID
+	WHERE Task_ID = @TaskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -312,6 +312,7 @@ As
 	SET Results_Folder_Path = RFP.Results_Folder_Path
 	FROM T_Peptide_Prophet_Task_Job_Map PPTJM INNER JOIN
 		 #TmpResultsFolderPaths RFP ON PPTJM.Job = RFP.Job
+	WHERE Task_ID = @TaskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 

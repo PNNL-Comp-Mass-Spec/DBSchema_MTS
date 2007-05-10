@@ -17,6 +17,7 @@ CREATE Procedure dbo.CheckPeptideProphetUpdateRequired
 **	Auth:	mem
 **	Date:	07/05/2006
 **			02/06/2007 mem - Now ignoring charge states >= 6 when looking for rows with null Peptide_Prophet_Probability values
+**			04/17/2007 mem - Now also ignoring charge states >= 6 when @JobFilter is non-zero; posting a log message if any peptides with charge >= 6 have Null values (Ticket #423)
 **    
 *****************************************************/
 (
@@ -34,6 +35,10 @@ As
 	declare @myError int
 	set @myRowCount = 0
 	set @myError = 0
+
+	declare @RowCountTotal int
+	declare @RowCountNull int
+	declare @RowCountNullCharge5OrLess int
 
 	-----------------------------------------------
 	-- Validate @JobFilter
@@ -67,27 +72,55 @@ As
 
 		IF @myRowCount <> 0
 			Set @JobAdvancedToNextState = 1
+		Else
+		Begin
+			-----------------------------------------------
+			-- Job @JobFilter must have a ResultType in #T_ResultTypeList
+			-- See if any rows have null Peptide Prophet values for this job
+			-- Keep track of whether the charge is <= 5 only advance
+			-- if the only missing values are peptides with charge >= 6
+			-----------------------------------------------
+			--
+			Set @RowCountTotal = 0
+			Set @RowCountNull = 0
+			Set @RowCountNullCharge5OrLess = 0
+			SELECT	@RowCountTotal = COUNT(*),
+					@RowCountNull = SUM(CASE WHEN SD.Peptide_Prophet_FScore IS NULL OR 
+												  SD.Peptide_Prophet_Probability IS NULL 
+										THEN 1 ELSE 0 END),
+					@RowCountNullCharge5OrLess = SUM(CASE WHEN P.Charge_State <= 5 AND (
+																SD.Peptide_Prophet_FScore IS NULL OR 
+																SD.Peptide_Prophet_Probability IS NULL)
+										THEN 1 ELSE 0 END)
+			FROM T_Peptides P INNER JOIN
+				 T_Score_Discriminant SD ON 
+				 P.Peptide_ID = SD.Peptide_ID
+			WHERE P.Analysis_ID = @JobFilter
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
 
-		-- See if Job @JobFilter already has peptide prophet results 
-		--  present in T_Score_Discriminant; advance the state to @NextProcessState
-		--  if no Null values are present
-		UPDATE T_Analysis_Description
-		SET Process_State = @NextProcessState, Last_Affected = GetDate()
-		WHERE Job = @JobFilter AND
-			ResultType IN (SELECT ResultType FROM #T_ResultTypeList) AND
-			NOT Job IN (
-				SELECT DISTINCT TAD.Job
-				FROM T_Analysis_Description TAD INNER JOIN
-					 T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
-					 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
-				WHERE TAD.Job = @JobFilter AND
-					  SD.Peptide_Prophet_Probability IS NULL
-				)
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-
-		If @myRowCount <> 0
-			Set @JobAdvancedToNextState = 1
+			If @RowCountTotal > 0 And @RowCountNull = 0
+			Begin
+				-- No Null rows; advance the state
+				Set @JobAdvancedToNextState = 1	
+			End
+			Else
+			Begin
+				If @RowCountNull > 0 And @RowCountNullCharge5OrLess = 0
+				Begin
+					set @message = 'Job ' + Convert(varchar(12), @JobFilter) + ' has ' + Convert(varchar(12), @RowCountNull) + ' out of ' + Convert(varchar(12), @RowCountTotal) + ' rows in T_Score_Discriminant with null peptide prophet FScore or Probability values; however, all have charge state 6+ or higher'
+					execute PostLogEntry 'Warning', @message, 'CheckPeptideProphetUpdateRequired'
+					Set @JobAdvancedToNextState = 1	
+				End
+			End
+			
+			If @JobAdvancedToNextState = 1
+			Begin
+				UPDATE T_Analysis_Description
+				SET Process_State = @NextProcessState, Last_Affected = GetDate()
+				WHERE Job = @JobFilter
+			End
+		End
 	End
 	Else
 	Begin
@@ -117,7 +150,7 @@ As
 					 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 				WHERE TAD.Process_State = @ProcessStateMatch AND
 					  SD.Peptide_Prophet_Probability IS NULL AND
-					  P.Charge_State < 6
+					  P.Charge_State <= 5
 				)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount

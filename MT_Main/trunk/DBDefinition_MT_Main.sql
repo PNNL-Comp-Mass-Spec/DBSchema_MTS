@@ -2,7 +2,7 @@
 CREATE DATABASE [MT_Main] ON  PRIMARY 
 ( NAME = N'MT_Main_Data', FILENAME = N'F:\SQLServerData\MT_Main_data.mdf' , SIZE = 629760KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
-( NAME = N'MT_Main_Log', FILENAME = N'D:\SQLServerData\MT_Main_log.ldf' , SIZE = 10176KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Log', FILENAME = N'D:\SQLServerData\MT_Main_log.ldf' , SIZE = 1130624KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 EXEC dbo.sp_dbcmptlevel @dbname=N'MT_Main', @new_cmptlevel=90

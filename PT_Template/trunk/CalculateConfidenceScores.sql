@@ -72,15 +72,13 @@ AS
 		FROM T_Analysis_Description TAD
 		WHERE TAD.Process_State = @ProcessStateMatch AND 
 			  (TAD.Job NOT IN
-				  (	SELECT T_Analysis_Description.Job
+				  (	SELECT TAD.Job
 					FROM T_Peptides P INNER JOIN
-						 T_Score_Discriminant SD ON 
-						 P.Peptide_ID = SD.Peptide_ID INNER JOIN
-						 T_Analysis_Description ON 
-						 P.Analysis_ID = T_Analysis_Description.Job
+						 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN
+						 T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
 					WHERE SD.DiscriminantScore IS NULL AND 
-						  T_Analysis_Description.Process_State = @ProcessStateMatch
-					GROUP BY T_Analysis_Description.Job
+						  TAD.Process_State = @ProcessStateMatch
+					GROUP BY TAD.Job
 					HAVING COUNT(SD.Peptide_ID) > 0
 				  )
 			  )
