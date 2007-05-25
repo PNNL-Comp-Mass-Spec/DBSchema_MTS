@@ -19,6 +19,7 @@ CREATE PROCEDURE ConfigureMassTagDB
 **			12/17/2004 mem - Increased field sizes for the input parameters
 **			07/25/2006 mem - Added parameter @UseProteinSequencesDB
 **			07/27/2006 mem - Updated to use @OrganismDBFileList to also populate Protein_Collection_Filter
+**			05/15/2007 mem - Expanded several input parameters to varchar(max)
 **    
 *****************************************************/
 (
@@ -26,17 +27,17 @@ CREATE PROCEDURE ConfigureMassTagDB
 	@campaign varchar(1024) = '',					-- e.g. Deinococcus  (can be a comma separated list)
 	@peptideDBName varchar(1024) = '',				-- e.g. PT_Deinococcus_A55  (can be a comma separated list)
 	@proteinDBName varchar(1024) = '',				-- e.g. ORF_Deinococcus_V23 (can be a comma separated list)
-	@OrganismDBFileList varchar(1024) = '',			-- Comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
-	@ParameterFileList varchar(1024) = '',			-- e.g. sequest_N14_NE.params, sequest_N14_NE_Stat_C_Iodoacetimide.params  (can be a comma separated list)
+	@OrganismDBFileList varchar(max) = '',			-- Comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
+	@ParameterFileList varchar(max) = '',			-- e.g. sequest_N14_NE.params, sequest_N14_NE_Stat_C_Iodoacetimide.params  (can be a comma separated list)
 
-	@PeptideImportFilterIDList varchar(64) = '',	-- e.g. 117
+	@PeptideImportFilterIDList varchar(512) = '',	-- e.g. 117
 	@PMTQualityScoreSetList varchar(512) = '',		-- e.g. 105, 1				(separate values with a semicolon)
-	@SeparationTypeList varchar(512) = '',			-- e.g. LC-ISCO-Standard
+	@SeparationTypeList varchar(max) = '',			-- e.g. LC-ISCO-Standard
 
-	@ExperimentFilterList varchar(512) = '',			-- e.g. DRAD%, DR104		(Can be single value or comma separated list; can contain % wildcards)
-	@ExperimentExclusionFilterList varchar(512) = '',	-- (Can be single value or comma separated list; can contain % wildcards)
-	@DatasetFilterList varchar(512) = '',				-- (Can be single value or comma separated list; can contain % wildcards)
-	@DatasetExclusionFilterList varchar(512) = '',		-- (Can be single value or comma separated list; can contain % wildcards)
+	@ExperimentFilterList varchar(max) = '',			-- e.g. DRAD%, DR104		(Can be single value or comma separated list; can contain % wildcards)
+	@ExperimentExclusionFilterList varchar(max) = '',	-- (Can be single value or comma separated list; can contain % wildcards)
+	@DatasetFilterList varchar(max) = '',				-- (Can be single value or comma separated list; can contain % wildcards)
+	@DatasetExclusionFilterList varchar(max) = '',		-- (Can be single value or comma separated list; can contain % wildcards)
 
 	@DatasetDateMinimum	varchar(32) = '',			-- e.g. 1/1/2000
 	@UseProteinSequencesDB tinyint = 1,				-- Set to 1 to use the V_DMS_Protein_Sequences views to obtain the protein sequence information for protein names

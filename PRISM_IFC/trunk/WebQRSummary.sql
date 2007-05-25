@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[WebQRSummary] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.WebQRSummary
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.WebQRSummary
 **			04/05/2005 mem - Added parameter @VerboseColumnOutput
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
+**			05/22/2007 mem - Expanded the size of @stmt and @params to nvarchar(512)
 **
 ****************************************************/
 (
@@ -32,8 +33,8 @@ AS
 	SET NOCOUNT ON
 	
 	declare @result int
-	declare @stmt nvarchar(100)
-	declare @params nvarchar(100)
+	declare @stmt nvarchar(512)
+	declare @params nvarchar(512)
 	set @stmt = N'exec [' + @MTDBName + N'].dbo.QRSummary @QuantitationIDList, @VerboseColumnOutput, @SortMode'
 	set @params = N'@QuantitationIDList varchar(1024), @VerboseColumnOutput tinyint, @SortMode tinyint'
 	exec @result = sp_executesql @stmt, @params, @QuantitationIDList = @QuantitationIDList, @VerboseColumnOutput = @VerboseColumnOutput, @SortMode = @SortMode

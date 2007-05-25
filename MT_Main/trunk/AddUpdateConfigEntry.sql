@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE AddUpdateConfigEntry
 /****************************************************
 **
@@ -28,16 +29,19 @@ CREATE PROCEDURE AddUpdateConfigEntry
 **	Date:	09/22/2004
 **			11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
 **			12/15/2005 mem - Now preventing zero-length values from being added to #TmpValues
+**			05/15/2007 mem - Expanded @entryValueList to varchar(max)
+**			05/22/2007 mem - Now checking for (and collapsing) duplicate entries in @entryValueList; also added parameter @infoOnly
 **    
 *****************************************************/
 (
 	@dbName varchar(64),
 	@entryName varchar(256),
-	@entryValueList varchar(2048),
+	@entryValueList varchar(max),
 	@valueDelimiter char(1) = ',',
 	@configTableName varchar(64) = 'T_Process_Config',
 	@configNameColumn varchar(32) = 'Name',
-	@configValueColumn varchar(32) = 'Value'
+	@configValueColumn varchar(32) = 'Value',
+	@infoOnly tinyint = 0
 )
 AS
 
@@ -51,18 +55,22 @@ AS
 	declare @DelimiterLoc int
 	declare @valueListCount int
 	
-	declare @ListRemaining varchar(2048)
 	declare @matchCount int
 	declare @rowMatchID int
 	
 	declare @remoteTableName varchar(256)
 	declare @CurrValue varchar(512)
 	
-	declare @S nvarchar(4000)
+	declare @S nvarchar(max)
 	
 	Set @matchCount = 0
 	Set @valueListCount = 0
 	Set @rowMatchID = 0
+	
+	---------------------------------------------------	
+	-- Validate the inputs
+	---------------------------------------------------	
+	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	---------------------------------------------------	
 	-- If @entryValueList is empty, then don't change anything
@@ -73,7 +81,7 @@ AS
 	---------------------------------------------------	
 	-- Initialize @remoteTableName
 	---------------------------------------------------	
-	Set @remoteTableName = '[' + @dbName + ']..' + @configTableName
+	Set @remoteTableName = '[' + @dbName + '].dbo.' + @configTableName
 
 	---------------------------------------------------	
 	-- Create a temporary table to hold the values
@@ -89,33 +97,13 @@ AS
 	-- Parse @entryValueList, splitting on @valueDelimiter
 	---------------------------------------------------	
 
-	Set @ListRemaining = @entryValueList
+	INSERT INTO #TmpValues
+	SELECT DISTINCT Value
+	FROM dbo.udfParseDelimitedList(@entryValueList, @valueDelimiter)
 	
-	While Len(@ListRemaining) > 0
-	Begin
-		---------------------------------------------------	
-		-- Extract next inclusion item and build criteria
-		---------------------------------------------------	
-		Set @DelimiterLoc = CharIndex(@valueDelimiter, @ListRemaining)		
-		If @DelimiterLoc > 0
-		 Begin
-			Set @CurrValue = RTrim(LTrim(SubString(@ListRemaining, 1, @DelimiterLoc-1)))
-			Set @ListRemaining = RTrim(LTrim(SubString(@ListRemaining, @DelimiterLoc+1, Len(@ListRemaining)-@DelimiterLoc)))
-		 End
-		Else			--last inclusion item
-		 Begin
-			Set @CurrValue = RTrim(LTrim(@ListRemaining))
-			Set @ListRemaining = ''
-		 End
-
-		If Len(@CurrValue) > 0
-			INSERT INTO #TmpValues (NewValue)
-			VALUES (@CurrValue)
-	End
 
 	SELECT @valueListCount = COUNT(*)
 	FROM #TmpValues	
-
 
 	---------------------------------------------------	
 	-- Start a transaction
@@ -171,8 +159,11 @@ AS
 		Set @S = @S + ' DELETE FROM ' + @remoteTableName
 		Set @S = @S + ' WHERE (' + @configNameColumn + ' = ''' + @entryName + ''') AND'
 		Set @S = @S + ' Process_Config_ID > ' + Convert(varchar(11), @rowMatchID)
-		--
-		exec sp_executesql @S
+		--	
+		If @infoOnly <> 0
+			Print @S
+		Else
+			exec sp_executesql @S
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount		
 		--
@@ -194,62 +185,77 @@ AS
 		--
 		exec sp_executesql @S, N'@matchCount int output', @matchCount output
 	End
-	
-	if @matchCount = 0
+
+	If @infoOnly <> 0
 	Begin
-		Set @S = ''
-		Set @S = @S + ' INSERT INTO ' + @remoteTableName + ' (' + @configNameColumn + ', ' + @configValueColumn + ')'
-		Set @S = @S + ' SELECT ''' + @entryName + ''', NewValue'
-		Set @S = @S + ' FROM #TmpValues'
+		SELECT @entryName AS Entry_Name, NewValue
+		FROM #TmpValues
+		ORDER BY NewValue
 	End
 	Else
-	Begin
-		If @valueListCount > 1
+	Begin -- <a>
+			
+		if @matchCount = 0
 		Begin
-			-- Grab the first value from #TmpValues and append it to the table
-			
-			SELECT TOP 1 @CurrValue = NewValue
-			FROM #TmpValues
-			
-			DELETE FROM
-			#TmpValues WHERE NewValue = @CurrValue
-
-			Set @S = ''
-			Set @S = @S + ' UPDATE ' + @remoteTableName
-			Set @S = @S + ' SET ' + @configValueColumn + ' = ''' +   @CurrValue + ''''
-			Set @S = @S + ' WHERE (' + @configNameColumn + ' = ''' + @entryName + ''')'
-			--
-			exec sp_executesql @S
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-			--
-			if @myError <> 0
-			Begin
-				Rollback transaction @transName
-				Goto Done
-			End
-
-
-			-- Now append the remaining values to the table
 			Set @S = ''
 			Set @S = @S + ' INSERT INTO ' + @remoteTableName + ' (' + @configNameColumn + ', ' + @configValueColumn + ')'
 			Set @S = @S + ' SELECT ''' + @entryName + ''', NewValue'
 			Set @S = @S + ' FROM #TmpValues'
-			
 		End
 		Else
-		Begin
-			Set @S = ''
-			Set @S = @S + ' UPDATE ' + @remoteTableName
-			Set @S = @S + ' SET ' + @configValueColumn + ' = ''' +  @entryValueList + ''''
-			Set @S = @S + ' WHERE (' + @configNameColumn + ' = ''' + @entryName + ''')'
-		End
-	End
+		Begin -- <b>
+			If @valueListCount > 1
+			Begin -- <c1>
+				-- Grab the first value from #TmpValues and append it to the table
+				
+				SELECT TOP 1 @CurrValue = NewValue
+				FROM #TmpValues
+				ORDER BY NewValue
+				
+				DELETE FROM #TmpValues 
+				WHERE NewValue = @CurrValue
 
-	exec sp_executesql @S
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
+				Set @S = ''
+				Set @S = @S + ' UPDATE ' + @remoteTableName
+				Set @S = @S + ' SET ' + @configValueColumn + ' = ''' +   @CurrValue + ''''
+				Set @S = @S + ' WHERE (' + @configNameColumn + ' = ''' + @entryName + ''')'
+				--	
+				If @infoOnly <> 0
+					Print @S
+				Else
+					exec sp_executesql @S
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				--
+				if @myError <> 0
+				Begin
+					Rollback transaction @transName
+					Goto Done
+				End
+
+
+				-- Now append the remaining values to the table
+				Set @S = ''
+				Set @S = @S + ' INSERT INTO ' + @remoteTableName + ' (' + @configNameColumn + ', ' + @configValueColumn + ')'
+				Set @S = @S + ' SELECT ''' + @entryName + ''', NewValue'
+				Set @S = @S + ' FROM #TmpValues'
+				Set @S = @S + ' ORDER BY NewValue'
+				
+			End -- </c1>
+			Else
+			Begin -- <c2>
+				Set @S = ''
+				Set @S = @S + ' UPDATE ' + @remoteTableName
+				Set @S = @S + ' SET ' + @configValueColumn + ' = ''' +  @entryValueList + ''''
+				Set @S = @S + ' WHERE (' + @configNameColumn + ' = ''' + @entryName + ''')'
+			End -- </c2>
+		End -- </n>
+
+		exec sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End -- </a>
+	
 	if @myError <> 0
 	Begin
 		Rollback transaction @transName
@@ -260,5 +266,6 @@ AS
 		
 Done:
 	return @myError
+
 
 GO

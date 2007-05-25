@@ -61,6 +61,10 @@ AS
 
 
 GO
+GRANT SELECT ON [dbo].[T_Process_Step_Control] TO [DMS_SP_User]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Execution_State]) TO [DMS_SP_User]
+GO
 ALTER TABLE [dbo].[T_Process_Step_Control]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States] FOREIGN KEY([Execution_State])
 REFERENCES [T_Process_Step_Control_States] ([Execution_State])
 GO
