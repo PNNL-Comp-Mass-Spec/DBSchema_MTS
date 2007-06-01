@@ -14,9 +14,9 @@ CREATE TABLE [dbo].[T_Mass_Tag_Peptide_Prophet_Stats](
 	[PepProphet_Probability_Max_CS1] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Max_CS1]  DEFAULT ((-100)),
 	[PepProphet_Probability_Max_CS2] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Max_CS2]  DEFAULT ((-100)),
 	[PepProphet_Probability_Max_CS3] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Max_CS3]  DEFAULT ((-100)),
-	[PepProphet_Probability_Avg_CS1] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS1]  DEFAULT ((-100)),
-	[PepProphet_Probability_Avg_CS2] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS2]  DEFAULT ((-100)),
-	[PepProphet_Probability_Avg_CS3] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS3]  DEFAULT ((-100)),
+	[PepProphet_FScore_Avg_CS1] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS1]  DEFAULT ((-100)),
+	[PepProphet_FScore_Avg_CS2] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS2]  DEFAULT ((-100)),
+	[PepProphet_FScore_Avg_CS3] [real] NULL CONSTRAINT [DF_T_Mass_Tag_Peptide_Prophet_Stats_PepProphet_Probability_Avg_CS3]  DEFAULT ((-100)),
  CONSTRAINT [PK_T_Mass_Tag_Peptide_Prophet_Stats] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC

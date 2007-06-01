@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
 **	Auth:	mem
 **	Date:	09/14/2006 mem
 **			11/15/2006 mem - Replaced use of Truncate Table with Delete From
+**			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
 **    
 *****************************************************/
 (
@@ -66,13 +67,13 @@ AS
 	SET ObsCount_CS1 = Statsq.ObsCount,
 		PepProphet_FScore_Max_CS1 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS1 = StatsQ.Peptide_Prophet_Probability_Maximum,
-		PepProphet_Probability_Avg_CS1 = StatsQ.Peptide_Prophet_Probability_Average
+		PepProphet_FScore_Avg_CS1 = StatsQ.Peptide_Prophet_FScore_Average
 	FROM T_Mass_Tag_Peptide_Prophet_Stats PPS INNER JOIN
 		(	SELECT  P.Mass_Tag_ID,
 					COUNT(*) AS ObsCount,
 					MAX(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Maximum, 
     				MAX(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Maximum,
-    				AVG(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Average
+    				AVG(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Average
 			FROM T_Peptides P INNER JOIN
 				 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 			WHERE P.Charge_State = 1
@@ -89,13 +90,13 @@ AS
 	SET ObsCount_CS2 = Statsq.ObsCount,
 		PepProphet_FScore_Max_CS2 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS2 = StatsQ.Peptide_Prophet_Probability_Maximum,
-		PepProphet_Probability_Avg_CS2 = StatsQ.Peptide_Prophet_Probability_Average
+		PepProphet_FScore_Avg_CS2 = StatsQ.Peptide_Prophet_FScore_Average
 	FROM T_Mass_Tag_Peptide_Prophet_Stats PPS INNER JOIN
 		(	SELECT  P.Mass_Tag_ID,
 					COUNT(*) AS ObsCount,
 					MAX(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Maximum, 
     				MAX(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Maximum,
-    				AVG(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Average
+    				AVG(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Average
 			FROM T_Peptides P INNER JOIN
 				 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 			WHERE P.Charge_State = 2
@@ -112,13 +113,13 @@ AS
 	SET ObsCount_CS3 = Statsq.ObsCount,
 		PepProphet_FScore_Max_CS3 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS3 = StatsQ.Peptide_Prophet_Probability_Maximum,
-		PepProphet_Probability_Avg_CS3 = StatsQ.Peptide_Prophet_Probability_Average
+		PepProphet_FScore_Avg_CS3 = StatsQ.Peptide_Prophet_FScore_Average
 	FROM T_Mass_Tag_Peptide_Prophet_Stats PPS INNER JOIN
 		(	SELECT  P.Mass_Tag_ID, 
 					COUNT(*) AS ObsCount,
 					MAX(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Maximum, 
     				MAX(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Maximum,
-    				AVG(SD.Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Average
+    				AVG(SD.Peptide_Prophet_FScore) AS Peptide_Prophet_FScore_Average
 			FROM T_Peptides P INNER JOIN
 				 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 			WHERE P.Charge_State >= 3

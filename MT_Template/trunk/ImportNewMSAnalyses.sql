@@ -41,7 +41,7 @@ CREATE Procedure ImportNewMSAnalyses
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
 **			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
-**			05/10/2007 mem - Added parameter @UseCachedDMSDataTables (Ticket:422)
+**			05/12/2007 mem - Added parameter @UseCachedDMSDataTables (Ticket:422)
 **						   - Switched to Try/Catch error handling
 **    
 *****************************************************/
@@ -649,7 +649,7 @@ As
 				Set @S = @S +     ' Dataset_Scan_Count = P.[Scan Count]'
 				Set @S = @S + ' FROM T_FTICR_Analysis_Description AS TAD INNER JOIN ('
 				Set @S = @S +     ' SELECT L.Dataset_ID, R.Created, R.[Acquisition Start], R.[Acquisition End], R.[Scan Count]'
-				Set @S = @S +     ' FROM T_FTICR_Analysis_Description AS L INNER JOIN'
+				Set @S = @S +     ' FROM T_FTICR_Analysis_Description AS L INNER JOIN '
 				Set @S = @S +            @DatasetInfoTable + ' AS R ON '
 				Set @S = @S +          ' L.Dataset_ID = R.ID AND ('
 				Set @S = @S +          ' L.Dataset_Created_DMS <> R.Created OR '

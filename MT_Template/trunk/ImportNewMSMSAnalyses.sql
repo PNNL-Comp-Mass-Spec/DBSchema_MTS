@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[ImportNewMSMSAnalyses] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure ImportNewMSMSAnalyses
@@ -51,6 +51,7 @@ CREATE Procedure ImportNewMSMSAnalyses
 **						   - Updated to support ValidateNewAnalysesUsingProteinCollectionFilters setting Valid to >= 250 if @PreviewSql <> 0
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
 **			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
+**			05/25/2007 mem - Now calling LookupPeptideDBLocations to determine the location of the peptide databases
 **
 *****************************************************/
 (
@@ -82,9 +83,6 @@ As
 	set @peptideDBPath = ''
 	
 	declare @peptideDBID int
-
-	declare @PeptideDBCountInvalid int
-	declare @InvalidDBList varchar(1024)
 	
 	declare @SCampaign varchar(255)
 	declare @SAddnl varchar(2000)
@@ -242,73 +240,13 @@ As
 		Set @DateText = ''
 		
 	---------------------------------------------------
-	-- Get peptide database name(s) from T_Process_Config
+	-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
 	---------------------------------------------------
 	--
-	INSERT INTO #T_Peptide_Database_List (PeptideDBName)
-	SELECT Value
-	FROM T_Process_Config
-	WHERE [Name] = 'Peptide_DB_Name' AND Len(Value) > 0
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myRowCount < 1
-	begin
-		set @message = 'No peptide databases are defined in T_Process_Config'
-		set @myError = 40000
-		goto Done
-	end
-		
-	---------------------------------------------------
-	-- Determine the ID and server for each Peptide DB in #T_Peptide_Database_List
-	---------------------------------------------------
-	--
-	exec @myError = MT_Main.dbo.PopulatePeptideDBLocationTable @PreferDBName = 1, @message = @message output
-
-	If @myError <> 0
-	Begin
-		If Len(IsNull(@message, '')) = 0
-			Set @message = 'Error calling MT_Main.dbo.PopulatePeptideDBLocationTable'
-		
-		Set @message = @message + '; Error Code ' + Convert(varchar(12), @myError)
-		Goto Done
-	End
+	Exec @myError = LookupPeptideDBLocations @message = @message output
 	
-	Set @PeptideDBCountInvalid = 0
-	SELECT @PeptideDBCountInvalid = COUNT(*)
-	FROM #T_Peptide_Database_List
-	WHERE PeptideDBID Is Null
-
-	If @PeptideDBCountInvalid > 0
-	Begin -- <a>
-		-- One or more DBs in #T_Peptide_Database_List are unknown
-		-- Construct a comma-separated list, post a log entry, 
-		--  and delete the invalid databases from #T_Peptide_Database_List
-		
-		Set @InvalidDBList = ''
-		SELECT @InvalidDBList = @InvalidDBList + PeptideDBName + ','
-		FROM #T_Peptide_Database_List
-		WHERE PeptideDBID Is Null
-		ORDER BY PeptideDBName
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
-		If @myRowCount > 0
-		Begin
-			-- Remove the trailing comma
-			Set @InvalidDBList = Left(@InvalidDBList, Len(@InvalidDBList)-1)
-			
-			Set @message = 'Invalid peptide DB'
-			If @myRowCount > 1
-				Set @message = @message + 's'
-			Set @message = @message + ' defined in T_Process_Config: ' + @InvalidDBList
-			execute PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
-			set @message = ''
-			
-			DELETE FROM #T_Peptide_Database_List
-			WHERE PeptideDBID Is Null
-		End
-	End
+	If @myError <> 0
+		Goto Done
 	
 	---------------------------------------------------
 	-- Count the number of Enzyme_ID entries in T_Process_Config
@@ -934,7 +872,14 @@ As
 		execute PostLogEntry 'Normal', @message, 'ImportNewMSMSAnalyses'
 
 Done:
+	If @myError <> 0 and @infoOnly = 0
+	Begin
+		execute PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
+	End
+
+
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User]

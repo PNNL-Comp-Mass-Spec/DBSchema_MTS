@@ -15,6 +15,8 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 **
 **  Auth:	mem
 **	Date:	04/06/2007 mem - Created this procedure by extending GetMassTagsGANETParam to include data in T_Mass_Tag_Peptide_Prophet_Stats
+**			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
+**
 **  
 ****************************************************************/
 (
@@ -111,9 +113,9 @@ As
 				MTPPS.PepProphet_Probability_Max_CS1, 
 				MTPPS.PepProphet_Probability_Max_CS2, 
 				MTPPS.PepProphet_Probability_Max_CS3, 
-				MTPPS.PepProphet_Probability_Avg_CS1, 
-				MTPPS.PepProphet_Probability_Avg_CS2, 
-				MTPPS.PepProphet_Probability_Avg_CS3
+				MTPPS.PepProphet_FScore_Avg_CS1, 
+				MTPPS.PepProphet_FScore_Avg_CS2, 
+				MTPPS.PepProphet_FScore_Avg_CS3
 		FROM #TmpMassTags
 			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
 			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
@@ -155,9 +157,9 @@ As
 			MTPPS.PepProphet_Probability_Max_CS1, 
 			MTPPS.PepProphet_Probability_Max_CS2, 
 			MTPPS.PepProphet_Probability_Max_CS3, 
-			MTPPS.PepProphet_Probability_Avg_CS1, 
-			MTPPS.PepProphet_Probability_Avg_CS2, 
-			MTPPS.PepProphet_Probability_Avg_CS3
+			MTPPS.PepProphet_FScore_Avg_CS1, 
+			MTPPS.PepProphet_FScore_Avg_CS2, 
+			MTPPS.PepProphet_FScore_Avg_CS3
 		FROM #TmpMassTags 
 			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID

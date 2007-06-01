@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.GetMassTagToProteinNameMap
 **			02/05/2005 mem - Added parameter @MinimumHighDiscriminantScore
 **			07/25/2006 mem - Updated to utilize new columns in V_IFC_Mass_Tag_to_Protein_Name_Map
 **			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability and updated @ScoreFilteringSQL to match GetMassTagsGANETParam
+**			05/29/2007 mem - Now returning Ref_ID
 **  
 ****************************************************************/
 (
@@ -69,10 +70,11 @@ As
 	Set @S = ''
 	Set @S = @S + ' SELECT PNM.Mass_Tag_ID,'
 	Set @S = @S +        ' CASE WHEN IsNull(PNM.Protein_DB_ID, -1) = 0'
-	Set @S = @S +  ' THEN PNM.External_Protein_ID'
+	Set @S = @S +        ' THEN PNM.External_Protein_ID'
 	Set @S = @S +        ' ELSE PNM.External_Reference_ID'
 	Set @S = @S +        ' END AS Protein_ID,'
-	Set @S = @S +        ' PNM.Reference'
+	Set @S = @S +        ' PNM.Reference,'
+	Set @S = @S +        ' PNM.Internal_Ref_ID AS Ref_ID'
 	Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN'
     Set @S = @S +      ' V_IFC_Mass_Tag_to_Protein_Name_Map PNM ON '
     Set @S = @S +      ' MT.Mass_Tag_ID = PNM.Mass_Tag_ID'
