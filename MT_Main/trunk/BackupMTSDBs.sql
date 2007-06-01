@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **			05/02/2007 mem - Added parameters @BackupBatchSize and @UseLocalTransferFolder
 **						   - Replaced parameter @FileAndThreadCount with parameters @FileCount and @ThreadCount
 **						   - Upgraded for use with Sql Backup 5 (replacing the Threads argument with the ThreadCount argument)
+**			05/31/2007 mem - Now including FILEOPTIONS only if @UseLocalTransferFolder is non-zero
 **    
 *****************************************************/
 (
@@ -37,7 +38,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 	@InfoOnly tinyint = 1,							-- Set to 1 to display the Backup SQL that would be run
 	@BackupBatchSize tinyint = 32,					-- If greater than 1, then sends Sql Backup a comma separated list of databases to backup (up to 32 DBs at a time); this is much more efficient than calling Sql Backup with one database at a time, but has a downside of inability to explicitly define the log file names
 	@UseLocalTransferFolder tinyint = 0,			-- Set to 1 to backup to the local "Redgate Backup Transfer Folder" then copy the file to @BackupFolderRoot; only used if @BackupFolderRoot starts with "\\"
-	@message varchar(512) = '' OUTPUT
+	@message varchar(2048) = '' OUTPUT
 )
 As	
 	set nocount on
@@ -81,6 +82,8 @@ As
 	Set @Verify = IsNull(@Verify, 0)
 	Set @InfoOnly = IsNull(@InfoOnly, 0)
 	Set @UseLocalTransferFolder = IsNull(@UseLocalTransferFolder, 0)
+	If @UseLocalTransferFolder <> 0
+		Set @UseLocalTransferFolder = 1
 
 	Set @DaysToKeepOldBackups = IsNull(@DaysToKeepOldBackups, 20)
 	If @DaysToKeepOldBackups < 3
@@ -92,12 +95,18 @@ As
 	-- Define the local variables
 	---------------------------------------
 	Declare @DBName varchar(255)
-	Declare @DBList varchar(3000)
-	Declare @DBsProcessed varchar(255)
+	Declare @DBList varchar(max)
+	Declare @DBsProcessed varchar(max)
 	Set @DBsProcessed = ''
 	
-	Declare @Sql varchar(4000)
-	Declare @SqlRestore varchar(4000)
+	Declare @DBListMaxLength int
+	Set @DBListMaxLength = 25000
+
+	Declare @DBsProcessedMaxLenth int
+	Set @DBsProcessedMaxLenth = 1250
+
+	Declare @Sql varchar(max)
+	Declare @SqlRestore varchar(max)
 	
 	Declare @BackupType varchar(32)
 	Declare @BackupTime varchar(64)
@@ -396,7 +405,8 @@ As
 			Else
 			Begin -- <b>
 				-- Populate @DBList with a comma separated list of the DBs in #Tmp_Current_Batch
-				-- However, don't let the length of @DBList get over 3000 characters (it is varchar(3000))
+				-- However, don't let the length of @DBList get over @DBListMaxLength characters 
+				-- (Red-Gate suggested no more than 60000 characters, or 30000 if nvarchar)
 				
 				Set @DBCountInBatch = 0
 				Set @AddDBsToBatch = 1
@@ -421,7 +431,7 @@ As
 						End
 						Else
 						Begin
-							If Len(@DBList) + Len(@DBName) + 1 < 3000
+							If Len(@DBList) + Len(@DBName) + 1 < @DBListMaxLength
 							Begin
 								Set @DBList = @DBList + ',' + @DBName
 								Set @DBCountInBatch = @DBCountInBatch + 1
@@ -496,7 +506,20 @@ As
 					Set @Sql = @Sql + ' COPYTO=''' + dbo.udfCombinePaths(@BackupFolderRoot, '<DATABASE>') + ''','
 					
 				Set @Sql = @Sql + ' ERASEFILES=' + Convert(varchar(16), @DaysToKeepOldBackups) + ','
-				Set @Sql = @Sql + ' FILEOPTIONS=3,'
+
+				-- FILEOPTIONS is the sum of the desired options:
+				--   1: Delete old backup files in the secondary backup folders (specified using COPYTO) 
+				--        if they are older than the number of days or hours specified in ERASEFILES or ERASEFILES_ATSTART.
+				--   2: Delete old backup files in the primary backup folder (specified using DISK) 
+				--        if they are older than the number of days or hours specified in ERASEFILES or ERASEFILES_ATSTART, 
+				--        unless they have the ARCHIVE flag set.
+				--   3: 1 and 2 both enabled
+				--   4: Overwrite existing files in the COPYTO folder.
+				--   7: All options enabled
+
+				If @UseLocalTransferFolder <> 0
+					Set @Sql = @Sql + ' FILEOPTIONS=1,'
+					
 				Set @Sql = @Sql + ' COMPRESSION=3,'
 
 				If @FileCount > 1
@@ -539,7 +562,7 @@ As
 				End -- </c4>
 				
 				---------------------------------------
-				-- Append @DBList to @DBsProcessed, limiting to 175 characters, 
+				-- Append @DBList to @DBsProcessed, limiting to @DBsProcessedMaxLenth characters, 
 				--  afterwhich a period is added for each additional DB
 				---------------------------------------
 				
@@ -551,17 +574,17 @@ As
 				If Len(@DBsProcessed) = 0
 				Begin
 					Set @DBsProcessed = @DBList
-					If Len(@DBsProcessed) > 175
-						Set @DBsProcessed = Left(@DBsProcessed, 175) + @Periods
+					If Len(@DBsProcessed) > @DBsProcessedMaxLenth
+						Set @DBsProcessed = Left(@DBsProcessed, @DBsProcessedMaxLenth) + @Periods
 				End
 				Else
 				Begin					
-					If Len(@DBsProcessed) + Len(@DBList) <= 175
+					If Len(@DBsProcessed) + Len(@DBList) <= @DBsProcessedMaxLenth
 						Set @DBsProcessed = @DBsProcessed + ', ' + @DBList
 					Else
 					Begin
-						If Len(@DBsProcessed) < 175
-							Set @DBsProcessed = @DBsProcessed + ', ' + Left(@DBList, 172-Len(@DBsProcessed)) + @Periods
+						If Len(@DBsProcessed) < @DBsProcessedMaxLenth
+							Set @DBsProcessed = @DBsProcessed + ', ' + Left(@DBList, @DBsProcessedMaxLenth-3-Len(@DBsProcessed)) + @Periods
 						Else
 							Set @DBsProcessed = @DBsProcessed + ' ' + @Periods
 					End
@@ -709,14 +732,14 @@ As
 				End -- </f2>
 				
 				---------------------------------------
-				-- Append @DBName to @DBsProcessed, limiting to 175 characters, 
+				-- Append @DBName to @DBsProcessed, limiting to @DBsProcessedMaxLenth characters, 
 				--  afterwhich a period is added for each additional DB
 				---------------------------------------
 				If Len(@DBsProcessed) = 0
 					Set @DBsProcessed = @DBName
 				Else
 				Begin
-					If Len(@DBsProcessed) <= 175
+					If Len(@DBsProcessed) <= @DBsProcessedMaxLenth
 						Set @DBsProcessed = @DBsProcessed + ', ' + @DBName
 					Else
 						Set @DBsProcessed = @DBsProcessed + '.'

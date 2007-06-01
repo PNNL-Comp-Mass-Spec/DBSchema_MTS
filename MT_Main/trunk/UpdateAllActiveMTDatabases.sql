@@ -14,7 +14,7 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **	Parameters:
 **
 **	Auth:	grk
-**	Date:	09/4/2002
+**	Date:	09/04/2002
 **			04/12/2004 grk - removed scheduling code
 **			04/14/2004 grk - added log verbosity control
 **			04/16/2004 grk - added check of update state for assigned pepdide DB
@@ -40,6 +40,7 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **			01/17/2007 mem - Updated to skip DBs with state >= 15 even if MTL_Demand_Import is non-zero
 **			03/06/2007 mem - Switched to Try/Catch error handling
 **			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
+**			05/31/2007 mem - Now setting @duplicateEntryHoldoffHours to 4 when calling PostLogEntry for various errors
 **    
 *****************************************************/
 (
@@ -71,7 +72,7 @@ As
 	declare @ProcTimeMinutesLast24Hours float
 	declare @ProcTimeMinutesLast7days float
 	
-	declare @message varchar(255)
+	declare @message varchar(4096)
 
 	declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
 	set @logVerbosity = 1
@@ -230,7 +231,7 @@ As
 					set @SkipUpdate = 1
 	
 					set @message = 'Skipping update for database ' + @MTL_Name + ' since its state is ' + Convert(varchar(12), @MTL_State) + '; change MTL_Demand_Import to 0 for this DB to avoid this error message'
-					execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases'
+					execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases', @duplicateEntryHoldoffHours=4
 					set @message = ''
 				End
 				
@@ -654,7 +655,7 @@ Done:
 	if @skippedDBList <> '' and @logVerbosity > 0
 	begin
 		set @message = 'Update was skipped since peptide DB(s) updating: ' + @skippedDBList
-		execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases'
+		execute PostLogEntry 'Error', @message, 'UpdateAllActiveMTDatabases', @duplicateEntryHoldoffHours=4
 	end
 
 	-----------------------------------------------------------

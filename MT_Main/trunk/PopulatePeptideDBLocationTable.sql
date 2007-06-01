@@ -219,3 +219,5 @@ Done:
 
 
 GO
+GRANT EXECUTE ON [dbo].[PopulatePeptideDBLocationTable] TO [DMS_SP_User]
+GO
