@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[QRGenerateORFColumnSql] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE dbo.QRGenerateORFColumnSql
@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 **			05/24/2005 mem - Added column InternalStdCountUniqueObserved and updated protein description linking method
 **			05/25/2005 mem - Added underscores at word boundaries in columns QD.SampleName, QR.MassTagCountUniqueObserved, and QR.MassTagCountUsedForAbundanceAvg
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
+**			05/28/2007 mem - Added column MT_Count_Unique_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -50,6 +51,7 @@ AS
 	Set @sql = @sql + 'QR.MassTagCountUniqueObserved AS Mass_Tag_Count_Unique_Observed,'
 	Set @sql = @sql + 'QR.InternalStdCountUniqueObserved AS Internal_Std_Count_Unique_Observed,'
 	Set @sql = @sql + 'QR.MassTagCountUsedForAbundanceAvg AS Peptide_Count_Used_For_Abundance_Avg,'
+	Set @sql = @sql + 'QR.MT_Count_Unique_Observed_Both_MS_and_MSMS,'
 	
 	Set @sql = @sql + 'QR.Full_Enzyme_Count,'
 	Set @sql = @sql + 'QR.Potential_Full_Enzyme_Count,'

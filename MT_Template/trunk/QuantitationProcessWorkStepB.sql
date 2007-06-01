@@ -12,6 +12,9 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 **
 **  Auth:	mem
 **	Date:	09/07/2006
+**			05/28/2007 mem - Now calling QuantitationProcessCheckForMSMSPeptideIDs to populate 
+**							 column Observed_By_MSMS_in_This_Dataset by looking for Sequest or
+**							 XTandem results from the datasets corresponding to the jobs in #UMCMatchResultsByJob
 **
 ****************************************************/
 (
@@ -41,7 +44,7 @@ AS
 
 	declare @ResultsCount int
 	set @ResultsCount = 0
-
+	
 	-----------------------------------------------------------
 	-- Step 5
 	--
@@ -67,6 +70,7 @@ AS
 	drop table [#UMCMatchResultsSource]
 
 	CREATE TABLE #UMCMatchResultsSource (
+		[Job] int NOT NULL ,
 		[TopLevelFraction] smallint NOT NULL ,
 		[Fraction] smallint NOT NULL ,
 		[Replicate] smallint NOT NULL ,
@@ -106,7 +110,8 @@ AS
 		-- Step 5b - Populate the temporary table with PMT tag matches
 		--
 		INSERT INTO #UMCMatchResultsSource
-			(TopLevelFraction, 
+			(Job,
+			TopLevelFraction, 
 			Fraction, 
 			[Replicate], 
 			InternalStdMatch,
@@ -137,7 +142,8 @@ AS
 			Charge_State_Min,
 			Charge_State_Max,
 			MassErrorPPM)
-		SELECT	TMDID.TopLevelFraction, 
+		SELECT	MMD.MD_Reference_Job,
+				TMDID.TopLevelFraction, 
 				TMDID.Fraction, 
 				TMDID.[Replicate], 
 				0 AS InternalStdMatch,
@@ -201,9 +207,11 @@ AS
 				THEN 1E6 * ((R.Class_Mass - RD.Mass_Tag_Mod_Mass) - MT.Monoisotopic_Mass) / MT.Monoisotopic_Mass		-- Mass Error PPM; correcting for mass mods by subtracting Mass_Tag_Mod_Mass
 				ELSE 0 
 				END
-		FROM T_Quantitation_MDIDs AS TMDID
+		FROM T_Quantitation_MDIDs TMDID
+			INNER JOIN T_Match_Making_Description MMD ON 
+				TMDID.MD_ID = MMD.MD_ID
 	   		INNER JOIN T_FTICR_UMC_Results AS R
-				ON TMDID.MD_ID = R.MD_ID
+				ON MMD.MD_ID = R.MD_ID
 			INNER JOIN T_FTICR_UMC_ResultDetails AS RD
 				ON R.UMC_Results_ID = RD.UMC_Results_ID
 			INNER JOIN T_Mass_Tags AS MT
@@ -232,7 +240,8 @@ AS
 		--			 Do not add new matches for PMTs that are already present
 		--
 		INSERT INTO #UMCMatchResultsSource
-			(TopLevelFraction, 
+			(Job,
+			TopLevelFraction, 
 			Fraction, 
 			[Replicate], 
 			InternalStdMatch,
@@ -263,7 +272,8 @@ AS
 			Charge_State_Min,
 			Charge_State_Max,
 			MassErrorPPM)
-		SELECT	TMDID.TopLevelFraction, 
+		SELECT	MMD.MD_Reference_Job,
+				TMDID.TopLevelFraction, 
 				TMDID.Fraction, 
 				TMDID.[Replicate], 
 				1 AS InternalStdMatch,
@@ -324,15 +334,17 @@ AS
 				IsNull(R.Charge_State_Max, 0),
 				
 				CASE WHEN IsNull(MT.Monoisotopic_Mass,0) > 0 
-				THEN 1E6 * ((R.Class_Mass) - MT.Monoisotopic_Mass) / MT.Monoisotopic_Mass		-- Mass Error PPM; correcting for mass mods by subtracting Mass_Tag_Mod_Mass
+				THEN 1E6 * ((R.Class_Mass -        0            ) - MT.Monoisotopic_Mass) / MT.Monoisotopic_Mass		-- Mass Error PPM
 				ELSE 0 
 				END
-		FROM T_Quantitation_MDIDs AS TMDID
+		FROM T_Quantitation_MDIDs TMDID
+			INNER JOIN T_Match_Making_Description MMD ON 
+				TMDID.MD_ID = MMD.MD_ID
 	   		INNER JOIN T_FTICR_UMC_Results AS R
-				ON TMDID.MD_ID = R.MD_ID
+				ON MMD.MD_ID = R.MD_ID
 			INNER JOIN T_FTICR_UMC_InternalStdDetails AS ISD
 				ON R.UMC_Results_ID = ISD.UMC_Results_ID
-			INNER JOIN MT_Main..T_Internal_Std_Components AS ISC 
+			INNER JOIN MT_Main.dbo.T_Internal_Std_Components AS ISC 
 				ON ISD.Seq_ID = ISC.Seq_ID
 			INNER JOIN T_Mass_Tags AS MT
 				ON ISC.Seq_ID = MT.Mass_Tag_ID
@@ -397,11 +409,13 @@ AS
 	--
 	--
 	INSERT INTO #UMCMatchResultsByJob
-		(TopLevelFraction, 
+		(Job,
+		 TopLevelFraction, 
 		 Fraction, 
 		 [Replicate], 
 		 InternalStdMatch,
 		 Mass_Tag_ID, 
+		 Observed_By_MSMS_in_This_Dataset,
 		 High_Normalized_Score,
 		 High_Discriminant_Score,
 		 High_Peptide_Prophet_Probability,
@@ -436,11 +450,13 @@ AS
 		 Charge_State_Max,
 		 MassErrorPPMAvg,
 		 UseValue)
-	SELECT	TopLevelFraction, 
+	SELECT	Job,
+			TopLevelFraction, 
 			Fraction, 
 			[Replicate], 
 			InternalStdMatch,
 			Mass_Tag_ID,
+			0 AS Observed_By_MSMS_in_This_Dataset,
 			Max(High_Normalized_Score),
 			Max(High_Discriminant_Score),
 			Max(High_Peptide_Prophet_Probability),
@@ -500,7 +516,7 @@ AS
 			AVG(MassErrorPPM),
 			1					-- UseValue is initially set to 1; it will be changed to 0 below as needed if filtering out outliers
 	FROM #UMCMatchResultsSource
-	GROUP BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods, [Replicate]
+	GROUP BY Job, TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods, [Replicate]
 	ORDER BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods, [Replicate]
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -646,6 +662,21 @@ AS
 		Convert(float, UMCIonCountMatch)
 	WHERE UMCIonCountMatch > 0
 
+	--
+	-- Step 5k
+	--
+	-- Update Observed_By_MSMS_in_This_Dataset by looking for Sequest or XTandem results
+	-- from the datasets corresponding to the jobs in #UMCMatchResultsByJob
+	
+	Declare @CheckResultsInRemotePeptideDBs tinyint
+	Set @CheckResultsInRemotePeptideDBs = 1
+
+	SELECT @CheckResultsInRemotePeptideDBs = Enabled
+	FROM T_Process_Step_Control
+	WHERE Processing_Step_Name = 'QR_Check_Results_in_Remote_Peptide_DBs'
+	
+	Exec @myError = QuantitationProcessCheckForMSMSPeptideIDs @CheckResultsInRemotePeptideDBs, @message = @message output
+	
 Done:
 	Return @myError
 

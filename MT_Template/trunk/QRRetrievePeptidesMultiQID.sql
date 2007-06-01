@@ -42,6 +42,7 @@ CREATE PROCEDURE dbo.QRRetrievePeptidesMultiQID
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **						   - Now using @SkipCrossTabSqlGeneration=1 when calling QRGenerateCrosstabSql
 **			12/06/2006 mem - No longer using @SortMode if @IncludeRefColumn = 0 (see explanation regarding #TmpQIDSortInfo.SortKey and SELECT DISTINCT)
+**			05/28/2007 mem - Now returning column JobCount_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -243,6 +244,8 @@ AS
 	Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
 	Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
 	Set @QRDsql = @QRDsql + ' Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
+	Set @QRDsql = @QRDsql + ' QRD.JobCount_Observed_Both_MS_and_MSMS,'
+
 
 	If @ModsPresent > 0
 		Set @QRDsql = @QRDsql + ' MT.Mod_Description,'

@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE Procedure dbo.QuantitationProcessStart
 /****************************************************	
 **
@@ -16,15 +15,15 @@ CREATE Procedure dbo.QuantitationProcessStart
 **
 **  Parameters: EntriesProcessed returns the number of entries processed
 **
-**  Auth: mem
-**	Date: 06/03/2003
-**
-**  Updated: 6/23/2003 by mem
-**			 7/07/2003
-**			 8/26/2003
-**			 2/13/2004 by mem: Changed logic to only obtain a task for processing if no tasks already have a state of 2 = Processing
-**			 2/16/2004 by mem: Changed code that looks for available tasks to use a temporary table to avoid deadlock issues
-**			 2/21/2004 by mem: Due to updates in QuantitationProcessWork, removed logic that aborts processing if other tasks have a state of 2
+**  Auth:	mem
+**	Date:	06/03/2003
+**			06/23/2003
+**			07/07/2003
+**			08/26/2003
+**			02/13/2004 mem - Changed logic to only obtain a task for processing if no tasks already have a state of 2 = Processing
+**			02/16/2004 mem - Changed code that looks for available tasks to use a temporary table to avoid deadlock issues
+**			02/21/2004 mem - Due to updates in QuantitationProcessWork, removed logic that aborts processing if other tasks have a state of 2
+**			05/28/2007 mem - Added call to VerifyUpdateEnabled
 **
 ****************************************************/
 (
@@ -38,7 +37,9 @@ As
 			@AvailableCount int,
 			@TasksCurrentlyProcessing int,
 			@ErrorCodeReturn int
-
+	
+	Declare @UpdateEnabled tinyint
+	
 	Set @myError = 0
 	Set @myRowCount = 0
 	Set @AvailableCount = 0
@@ -53,6 +54,11 @@ As
 	Declare @QuantitationID int,
 		    @QuantitationState tinyint
 
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @StepName = 'MS_Peak_Matching', @CallingFunctionDescription = 'QuantitationProcessStart', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+		
 	-----------------------------------------------------------
 	-- Step 1
 	--
@@ -176,6 +182,13 @@ As
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		SET @AvailableCount = @myRowCount
 
+		If @AvailableCount > 0
+		Begin
+			-- Validate that updating is enabled, abort if not enabled
+			exec VerifyUpdateEnabled @StepName = 'MS_Peak_Matching', @CallingFunctionDescription = 'QuantitationProcessStart', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+			If @UpdateEnabled = 0
+				Set @AvailableCount = 0
+		End
 	End
 
 
@@ -207,7 +220,6 @@ Done:
 	Print @message
 	SELECT @message
 	Return @myError
-
 
 
 GO

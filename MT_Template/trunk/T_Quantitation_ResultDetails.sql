@@ -46,6 +46,7 @@ CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[TopLevelFractionMax] [smallint] NOT NULL,
 	[ORF_Count] [smallint] NOT NULL,
 	[PMT_Quality_Score] [decimal](9, 5) NOT NULL,
+	[JobCount_Observed_Both_MS_and_MSMS] [smallint] NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Observed_Both_MS_and_MSMS]  DEFAULT ((0)),
  CONSTRAINT [PK_T_Quantitation_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[QRD_ID] ASC

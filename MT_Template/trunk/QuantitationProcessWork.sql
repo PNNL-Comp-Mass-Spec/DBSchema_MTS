@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.QuantitationProcessWork
 /****************************************************	
 **  Desc: Processes a single Quantitation ID entry 
@@ -66,10 +67,11 @@ CREATE Procedure dbo.QuantitationProcessWork
 **			03/23/2006 mem - Replaced all decimal data types with real data types to avoid overflow errors
 **			09/06/2006 mem - Added support for Minimum_MT_Peptide_Prophet_Probability
 **			09/07/2006 mem - Refactored to place the code for the various steps in separate SPs
+**			05/25/2007 mem - Added columns Job and Observed_By_MSMS_in_This_Dataset to #UMCMatchResultsByJob
 **
 ****************************************************/
 (
-	@QuantitationID int								-- Quantitation_ID to process 
+	@QuantitationID int					-- Quantitation_ID to process 
 )
 AS
 	Set NoCount On
@@ -247,11 +249,13 @@ AS
 		
 	CREATE TABLE #UMCMatchResultsByJob (
 		[UniqueID] int IDENTITY (1, 1) NOT NULL ,
+		[Job] int NOT NULL ,
 		[TopLevelFraction] smallint NOT NULL ,
 		[Fraction] smallint NOT NULL ,
 		[Replicate] smallint NOT NULL ,
 		[InternalStdMatch] tinyint NOT NULL ,
 		[Mass_Tag_ID] int NOT NULL ,
+		[Observed_By_MSMS_in_This_Dataset] tinyint NOT NULL ,
 		[High_Normalized_Score] real NOT NULL ,
 		[High_Discriminant_Score] real NOT NULL ,
 		[High_Peptide_Prophet_Probability] real NOT NULL ,
@@ -306,6 +310,7 @@ AS
 		[InternalStdMatch] tinyint NOT NULL ,
 		[Mass_Tag_ID] int NOT NULL ,
 		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
+		[JobCount_Observed_Both_MS_and_MSMS] int NULL ,
 		[Protein_Count] int NOT NULL ,
 		[PMT_Quality_Score] real NOT NULL ,
 		[Cleavage_State] tinyint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
@@ -380,6 +385,7 @@ AS
 		[MassTagMatchingIonCount] int NULL ,
 		[MassTagMatchingIonCountInUMCsWithSingleHitCount] int NULL ,
 		[FractionScansMatchingSingleMassTag] real NULL ,
+		[MT_Count_Unique_Observed_Both_MS_and_MSMS] int NULL ,
 		[UMCMultipleMTHitCountAvg] real NULL ,
 		[UMCMultipleMTHitCountStDev] float NULL ,
 		[UMCMultipleMTHitCountMin] int NULL ,
@@ -521,6 +527,7 @@ AS
 						@message output
 	If @myError <> 0
 		Goto Done
+	
 	
 	-----------------------------------------------------------
 	-- Step 12

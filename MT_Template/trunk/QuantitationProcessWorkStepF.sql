@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepF
 **
 **  Auth:	mem
 **	Date:	09/07/2006
+**			05/25/2007 mem - Now populating MT_Count_Unique_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -114,6 +115,7 @@ AS
 		 MassTagMatchingIonCount,
 		 MassTagMatchingIonCountInUMCsWithSingleHitCount,
 		 FractionScansMatchingSingleMassTag,
+		 MT_Count_Unique_Observed_Both_MS_and_MSMS,
 		 UMCMultipleMTHitCountAvg,
 		 UMCMultipleMTHitCountStDev,
 		 UMCMultipleMTHitCountMin,
@@ -147,6 +149,7 @@ AS
 			SUM(UMCIonCountMatchAvg),							-- MassTagMatchingIonCount: Sum of all Matching_Member_Count values for all UMC's for all Mass Tags for this Protein
 			SUM(UMCIonCountMatchInUMCsWithSingleHitAvg),		-- MassTagMatchingIonCountInUMCsWithSingleHitCount: Sum of all Match Score values for all UMC's for this Protein wherein the UMC matched a single Mass Tag
 			0 AS FractionScansMatchingSingleMassTag,
+			SUM(CASE WHEN JobCount_Observed_Both_MS_and_MSMS > 0 THEN 1 ELSE 0 END),		--  MT_Count_Unique_Observed_Both_MS_and_MSMS
 			AVG(UMCMultipleMTHitCountAvg),
 			IsNull(StDev(UMCMultipleMTHitCountAvg), 0),
 			MIN(UMCMultipleMTHitCountMin),

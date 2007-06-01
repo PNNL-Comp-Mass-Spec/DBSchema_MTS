@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepE
 **
 **  Auth:	mem
 **	Date:	09/07/2006
+**			05/25/2007 mem - Now populating column JobCount_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -72,6 +73,7 @@ AS
 		[InternalStdMatch] tinyint NOT NULL ,
 		[Mass_Tag_ID] int NOT NULL ,
 		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
+		[JobCount_Observed_Both_MS_and_MSMS] int NULL ,
 		[MTAbundanceAvg] float NULL ,
 		[MTAbundanceStDev] float NULL ,
 		[MTAbundanceLightPlusHeavyAvg] float NULL ,
@@ -116,6 +118,7 @@ AS
 		InternalStdMatch,
 		Mass_Tag_ID,
 		Mass_Tag_Mods,
+		JobCount_Observed_Both_MS_and_MSMS,
 		MTAbundanceAvg, MTAbundanceStDev,
 		MTAbundanceLightPlusHeavyAvg,
 		Member_Count_Used_For_Abu_Avg,
@@ -140,6 +143,7 @@ AS
 			InternalStdMatch,
 			Mass_Tag_ID, 
 			Mass_Tag_Mods,
+			SUM(Observed_By_MSMS_in_This_Dataset),				-- JobCount_Observed_Both_MS_and_MSMS
 			AVG(MTAbundance),									-- MTAbundanceAvg
 			-- If only a single trial, then cannot have a MTAbundance StDev value
 			-- Use IsNull() to convert the resultant Null StDev values to 0
@@ -219,6 +223,7 @@ AS
 		[InternalStdMatch] tinyint NOT NULL ,
 		[Mass_Tag_ID] int NOT NULL ,
 		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
+		[JobCount_Observed_Both_MS_and_MSMS] int NULL ,
 		[MTAbundanceAvg] float NULL ,					-- Sum of MT Abundance values across fractions
 		[MTAbundanceStDev] float NULL ,					-- Standard deviation for a sum of numbers = Sqrt(Sum(StDevs^2))
 		[MTAbundanceLightPlusHeavyAvg] float NULL ,
@@ -264,7 +269,9 @@ AS
 	-- Sum peptide abundances across fractions
 	INSERT INTO #UMCMatchResultsByTopLevelFraction
 		(TopLevelFraction, InternalStdMatch, 
-		 Mass_Tag_ID, Mass_Tag_Mods,
+		 Mass_Tag_ID,
+		 Mass_Tag_Mods,
+		 JobCount_Observed_Both_MS_and_MSMS,
 		 MTAbundanceAvg, MTAbundanceStDev,
 		 MTAbundanceLightPlusHeavyAvg,
 		 Member_Count_Used_For_Abu_Avg,
@@ -288,7 +295,9 @@ AS
 		 ReplicateCountAvg, ReplicateCountMin, ReplicateCountMax,
 		 FractionCount, FractionMin, FractionMax)
 	SELECT	TopLevelFraction, InternalStdMatch, 
-			Mass_Tag_ID, Mass_Tag_Mods,
+			Mass_Tag_ID, 
+			Mass_Tag_Mods,
+			SUM(JobCount_Observed_Both_MS_and_MSMS),
 			SUM(MTAbundanceAvg),											-- MTAbundanceAvg = Sum of MTAbundanceAvg values across fractions
 			-- Compute the standard deviation of the Sum of several numbers by finding the
 			--  sum of the squares of the MTAbundanceStDev values, then taking the
@@ -362,7 +371,9 @@ AS
 	-- Sum peptide abundances across top level fractions
 	INSERT INTO #UMCMatchResultsSummary
 		(Ref_ID, InternalStdMatch, 
-		 Mass_Tag_ID, Mass_Tag_Mods, 
+		 Mass_Tag_ID, 
+		 Mass_Tag_Mods, 
+		 JobCount_Observed_Both_MS_and_MSMS, 
 		 Protein_Count, PMT_Quality_Score,
 		 Cleavage_State, Fragment_Span,
 		 MTAbundanceAvg, MTAbundanceStDev,
@@ -390,7 +401,9 @@ AS
 		 TopLevelFractionCount, TopLevelFractionMin, TopLevelFractionMax,
 		 MaxClassAbundanceThisRef)
 	SELECT	MTPM.Ref_ID, UMR.InternalStdMatch, 
-			UMR.Mass_Tag_ID, UMR.Mass_Tag_Mods,
+			UMR.Mass_Tag_ID, 
+			UMR.Mass_Tag_Mods,
+			SUM(JobCount_Observed_Both_MS_and_MSMS),
 			IsNull(MT.Multiple_Proteins,0) + 1, IsNull(MT.PMT_Quality_Score,0),
 			MTPM.Cleavage_State, MTPM.Fragment_Span,							-- Note that these values could be NULL
 			SUM(MTAbundanceAvg),											-- MTAbundanceAvg = Sum of MTAbundanceAvg values across fractions

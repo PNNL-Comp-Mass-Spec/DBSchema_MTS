@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepH
 **
 **  Auth:	mem
 **	Date:	09/07/2006
+**			05/25/2007 mem - Now populating MT_Count_Unique_Observed_Both_MS_and_MSMS and JobCount_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -39,6 +40,7 @@ AS
 		 InternalStdCountUniqueObserved,
 		 MassTagCountUsedForAbundanceAvg,
 		 MassTagMatchingIonCount, FractionScansMatchingSingleMassTag,
+		 MT_Count_Unique_Observed_Both_MS_and_MSMS,
 		 Abundance_Average, Abundance_Minimum, Abundance_Maximum, Abundance_StDev, 
 		 Match_Score_Average,
 		 ER_Average, ER_Minimum, ER_Maximum, ER_StDev, 
@@ -64,6 +66,7 @@ AS
 			ObservedInternalStdCount,
 			MassTagCountUsedForAbundanceAvg,
 			MassTagMatchingIonCount, FractionScansMatchingSingleMassTag,
+			MT_Count_Unique_Observed_Both_MS_and_MSMS,
 			Abundance_Average, Abundance_Minimum, Abundance_Maximum, IsNull(Abundance_StDev, 0),
 			Match_Score_Avg,
 			ER_Average, ER_Minimum, ER_Maximum, IsNull(ER_StDev, 0),
@@ -146,6 +149,7 @@ AS
 		 FractionCountAvg, FractionMin, FractionMax,
 		 TopLevelFractionCount, TopLevelFractionMin, TopLevelFractionMax,
 		 ORF_Count, PMT_Quality_Score,
+		 JobCount_Observed_Both_MS_and_MSMS,
 		 Internal_Standard_Match)
 	SELECT	T_Quantitation_Results.QR_ID, 
 			D.Mass_Tag_ID, 
@@ -178,6 +182,7 @@ AS
 			D.FractionCountAvg, D.FractionMin, D.FractionMax,
 			D.TopLevelFractionCount, D.TopLevelFractionMin,	D.TopLevelFractionMax,
 			D.Protein_Count, D.PMT_Quality_Score,
+			D.JobCount_Observed_Both_MS_and_MSMS,
 			D.InternalStdMatch
 	FROM	#UMCMatchResultsSummary AS D 
 			LEFT OUTER JOIN T_Quantitation_Results ON 

@@ -13,6 +13,7 @@ CREATE TABLE [dbo].[T_Quantitation_Results](
 	[MassTagCountUsedForAbundanceAvg] [int] NOT NULL,
 	[MassTagMatchingIonCount] [int] NOT NULL,
 	[FractionScansMatchingSingleMassTag] [decimal](9, 8) NOT NULL,
+	[MT_Count_Unique_Observed_Both_MS_and_MSMS] [int] NOT NULL CONSTRAINT [DF_T_Quantitation_Results_MT_Count_Unique_Observed_Both_MS_and_MSMS]  DEFAULT ((0)),
 	[Abundance_Average] [float] NOT NULL,
 	[Abundance_Minimum] [float] NOT NULL,
 	[Abundance_Maximum] [float] NOT NULL,

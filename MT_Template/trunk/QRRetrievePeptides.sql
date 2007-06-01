@@ -43,6 +43,7 @@ CREATE PROCEDURE dbo.QRRetrievePeptides
 **			01/31/2006 mem - Now returning 'Unknown' if the Cleavage_State value is null
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			09/07/2006 mem - Now returning column High_Peptide_Prophet_Probability
+**			05/28/2007 mem - Now returning column JobCount_Observed_Both_MS_and_MSMS
 **
 ****************************************************/
 (
@@ -56,10 +57,10 @@ AS
 
 	Set NoCount On
 
-	Declare @QRDsql varchar(2000),
-	        @sql varchar(4000),
+	Declare @QRDsql varchar(max),
+	        @sql varchar(max),
 			@ORFColumnSql varchar(2048),
-			@ReplicateAndFractionSql varchar(1024)
+			@ReplicateAndFractionSql varchar(2048)
 
 	Declare	@ReplicateCount int,
 			@FractionCount int,
@@ -132,6 +133,7 @@ AS
 	Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
 	Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
 	Set @QRDsql = @QRDsql + ' Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
+	Set @QRDsql = @QRDsql + ' QRD.JobCount_Observed_Both_MS_and_MSMS,'
 
 	If @ModsPresent > 0
 		Set @QRDsql = @QRDsql + ' MT.Mod_Description,'

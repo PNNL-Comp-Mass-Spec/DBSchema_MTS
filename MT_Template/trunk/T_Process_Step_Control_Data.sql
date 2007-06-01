@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Step_Control] ******/
-/****** RowCount: 24 ******/
+/****** RowCount: 25 ******/
 /****** Columns: Processing_Step_Name, enabled, Last_Affected, Entered_By ******/
 INSERT INTO [T_Process_Step_Control] VALUES ('AddDefaultPeakMatchingTasks',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('AddGANETUpdateTask',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -15,6 +15,7 @@ INSERT INTO [T_Process_Step_Control] VALUES ('GeneralStatisticsIncludesExtendedI
 INSERT INTO [T_Process_Step_Control] VALUES ('ImportMSJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ImportMSMSJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('LogLevel',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('QR_Check_Results_in_Remote_Peptide_DBs',1,'5/28/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('QuantitationProcessing',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('RefreshAnalysisDescriptionInfo',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('RefreshMSMSJobNets',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
