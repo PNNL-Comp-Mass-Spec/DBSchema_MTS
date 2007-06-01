@@ -52,6 +52,8 @@ CREATE PROCEDURE dbo.GetMassTags
 **			05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**			02/15/2007 mem - Clarified use of MSMS_Dataset_Count, MS_Dataset_Count,MSMS MS_Dataset_Count, and MS_Dataset_Count in @criteriaSql
+**						   - Fixed bug that failed to put MSMS_DeltaCn2_Maximum criteria in the Having clause of the query
 **
 *****************************************************/
 (
@@ -65,7 +67,8 @@ CREATE PROCEDURE dbo.GetMassTags
 	@Proteins varchar(7000) = '',
 	@maximumRowCount int = 100000,
 	@includeSupersededData varchar(32) = 'False',
-	@minimumPMTQualityScore float = 1.0
+	@minimumPMTQualityScore float = 1.0,
+	@previewSql tinyint = 0
 )
 As
 	set nocount on
@@ -76,6 +79,8 @@ As
 	set @myRowCount = 0
 	
 	set @message = ''
+	set @previewSql = IsNull(@previewSql, 0)
+	
 	declare @result int
 	
 	---------------------------------------------------
@@ -150,8 +155,11 @@ As
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_High_Discriminant_Score', 'MT.High_Discriminant_Score')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Mod_Count', 'MT.Mod_Count')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Mod_Description', 'MT.Mod_Description')
-	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Dataset_Count', 'COUNT(DISTINCT JobTable.Dataset)')
-	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Job_Count', 'COUNT(DISTINCT JobTable.Job)')
+	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Dataset_Count', 'COUNT(DISTINCT JobTable.Dataset)')
+	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Job_Count', 'COUNT(DISTINCT JobTable.Job)')
+	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MS_Dataset_Count', 'COUNT(DISTINCT JobTable.Dataset)')
+	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MS_Job_Count', 'COUNT(DISTINCT JobTable.Job)')
+
 
 	If @internalMatchCode = 'UMC'
 	Begin
@@ -405,7 +413,8 @@ As
 	Set @sqlHaving = ''
 	If Len(@criteriaSqlUpdated) > 0
 	Begin
-		If CharIndex('COUNT(', @criteriaSqlUpdated) > 0 OR CharIndex('SUM(', @criteriaSqlUpdated) > 0
+		If CharIndex('COUNT(', @criteriaSqlUpdated) > 0 OR CharIndex('SUM(', @criteriaSqlUpdated) > 0 OR
+		   CharIndex('MAX(', @criteriaSqlUpdated) > 0 OR CharIndex('MIN(', @criteriaSqlUpdated) > 0
 			Set @sqlHaving = 'HAVING (' + @criteriaSqlUpdated + ')'
 		Else
 			Set @sqlWhere = @sqlWhere + ' AND (' + @criteriaSqlUpdated + ')'
@@ -464,7 +473,7 @@ As
 	--
 	--INSERT INTO T_Junk(Contents) VALUES(@sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy)	
 		
-	If @returnRowCount = 'true'
+	If @returnRowCount = 'true' And @previewSql = 0
 	begin
 		-- In order to return the row count, we wrap the sql text with Count (*) 
 		-- and exclude the @sqlOrderBy text from the sql statement
@@ -472,8 +481,10 @@ As
 	end
 	Else
 	begin
-		--Print  @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy
-		Exec (@sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy)
+		If @previewSql <> 0
+			Print  @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy
+		Else
+			Exec (@sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy)
 	end
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount

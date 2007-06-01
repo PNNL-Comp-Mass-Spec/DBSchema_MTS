@@ -28,6 +28,7 @@ CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **			11/30/2006 mem - Implemented Try...Catch error handling
 **			12/01/2006 mem - Changed the minimum log level for the "Update" progress messages to be 2 rather than 1
+**			05/23/2007 mem - Now passing source server and database name to ProcessCandidateSequences
 **    
 *****************************************************/
 (
@@ -84,6 +85,9 @@ As
 	declare @messageAddnl varchar(256)
 
 	declare @Sql varchar(1024)
+
+	declare @SourceDatabase varchar(256)
+	Set @SourceDatabase = @@ServerName + '.' + DB_Name()
 	
 	declare @logLevel int
 	set @logLevel = 1		-- Default to normal logging
@@ -344,6 +348,7 @@ As
 																@CandidateSequencesTableName, @CandidateModDetailsTableName, 
 																@CandidateTablesContainJobColumn = @CandidateTablesContainJobColumn,
 																@Job = @Job, 
+																@SourceDatabase = @SourceDatabase,
 																@count = @processCount output, 
 																@message = @message output
 		--

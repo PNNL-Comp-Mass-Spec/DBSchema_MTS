@@ -26,6 +26,7 @@ CREATE Procedure dbo.GetPeptidesAndSICStats
 **			02/03/2007 mem - Removed invalid Group By on XCorr when flagging the row with the highest value for each Seq_ID, as specified by @MaxValueSelectionMode
 **						   - Added parameter @ReportHighestScoreStatsInJob
 **			02/11/2007 mem - Added parameter @GroupByChargeState
+**			05/15/2007 mem - Added parameter @JobPeptideFilterTableName
 **    
 *****************************************************/
 (
@@ -42,6 +43,7 @@ CREATE Procedure dbo.GetPeptidesAndSICStats
 	@MinXCorrPartiallyTrypticCharge1 real = 4.0,					-- Only used if @CleavageStateMinimum is < 2
 	@MinXCorrPartiallyTrypticCharge2 real = 4.3,					-- Only used if @CleavageStateMinimum is < 2
 	@MinXCorrPartiallyTrypticCharge3 real = 4.7,					-- Only used if @CleavageStateMinimum is < 2
+	@JobPeptideFilterTableName varchar(128) = '',			-- If provided, then will filter the results to only include peptides defined in this table; the table must have fields Job and Peptide and the peptides must be in the format A.BCDEFGH.I
 	@PreviewSql tinyint = 0,
 	@message varchar(512) = '' output
 )
@@ -85,6 +87,8 @@ As
 	Set @MinXCorrPartiallyTrypticCharge2 = IsNull(@MinXCorrPartiallyTrypticCharge2, 4.3)
 	Set @MinXCorrPartiallyTrypticCharge3 = IsNull(@MinXCorrPartiallyTrypticCharge3, 4.7)
 
+	Set @JobPeptideFilterTableName = LTrim(RTrim(IsNull(@JobPeptideFilterTableName, '')))
+	
 	Set @message = ''
 
 
@@ -303,7 +307,7 @@ As
 	--  First loop; construct text for Peptide_Hit jobs
 	--  Second loop; construct text for XT_Peptide_Hit jobs
 	--------------------------------------------------------------
-	Declare @S nvarchar(2048)
+	Declare @S nvarchar(max)
 	Declare @Params nvarchar(1024)
 
 	Declare @InsertSqlPeptideHit nvarchar(2048)
@@ -336,20 +340,25 @@ As
 			Set @S = @S +   ' X.Normalized_Score, X.Hyperscore, X.Log_EValue, X.DeltaCn2,'
 
 		Set @S = @S +   ' Pep.Charge_State, Pep.Scan_Number, PPM.Cleavage_State'
-		Set @S = @S + ' FROM T_Analysis_Description TAD INNER JOIN'
-		Set @S = @S +     ' T_Datasets DS ON TAD.Dataset_ID = DS.Dataset_ID INNER JOIN'
-		Set @S = @S +     ' T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN'
+		Set @S = @S + ' FROM T_Analysis_Description TAD INNER JOIN '
+		Set @S = @S +     ' T_Datasets DS ON TAD.Dataset_ID = DS.Dataset_ID INNER JOIN '
+		Set @S = @S +     ' T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN '
 		If @Loop = 1
-			Set @S = @S +     ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN'
+			Set @S = @S +     ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN '
 		If @Loop = 2
-			Set @S = @S +     ' T_Score_XTandem X ON Pep.Peptide_ID = X.Peptide_ID INNER JOIN'
+			Set @S = @S +     ' T_Score_XTandem X ON Pep.Peptide_ID = X.Peptide_ID INNER JOIN '
 			
-		Set @S = @S +     ' T_Peptide_to_Protein_Map PPM ON Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN'
-		Set @S = @S +     ' T_Proteins Pro ON PPM.Ref_ID = Pro.Ref_ID INNER JOIN'
-		Set @S = @S +     ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID INNER JOIN'
-		Set @S = @S +     ' T_Sequence S on Pep.Seq_ID = S.Seq_ID'
+		Set @S = @S +     ' T_Peptide_to_Protein_Map PPM ON Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN '
+		Set @S = @S +     ' T_Proteins Pro ON PPM.Ref_ID = Pro.Ref_ID INNER JOIN '
+		Set @S = @S +     ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID INNER JOIN '
+		Set @S = @S +     ' T_Sequence S on Pep.Seq_ID = S.Seq_ID '
+	
+		If Len(@JobPeptideFilterTableName) > 0
+			Set @S = @S + ' INNER JOIN [' + @JobPeptideFilterTableName + '] JPF ON Pep.Analysis_ID = JPF.Job AND Pep.Peptide = JPF.Peptide '
+
 		Set @S = @S + ' WHERE PPM.Cleavage_State >= @CleavageStateMinimum AND'
 		Set @S = @S +  ' TAD.job = @Job AND ('
+		
 		If @CleavageStateMinimum < 2
 			Set @S = @S +    '(PPM.Cleavage_State = 2 AND '
 			
@@ -697,7 +706,7 @@ As
 					If @GroupByChargeState <> 0
 						Set @S = @S +			  ', Charge_State'
 					Set @S = @S +           ' FROM #TmpPeptidesAndSICStats'
-					Set @S = @S +           ' GROUP BY SIC_Job, Seq_ID'
+					Set @S = @S +     ' GROUP BY SIC_Job, Seq_ID'
 					If @GroupByChargeState <> 0
 						Set @S = @S +				', Charge_State'
 					Set @S = @S +         ' ) LookupQ ON'
