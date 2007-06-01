@@ -5,10 +5,10 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_Log_Entries](
 	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
-	[posted_by] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[posted_by] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[posting_time] [datetime] NOT NULL CONSTRAINT [DF_T_Log_Entries_posting_time]  DEFAULT (getdate()),
-	[type] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[message] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[type] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[message] [varchar](4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Log_Entries_Entered_By]  DEFAULT (suser_sname()),
  CONSTRAINT [PK_T_Log_Entries] PRIMARY KEY CLUSTERED 
 (

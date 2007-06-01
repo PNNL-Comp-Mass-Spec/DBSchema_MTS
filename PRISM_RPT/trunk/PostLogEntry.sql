@@ -10,19 +10,16 @@ CREATE Procedure dbo.PostLogEntry
 **	Desc: Put new entry into the main log table
 **
 **	Return values: 0: success, otherwise, error code
-**
-**	Parameters: 
-**
-**	
-**
-**		Auth: grk
-**		Date: 10/31/2001
-**			  02/17/2005 mem - Added parameter @duplicateEntryHoldoffHours
+*
+**	Auth:	grk
+**	Date:	10/31/2001
+**			02/17/2005 mem - Added parameter @duplicateEntryHoldoffHours
+**			05/31/2007 mem - Expanded the size of @type, @message, and @postedBy
 **    
 *****************************************************/
-	@type varchar(50),
-	@message varchar(500),
-	@postedBy varchar(50)= 'na',
+	@type varchar(128),
+	@message varchar(4096),
+	@postedBy varchar(128)= 'na',
 	@duplicateEntryHoldoffHours int = 0			-- Set this to a value greater than 0 to prevent duplicate entries being posted within the given number of hours
 As
 
@@ -44,8 +41,7 @@ As
 		--
 		if @@rowcount <> 1
 		begin
-			RAISERROR ('Update was unsuccessful for T_Log_Entries table',
-						10, 1)
+			RAISERROR ('Update was unsuccessful for T_Log_Entries table', 10, 1)
 			return 51191
 		end
 	End
