@@ -29,6 +29,8 @@ CREATE Procedure dbo.NamePeptides
 **			02/14/2005 mem - Now posting progress messages to the log every 5 minutes
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			08/10/2006 mem - Now populating Missed_Cleavage_Count
+**			06/04/2007 mem - Added parameters @MTIDMinimum, @MTIDMaximum, and @SkipRepeatCountCheck
+**						   - No longer storing peptide sequence or protein name in #TMPTags
 **    
 *****************************************************/
 (
@@ -39,7 +41,10 @@ CREATE Procedure dbo.NamePeptides
 												--otherwise, return on error
 	@namingString varchar(10) = 't',			--string used in naming 'fully cleaved' peptides
 	@RecomputeAll tinyint = 0,					-- When 1, recomputes stats for all mass tags; when 0, only computes if the peptide name or peptide cleavage state is null
-	@logLevel tinyint = 1
+	@logLevel tinyint = 1,
+	@MTIDMinimum int = 0,
+	@MTIDMaximum int = 0,
+	@SkipRepeatCountCheck tinyint = 0
 )	
 AS
 	SET NOCOUNT ON
@@ -61,10 +66,12 @@ AS
 	declare @Mass_Tag_ID int
 	declare @Ref_ID int
 	declare @Reference varchar(128)
+	declare @RefIDCached int
 
 	set @peptide = ''
 	set @Mass_Tag_ID = -1
 	set @Ref_ID = -1
+	Set @RefIDCached = -2
 	set @Reference = ''
 	
 	declare @lastProgressUpdate datetime
@@ -83,6 +90,15 @@ AS
 	declare @terminusState tinyint
 	declare @missedCleavageCount smallint
 	
+	declare @Sql varchar(2048)
+	
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------
+	Set @logLevel = IsNull(@logLevel, 1)
+	Set @MTIDMinimum = IsNull(@MTIDMinimum, 0)
+	Set @MTIDMaximum = IsNull(@MTIDMaximum, 0)
+	Set @SkipRepeatCountCheck = IsNull(@SkipRepeatCountCheck, 0)
 
 	---------------------------------------------------
 	-- Creation of temporary table to pull data from
@@ -91,9 +107,6 @@ AS
 	CREATE TABLE #TMPTags (
 		[Mass_Tag_ID]	int NOT NULL ,
 		[Ref_ID] int NOT NULL,
-		[Peptide] varchar (850) NOT NULL,
-		[Reference] varchar(128),
-		[ProteinLength] int,
 		[Unique_Row_ID] int IDENTITY (1, 1) NOT NULL
 	)
 
@@ -103,43 +116,40 @@ AS
 	-- copy data to temp table
 	---------------------------------------------------
 	
+	Set @Sql  = ''
 	If @RecomputeAll = 0
-	  Begin
-		INSERT	#TMPTags (
-			Mass_Tag_ID, Ref_ID, Peptide, Reference, ProteinLength
-			)
-		SELECT	MTPM.Mass_Tag_ID,
-				MTPM.Ref_ID,
-				MT.Peptide,
-				PR.Reference,
-				IsNull(DataLength(PR.Protein_Sequence), 0)
-		FROM	T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON 
-				MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON
-				MTPM.Ref_ID = PR.Ref_ID
-		WHERE	NOT PR.Protein_Sequence IS NULL AND
-				(Mass_Tag_Name IS NULL OR Cleavage_State IS NULL)
-		ORDER BY MTPM.Mass_Tag_ID, MTPM.Ref_ID
-	  End
+	Begin
+		Set @Sql = @Sql + ' INSERT	#TMPTags (Mass_Tag_ID, Ref_ID)'
+		Set @Sql = @Sql + ' SELECT	MTPM.Mass_Tag_ID, MTPM.Ref_ID'
+		Set @Sql = @Sql + ' FROM	T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON '
+		Set @Sql = @Sql +         ' MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON'
+		Set @Sql = @Sql +         ' MTPM.Ref_ID = PR.Ref_ID'
+		Set @Sql = @Sql + ' WHERE	NOT PR.Protein_Sequence IS NULL AND'
+		Set @Sql = @Sql + ' (Mass_Tag_Name IS NULL OR Cleavage_State IS NULL)'
+	End
 	Else
-	  Begin
-		INSERT	#TMPTags (
-			Mass_Tag_ID, Ref_ID, Peptide, Reference, ProteinLength
-			)
-		SELECT	MTPM.Mass_Tag_ID,
-				MTPM.Ref_ID,
-				MT.Peptide,
-				PR.Reference,
-				IsNull(DataLength(PR.Protein_Sequence), 0)
-		FROM	T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON 
-				MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON
-				MTPM.Ref_ID = PR.Ref_ID
-		WHERE	NOT PR.Protein_Sequence IS NULL
-		ORDER BY MTPM.Mass_Tag_ID, MTPM.Ref_ID
-	  End
+	Begin
+		Set @Sql = @Sql + ' INSERT	#TMPTags (Mass_Tag_ID, Ref_ID)'
+		Set @Sql = @Sql + ' SELECT	MTPM.Mass_Tag_ID, MTPM.Ref_ID'
+		Set @Sql = @Sql + ' FROM	T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON '
+		Set @Sql = @Sql +         ' MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON'
+		Set @Sql = @Sql +         ' MTPM.Ref_ID = PR.Ref_ID'
+		Set @Sql = @Sql + ' WHERE	NOT PR.Protein_Sequence IS NULL'
+	End
 	
+	If Not (@MTIDMinimum = 0 And @MTIDMaximum = 0)
+	Begin
+		Set @Sql = @Sql + ' AND MT.Mass_Tag_ID >= ' + Convert(varchar(19), @MTIDMinimum) 
+		Set @Sql = @Sql + ' AND MT.Mass_Tag_ID <= ' + Convert(varchar(19), @MTIDMaximum) 
+	End
 	
-	-- check for errors
+	Set @Sql = @Sql + ' ORDER BY MTPM.Ref_ID, MTPM.Mass_Tag_ID'
+	
+	Exec (@Sql)
+	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+
 	if @myError <> 0 
 	begin
 		set @message = 'Error while creating data in temporary table'
@@ -160,16 +170,22 @@ AS
 	Set @done = @myRowCount
 	Set @LastUniqueRowID = 0
 	
+	-- Lookup the first @Ref_ID value in #TMPTags, then
+	-- make sure @RefIDCached is different
+	SELECT TOP 1 @Ref_ID = Ref_ID
+	FROM #TMPTags
+	ORDER BY Unique_Row_ID
+	
+	If @RefIDCached = @Ref_ID
+		Set @RefIDCached = IsNull(@Ref_ID,-1) - 1
+	
 	While @done > 0
-	Begin
-		-- Select data about one Mass_Tag_ID/ref_id pair from the temporary table
+	Begin -- <a>
+		-- Select data about one Mass_Tag_ID/Ref_ID pair from the temporary table
   		SELECT TOP 1 
   			@LastUniqueRowID = Unique_Row_ID,
-			@peptide = Peptide, 
 			@Mass_Tag_ID = Mass_Tag_ID, 
-			@Ref_ID = Ref_ID,
-			@Reference = Reference,
-			@ProteinLength = ProteinLength
+			@Ref_ID = Ref_ID
 		FROM #TMPTags
 		WHERE Unique_Row_ID > @LastUniqueRowID
 		ORDER BY Unique_Row_ID
@@ -186,7 +202,32 @@ AS
 		If @done = 0
 			Set @message = ''
 		Else
-		Begin		
+		Begin -- <b>
+			------------------------------------------------
+			-- Get this peptide's sequence, the protein name, and the length of the protein sequence
+			------------------------------------------------
+			
+			If @RefIDCached = @Ref_ID
+			Begin
+				SELECT @peptide = Peptide
+				FROM T_Mass_Tags
+				WHERE Mass_Tag_ID = @Mass_Tag_ID
+			End
+			Else
+			Begin
+				SELECT	@peptide = MT.Peptide,
+						@Reference = PR.Reference,
+						@ProteinLength = IsNull(DataLength(PR.Protein_Sequence), 0),
+						@RefIDCached = MTPM.Ref_ID
+				FROM T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON 
+					 MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON
+					 MTPM.Ref_ID = PR.Ref_ID
+				WHERE MTPM.Mass_Tag_ID = @Mass_Tag_ID AND MTPM.Ref_ID = @Ref_ID
+			End
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
 			------------------------------------------------
 			--compute info about peptide
 			------------------------------------------------
@@ -219,7 +260,7 @@ AS
 			set @fragmentSpan = 0
 				
 			If (@cleavageState = 2)  
-			Begin
+			Begin -- <c>
 				-- Both ends cleaved, so compute fragment number
 				EXEC @fragmentNumber = ComputePeptideFragmentNumber
 						@Ref_ID,
@@ -237,8 +278,11 @@ AS
 			-- Determine the number of missed cleavages
 			EXEC @missedCleavageCount = CountMissedCleavagePoints @peptide, @CheckForPrefixAndSuffixResidues = 0
 
-			-- Count the number of times the peptide occurs in the protein sequence	
-			EXEC @repeatCount = CountSubstringInProtein @Ref_ID, @peptide
+			If @SkipRepeatCountCheck = 0
+				-- Count the number of times the peptide occurs in the protein sequence	
+				EXEC @repeatCount = CountSubstringInProtein @Ref_ID, @peptide
+			Else
+				Set @repeatCount = Null
 			
 			set @terminusState = 0
 			if @residueStart = 1
@@ -268,7 +312,7 @@ AS
 				Fragment_Span = @fragmentSpan,
 				Residue_Start = @residueStart,
 				Residue_End = @residueEnd,
-				Repeat_Count = @repeatCount,
+				Repeat_Count = IsNull(@repeatCount, Repeat_Count),
 				Terminus_State = @terminusState,
 				Missed_Cleavage_Count = @missedCleavageCount
 			WHERE Mass_Tag_ID = @Mass_Tag_ID AND Ref_ID = @Ref_ID
@@ -288,28 +332,28 @@ AS
 			set @count = @count + 1
 
 			if @logLevel >= 1
-			Begin
+			Begin -- <c2>
 				if @count % 1000 = 0 
-				Begin
+				Begin -- <d>
 					if @count % 100000 = 0 Or DateDiff(second, @lastProgressUpdate, GetDate()) >= 300
-					Begin
+					Begin -- <e>
 						set @message = '...Processing: ' + convert(varchar(11), @count)
 						execute PostLogEntry 'Progress', @message, 'NamePeptides'
 						set @message = ''
 						set @lastProgressUpdate = GetDate()
-					End
+					End -- </e>
 
 					-- Validate that updating is enabled, abort if not enabled
 					exec VerifyUpdateEnabled @CallingFunctionDescription = 'NamePeptides', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 					If @UpdateEnabled = 0
 						Goto Done
-				End
-			End			
+				End -- </d>
+			End -- </c2>
 			
 			set @myError = 0
-		End
+		End -- </b>
 
-	end  -- end of while loop		
+	End -- </a>
 
 
 	--------------------------------------------------

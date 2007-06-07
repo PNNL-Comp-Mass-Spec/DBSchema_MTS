@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 /****************************************************
 **	Desc:  
@@ -28,6 +29,7 @@ CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			02/06/2006 mem - Added brackets around the experiment name when building @crossTabCols to allow for experiments with spaces in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**			06/05/2007 mem - Changed @sql and @crossTabCols to varchar(max) and added parameter @PreviewSql
 **    
 *****************************************************/
 (
@@ -35,7 +37,8 @@ CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 	@experiments varchar(7000) = '%050113',
 	@aggregation varchar(24) = 'Sum_XCorr', -- 'Count_Peptide_Hits'
 	@mode varchar(32) = 'Interaction_Rollup_Report', -- 'Crosstab_Report', 'Interaction_Report', 'Preview_Data_Analysis_Jobs', 'Preview_Experiments', 'Preview_Proteins'
-	@message varchar(512) output
+	@message varchar(512)='' output,
+	@PreviewSql tinyint=0
 )
 AS
 	set nocount on
@@ -45,7 +48,7 @@ AS
 	set @myError = 0
 	set @myRowCount = 0
 
-	declare @sql nvarchar(4000)
+	declare @sql nvarchar(max)
 	
 	---------------------------------------------------
 	-- validate mass tag DB name
@@ -154,6 +157,9 @@ AS
 	set @sql = @sql + 'GROUP  BY Ref_ID, Experiment, Dataset, Job '+ CHAR(10)
 	set @sql = @sql + 'HAVING  (COUNT(Ref_ID) > 1) '+ CHAR(10)
 	--
+	If @PreviewSql <> 0
+		Print @Sql + CHAR(10)
+	
 	EXEC @myError = sp_executesql @sql
 	--
 	if @myError <> 0
@@ -212,7 +218,7 @@ AS
 	set @sql = @sql + 'INSERT INTO #ORF (S, Reference, Ref_ID, ORF_ID, Monoisotopic_Mass, Description, Reference_Notes) '+ CHAR(10)
 	if @dbVer > 1
 		begin
-			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, External_Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
+			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, External_Protein_ID as ORF_ID, Monoisotopic_Mass, Description, Description AS Reference_Notes '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins'+ CHAR(10)
 		end
@@ -224,6 +230,9 @@ AS
 		end
 	set @sql = @sql + 'WHERE Ref_ID IN (SELECT DISTINCT Ref_ID FROM #XPD)'+ CHAR(10)
 	--
+	If @PreviewSql <> 0
+		Print @Sql + CHAR(10)
+
 	EXEC @myError = sp_executesql @sql
 	--
 	if @myError <> 0
@@ -232,33 +241,37 @@ AS
 		goto Done
 	end
 
-	---------------------------------------------------
-	-- update ORF description from ORF database (if existent)
-	---------------------------------------------------
-
-	declare @peptideDBName varchar(128), @proteinDBName varchar(128)
-	Exec MT_Main.dbo.GetMTAssignedDBs @MTDBName, @peptideDBName output, @proteinDBName output
-
-	if @proteinDBName <> ''
+	if @dbVer <= 1
 	begin
-		set @sql = ''
-		set @sql = @sql + 'update X '
-		set @sql = @sql + 'set X.Description = T.Description, X.Reference_Notes = T.Reference + '' '' + cast(T.Description as varchar(512)) '
-		set @sql = @sql + 'from #ORF X INNER JOIN '
-		set @sql = @sql + '( '
-		set @sql = @sql + 'SELECT Reference, Description_From_FASTA AS Description '
-		set @sql = @sql + 'FROM ' + @proteinDBName + '.dbo.T_ORF '
-		set @sql = @sql + ') T on T.Reference = X.Reference '
-		--
-		EXEC @myError = sp_executesql @sql
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Could not update temporary table for ORFs descriptions'
-			goto Done
-		end
-	end 
+		---------------------------------------------------
+		-- update ORF description from ORF database (if existent)
+		-- Not necesassary if @dbVer is > 1 because T_Proteins now contains protein descriptions
+		---------------------------------------------------
 
+		declare @peptideDBName varchar(128), @proteinDBName varchar(128)
+		Exec MT_Main.dbo.GetMTAssignedDBs @MTDBName, @peptideDBName output, @proteinDBName output
+
+		if @proteinDBName <> ''
+		begin
+			set @sql = ''
+			set @sql = @sql + 'update X '
+			set @sql = @sql + 'set X.Description = T.Description, X.Reference_Notes = T.Reference + '' '' + cast(T.Description as varchar(512)) '
+			set @sql = @sql + 'from #ORF X INNER JOIN '
+			set @sql = @sql + '( '
+			set @sql = @sql + 'SELECT Reference, Description_From_FASTA AS Description '
+			set @sql = @sql + 'FROM ' + @proteinDBName + '.dbo.T_ORF '
+			set @sql = @sql + ') T on T.Reference = X.Reference '
+			--
+			EXEC @myError = sp_executesql @sql
+			--
+			if @myError <> 0
+			begin
+				set @message = 'Could not update temporary table for ORFs descriptions'
+				goto Done
+			end
+		end 
+	end
+	
 	---------------------------------------------------
 	-- Output list of bait protein to sample protein interactions
 	---------------------------------------------------
@@ -333,15 +346,18 @@ AS
 	end
 
 	---------------------------------------------------
+	-- Crosstab Mode
 	-- Build crosstab column SQL for each job
 	---------------------------------------------------
 	declare @colName varchar(50)
-	set @colname = 'SX'
 
 	declare @funcName varchar(32)
+
+	-- Initially assume @aggregation is 'Sum_XCorr'
+	set @colname = 'SX'
 	set @funcName = 'SUM'
 
-	If @aggregation = 'Count_Peptide_Hits' -- '''Sum_XCorr'
+	If @aggregation = 'Count_Peptide_Hits'
 	begin
 		set @colname = 'NP'
 		set @funcName = 'SUM'
@@ -353,7 +369,7 @@ AS
 		set @funcName = 'SUM'
 	end
 	
-	declare @crossTabCols varchar(5000)
+	declare @crossTabCols varchar(max)
 	set @crossTabCols = ''
 
 	SELECT @crossTabCols = @crossTabCols 
@@ -386,18 +402,13 @@ AS
 	set @sql = @sql + 'GROUP BY S, Reference, Monoisotopic_Mass, Reference_Notes, Standard ' + CHAR(10)
 	set @sql = @sql + 'ORDER BY Monoisotopic_Mass DESC ' + CHAR(10)
 
-	-- check if dynamic sql statement has been truncated
-	--
-	if len(@sql) = 4000
-	begin
-		set @myError = 20
-		set @message = 'Too many crosstab columns'
-		goto Done
-	end
-
 	-- execute dynamic sql
 	--
-	EXEC @myError = sp_executesql @sql
+
+	If @PreviewSql <> 0
+		Print @Sql
+	Else
+		EXEC @myError = sp_executesql @sql
 	--
 	if @myError <> 0
 	begin
