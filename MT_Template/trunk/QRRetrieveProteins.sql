@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QRRetrieveProteins
+CREATE Procedure dbo.QRRetrieveProteins
 /****************************************************	
 **  Desc: Returns the proteins and associated statistics
 **		  for the given QuantitationID
@@ -41,17 +41,25 @@ CREATE PROCEDURE dbo.QRRetrieveProteins
 **			04/05/2005 mem - Added parameter @VerboseColumnOutput
 **			05/25/2005 mem - Renamed output column MonoMassKDa to Mono_Mass_KDa
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
+**			06/05/2007 mem - Added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **
 ****************************************************/
 (
 	@QuantitationID int,
 	@ReplicateCountAvgMinimum decimal(9,5) = 1,			-- Ignored if the given QuantitationID only has one MDID defined
 	@Description varchar(32)='' OUTPUT,
-	@VerboseColumnOutput tinyint = 1					-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns (at present, this parameter is unused, but is included for symmetry with WebQRRetrievePeptidesMultiQID)
+	@VerboseColumnOutput tinyint = 1,					-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns (at present, this parameter is unused, but is included for symmetry with WebQRRetrievePeptidesMultiQID)
+	@message varchar(512)='' output,
+	@PreviewSql tinyint=0
 )
 AS 
 
 	Set NoCount On
+
+	Declare @myError int
+	Declare @myRowcount int
+	Set @myRowcount = 0
+	Set @myError = 0
 
 	Declare @sql varchar(8000),
 			@ORFColumnSql varchar(2048),
@@ -64,70 +72,98 @@ AS
 			@ERValuesPresent float
 	
 	Set @MDIDCount = 0
-	
-	-- Determine if this QuantitationID has more than one MDID defined
-	SELECT @MDIDCount = Count(MD_ID)
-	FROM T_Quantitation_MDIDs
-	WHERE Quantitation_ID = @QuantitationID
-	
-	-- Determine if this QuantitationID has any nonzero ER values
-	SELECT @ERValuesPresent = MAX(ABS(ER_Average))
-	FROM T_Quantitation_Results
-	WHERE Quantitation_ID = @QuantitationID
-	
-	-- If only one MDID, then make sure @ReplicateCountAvgMinimum is at most 1
-	If @MDIDCount <=1 AND @ReplicateCountAvgMinimum > 1
-		Set @ReplicateCountAvgMinimum = 1
+
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
+
+	Begin Try
 		
-	-- Generate a description for this QuantitationID using the job numbers that its
-	-- MDID's correspond plus the text 'Pro' = Protein
-	Exec QRGenerateDescription @QuantitationID, 'Pro', @Description = @Description OUTPUT
+		-- Determine if this QuantitationID has more than one MDID defined
+		SELECT @MDIDCount = Count(MD_ID)
+		FROM T_Quantitation_MDIDs
+		WHERE Quantitation_ID = @QuantitationID
+		
+		-- Determine if this QuantitationID has any nonzero ER values
+		SELECT @ERValuesPresent = MAX(ABS(ER_Average))
+		FROM T_Quantitation_Results
+		WHERE Quantitation_ID = @QuantitationID
+		
+		-- If only one MDID, then make sure @ReplicateCountAvgMinimum is at most 1
+		If @MDIDCount <=1 AND @ReplicateCountAvgMinimum > 1
+			Set @ReplicateCountAvgMinimum = 1
+			
+		-- Generate a description for this QuantitationID using the job numbers that its
+		-- MDID's correspond plus the text 'Pro' = Protein
+		Set @CurrentLocation = 'Call QRGenerateDescription'
+		Exec QRGenerateDescription @QuantitationID, 'Pro', @Description = @Description OUTPUT
 
+		
+		-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
+		-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
+		--  the count variable greater than 1 so that the columns get displayed anyway
+		Set @CurrentLocation = 'Call QRLookupReplicateAndFractionCounts'
+		Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
+
+		Set @ReplicateAndFractionSql = ''
+		If @ReplicateCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountStDev, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountMax, '
+		End
+
+		If @FractionCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountMax, '
+		End
+
+		If @TopLevelFractionCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountMax, '
+		End
+
+		Set @CurrentLocation = 'Construct the Sql to return the data'
+		
+		-- Generate the sql for the ORF columns in T_Quantitation_Results
+		Set @CurrentLocation = 'Call QRLookupReplicateAndFractionCounts'
+		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
+		
+		Set @sql = @ORFColumnSql
+		
+		Set @sql = @sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
+		Set @sql = @sql + ' Round(T_Proteins.Monoisotopic_Mass / 1000, 2) AS Mono_Mass_KDa'
+		Set @sql = @sql + ' FROM T_Quantitation_Results As QR LEFT OUTER JOIN'
+		Set @sql = @sql + '  T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
+		Set @sql = @sql + ' INNER JOIN'
+		Set @sql = @sql + '  T_Quantitation_Description AS QD ON QR.Quantitation_ID = QD.Quantitation_ID'
+		Set @sql = @sql + ' WHERE 	QD.Quantitation_ID = ' + Convert(varchar(19), @QuantitationID) + ' AND '
+		Set @sql = @sql + '			QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
+		Set @sql = @sql + ' ORDER BY QR.Abundance_Average DESC, T_Proteins.Reference'
+
+		Set @CurrentLocation = 'Execute @Sql'
+		--
+		If @PreviewSql <> 0
+			Print @Sql
+		Else
+			Exec (@Sql)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QRRetrieveProteins')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done
+	End Catch
 	
-	-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
-	-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
-	--  the count variable greater than 1 so that the columns get displayed anyway
-	Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
-
-	Set @ReplicateAndFractionSql = ''
-	If @ReplicateCount > 1
-	  Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountStDev, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountMax, '
-	  End
-
-	If @FractionCount > 1
-	  Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountMax, '
-	  End
-
-	If @TopLevelFractionCount > 1
-	  Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountMax, '
-	  End
-	
-	-- Generate the sql for the ORF columns in T_Quantitation_Results
-	Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
-	
-	-- Construct the sql to return the data
-	Set @sql = @ORFColumnSql
-	
-	Set @sql = @sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
-	Set @sql = @sql + ' Round(T_Proteins.Monoisotopic_Mass / 1000, 2) AS Mono_Mass_KDa'
-	Set @sql = @sql + ' FROM T_Quantitation_Results As QR LEFT OUTER JOIN'
-	Set @sql = @sql + '  T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
-	Set @sql = @sql + ' INNER JOIN'
-	Set @sql = @sql + '  T_Quantitation_Description AS QD ON QR.Quantitation_ID = QD.Quantitation_ID'
-	Set @sql = @sql + ' WHERE 	QD.Quantitation_ID = ' + Convert(varchar(19), @QuantitationID) + ' AND '
-	Set @sql = @sql + '			QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
-	Set @sql = @sql + ' ORDER BY QR.Abundance_Average DESC, T_Proteins.Reference'
-
-	Exec (@sql)	
+Done:
 	--
-	Return @@Error
+	Return @myError
 
 
 GO

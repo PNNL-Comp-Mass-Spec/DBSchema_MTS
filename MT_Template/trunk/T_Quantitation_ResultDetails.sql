@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[QRD_ID] [int] IDENTITY(1,1) NOT NULL,
 	[QR_ID] [int] NOT NULL,
-	[Internal_Standard_Match] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Internal_Standard_Match]  DEFAULT (0),
+	[Internal_Standard_Match] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Internal_Standard_Match]  DEFAULT ((0)),
 	[Mass_Tag_ID] [int] NOT NULL,
 	[Mass_Tag_Mods] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Mass_Tag_Mods]  DEFAULT (''),
 	[MT_Abundance] [float] NOT NULL,
@@ -23,6 +23,7 @@ CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[Charge_State_Min] [tinyint] NOT NULL,
 	[Charge_State_Max] [tinyint] NOT NULL,
 	[Mass_Error_PPM_Avg] [float] NOT NULL,
+	[MT_Rank_Match_Score_Avg] [real] NULL,
 	[MT_Match_Score_Avg] [float] NOT NULL,
 	[MT_Del_Match_Score_Avg] [decimal](9, 5) NULL,
 	[NET_Error_Obs_Avg] [decimal](9, 5) NULL,

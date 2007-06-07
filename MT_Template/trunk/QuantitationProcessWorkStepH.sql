@@ -13,6 +13,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepH
 **  Auth:	mem
 **	Date:	09/07/2006
 **			05/25/2007 mem - Now populating MT_Count_Unique_Observed_Both_MS_and_MSMS and JobCount_Observed_Both_MS_and_MSMS
+**			06/06/2007 mem - Now populating MT_Rank_Match_Score_Avg
 **
 ****************************************************/
 (
@@ -135,6 +136,7 @@ AS
 		 Charge_State_Min,
 		 Charge_State_Max,
 		 Mass_Error_PPM_Avg,
+		 MT_Rank_Match_Score_Avg,
 		 MT_Match_Score_Avg,
 		 MT_Del_Match_Score_Avg,
 		 NET_Error_Obs_Avg,
@@ -168,6 +170,7 @@ AS
 			D.Charge_State_Min,
 			D.Charge_State_Max,
 			D.MassErrorPPMAvg,
+			D.Rank_Match_Score_Avg,
 			D.Match_Score_Avg,
 			D.Del_Match_Score_Avg,
 			D.NET_Error_Obs_Avg,

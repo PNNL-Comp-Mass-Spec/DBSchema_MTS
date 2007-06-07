@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE ProcEDURE dbo.QRRetrieveProteinsMultiQID
+CREATE Procedure dbo.QRRetrieveProteinsMultiQID
 /****************************************************	
 **  Desc: Returns the proteins and associated statistics
 **		    for the given list of QuantitationID's
@@ -41,6 +41,7 @@ CREATE ProcEDURE dbo.QRRetrieveProteinsMultiQID
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **						   - Now using @SkipCrossTabSqlGeneration=1 when calling QRGenerateCrosstabSql
+**			06/04/2007 mem - Added parameters @message and @PreviewSql; changed @Sql to varchar(max); switched to Try/Catch error handling
 **
 ****************************************************/
 (
@@ -49,7 +50,9 @@ CREATE ProcEDURE dbo.QRRetrieveProteinsMultiQID
 	@ReplicateCountAvgMinimum decimal(9,5) = 1,			-- Ignored if the given QuantitationID only has one MDID defined
 	@Description varchar(32)='' OUTPUT,
 	@VerboseColumnOutput tinyint = 1,					-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
-	@SortMode tinyint=2									-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@SortMode tinyint=2,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@message varchar(512)='' output,
+	@PreviewSql tinyint=0
 )
 AS 
 
@@ -60,9 +63,9 @@ AS
 	Set @myRowcount = 0
 	Set @myError = 0
 
-	Declare @sql varchar(8000),
+	Declare @Sql varchar(max),
 			@ORFColumnSql varchar(2048),
-			@ReplicateAndFractionSql varchar(1024)
+			@ReplicateAndFractionSql varchar(2048)
 
 	Declare @QuantitationID int,
 			@MDIDCount int,
@@ -92,154 +95,182 @@ AS
 
 	Declare @continue int
 
-	--------------------------------------------------------------
-	-- Create a temporary table to hold the QIDs and sorting info
-	--------------------------------------------------------------
-			
-	CREATE TABLE #TmpQIDSortInfo (
-		SortKey int identity (1,1),
-		QID int NOT NULL)
 
-	--------------------------------------------------------------
-	-- Call QRGenerateCrosstabSql to populate CrossTabSql and QuantitationIDListSql
-	-- Simultaneously, determine if any of the QuantitationID's have nonzero ER values
-	-- We only need QuantitationIDListSql for this stored procedure, but QRGenerateCrosstabSql returns both
-	-- We have to define @SourceColName and a few other variables before calling the SP
-	-- This SP also populates the #TmpQIDSortInfo temporary table using @QuantitationIDList
-	--------------------------------------------------------------
-	Exec @myError = QRGenerateCrosstabSql	
-								@QuantitationIDList, 
-								@SourceColName,
-								@AggregateColName,
-								@AverageAcrossColumnsEnabled,
-								@SeparateReplicateDataIDs,
-								@SortMode,
-								@SkipCrossTabSqlGeneration = 1,
-								@ERValuesPresent = @ERValuesPresent Output
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 
-	If @myError <> 0
-	Begin
-		print 'Error calling QRGenerateCrosstabSql: ' + Convert(varchar(12), @myError)
-		Goto Done
-	End
+	Begin Try
 
-	--------------------------------------------------------------
-	-- Determine if any of the QID's have multiple replicates, fractions, or TopLevelFractions
-	-- We have to step through the values in @QuantitationIDListSql to do this
-	--------------------------------------------------------------
-	--
-	SELECT @QuantitationID = MIN(QID)-1
-	FROM #TmpQIDSortInfo
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	
-	Set @continue = 1
-	While @continue = 1
-	Begin
-		SELECT TOP 1 @QuantitationID = QID
+		--------------------------------------------------------------
+		-- Create a temporary table to hold the QIDs and sorting info
+		--------------------------------------------------------------
+				
+		CREATE TABLE #TmpQIDSortInfo (
+			SortKey int identity (1,1),
+			QID int NOT NULL)
+
+		--------------------------------------------------------------
+		-- Call QRGenerateCrosstabSql to populate CrossTabSql and QuantitationIDListSql
+		-- Simultaneously, determine if any of the QuantitationID's have nonzero ER values
+		-- We only need QuantitationIDListSql for this stored procedure, but QRGenerateCrosstabSql returns both
+		-- We have to define @SourceColName and a few other variables before calling the SP
+		-- This SP also populates the #TmpQIDSortInfo temporary table using @QuantitationIDList
+		--------------------------------------------------------------
+
+		Set @CurrentLocation = 'Call QRGenerateCrosstabSql'
+		--
+		Exec @myError = QRGenerateCrosstabSql	
+									@QuantitationIDList, 
+									@SourceColName,
+									@AggregateColName,
+									@AverageAcrossColumnsEnabled,
+									@SeparateReplicateDataIDs,
+									@SortMode,
+									@SkipCrossTabSqlGeneration = 1,
+									@ERValuesPresent = @ERValuesPresent Output
+
+		If @myError <> 0
+		Begin
+			print 'Error calling QRGenerateCrosstabSql: ' + Convert(varchar(12), @myError)
+			Goto Done
+		End
+
+		--------------------------------------------------------------
+		-- Determine if any of the QID's have multiple replicates, fractions, or TopLevelFractions
+		-- We have to step through the values in @QuantitationIDListSql to do this
+		--------------------------------------------------------------
+		--
+		SELECT @QuantitationID = MIN(QID)-1
 		FROM #TmpQIDSortInfo
-		WHERE QID > @QuantitationID
-		ORDER BY QID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		
-		If @myRowCount <> 1
-			Set @continue = 0
+		Set @continue = 1
+		While @continue = 1
+		Begin
+			SELECT TOP 1 @QuantitationID = QID
+			FROM #TmpQIDSortInfo
+			WHERE QID > @QuantitationID
+			ORDER BY QID
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			
+			If @myRowCount <> 1
+				Set @continue = 0
+			Else
+			Begin
+				-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
+				-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
+				-- the count variable greater than 1 so that the columns get displayed anyway
+				Set @CurrentLocation = 'Call QRLookupReplicateAndFractionCounts for ' + Convert(varchar(19), @QuantitationID)
+				Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
+
+				If @ReplicateCount > @HighestReplicateCount
+					Set @HighestReplicateCount = @ReplicateCount
+
+				If @FractionCount > @HighestFractionCount
+					Set @HighestFractionCount = @FractionCount
+
+				If @TopLevelFractionCount > @HighestTopLevelFractionCount
+					Set @HighestTopLevelFractionCount = @TopLevelFractionCount
+
+				SELECT @MDIDCount = Count(MD_ID)
+				FROM T_Quantitation_MDIDs
+				WHERE Quantitation_ID = @QuantitationID
+				
+				If @MDIDCount > @HighestMDIDCount
+					Set @HighestMDIDCount = @MDIDCount
+			End
+		End
+
+		Set @ReplicateAndFractionSql = ''
+		If @HighestReplicateCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountStDev, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountMax, '
+		End
+
+		If @HighestFractionCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountMax, '
+		End
+
+		If @HighestTopLevelFractionCount > 1
+		Begin
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountAvg, '
+			Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountMax, '
+		End
+		
+		-- If highest MDID count is 1, then make sure @ReplicateCountAvgMinimum is at most 1
+		If @HighestMDIDCount <=1 And @ReplicateCountAvgMinimum > 1
+			Set @ReplicateCountAvgMinimum = 1
+		
+		--------------------------------------------------------------
+		-- Populate @Description
+		--------------------------------------------------------------
+		If CharIndex(',', @QuantitationIDList) > 1
+		Begin
+			-- User provided a list of Quantitation ID's
+			
+			Set @Description = 'QIDs '
+
+			-- Make sure @JobList isn't too long
+			If Len(@QuantitationIDList) > 26 - Len(@Description)
+				Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 24 - Len(@Description)) + '..'
+
+			-- Append @QuantitationIDList to @Description
+			Set @Description = @Description + @QuantitationIDList + ';Pro'
+		End
 		Else
 		Begin
-			-- Determine if this QuantitationID has multiple replicates, fractions, or TopLevelFractions
-			-- Alternatively, if any of those values are greater than 1, but there is only one entry, set
-			-- the count variable greater than 1 so that the columns get displayed anyway
-			Exec QRLookupReplicateAndFractionCounts @QuantitationID, @ReplicateCount = @ReplicateCount OUTPUT, @FractionCount = @FractionCount OUTPUT, @TopLevelFractionCount = @TopLevelFractionCount OUTPUT
-
-			If @ReplicateCount > @HighestReplicateCount
-				Set @HighestReplicateCount = @ReplicateCount
-
-			If @FractionCount > @HighestFractionCount
-				Set @HighestFractionCount = @FractionCount
-
-			If @TopLevelFractionCount > @HighestTopLevelFractionCount
-				Set @HighestTopLevelFractionCount = @TopLevelFractionCount
-
-			SELECT @MDIDCount = Count(MD_ID)
-			FROM T_Quantitation_MDIDs
-			WHERE Quantitation_ID = @QuantitationID
-			
-			If @MDIDCount > @HighestMDIDCount
-				Set @HighestMDIDCount = @MDIDCount
+			-- User provided a single quantitation ID
+			-- Generate a description for this QuantitationID using the job numbers that its
+			-- MDID's correspond plus the text 'Pep' = Peptide
+			Exec QRGenerateDescription @QuantitationID, 'Pro', @Description = @Description OUTPUT
 		End
-	End
-
-	Set @ReplicateAndFractionSql = ''
-	If @HighestReplicateCount > 1
-	Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountStDev, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.ReplicateCountMax, '
-	End
-
-	If @HighestFractionCount > 1
-	Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.FractionCountMax, '
-	End
-
-	If @HighestTopLevelFractionCount > 1
-	Begin
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountAvg, '
-		Set @ReplicateAndFractionSql = @ReplicateAndFractionSql + 'QR.TopLevelFractionCountMax, '
-	End
-	
-	-- If highest MDID count is 1, then make sure @ReplicateCountAvgMinimum is at most 1
-	If @HighestMDIDCount <=1 And @ReplicateCountAvgMinimum > 1
-		Set @ReplicateCountAvgMinimum = 1
-	
-	--------------------------------------------------------------
-	-- Populate @Description
-	--------------------------------------------------------------
-	If CharIndex(',', @QuantitationIDList) > 1
-	Begin
-		-- User provided a list of Quantitation ID's
 		
-		Set @Description = 'QIDs '
+		
+		--------------------------------------------------------------
+		-- Construct the sql to return the data
+		--------------------------------------------------------------
+		
+		Set @CurrentLocation = 'Populate @Sql'
+		
+		-- Generate the sql for the ORF columns in T_Quantitation_Results
+		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
+		Set @Sql = @ORFColumnSql
+		
+		Set @Sql = @Sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
+		Set @Sql = @Sql + ' Round(IsNull(T_Proteins.Monoisotopic_Mass, 0) / 1000, 2) AS Mono_Mass_KDa'
+		If @VerboseColumnOutput <> 0
+			Set @Sql = @Sql + ' , QD.Quantitation_ID'
+		Set @Sql = @Sql + ' FROM #TmpQIDSortInfo INNER JOIN '
+		Set @Sql = @Sql +      ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
+		Set @Sql = @Sql +      ' T_Quantitation_Description QD ON QR.Quantitation_ID = QD.Quantitation_ID LEFT OUTER JOIN'
+		Set @Sql = @Sql +      ' T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
+		Set @Sql = @Sql + ' WHERE QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
+		Set @Sql = @Sql + ' ORDER BY #TmpQIDSortInfo.SortKey, QR.Abundance_Average DESC, T_Proteins.Reference'
+		
+		Set @CurrentLocation = 'Execute @Sql'
+		--
+		If @PreviewSql <> 0
+			Print @Sql
+		Else
+			Exec (@Sql)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-		-- Make sure @JobList isn't too long
-		If Len(@QuantitationIDList) > 26 - Len(@Description)
-			Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 24 - Len(@Description)) + '..'
-
-		-- Append @QuantitationIDList to @Description
-		Set @Description = @Description + @QuantitationIDList + ';Pro'
-	End
-	Else
-	Begin
-		-- User provided a single quantitation ID
-		-- Generate a description for this QuantitationID using the job numbers that its
-		-- MDID's correspond plus the text 'Pep' = Peptide
-		Exec QRGenerateDescription @QuantitationID, 'Pro', @Description = @Description OUTPUT
-	End
-	
-	
-	--------------------------------------------------------------
-	-- Construct the sql to return the data
-	--------------------------------------------------------------
-	-- Generate the sql for the ORF columns in T_Quantitation_Results
-	Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
-	Set @sql = @ORFColumnSql
-	
-	Set @sql = @sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
-	Set @sql = @sql + ' Round(IsNull(T_Proteins.Monoisotopic_Mass, 0) / 1000, 2) AS Mono_Mass_KDa'
-	If @VerboseColumnOutput <> 0
-		Set @sql = @sql + ' , QD.Quantitation_ID'
-	Set @sql = @sql + ' FROM #TmpQIDSortInfo INNER JOIN '
-	Set @sql = @sql +      ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
-	Set @sql = @sql +      ' T_Quantitation_Description QD ON QR.Quantitation_ID = QD.Quantitation_ID LEFT OUTER JOIN'
-	Set @sql = @sql +      ' T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
-	Set @sql = @sql + ' WHERE QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
-	Set @sql = @sql + ' ORDER BY #TmpQIDSortInfo.SortKey, QR.Abundance_Average DESC, T_Proteins.Reference'
-	
-	Exec (@sql)
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QRRetrieveProteinsMultiQID')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done
+	End Catch
 
 Done:
 	--

@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE Procedure dbo.QuantitationProcessWork
 /****************************************************	
 **  Desc: Processes a single Quantitation ID entry 
@@ -68,6 +67,8 @@ CREATE Procedure dbo.QuantitationProcessWork
 **			09/06/2006 mem - Added support for Minimum_MT_Peptide_Prophet_Probability
 **			09/07/2006 mem - Refactored to place the code for the various steps in separate SPs
 **			05/25/2007 mem - Added columns Job and Observed_By_MSMS_in_This_Dataset to #UMCMatchResultsByJob
+**			06/05/2007 mem - Switched to Try/Catch error handling
+**			06/06/2007 mem - Added [Rank_Match_Score_Avg] to #UMCMatchResultsByJob and #UMCMatchResultsSummary
 **
 ****************************************************/
 (
@@ -107,477 +108,524 @@ AS
 			@MinimumMTPeptideProphetProbability real,	-- 0 to use all mass tags, > 0 to filter by Peptide_Prophet_Probability
 			@MinimumPMTQualityScore real,				-- 0 to use all mass tags, > 0 to filter by PMT Quality Score (as currently set in T_Mass_Tags)
 			@MinimumPeptideLength tinyint,				-- 0 to use all mass tags, > 0 to filter by peptide length
+			@MaximumMatchesPerUMCToKeep smallint,		-- 0 to use all matches for each UMC, > 0 to only use the top @MaximumMatchesPerUMCToKeep matches to each UMC (favoring the ones with the closest SLiC score first); matches with identical SLiC scores will all be used
 			@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
 			@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score (aka Del SLiC Score); only used if @MinimumMatchScore is > 0
 			@MinimumPeptideReplicateCount tinyint,		-- 0 or 1 to filter out nothing; 2 or higher to filter out peptides not seen in the given number of replicates
 			@ORFCoverageComputationLevel tinyint,		-- 0 for no ORF coverage, 1 for observed ORF coverage, 2 for observed and potential ORF coverage; option 2 is very CPU intensive for large databases
 			@InternalStdInclusionMode tinyint			-- 0 for no NET lockers, 1 for PMT tags and NET Lockers, 2 for NET lockers only
 
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 
- 	-- Note: These defaults get overridden below during the 
- 	--	   Select From T_Quantitation_Description call
- 	Set @RemoveOutlierAbundancesForReplicates = 1
- 	Set @FractionCrossReplicateAvgInRange = 0.8
- 	Set @AddBackExcludedMassTags = 0
- 	Set @FractionHighestAbuToUse = 0
- 	Set @ERMode = 0
- 	Set @MinimumMTHighNormalizedScore = 0
- 	Set @MinimumMTHighDiscriminantScore = 0
- 	Set @MinimumMTPeptideProphetProbability = 0
- 	Set @MinimumPMTQualityScore = 0
-	Set @MinimumPeptideLength = 4
- 	Set @MinimumMatchScore = 0
- 	Set @MinimumDelMatchScore = 0
- 	Set @MinimumPeptideReplicateCount = 0
- 	Set @ORFCoverageComputationLevel = 1
-	Set @InternalStdInclusionMode = 1
-	
-	Declare @PctSmallDataToDiscard tinyint,							-- Percentage, between 0 and 99
-			@PctLargeDataToDiscard tinyint,							-- Percentage, between 0 and 99
-			@MinimumDataPointsForRegressionNormalization smallint	-- Number, 2 or larger
-						
-	Set @PctSmallDataToDiscard = 10
-	Set @PctLargeDataToDiscard = 5
-	Set @MinimumDataPointsForRegressionNormalization = 10		
+	Begin Try
 
-	Declare @MinimumPotentialPMTQualityScore real
-
-	-----------------------------------------------------------
-	-- Step 1
-	--
-	-- Delete existing results for @QuantitationID in T_Quantitation_Results
-	-- Note that deletes will cascade into T_Quantitation_ResultDetails
-	-- via the foreign key relationship on QR_ID
-	-----------------------------------------------------------
-	--
-	DELETE FROM	T_Quantitation_Results
-	WHERE		Quantitation_ID = @QuantitationID
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0 
-	Begin
-		Set @message = 'Error while deleting rows from T_Quantitation_Results and T_Quantitation_ResultDetails with Quantitation_ID = ' + convert(varchar(19), @QuantitationID)
-		Set @myError = 111
-		Goto Done
-	End
-	
-	
-	-----------------------------------------------------------
-	-- Step 2
-	--
-	-- Make sure one or more MD_ID values is present in T_Quantitation_MDIDs
-	-----------------------------------------------------------
-	--
-	SELECT	@ReplicateCountEstimate = Count (Distinct [Replicate])
-	FROM	T_Quantitation_MDIDs
-	WHERE	Quantitation_ID = @QuantitationID
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
-	--
-	If @myError <> 0 
-	Begin
-		Set @message = 'Error while checking for existing MDIDs in T_Quantitation_MDIDs'
-		Set @myError = 112
-		Goto Done
-	End
-	
-	If @ReplicateCountEstimate = 0
-	Begin
-		Set @message = 'Could not find any MDIDs in T_Quantitation_MDIDs matching Quantitation_ID = ' + convert(varchar(19), @QuantitationID)
-		Set @myError = 113
-		Goto Done
-	End
-
-
-	-----------------------------------------------------------
-	-- Step 3
-	--
-	-- Lookup the values for Outlier filtering, @FractionHighestAbuToUse,
-	--  and the Normalization options in table T_Quantitation_Description
-	-----------------------------------------------------------
-	--
-
-	SELECT	@RemoveOutlierAbundancesForReplicates = RemoveOutlierAbundancesForReplicates,
-			@FractionCrossReplicateAvgInRange = FractionCrossReplicateAvgInRange,
-			@AddBackExcludedMassTags = AddBackExcludedMassTags,
-			@FractionHighestAbuToUse = Fraction_Highest_Abu_To_Use,
-			@NormalizeAbundances = Normalize_To_Standard_Abundances,
-			@StandardAbundanceMin = Standard_Abundance_Min,
-			@StandardAbundanceMax = Standard_Abundance_Max,
-			@UMCAbundanceMode = UMC_Abundance_Mode,
-			@ERMode = Expression_Ratio_Mode,
-			@MinimumMTHighNormalizedScore = Minimum_MT_High_Normalized_Score,
-			@MinimumMTHighDiscriminantScore = Minimum_MT_High_Discriminant_Score,
- 			@MinimumMTPeptideProphetProbability = Minimum_MT_Peptide_Prophet_Probability,
-			@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
-			@MinimumPeptideLength = Minimum_Peptide_Length,
-			@MinimumMatchScore = Minimum_Match_Score,
-			@MinimumDelMatchScore = Minimum_Del_Match_Score,
-			@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count,
-			@ORFCoverageComputationLevel = ORF_Coverage_Computation_Level,
-			@PctSmallDataToDiscard = RepNormalization_PctSmallDataToDiscard, 
-			@PctLargeDataToDiscard = RepNormalization_PctLargeDataToDiscard,
-			@MinimumDataPointsForRegressionNormalization = RepNormalization_MinimumDataPointCount,
-			@InternalStdInclusionMode = Internal_Std_Inclusion_Mode
-	FROM	T_Quantitation_Description
-	WHERE	Quantitation_ID = @QuantitationID
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
-	--
-	If @myError <> 0 
-	Begin
-		Set @message = 'Error while looking up parameters for Quantitation_ID = ' + convert(varchar(19), @QuantitationID) + ' in table T_Quantitation_Description'
-		Set @myError = 114
-		Goto Done
-	End
-
-	-- Validate @InternalStdInclusionMode
-	Set @InternalStdInclusionMode = IsNull(@InternalStdInclusionMode, 1)
-	If @InternalStdInclusionMode < 0 Or @InternalStdInclusionMode > 2
+ 		-- Note: These defaults get overridden below during the 
+ 		--	   Select From T_Quantitation_Description call
+ 		Set @RemoveOutlierAbundancesForReplicates = 1
+ 		Set @FractionCrossReplicateAvgInRange = 0.8
+ 		Set @AddBackExcludedMassTags = 0
+ 		Set @FractionHighestAbuToUse = 0
+ 		Set @ERMode = 0
+ 		Set @MinimumMTHighNormalizedScore = 0
+ 		Set @MinimumMTHighDiscriminantScore = 0
+ 		Set @MinimumMTPeptideProphetProbability = 0
+ 		Set @MinimumPMTQualityScore = 0
+		Set @MinimumPeptideLength = 4
+		Set @MaximumMatchesPerUMCToKeep = 0
+ 		Set @MinimumMatchScore = 0
+ 		Set @MinimumDelMatchScore = 0
+ 		Set @MinimumPeptideReplicateCount = 0
+ 		Set @ORFCoverageComputationLevel = 1
 		Set @InternalStdInclusionMode = 1
-
-
-	-----------------------------------------------------------
-	-- Step 3b
-	--
-	-- Create the temporary tables required by the various sub-procedures
-	-----------------------------------------------------------
-	
-	if exists (select * from dbo.sysobjects where id = object_id(N'[#UMCMatchResultsByJob]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-	drop table [#UMCMatchResultsByJob]
 		
-	CREATE TABLE #UMCMatchResultsByJob (
-		[UniqueID] int IDENTITY (1, 1) NOT NULL ,
-		[Job] int NOT NULL ,
-		[TopLevelFraction] smallint NOT NULL ,
-		[Fraction] smallint NOT NULL ,
-		[Replicate] smallint NOT NULL ,
-		[InternalStdMatch] tinyint NOT NULL ,
-		[Mass_Tag_ID] int NOT NULL ,
-		[Observed_By_MSMS_in_This_Dataset] tinyint NOT NULL ,
-		[High_Normalized_Score] real NOT NULL ,
-		[High_Discriminant_Score] real NOT NULL ,
-		[High_Peptide_Prophet_Probability] real NOT NULL ,
-		[PMT_Quality_Score] real NOT NULL ,
-		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
-		[MTAbundance] float NOT NULL ,
-		[MTAbundanceLightPlusHeavy] float NOT NULL ,
-		[Member_Count_Used_For_Abu] int NOT NULL ,
-		[UMCMatchCount] int NULL ,
-		[UMCIonCountTotal] int NULL ,
-		[UMCIonCountMatch] int NULL ,
-		[UMCIonCountMatchInUMCsWithSingleHit] int NULL ,
-		[FractionScansMatchingSingleMT] real NULL ,
-		[UMCMultipleMTHitCountAvg] real NULL ,
-		[UMCMultipleMTHitCountStDev] float NULL ,
-		[UMCMultipleMTHitCountMin] int NULL ,
-		[UMCMultipleMTHitCountMax] int NULL ,
-		[AverageAbundanceAcrossReps] float NULL ,
-		[MedianAbundanceAcrossReps] float NULL ,
-		[Match_Score_Avg] float NULL ,
-		[Del_Match_Score_Avg] float NULL ,
-		[NET_Error_Obs_Avg] float NULL ,
-		[NET_Error_Pred_Avg] float null ,
-		[ER_WeightedAvg] float NULL ,
-		[ER_StDev] float NULL ,
-		[ER_Charge_State_Basis_Count_Avg] real NOT NULL ,
-		[MTAbundanceLight] float NOT NULL ,
-		[MTAbundanceHeavy] float NOT NULL ,
-		[ER_Recomputed] float NOT NULL ,
-		[ER_ToUse] float NOT NULL ,
-		[ScanMinimum] int NOT NULL ,
-		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] real NOT NULL ,
-		[NET_Maximum] real NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-		[Charge_State_Min] tinyint NOT NULL ,
-		[Charge_State_Max] tinyint NOT NULL ,
-		[MassErrorPPMAvg] float NOT NULL ,
-		[UseValue] tinyint NOT NULL 
-	) ON [PRIMARY]
+		Declare @PctSmallDataToDiscard tinyint,							-- Percentage, between 0 and 99
+				@PctLargeDataToDiscard tinyint,							-- Percentage, between 0 and 99
+				@MinimumDataPointsForRegressionNormalization smallint	-- Number, 2 or larger
+							
+		Set @PctSmallDataToDiscard = 10
+		Set @PctLargeDataToDiscard = 5
+		Set @MinimumDataPointsForRegressionNormalization = 10		
 
-	-- This used to be a Unique Primary Key (PK__UMCMatchResultsByJob) but that can lead to name collisions if this
-	-- stored procedure is called more than once simultaneously; thus, we've switched to a Unique Clustered Index
-	CREATE UNIQUE CLUSTERED INDEX #IX__TempTable__UMCMatchResultsByJob_UniqueID ON #UMCMatchResultsByJob([UniqueID]) ON [PRIMARY]
+		Declare @MinimumPotentialPMTQualityScore real
 
-
-	if exists (select * from dbo.sysobjects where id = object_id(N'[#UMCMatchResultsSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-	drop table [#UMCMatchResultsSummary]
-
-	CREATE TABLE #UMCMatchResultsSummary (
-		[Ref_ID] int NOT NULL ,
-		[InternalStdMatch] tinyint NOT NULL ,
-		[Mass_Tag_ID] int NOT NULL ,
-		[Mass_Tag_Mods] [varchar](50) NOT NULL ,
-		[JobCount_Observed_Both_MS_and_MSMS] int NULL ,
-		[Protein_Count] int NOT NULL ,
-		[PMT_Quality_Score] real NOT NULL ,
-		[Cleavage_State] tinyint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
-		[Fragment_Span] smallint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
-		[MTAbundanceAvg] float NULL ,						-- Sum of MT Abundance values across fractions
-		[MTAbundanceStDev] float NULL ,					-- Standard deviation for a sum of numbers = Sqrt(Sum(StDevs^2))
-		[MTAbundanceLightPlusHeavyAvg] float NULL ,
-		[Member_Count_Used_For_Abu_Avg] float NOT NULL ,
-		[Match_Score_Avg] float NULL ,
-		[Del_Match_Score_Avg] float NULL ,
-		[NET_Error_Obs_Avg] float NULL ,
-		[NET_Error_Pred_Avg] float null ,
-		[ERAvg] float NULL ,
-		[ER_StDev] float NULL ,
-		[ER_Charge_State_Basis_Count_Avg] float NULL ,
-		[ScanMinimum] int NOT NULL ,
-		[ScanMaximum] int NOT NULL ,
-		[NET_Minimum] real NOT NULL ,
-		[NET_Maximum] real NOT NULL ,
-		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-		[Charge_State_Min] tinyint NOT NULL ,
-		[Charge_State_Max] tinyint NOT NULL ,
-		[MassErrorPPMAvg] float NOT NULL ,
-		[UMCMatchCountAvg] real NULL ,
-		[UMCMatchCountStDev] real NULL ,
-		[UMCIonCountTotalAvg] real NULL ,
-		[UMCIonCountMatchAvg] real NULL ,
-		[UMCIonCountMatchInUMCsWithSingleHitAvg] real NULL ,
-		[FractionScansMatchingSingleMTAvg] real NULL ,
-		[FractionScansMatchingSingleMTStDev] real NULL ,
-		[UMCMultipleMTHitCountAvg] real NULL ,
-		[UMCMultipleMTHitCountStDev] float NULL ,
-		[UMCMultipleMTHitCountMin] int NULL ,
-		[UMCMultipleMTHitCountMax] int NULL ,
-		[ReplicateCountAvg] real NULL ,
-		[ReplicateCountMin] smallint NULL ,
-		[ReplicateCountMax] smallint NULL ,
-		[FractionCountAvg] real NULL ,
-		[FractionMin] smallint NULL ,
-		[FractionMax] smallint NULL ,
-		[TopLevelFractionCount] smallint NULL ,
-		[TopLevelFractionMin] smallint NULL ,
-		[TopLevelFractionMax] smallint NULL ,
-		[MaxClassAbundanceThisRef] float NULL ,
-		[Used_For_Abundance_Computation] tinyint NULL
-	) ON [PRIMARY]
-
-	CREATE  CLUSTERED  INDEX #IX__TempTable__UMCMatchResultsSummary_Ref_ID ON #UMCMatchResultsSummary([Ref_ID]) ON [PRIMARY]
-	CREATE  INDEX #IX__TempTable__UMCMatchResultsSummary_Mass_Tag_ID ON #UMCMatchResultsSummary([Mass_Tag_ID]) ON [PRIMARY]
-
-
-	if exists (select * from dbo.sysobjects where id = object_id(N'[#ProteinAbundanceSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-	drop table [#ProteinAbundanceSummary]
-
-	CREATE TABLE #ProteinAbundanceSummary (
-		[Ref_ID] int NOT NULL ,
-		[ReplicateCountAvg] real NULL ,
-		[ReplicateCountStDev] real NULL ,
-		[ReplicateCountMax] smallint NULL ,
-		[FractionCountAvg] real NULL ,
-		[FractionCountMax] smallint NULL ,
-		[TopLevelFractionCountAvg] real NULL ,
-		[TopLevelFractionCountMax] smallint NULL ,
-		[ObservedMassTagCount] int NULL ,
-		[ObservedInternalStdCount] int NULL ,
-		[Mass_Error_PPM_Avg] float NULL ,
-		[Protein_Count_Avg] real NULL ,
-		[Full_Enzyme_Count] int NULL ,
-		[Full_Enzyme_No_Missed_Cleavage_Count] int NULL ,
-		[Partial_Enzyme_Count] int NULL ,
-		[MassTagCountUsedForAbundanceAvg] int NULL ,
-		[MassTagMatchingIonCount] int NULL ,
-		[MassTagMatchingIonCountInUMCsWithSingleHitCount] int NULL ,
-		[FractionScansMatchingSingleMassTag] real NULL ,
-		[MT_Count_Unique_Observed_Both_MS_and_MSMS] int NULL ,
-		[UMCMultipleMTHitCountAvg] real NULL ,
-		[UMCMultipleMTHitCountStDev] float NULL ,
-		[UMCMultipleMTHitCountMin] int NULL ,
-		[UMCMultipleMTHitCountMax] int NULL ,
-		[Abundance_Average] float NULL ,
-		[Abundance_Minimum] float NULL ,
-		[Abundance_Maximum] float NULL ,
-		[Abundance_StDev] float NULL ,
-		[Match_Score_Avg] float NULL ,
-		[ER_Average] float NULL ,
-		[ER_Minimum] float NULL ,
-		[ER_Maximum] float NULL ,
-		[ER_StDev] float NULL ,
-		[Protein_Coverage_Residue_Count] int NULL ,
-		[Protein_Coverage_Fraction] real NULL ,
-		[Protein_Coverage_Fraction_High_Abundance] real NULL ,
-		[Potential_Protein_Coverage_Residue_Count] int NULL ,
-		[Potential_Protein_Coverage_Fraction] real NULL ,
-		[Potential_Full_Enzyme_Count] int NULL ,
-		[Potential_Partial_Enzyme_Count] int NULL
-	) ON [PRIMARY]
-
-	--
-	-- Add an index on the Ref_ID column
-	--
-	CREATE CLUSTERED INDEX #IX__TempTable__ProteinAbundanceSummary ON #ProteinAbundanceSummary ([Ref_ID])
-
-
-	-----------------------------------------------------------
-	-- Step 4
-	--
-	-- Determine the number of UMCs that have one or more matches that pass the various filters
-	-- This value is reported as an overall quality statistic
-	-- This value does not account for any outlier filtering that may occur later on in this procedure
-	-----------------------------------------------------------
-
-	exec @myError = QuantitationProcessWorkStepA 
-						@QuantitationID, @InternalStdInclusionMode, 
-						@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
- 						@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
-						@MinimumPeptideLength, @MinimumMatchScore, @MinimumDelMatchScore,
-						@message output
-	If @myError <> 0
-		Goto Done
-
-	-----------------------------------------------------------
-	-- Step 5
-	--
-	-- In order to speed up the following queries, it is advantageous to copy the 
-	-- UMC match results for the corresponding MD_ID's to a temporary table
-	--
-	-- When creating the table, we combine the data from T_FTICR_UMC_Results
-	--  and T_FTICR_UMC_ResultDetails
-	--
-	-----------------------------------------------------------
-	
-	exec @myError = QuantitationProcessWorkStepB 
-						@QuantitationID,
-						@InternalStdInclusionMode,
-						@UMCAbundanceMode, @ERMode,
-						@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
-						@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
-						@MinimumPeptideLength, @MinimumMatchScore, @MinimumDelMatchScore,
-						@message output
-	If @myError <> 0
-		Goto Done
-	
-	-----------------------------------------------------------
-	-- Step 6
-	--
-	-- Normalize the abundances if requested
-	-- We first use StandardAbundanceMax and StandardAbundanceMin to scale all of the data
-	-- Then, for each fraction that has replicates, we normalize each of the replicates to the first replicate
-	--
-	-----------------------------------------------------------
-	--
-	exec @myError = QuantitationProcessWorkStepC
-						@QuantitationID,
-						@NormalizeAbundances, @NormalizeReplicateAbu,
-						@StandardAbundanceMin, @StandardAbundanceMax, @StandardAbundanceRange,
-						@PctSmallDataToDiscard,	@PctLargeDataToDiscard,
-						@MinimumDataPointsForRegressionNormalization,
-						@message output
-	If @myError <> 0
-		Goto Done
-
-
-	-----------------------------------------------------------
-	-- Step 6.5
-	--
-	-- Possibly remove peptides that aren't present in the minimum number of replicates
-	-- 
-	If @MinimumPeptideReplicateCount > 0
-	 Begin
-		DELETE #UMCMatchResultsByJob
-		FROM #UMCMatchResultsByJob AS M INNER JOIN
-			(SELECT TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
-			 FROM #UMCMatchResultsByJob
-			 GROUP BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
-			 HAVING Count([Replicate]) < @MinimumPeptideReplicateCount
-			 ) AS N ON	M.TopLevelFraction = N.TopLevelFraction AND
-						M.Fraction = N.Fraction AND
-						M.InternalStdMatch = N.InternalStdMatch AND
-						M.Mass_Tag_ID = N.Mass_Tag_ID AND
-						M.Mass_Tag_Mods = N.Mass_Tag_Mods
-			
+		Declare @QuantitationIDText varchar(19)
+		Set @QuantitationIDText = Convert(varchar(19), @QuantitationID)
+		
+		-----------------------------------------------------------
+		-- Step 1
+		--
+		-- Delete existing results for @QuantitationID in T_Quantitation_Results
+		-- Note that deletes will cascade into T_Quantitation_ResultDetails
+		-- via the foreign key relationship on QR_ID
+		-----------------------------------------------------------
+		--
+		Set @CurrentLocation = 'Delete existing results for QID ' + @QuantitationIDText
+		--
+		DELETE FROM	T_Quantitation_Results
+		WHERE		Quantitation_ID = @QuantitationID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0 
+		Begin
+			Set @message = 'Error while deleting rows from T_Quantitation_Results and T_Quantitation_ResultDetails with Quantitation_ID = ' + @QuantitationIDText
+			Set @myError = 111
+			Goto Done
+		End
+		
+		
+		-----------------------------------------------------------
+		-- Step 2
+		--
+		-- Make sure one or more MD_ID values is present in T_Quantitation_MDIDs
+		-----------------------------------------------------------
+		--
+		Set @CurrentLocation = 'Look for MDIDs for ' + @QuantitationIDText
+		--
+		SELECT	@ReplicateCountEstimate = Count (Distinct [Replicate])
+		FROM	T_Quantitation_MDIDs
+		WHERE	Quantitation_ID = @QuantitationID
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 		--
-	 End
+		If @myError <> 0 
+		Begin
+			Set @message = 'Error while checking for existing MDIDs in T_Quantitation_MDIDs'
+			Set @myError = 112
+			Goto Done
+		End
+		
+		If @ReplicateCountEstimate = 0
+		Begin
+			Set @message = 'Could not find any MDIDs in T_Quantitation_MDIDs matching Quantitation_ID = ' + @QuantitationIDText
+			Set @myError = 113
+			Goto Done
+		End
 
 
-	-----------------------------------------------------------
-	-- Step 7
-	--
-	-- Optionally, filter out the outliers
-	-- This can only be done with replicate data
-	-----------------------------------------------------------
+		-----------------------------------------------------------
+		-- Step 3
+		--
+		-- Lookup the values for Outlier filtering, @FractionHighestAbuToUse,
+		--  and the Normalization options in table T_Quantitation_Description
+		-----------------------------------------------------------
+		--
+		Set @CurrentLocation = 'Lookup the option values'
+		--
+		SELECT	@RemoveOutlierAbundancesForReplicates = RemoveOutlierAbundancesForReplicates,
+				@FractionCrossReplicateAvgInRange = FractionCrossReplicateAvgInRange,
+				@AddBackExcludedMassTags = AddBackExcludedMassTags,
+				@FractionHighestAbuToUse = Fraction_Highest_Abu_To_Use,
+				@NormalizeAbundances = Normalize_To_Standard_Abundances,
+				@StandardAbundanceMin = Standard_Abundance_Min,
+				@StandardAbundanceMax = Standard_Abundance_Max,
+				@UMCAbundanceMode = UMC_Abundance_Mode,
+				@ERMode = Expression_Ratio_Mode,
+				@MinimumMTHighNormalizedScore = Minimum_MT_High_Normalized_Score,
+				@MinimumMTHighDiscriminantScore = Minimum_MT_High_Discriminant_Score,
+ 				@MinimumMTPeptideProphetProbability = Minimum_MT_Peptide_Prophet_Probability,
+				@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
+				@MinimumPeptideLength = Minimum_Peptide_Length,
+				@MaximumMatchesPerUMCToKeep = Maximum_Matches_per_UMC_to_Keep,
+				@MinimumMatchScore = Minimum_Match_Score,
+				@MinimumDelMatchScore = Minimum_Del_Match_Score,
+				@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count,
+				@ORFCoverageComputationLevel = ORF_Coverage_Computation_Level,
+				@PctSmallDataToDiscard = RepNormalization_PctSmallDataToDiscard, 
+				@PctLargeDataToDiscard = RepNormalization_PctLargeDataToDiscard,
+				@MinimumDataPointsForRegressionNormalization = RepNormalization_MinimumDataPointCount,
+				@InternalStdInclusionMode = Internal_Std_Inclusion_Mode
+		FROM	T_Quantitation_Description
+		WHERE	Quantitation_ID = @QuantitationID
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+		--
+		If @myError <> 0 
+		Begin
+			Set @message = 'Error while looking up parameters for Quantitation_ID = ' + @QuantitationIDText + ' in table T_Quantitation_Description'
+			Set @myError = 114
+			Goto Done
+		End
 
-	exec @myError = QuantitationProcessWorkStepD 
-						@QuantitationID,
-						@RemoveOutlierAbundancesForReplicates,
-						@FractionCrossReplicateAvgInRange,
-						@AddBackExcludedMassTags,
-						@message output
-
-	If @myError <> 0
-		Goto Done
+		-- Validate @InternalStdInclusionMode
+		Set @InternalStdInclusionMode = IsNull(@InternalStdInclusionMode, 1)
+		If @InternalStdInclusionMode < 0 Or @InternalStdInclusionMode > 2
+			Set @InternalStdInclusionMode = 1
 
 
-	-----------------------------------------------------------
-	-- Step 9
-	--
-	-- Compute the average abundance for each mass tag (aka peptide)
-	-----------------------------------------------------------
-	
-	exec @myError = QuantitationProcessWorkStepE
-						@QuantitationID, @InternalStdInclusionMode, 
-						@message output
-	If @myError <> 0
-		Goto Done
-	
-	
-	-----------------------------------------------------------
-	-- Step 12
-	--
-	-- Compute the Protein Abundances and other stats for each Protein
-	-- We do this using several SQL Update and Insert Into statements
-	-----------------------------------------------------------
+		-----------------------------------------------------------
+		-- Step 3b
+		--
+		-- Create the temporary tables required by the various sub-procedures
+		-----------------------------------------------------------
+		
+		Set @CurrentLocation = 'Create the temporary tables'
+		
+		if exists (select * from dbo.sysobjects where id = object_id(N'[#UMCMatchResultsByJob]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [#UMCMatchResultsByJob]
+			
+		CREATE TABLE #UMCMatchResultsByJob (
+			[UniqueID] int IDENTITY (1, 1) NOT NULL ,
+			[Job] int NOT NULL ,
+			[TopLevelFraction] smallint NOT NULL ,
+			[Fraction] smallint NOT NULL ,
+			[Replicate] smallint NOT NULL ,
+			[InternalStdMatch] tinyint NOT NULL ,
+			[Mass_Tag_ID] int NOT NULL ,
+			[Observed_By_MSMS_in_This_Dataset] tinyint NOT NULL ,
+			[High_Normalized_Score] real NOT NULL ,
+			[High_Discriminant_Score] real NOT NULL ,
+			[High_Peptide_Prophet_Probability] real NOT NULL ,
+			[PMT_Quality_Score] real NOT NULL ,
+			[Mass_Tag_Mods] [varchar](50) NOT NULL ,
+			[MTAbundance] float NOT NULL ,
+			[MTAbundanceLightPlusHeavy] float NOT NULL ,
+			[Member_Count_Used_For_Abu] int NOT NULL ,
+			[UMCMatchCount] int NULL ,
+			[UMCIonCountTotal] int NULL ,
+			[UMCIonCountMatch] int NULL ,
+			[UMCIonCountMatchInUMCsWithSingleHit] int NULL ,
+			[FractionScansMatchingSingleMT] real NULL ,
+			[UMCMultipleMTHitCountAvg] real NULL ,
+			[UMCMultipleMTHitCountStDev] float NULL ,
+			[UMCMultipleMTHitCountMin] int NULL ,
+			[UMCMultipleMTHitCountMax] int NULL ,
+			[AverageAbundanceAcrossReps] float NULL ,
+			[MedianAbundanceAcrossReps] float NULL ,
+			[Rank_Match_Score_Avg] float NULL ,
+			[Match_Score_Avg] float NULL ,
+			[Del_Match_Score_Avg] float NULL ,
+			[NET_Error_Obs_Avg] float NULL ,
+			[NET_Error_Pred_Avg] float null ,
+			[ER_WeightedAvg] float NULL ,
+			[ER_StDev] float NULL ,
+			[ER_Charge_State_Basis_Count_Avg] real NOT NULL ,
+			[MTAbundanceLight] float NOT NULL ,
+			[MTAbundanceHeavy] float NOT NULL ,
+			[ER_Recomputed] float NOT NULL ,
+			[ER_ToUse] float NOT NULL ,
+			[ScanMinimum] int NOT NULL ,
+			[ScanMaximum] int NOT NULL ,
+			[NET_Minimum] real NOT NULL ,
+			[NET_Maximum] real NOT NULL ,
+			[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
+			[Charge_State_Min] tinyint NOT NULL ,
+			[Charge_State_Max] tinyint NOT NULL ,
+			[MassErrorPPMAvg] float NOT NULL ,
+			[UseValue] tinyint NOT NULL 
+		) ON [PRIMARY]
 
-	exec @myError = QuantitationProcessWorkStepF
-						@QuantitationID,
-						@FractionHighestAbuToUse,				-- Fraction of highest abundance mass tag for given ORF to use when computing ORF abundance (0.0 to 1.0)
-						@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
- 						@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
- 						@MinimumPotentialPMTQualityScore output,
-						@message output
-	If @myError <> 0
-		Goto Done
+		-- This used to be a Unique Primary Key (PK__UMCMatchResultsByJob) but that can lead to name collisions if this
+		-- stored procedure is called more than once simultaneously; thus, we've switched to a Unique Clustered Index
+		CREATE UNIQUE CLUSTERED INDEX #IX__TempTable__UMCMatchResultsByJob_UniqueID ON #UMCMatchResultsByJob([UniqueID]) ON [PRIMARY]
 
-	-----------------------------------------------------------
-	-- Step 13
-	--
-	-- Compute Protein Coverage
-	-----------------------------------------------------------
 
-	If @ORFCoverageComputationLevel > 0
-	Begin
-		exec @myError = QuantitationProcessWorkStepG @MinimumPotentialPMTQualityScore, @message output
+		if exists (select * from dbo.sysobjects where id = object_id(N'[#UMCMatchResultsSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [#UMCMatchResultsSummary]
+
+		CREATE TABLE #UMCMatchResultsSummary (
+			[Ref_ID] int NOT NULL ,
+			[InternalStdMatch] tinyint NOT NULL ,
+			[Mass_Tag_ID] int NOT NULL ,
+			[Mass_Tag_Mods] [varchar](50) NOT NULL ,
+			[JobCount_Observed_Both_MS_and_MSMS] int NULL ,
+			[Protein_Count] int NOT NULL ,
+			[PMT_Quality_Score] real NOT NULL ,
+			[Cleavage_State] tinyint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
+			[Fragment_Span] smallint NULL ,					-- This needs to be NULL in case a mass tag hasn't yet been processed by NamePeptides
+			[MTAbundanceAvg] float NULL ,						-- Sum of MT Abundance values across fractions
+			[MTAbundanceStDev] float NULL ,					-- Standard deviation for a sum of numbers = Sqrt(Sum(StDevs^2))
+			[MTAbundanceLightPlusHeavyAvg] float NULL ,
+			[Member_Count_Used_For_Abu_Avg] float NOT NULL ,
+			[Rank_Match_Score_Avg] float NULL ,
+			[Match_Score_Avg] float NULL ,
+			[Del_Match_Score_Avg] float NULL ,
+			[NET_Error_Obs_Avg] float NULL ,
+			[NET_Error_Pred_Avg] float null ,
+			[ERAvg] float NULL ,
+			[ER_StDev] float NULL ,
+			[ER_Charge_State_Basis_Count_Avg] float NULL ,
+			[ScanMinimum] int NOT NULL ,
+			[ScanMaximum] int NOT NULL ,
+			[NET_Minimum] real NOT NULL ,
+			[NET_Maximum] real NOT NULL ,
+			[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
+			[Charge_State_Min] tinyint NOT NULL ,
+			[Charge_State_Max] tinyint NOT NULL ,
+			[MassErrorPPMAvg] float NOT NULL ,
+			[UMCMatchCountAvg] real NULL ,
+			[UMCMatchCountStDev] real NULL ,
+			[UMCIonCountTotalAvg] real NULL ,
+			[UMCIonCountMatchAvg] real NULL ,
+			[UMCIonCountMatchInUMCsWithSingleHitAvg] real NULL ,
+			[FractionScansMatchingSingleMTAvg] real NULL ,
+			[FractionScansMatchingSingleMTStDev] real NULL ,
+			[UMCMultipleMTHitCountAvg] real NULL ,
+			[UMCMultipleMTHitCountStDev] float NULL ,
+			[UMCMultipleMTHitCountMin] int NULL ,
+			[UMCMultipleMTHitCountMax] int NULL ,
+			[ReplicateCountAvg] real NULL ,
+			[ReplicateCountMin] smallint NULL ,
+			[ReplicateCountMax] smallint NULL ,
+			[FractionCountAvg] real NULL ,
+			[FractionMin] smallint NULL ,
+			[FractionMax] smallint NULL ,
+			[TopLevelFractionCount] smallint NULL ,
+			[TopLevelFractionMin] smallint NULL ,
+			[TopLevelFractionMax] smallint NULL ,
+			[MaxClassAbundanceThisRef] float NULL ,
+			[Used_For_Abundance_Computation] tinyint NULL
+		) ON [PRIMARY]
+
+		CREATE  CLUSTERED  INDEX #IX__TempTable__UMCMatchResultsSummary_Ref_ID ON #UMCMatchResultsSummary([Ref_ID]) ON [PRIMARY]
+		CREATE  INDEX #IX__TempTable__UMCMatchResultsSummary_Mass_Tag_ID ON #UMCMatchResultsSummary([Mass_Tag_ID]) ON [PRIMARY]
+
+
+		if exists (select * from dbo.sysobjects where id = object_id(N'[#ProteinAbundanceSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [#ProteinAbundanceSummary]
+
+		CREATE TABLE #ProteinAbundanceSummary (
+			[Ref_ID] int NOT NULL ,
+			[ReplicateCountAvg] real NULL ,
+			[ReplicateCountStDev] real NULL ,
+			[ReplicateCountMax] smallint NULL ,
+			[FractionCountAvg] real NULL ,
+			[FractionCountMax] smallint NULL ,
+			[TopLevelFractionCountAvg] real NULL ,
+			[TopLevelFractionCountMax] smallint NULL ,
+			[ObservedMassTagCount] int NULL ,
+			[ObservedInternalStdCount] int NULL ,
+			[Mass_Error_PPM_Avg] float NULL ,
+			[Protein_Count_Avg] real NULL ,
+			[Full_Enzyme_Count] int NULL ,
+			[Full_Enzyme_No_Missed_Cleavage_Count] int NULL ,
+			[Partial_Enzyme_Count] int NULL ,
+			[MassTagCountUsedForAbundanceAvg] int NULL ,
+			[MassTagMatchingIonCount] int NULL ,
+			[MassTagMatchingIonCountInUMCsWithSingleHitCount] int NULL ,
+			[FractionScansMatchingSingleMassTag] real NULL ,
+			[MT_Count_Unique_Observed_Both_MS_and_MSMS] int NULL ,
+			[UMCMultipleMTHitCountAvg] real NULL ,
+			[UMCMultipleMTHitCountStDev] float NULL ,
+			[UMCMultipleMTHitCountMin] int NULL ,
+			[UMCMultipleMTHitCountMax] int NULL ,
+			[Abundance_Average] float NULL ,
+			[Abundance_Minimum] float NULL ,
+			[Abundance_Maximum] float NULL ,
+			[Abundance_StDev] float NULL ,
+			[Rank_Match_Score_Avg] float NULL ,
+			[Match_Score_Avg] float NULL ,
+			[ER_Average] float NULL ,
+			[ER_Minimum] float NULL ,
+			[ER_Maximum] float NULL ,
+			[ER_StDev] float NULL ,
+			[Protein_Coverage_Residue_Count] int NULL ,
+			[Protein_Coverage_Fraction] real NULL ,
+			[Protein_Coverage_Fraction_High_Abundance] real NULL ,
+			[Potential_Protein_Coverage_Residue_Count] int NULL ,
+			[Potential_Protein_Coverage_Fraction] real NULL ,
+			[Potential_Full_Enzyme_Count] int NULL ,
+			[Potential_Partial_Enzyme_Count] int NULL
+		) ON [PRIMARY]
+
+		--
+		-- Add an index on the Ref_ID column
+		--
+		CREATE CLUSTERED INDEX #IX__TempTable__ProteinAbundanceSummary ON #ProteinAbundanceSummary ([Ref_ID])
+
+
+		-----------------------------------------------------------
+		-- Step 4
+		--
+		-- Determine the number of UMCs that have one or more matches that pass the various filters
+		-- This value is reported as an overall quality statistic
+		-- This value does not account for any outlier filtering that may occur later on in this procedure
+		-----------------------------------------------------------
+
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepA for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepA 
+							@QuantitationID, @InternalStdInclusionMode, 
+							@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
+ 							@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
+							@MinimumPeptideLength, @MinimumMatchScore, @MinimumDelMatchScore,
+							@message output
 		If @myError <> 0
 			Goto Done
-	End
 
-	-----------------------------------------------------------
-	-- Step 14
-	--
-	-- Append the Protein abundance results to T_Quantitation_Results
-	-- and the list of mass tags observed to T_Quantitation_ResultDetails
-	-----------------------------------------------------------
+		-----------------------------------------------------------
+		-- Step 5
+		--
+		-- In order to speed up the following queries, it is advantageous to copy the 
+		-- UMC match results for the corresponding MD_ID's to a temporary table
+		--
+		-- When creating the table, we combine the data from T_FTICR_UMC_Results
+		--  and T_FTICR_UMC_ResultDetails
+		--
+		-----------------------------------------------------------
+		
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepB for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepB 
+							@QuantitationID,
+							@InternalStdInclusionMode,
+							@UMCAbundanceMode, @ERMode,
+							@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
+							@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
+							@MinimumPeptideLength, @MaximumMatchesPerUMCToKeep,
+							@MinimumMatchScore, @MinimumDelMatchScore,
+							@message output
+		If @myError <> 0
+			Goto Done
+		
+		-----------------------------------------------------------
+		-- Step 6
+		--
+		-- Normalize the abundances if requested
+		-- We first use StandardAbundanceMax and StandardAbundanceMin to scale all of the data
+		-- Then, for each fraction that has replicates, we normalize each of the replicates to the first replicate
+		--
+		-----------------------------------------------------------
 
-	exec @myError = QuantitationProcessWorkStepH @QuantitationID, @message output
-	If @myError <> 0
-		Goto Done
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepc for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepC
+							@QuantitationID,
+							@NormalizeAbundances, @NormalizeReplicateAbu,
+							@StandardAbundanceMin, @StandardAbundanceMax, @StandardAbundanceRange,
+							@PctSmallDataToDiscard,	@PctLargeDataToDiscard,
+							@MinimumDataPointsForRegressionNormalization,
+							@message output
+		If @myError <> 0
+			Goto Done
 
-	-- Uncomment the following to display the status message returned by QuantitationProcessWorkStepH
-	--
-	--Print @message
-	--Select @message
+
+		-----------------------------------------------------------
+		-- Step 6.5
+		--
+		-- Possibly remove peptides that aren't present in the minimum number of replicates
+		-- 
+		If @MinimumPeptideReplicateCount > 0
+		Begin
+			DELETE #UMCMatchResultsByJob
+			FROM #UMCMatchResultsByJob AS M INNER JOIN
+				(SELECT TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
+				FROM #UMCMatchResultsByJob
+				GROUP BY TopLevelFraction, Fraction, InternalStdMatch, Mass_Tag_ID, Mass_Tag_Mods
+				HAVING Count([Replicate]) < @MinimumPeptideReplicateCount
+				) AS N ON	M.TopLevelFraction = N.TopLevelFraction AND
+							M.Fraction = N.Fraction AND
+							M.InternalStdMatch = N.InternalStdMatch AND
+							M.Mass_Tag_ID = N.Mass_Tag_ID AND
+							M.Mass_Tag_Mods = N.Mass_Tag_Mods
+				
+			--
+			SELECT @myError = @@error, @myRowCount = @@RowCount
+			--
+		End
+
+
+		-----------------------------------------------------------
+		-- Step 7
+		--
+		-- Optionally, filter out the outliers
+		-- This can only be done with replicate data
+		-----------------------------------------------------------
+
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepD for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepD 
+							@QuantitationID,
+							@RemoveOutlierAbundancesForReplicates,
+							@FractionCrossReplicateAvgInRange,
+							@AddBackExcludedMassTags,
+							@message output
+
+		If @myError <> 0
+			Goto Done
+
+
+		-----------------------------------------------------------
+		-- Step 9
+		--
+		-- Compute the average abundance for each mass tag (aka peptide)
+		-----------------------------------------------------------
+		
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepE for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepE
+							@QuantitationID, @InternalStdInclusionMode, 
+							@message output
+		If @myError <> 0
+			Goto Done
+		
+		
+		-----------------------------------------------------------
+		-- Step 12
+		--
+		-- Compute the Protein Abundances and other stats for each Protein
+		-- We do this using several SQL Update and Insert Into statements
+		-----------------------------------------------------------
+
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepF for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepF
+							@QuantitationID,
+							@FractionHighestAbuToUse,				-- Fraction of highest abundance mass tag for given ORF to use when computing ORF abundance (0.0 to 1.0)
+							@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
+ 							@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
+ 							@MinimumPotentialPMTQualityScore output,
+							@message output
+		If @myError <> 0
+			Goto Done
+
+		-----------------------------------------------------------
+		-- Step 13
+		--
+		-- Compute Protein Coverage
+		-----------------------------------------------------------
+
+		If @ORFCoverageComputationLevel > 0
+		Begin
+			Set @CurrentLocation = 'Call QuantitationProcessWorkStepG for ' + @QuantitationIDText
+			--
+			exec @myError = QuantitationProcessWorkStepG @MinimumPotentialPMTQualityScore, @message output
+			If @myError <> 0
+				Goto Done
+		End
+
+		-----------------------------------------------------------
+		-- Step 14
+		--
+		-- Append the Protein abundance results to T_Quantitation_Results
+		-- and the list of mass tags observed to T_Quantitation_ResultDetails
+		-----------------------------------------------------------
+
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepH for ' + @QuantitationIDText
+		--
+		exec @myError = QuantitationProcessWorkStepH @QuantitationID, @message output
+		If @myError <> 0
+			Goto Done
+
+		-- Uncomment the following to display the status message returned by QuantitationProcessWorkStepH
+		--
+		--Print @message
+		--Select @message
+
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QuantitationProcessWork')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList = '',
+								@ErrorNum = @myError output, @message = @message output
+		Goto DoneSkipLog
+	End Catch
 
 Done:
 	-----------------------------------------------------------
-	-- Done processing; 
+	-- Done processing
 	-----------------------------------------------------------
 		
 	If @myError <> 0 
@@ -589,7 +637,9 @@ Done:
 			Execute PostLogEntry 'Error', @message, 'QuantitationProcessing'
 			Print @message
 		End
-			
+		
+DoneSkipLog:			
+
 	Return @myError
 
 

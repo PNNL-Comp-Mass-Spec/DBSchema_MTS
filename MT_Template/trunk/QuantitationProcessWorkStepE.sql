@@ -13,6 +13,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepE
 **  Auth:	mem
 **	Date:	09/07/2006
 **			05/25/2007 mem - Now populating column JobCount_Observed_Both_MS_and_MSMS
+**			06/06/2007 mem - Now populating column Rank_Match_Score_Avg
 **
 ****************************************************/
 (
@@ -78,6 +79,7 @@ AS
 		[MTAbundanceStDev] float NULL ,
 		[MTAbundanceLightPlusHeavyAvg] float NULL ,
 		[Member_Count_Used_For_Abu_Avg] real NULL ,
+		[Rank_Match_Score_Avg] float NULL ,
 		[Match_Score_Avg] float NULL ,
 		[Del_Match_Score_Avg] float NULL ,
 		[NET_Error_Obs_Avg] float NULL ,
@@ -122,6 +124,7 @@ AS
 		MTAbundanceAvg, MTAbundanceStDev,
 		MTAbundanceLightPlusHeavyAvg,
 		Member_Count_Used_For_Abu_Avg,
+		Rank_Match_Score_Avg,
 		Match_Score_Avg,
 		Del_Match_Score_Avg,
 		NET_Error_Obs_Avg,
@@ -151,6 +154,7 @@ AS
 
 			AVG(MTAbundanceLightPlusHeavy),						-- MTAbundanceLightPlusHeavyAvg
 			AVG(CONVERT(real, Member_Count_Used_For_Abu)),		-- Member_Count_Used_For_Abu_Avg; Avg, since we're averaging MTAbundance
+			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
 			AVG(NET_Error_Obs_Avg),
@@ -228,6 +232,7 @@ AS
 		[MTAbundanceStDev] float NULL ,					-- Standard deviation for a sum of numbers = Sqrt(Sum(StDevs^2))
 		[MTAbundanceLightPlusHeavyAvg] float NULL ,
 		[Member_Count_Used_For_Abu_Avg] float NULL ,
+		[Rank_Match_Score_Avg] float NULL ,
 		[Match_Score_Avg] float NULL ,
 		[Del_Match_Score_Avg] float NULL ,
 		[NET_Error_Obs_Avg] float NULL ,
@@ -275,6 +280,7 @@ AS
 		 MTAbundanceAvg, MTAbundanceStDev,
 		 MTAbundanceLightPlusHeavyAvg,
 		 Member_Count_Used_For_Abu_Avg,
+		 Rank_Match_Score_Avg,
 		 Match_Score_Avg,
 		 Del_Match_Score_Avg,
 		 NET_Error_Obs_Avg,
@@ -306,6 +312,7 @@ AS
 			
 			SUM(MTAbundanceLightPlusHeavyAvg),
 			SUM(Member_Count_Used_For_Abu_Avg),								-- Sum, since we're summing MTAbundanceAvg
+			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
 			AVG(NET_Error_Obs_Avg),
@@ -379,6 +386,7 @@ AS
 		 MTAbundanceAvg, MTAbundanceStDev,
 		 MTAbundanceLightPlusHeavyAvg,
 		 Member_Count_Used_For_Abu_Avg,
+		 Rank_Match_Score_Avg,
 		 Match_Score_Avg,
 		 Del_Match_Score_Avg,
 		 NET_Error_Obs_Avg,
@@ -414,6 +422,7 @@ AS
 
 			SUM(MTAbundanceLightPlusHeavyAvg),
 			SUM(Member_Count_Used_For_Abu_Avg),
+			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
 			AVG(NET_Error_Obs_Avg),

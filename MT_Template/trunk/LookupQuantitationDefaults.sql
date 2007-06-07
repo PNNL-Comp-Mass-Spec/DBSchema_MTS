@@ -14,6 +14,8 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 **  Auth:	mem
 **	Date:	08/12/2005
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**			06/06/2007 mem - Added parameter @MaximumMatchesPerUMCToKeep
+**						   - Updated to allow for wildcards in T_Quantitation_Defaults.Instrument_Name
 **
 ****************************************************/
 (
@@ -40,7 +42,8 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 	@ORFCoverageComputationLevel tinyint output,
 	@InternalStdInclusionMode tinyint output,
 
-	@MinimumPeptideProphetProbability real output
+	@MinimumPeptideProphetProbability real output,
+	@MaximumMatchesPerUMCToKeep smallint output
 )
 AS
 	Set NoCount On
@@ -55,6 +58,7 @@ AS
 	Declare @MDIDText varchar(12)
 	Declare @DefaultID int
 	Declare @InstrumentName varchar(255)
+	Declare @InstrumentNameMatched varchar(255)
 	Declare @DatasetName varchar(255)
 	
 	If @MDID Is Null
@@ -77,6 +81,7 @@ AS
 	Set @MinimumPMTQualityScore = 0
 	
 	Set @MinimumPeptideLength = 6
+	Set @MaximumMatchesPerUMCToKeep = 1
 	Set @MinimumMatchScore = 0.35
 	Set @MinimumDelMatchScore = 0.1
 
@@ -111,30 +116,32 @@ AS
 
 			-- First, try to match instrument and dataset
 			-- Use the PATINDEX function to compare the dataset name filters defined in the table against @DatasetName
-			SELECT TOP 1 @DefaultID = Default_ID
+			SELECT TOP 1 @DefaultID = Default_ID, @InstrumentNameMatched = Instrument_Name
 			FROM T_Quantitation_Defaults
 			WHERE NOT Dataset_Name_Filter Is Null AND
-				  Instrument_Name = @InstrumentName AND
+				  (Instrument_Name = @InstrumentName OR 
+				   Instrument_Name LIKE '%[%]%' AND PATINDEX(Instrument_Name, @InstrumentName) > 0) AND
 				  IsNull(PATINDEX(Dataset_Name_Filter, @DatasetName), 0) > 0
 			ORDER BY Default_ID ASC
 			--
 			SELECT @myError = @@Error, @myRowCount = @@RowCount
 		
 			If @myRowCount > 0
-				Set @message = Convert(varchar(12), @DefaultID) + ': Matched Instrument Name and Dataset Name: ' + @InstrumentName + ' and ' + @DatasetName
+				Set @message = Convert(varchar(12), @DefaultID) + ': Matched Instrument Name and Dataset Name: ' + @InstrumentNameMatched + ' and ' + @DatasetName
 			Else
 			Begin
 				-- No match, so just match the instrument, excluding any rows with Dataset_Name_Filter defined
-				SELECT TOP 1 @DefaultID = Default_ID
+				SELECT TOP 1 @DefaultID = Default_ID, @InstrumentNameMatched = Instrument_Name
 				FROM T_Quantitation_Defaults
-				WHERE Instrument_Name = @InstrumentName AND
+				WHERE (Instrument_Name = @InstrumentName OR 
+					   Instrument_Name LIKE '%[%]%' AND PATINDEX(Instrument_Name, @InstrumentName) > 0) AND
 					  Len(IsNull(Dataset_Name_Filter, '')) = 0
 				ORDER BY Default_ID ASC
 				--
 				SELECT @myError = @@Error, @myRowCount = @@RowCount
 
 				If @myRowCount > 0
-					Set @message = Convert(varchar(12), @DefaultID) + ': Matched Instrument Name: ' + @InstrumentName + ' but not ' + @DatasetName
+					Set @message = Convert(varchar(12), @DefaultID) + ': Matched Instrument Name: ' + @InstrumentNameMatched + ' but not ' + @DatasetName
 				Else
 				Begin
 					-- Still no match, look for the 'DefaultSettings' row
@@ -175,6 +182,7 @@ AS
 						@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
 						@MinimumPMTQualityScore = Minimum_PMT_Quality_Score, 
 						@MinimumPeptideLength = Minimum_Peptide_Length, 
+						@MaximumMatchesPerUMCToKeep = Maximum_Matches_per_UMC_to_Keep,
 						@MinimumMatchScore = Minimum_Match_Score, 
 						@MinimumDelMatchScore = Minimum_Del_Match_Score, 
 						@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count, 

@@ -15,6 +15,8 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 **			05/28/2007 mem - Now calling QuantitationProcessCheckForMSMSPeptideIDs to populate 
 **							 column Observed_By_MSMS_in_This_Dataset by looking for Sequest or
 **							 XTandem results from the datasets corresponding to the jobs in #UMCMatchResultsByJob
+**			06/04/2007 mem - Now filtering on match score if either @MinimumMatchScore or @MinimumDelMatchScore is non-zero
+**			06/06/2007 mem - Now populating Rank_Match_Score_Avg, then filtering based on parameter @MaximumMatchesPerUMCToKeep
 **
 ****************************************************/
 (
@@ -29,6 +31,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 	@MinimumPMTQualityScore real,				-- 0 to use all mass tags, > 0 to filter by PMT Quality Score (as currently set in T_Mass_Tags)
 
 	@MinimumPeptideLength tinyint,				-- 0 to use all mass tags, > 0 to filter by peptide length
+	@MaximumMatchesPerUMCToKeep smallint,		-- 0 to use all matches for each UMC, > 0 to only use the top @MaximumMatchesPerUMCToKeep matches to each UMC (favoring the ones with the closest SLiC score first); matches with identical SLiC scores will all be used
 	@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
 	@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score (aka Del SLiC Score); only used if @MinimumMatchScore is > 0
 
@@ -70,6 +73,8 @@ AS
 	drop table [#UMCMatchResultsSource]
 
 	CREATE TABLE #UMCMatchResultsSource (
+		[UniqueID] int identity(1,1) NOT NULL ,
+		[MD_ID] int NOT NULL ,
 		[Job] int NOT NULL ,
 		[TopLevelFraction] smallint NOT NULL ,
 		[Fraction] smallint NOT NULL ,
@@ -101,7 +106,8 @@ AS
 		[Class_Stats_Charge_Basis] smallint NOT NULL ,
 		[Charge_State_Min] smallint NOT NULL ,
 		[Charge_State_Max] smallint NOT NULL ,
-		[MassErrorPPM] float NOT NULL
+		[MassErrorPPM] float NOT NULL ,
+		[Rank_Match_Score] smallint NULL
 	) ON [PRIMARY]
 
 	If @InternalStdInclusionMode = 0 OR @InternalStdInclusionMode = 1
@@ -110,7 +116,8 @@ AS
 		-- Step 5b - Populate the temporary table with PMT tag matches
 		--
 		INSERT INTO #UMCMatchResultsSource
-			(Job,
+		   (MD_ID,
+			Job,
 			TopLevelFraction, 
 			Fraction, 
 			[Replicate], 
@@ -142,7 +149,8 @@ AS
 			Charge_State_Min,
 			Charge_State_Max,
 			MassErrorPPM)
-		SELECT	MMD.MD_Reference_Job,
+		SELECT	MMD.MD_ID,
+				MMD.MD_Reference_Job,
 				TMDID.TopLevelFraction, 
 				TMDID.Fraction, 
 				TMDID.[Replicate], 
@@ -240,7 +248,8 @@ AS
 		--			 Do not add new matches for PMTs that are already present
 		--
 		INSERT INTO #UMCMatchResultsSource
-			(Job,
+		   (MD_ID,
+			Job,
 			TopLevelFraction, 
 			Fraction, 
 			[Replicate], 
@@ -272,7 +281,8 @@ AS
 			Charge_State_Min,
 			Charge_State_Max,
 			MassErrorPPM)
-		SELECT	MMD.MD_Reference_Job,
+		SELECT	MMD.MD_ID,
+				MMD.MD_Reference_Job,
 				TMDID.TopLevelFraction, 
 				TMDID.Fraction, 
 				TMDID.[Replicate], 
@@ -372,7 +382,7 @@ AS
 	--
 	-- Step 5d - Possibly delete low scoring matches
 	--
-	If @MinimumMatchScore > 0 AND @ResultsCount > 0
+	If (@MinimumMatchScore > 0 OR @MinimumDelMatchScore > 0) AND @ResultsCount > 0
 	Begin
 		-- Transact-SQL delete notation
 		DELETE FROM #UMCMatchResultsSource
@@ -399,6 +409,35 @@ AS
 				set @myError = 121
 				goto Done
 			End
+		End
+	End
+	
+
+	--
+	-- Step 5e - Populate Rank_Match_Score in #UMCMatchResultsSource
+	--
+	If @ResultsCount > 0
+	Begin
+	
+		UPDATE #UMCMatchResultsSource
+		SET Rank_Match_Score = RankQ.DenseRank
+		FROM #UMCMatchResultsSource Src
+			INNER JOIN ( SELECT UniqueID, 
+								Dense_Rank() OVER ( PARTITION BY MD_ID, UMC_Ind ORDER BY Match_Score DESC ) AS DenseRank
+						FROM #UMCMatchResultsSource
+					   ) RankQ ON Src.UniqueID = RankQ.UniqueID
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+
+		If IsNull(@MaximumMatchesPerUMCToKeep, 0) > 0
+		Begin
+			-- Only keep the top @MaximumMatchesPerUMCToKeep score values for each UMC
+			-- Since we used Dense_Rank() above, if multiple Mass Taqs have the same Match_Score values, then
+			--  they're given the same Rank value
+			DELETE #UMCMatchResultsSource
+			WHERE Rank_Match_Score > @MaximumMatchesPerUMCToKeep
+			--
+			SELECT @myError = @@error, @myRowCount = @@RowCount
 		End
 	End
 	
@@ -430,6 +469,7 @@ AS
 		 UMCIonCountMatchInUMCsWithSingleHit, FractionScansMatchingSingleMT,
 		 UMCMultipleMTHitCountAvg, UMCMultipleMTHitCountStDev,
 		 UMCMultipleMTHitCountMin, UMCMultipleMTHitCountMax,
+		 Rank_Match_Score_Avg,
 		 Match_Score_Avg,
 		 Del_Match_Score_Avg,
 		 NET_Error_Obs_Avg,
@@ -479,6 +519,7 @@ AS
 			STDEV(CONVERT(real, MassTag_Hit_Count)),	-- UMCMultipleMTHitCountStDev; this will be Null if only one UMC matched this mass tag
 			MIN(MassTag_Hit_Count), 
 			MAX(MassTag_Hit_Count),		-- UMCMultipleMTHitCountMax
+			AVG(Rank_Match_Score),		-- Rank_Match_Score_Avg: Rank 1 is top hit, rank 2 is 2nd, etc.
 			AVG(Match_Score),			-- Match_Score_Avg: Match_Score holds the likelihood of the match, a value between 0 and 1, or -1 if undefined
 			AVG(Del_Match_Score),		-- Del_Match_Score_Avg: Del_Match_Score holds the distance of the given match to highest scoring match
 			AVG(ElutionTime - IsNull(MT_Avg_GANET, ElutionTime)),		-- NET_Error_Obs_Avg

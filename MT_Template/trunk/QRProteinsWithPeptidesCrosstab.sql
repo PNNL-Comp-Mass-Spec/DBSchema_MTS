@@ -34,6 +34,8 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 **			01/30/2006 mem - Added parameter @IncludePrefixAndSuffixResidues, which, when enabled, will cause the peptide sequence displayed to have prefix and suffix residues
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
+**			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
+**			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **
 ****************************************************/
 (
@@ -43,7 +45,9 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 	@AggregateColName varchar(128) = 'AvgAbu',
 	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
 	@IncludePrefixAndSuffixResidues tinyint = 0,		-- The query is slower if this is enabled
-	@SortMode tinyint=0									-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@message varchar(512)='' output,
+	@PreviewSql tinyint=0
 )
 AS 
 
@@ -54,109 +58,139 @@ AS
 	Set @myRowcount = 0
 	Set @myError = 0
 
-	Declare @sql varchar(8000)
+	Declare @Sql varchar(max)
 
-	Declare @CrossTabSql varchar(7000),			-- Note: This cannot be any larger than 7000 since we add it plus some other text to @sql
-			@CrossTabSqlGroupBy varchar(8000),
+	Declare @PivotColumnsSql varchar(max),
+			@QuantitationIDListSql varchar(max),
+			@CrossTabSqlGroupBy varchar(max),
 			@ColumnListToShow varchar(900),
+			@ColumnListToShow2 varchar(900),
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
-			@QuantitationIDListClean varchar(1024)
+			@QuantitationIDListClean varchar(max)
 
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
 	Set @QuantitationIDListClean = ''
-	
-	--------------------------------------------------------------
-	-- Create a temporary table to hold the QIDs and sorting info
-	--------------------------------------------------------------
-			
-	CREATE TABLE #TmpQIDSortInfo (
-		SortKey int identity (1,1),
-		QID int NOT NULL)
 
-	--------------------------------------------------------------
-	-- Call QRGenerateCrosstabSql to populate CrossTabSql and QuantitationIDListSql
-	-- This SP also populates @ModsPresent
-	--------------------------------------------------------------
-	Exec QRGenerateCrosstabSql	@QuantitationIDList, 
-								@SourceColName,
-								@AggregateColName,
-								@AverageAcrossColumns,				-- When @AverageAcrossColumns = 1, then set @NullWhenMissing = 1
-								@SeparateReplicateDataIDs,
-								@SortMode,
-								@SkipCrossTabSqlGeneration = 0,
-								@CrossTabSql = @CrossTabSql Output, 
-								@CrossTabSqlGroupBy = @CrossTabSqlGroupBy Output,
-								@ERValuesPresent = @ERValuesPresent Output,
-								@ModsPresent = @ModsPresent Output,
-								@QuantitationIDListClean = @QuantitationIDListClean output
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 
-	--------------------------------------------------------------
-	-- Create dynamic SQL to generate resultset containing summary matrix
-	--------------------------------------------------------------
-	
-	Set @sql = ''
-	Set @sql = @sql + ' SELECT SubQ.Ref_ID,T_Proteins.Reference,'
-	Set @sql = @sql +   'T_Proteins.Description As Protein_Description,'
-	Set @sql = @sql +   'SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods,'
-	If @ModsPresent > 0
-		Set @sql = @sql + 'SubQ.Mod_Description,'
+	Begin Try
 
-	Set @sql = @sql + @CrossTabSql
-	Set @sql = @sql + ' FROM ( SELECT QR.Quantitation_ID,QR.Ref_ID,QRD.Mass_Tag_ID,'
-	If @IncludePrefixAndSuffixResidues <> 0
-		Set @sql = @sql + ' MTPM.Peptide_Sequence AS Peptide,'
-	Else
-		Set @sql = @sql + ' MT.Peptide,'
+		--------------------------------------------------------------
+		-- Create a temporary table to hold the QIDs and sorting info
+		-- This table is populated by QRGenerateCrosstabSql
+		--------------------------------------------------------------
+				
+		CREATE TABLE #TmpQIDSortInfo (
+			SortKey int identity (1,1),
+			QID int NOT NULL)
 
-	Set @sql = @sql +               ' MT.Mod_Description,'
-	Set @sql = @sql +               ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
-	Set @sql = @sql +               ' QRD.' + @SourceColName
-	Set @sql = @sql +        ' FROM #TmpQIDSortInfo INNER JOIN '
-	Set @sql = @sql +             ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
-    Set @sql = @sql +             ' T_Quantitation_ResultDetails QRD ON QR.QR_ID = QRD.QR_ID INNER JOIN'
-    Set @sql = @sql +             ' T_Mass_Tags AS MT ON QRD.Mass_Tag_ID = MT.Mass_Tag_ID'
-    If @IncludePrefixAndSuffixResidues <> 0
-	Begin
-		Set @sql = @sql +         ' INNER JOIN V_Mass_Tag_to_Protein_Map_Full_Sequence AS MTPM ON'
-		Set @sql = @sql +         ' MT.Mass_Tag_ID = MTPM.Mass_Tag_ID AND QR.Ref_ID = MTPM.Ref_ID'
-	End
+		--------------------------------------------------------------
+		-- Call QRGenerateCrosstabSql to populate @PivotColumnsSql and @QuantitationIDListSql
+		-- This SP also populates @ModsPresent
+		--------------------------------------------------------------
 
-	Set @sql = @sql +        ' ) AS SubQ'
-
-	If @SeparateReplicateDataIDs <> 0 And Len(@QuantitationIDListClean) > 0
-	Begin
-		Set @sql = @sql +   ' INNER JOIN (SELECT DISTINCT QR2.Ref_ID AS RefID_Filter'
-		Set @sql = @sql +             ' FROM T_Quantitation_Results AS QR2'
-		Set @sql = @sql +             ' WHERE QR2.Quantitation_ID IN (' + @QuantitationIDListClean + ')'
-		Set @sql = @sql +   ') As CompareQ ON SubQ.Ref_ID = CompareQ.RefID_Filter'
-	End
-
-	Set @sql = @sql + ' LEFT OUTER JOIN T_Proteins ON SubQ.Ref_ID = T_Proteins.Ref_ID'
-	Set @sql = @sql + ' GROUP BY SubQ.Ref_ID,T_Proteins.Reference,SubQ.Mass_Tag_ID,SubQ.Peptide,SubQ.Mass_Tag_Mods,T_Proteins.Description'
-	If @ModsPresent > 0
-		Set @sql = @sql + ',SubQ.Mod_Description'
-
-	If @AverageAcrossColumns = 0
-	Begin
-		Set @sql = @sql + ' ORDER BY T_Proteins.Reference,Mass_Tag_ID,Peptide,Mass_Tag_Mods'
-		Exec (@sql)
+		Set @CurrentLocation = 'Call QRGenerateCrosstabSql'
 		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-	End
-	Else
-	Begin
-		Set @ColumnListToShow = 'Ref_ID,Reference,Protein_Description,Mass_Tag_ID,Peptide,Mass_Tag_Mods'
-		If @ModsPresent > 0
-			Set @ColumnListToShow = @ColumnListToShow + ',Mod_Description'
+		Exec QRGenerateCrosstabSql	@QuantitationIDList, 
+									@SourceColName,
+									@AggregateColName,
+									@AverageAcrossColumns,				-- When @AverageAcrossColumns = 1, then set @NullWhenMissing = 1
+									@SeparateReplicateDataIDs,
+									@SortMode,
+									@SkipCrossTabSqlGeneration = 0,
+									@PivotColumnsSql = @PivotColumnsSql output, 
+									@CrossTabSqlGroupBy = @CrossTabSqlGroupBy output,
+									@QuantitationIDListSql = @QuantitationIDListSql output,
+									@ERValuesPresent = @ERValuesPresent output,
+									@ModsPresent = @ModsPresent output,
+									@QuantitationIDListClean = @QuantitationIDListClean output
+
+
+		--------------------------------------------------------------
+		-- Create dynamic SQL to generate the pivot table
+		--------------------------------------------------------------
+
+		Set @CurrentLocation = 'Populate @Sql'
+
+		Set @ColumnListToShow = ''
+		Set @ColumnListToShow = @ColumnListToShow + 'PivotResults.Ref_ID, Prot.Reference,'
+		Set @ColumnListToShow = @ColumnListToShow + 'Prot.Description As Protein_Description,'
+
+		Set @ColumnListToShow = @ColumnListToShow + 'MT.Mass_Tag_ID,'
 		
-		-- Note: @CrossTabSqlGroupBy and @Sql could be quite long
-		--       Thus, we'll concatenate during the Exec statement
-		Exec ('SELECT ' + @ColumnListToShow + ',' + @CrossTabSqlGroupBy + ' FROM (' + @Sql + ') AS OuterQuery' + ' GROUP BY ' + @ColumnListToShow + ' ORDER BY Reference, Mass_Tag_ID, Peptide, Mass_Tag_Mods')
+		If @IncludePrefixAndSuffixResidues <> 0
+			Set @ColumnListToShow = @ColumnListToShow + 'MIN(MTPM.Peptide_Sequence) AS Peptide,'
+		Else
+			Set @ColumnListToShow = @ColumnListToShow + 'MT.Peptide,'
+		
+		Set @ColumnListToShow = @ColumnListToShow + 'PivotResults.Mass_Tag_Mods'
+		Set @ColumnListToShow2 = 'Ref_ID, Reference, Protein_Description, Mass_Tag_ID, Peptide, Mass_Tag_Mods'
+		
+		If @ModsPresent > 0
+		Begin
+			Set @ColumnListToShow = @ColumnListToShow + ',MT.Mod_Description'
+			Set @ColumnListToShow2 = @ColumnListToShow2 + ',Mod_Description'
+		End
+
+		Set @sql = ''
+		Set @sql = @sql + ' SELECT ' + @ColumnListToShow + ', '
+		Set @sql = @sql +          @PivotColumnsSql
+
+		Set @sql = @sql + ' FROM  (SELECT QR.Quantitation_ID, QR.Ref_ID, QRD.Mass_Tag_ID,'
+		Set @sql = @sql +         ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
+		Set @sql = @sql +         ' CONVERT(VARCHAR(19), QRD.' + @SourceColName + ') AS ' + @SourceColName
+		Set @sql = @sql +       ' FROM #TmpQIDSortInfo INNER JOIN '
+		Set @sql = @sql +            ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
+		Set @sql = @sql +            ' T_Quantitation_ResultDetails QRD ON QR.QR_ID = QRD.QR_ID) AS DataQ'
+		Set @sql = @sql +       ' PIVOT ('
+		Set @sql = @sql +       '   MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
+		Set @sql = @sql +       ' ) AS PivotResults'
+		Set @sql = @sql +        ' INNER JOIN T_Mass_Tags MT ON PivotResults.Mass_Tag_ID = MT.Mass_Tag_ID'
+
+		If @IncludePrefixAndSuffixResidues <> 0
+		Begin
+			Set @sql = @sql +    ' INNER JOIN V_Mass_Tag_to_Protein_Map_Full_Sequence MTPM ON'
+			Set @sql = @sql +       ' MT.Mass_Tag_ID = MTPM.Mass_Tag_ID AND PivotResults.Ref_ID = MTPM.Ref_ID'
+		End
+		Set @sql = @sql +        ' LEFT OUTER JOIN T_Proteins Prot ON PivotResults.Ref_ID = Prot.Ref_ID'
+		
+		If @IncludePrefixAndSuffixResidues <> 0
+		Begin
+			Set @sql = @sql +   ' GROUP BY PivotResults.Ref_ID, Prot.Reference, Prot.Description, MT.Mass_Tag_ID, MT.Peptide, PivotResults.Mass_Tag_Mods, MT.Mod_Description,' + @QuantitationIDListSql
+		End
+		
+
+		If @AverageAcrossColumns = 0
+		Begin
+			Set @Sql = @Sql + ' ORDER BY Prot.Reference, MT.Mass_Tag_ID, MT.Peptide, PivotResults.Mass_Tag_Mods'
+		End
+		Else
+		Begin
+			Set @Sql =        ' SELECT ' + @ColumnListToShow2 + ',' + @CrossTabSqlGroupBy + ' FROM (' + @Sql + ') AS OuterQuery' 
+			Set @Sql = @Sql + ' GROUP BY ' + @ColumnListToShow2 + ' ORDER BY Reference, Mass_Tag_ID, Peptide, Mass_Tag_Mods'
+		End
+
+		Set @CurrentLocation = 'Execute @Sql'
+		--
+		If @PreviewSql <> 0
+			Print @Sql
+		Else
+			Exec (@Sql)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-	End
+
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QRProteinsWithPeptidesCrosstab')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+								@ErrorNum = @myError output, @message = @message output
+		Goto Done
+	End Catch
 
 Done:
 	Return @myError
