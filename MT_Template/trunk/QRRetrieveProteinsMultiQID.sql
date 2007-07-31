@@ -42,10 +42,12 @@ CREATE Procedure dbo.QRRetrieveProteinsMultiQID
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **						   - Now using @SkipCrossTabSqlGeneration=1 when calling QRGenerateCrosstabSql
 **			06/04/2007 mem - Added parameters @message and @PreviewSql; changed @Sql to varchar(max); switched to Try/Catch error handling
+**			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
+**			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
 **
 ****************************************************/
 (
-	@QuantitationIDList varchar(1024),					-- Comma separated list of Quantitation ID's
+	@QuantitationIDList varchar(max),					-- Comma separated list of Quantitation ID's
 	@SeparateReplicateDataIDs tinyint = 0,				-- For quantitation ID's with replicates, include separate details for each replicate
 	@ReplicateCountAvgMinimum decimal(9,5) = 1,			-- Ignored if the given QuantitationID only has one MDID defined
 	@Description varchar(32)='' OUTPUT,
@@ -218,8 +220,8 @@ AS
 			Set @Description = 'QIDs '
 
 			-- Make sure @JobList isn't too long
-			If Len(@QuantitationIDList) > 26 - Len(@Description)
-				Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 24 - Len(@Description)) + '..'
+			If Len(@QuantitationIDList) > 23 - Len(@Description)
+				Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 21 - Len(@Description)) + '..'
 
 			-- Append @QuantitationIDList to @Description
 			Set @Description = @Description + @QuantitationIDList + ';Pro'

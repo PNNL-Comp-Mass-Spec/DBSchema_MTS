@@ -71,7 +71,7 @@ CREATE Procedure dbo.AddQuantitationDescription
 	@MinimumPMTQualityScore real = 0,				-- Ignored if @LookupDefaultOptions <> 0
 	
 	@MinimumPeptideLength tinyint = 6,				-- Ignored if @LookupDefaultOptions <> 0
-	@MinimumMatchScore real = 0.25,					-- Ignored if @LookupDefaultOptions <> 0
+	@MinimumMatchScore real = 0.35,					-- Ignored if @LookupDefaultOptions <> 0
 	@MinimumDelMatchScore real = 0,					-- Ignored if @LookupDefaultOptions <> 0
 
 	@MinimumPeptideReplicateCount smallint = 0,		-- Ignored if @LookupDefaultOptions <> 0
@@ -98,6 +98,9 @@ As
 	Declare @State tinyint
 	Set @State=1					-- new record state is always New
 
+	Declare @TransAddQuantitationDescription varchar(32)
+	Set @TransAddQuantitationDescription = ''
+	
 	Declare @LocalEntriesProcessed int
 	Set @LocalEntriesProcessed=0
 
@@ -109,6 +112,7 @@ As
 		
 		If IsNull(@LookupDefaultOptions, 1) <> 0
 		Begin
+			Set @CurrentLocation = 'Call LookupQuantitationDefaults for MDID ' + IsNull(Convert(varchar(19), @MDID), 'Null')
 			-- Lookup the Quantitation Defaults for @MDID (even if it's null)
 			Exec LookupQuantitationDefaults @MDID, @message output,
 											@Fraction_Highest_Abu_To_Use output, @Normalize_To_Standard_Abundances output, 
@@ -122,13 +126,16 @@ As
 											@MaximumMatchesPerUMCToKeep output
 		End	
 
+		Set @TransAddQuantitationDescription = 'TransAddQuantitation'
+		Begin Transaction @TransAddQuantitationDescription
 		
-		Begin Transaction TransAddQuantitationDescription
-
 		-- Look for existing QuantitationID tasks with the same SampleName and Comment or with the same MDID
 		-- If found, and if their MDID entries have MD_State = 5, then set Quantitation_State = 5
 		-- Do not change Quantitation_State if MD_State is not 5, since we want to allow the option to
 		--  rollup the same MD_ID value with different quantitation options
+		--
+		Set @CurrentLocation = 'Set Quantitation_State to 5 for tasks with the same SampleName and Comment or for the same MDID'
+
 		UPDATE T_Quantitation_Description
 		SET Quantitation_State = 5
 		WHERE (Quantitation_ID IN
@@ -149,17 +156,10 @@ As
 			)
 		--
 		Select @myError = @@Error, @myRowCount = @@RowCount
+		
+		
+		Set @CurrentLocation = 'Add a new row to the T_Quantitation_Description table'
 		--
-		If @myError <> 0
-		Begin
-			RollBack Transaction TransAddQuantitationDescription
-			Set @myError = 101
-			Set @message = 'Error checking for similar Quantitation tasks'
-			Goto Done
-		End
-		
-		
-		-- Add a new row to the T_Quantitation_Description table
 		INSERT INTO dbo.T_Quantitation_Description
 			(	SampleName, Quantitation_State, Comment, 
 				Fraction_Highest_Abu_To_Use, Normalize_To_Standard_Abundances,
@@ -200,7 +200,7 @@ As
 		--
 		If @myError <> 0 Or @myRowCount <> 1
 		Begin
-			RollBack Transaction TransAddQuantitationDescription
+			RollBack Transaction @TransAddQuantitationDescription
 			Set @myError = 102
 			Set @message = 'Error adding row to T_Quantitation_Description'
 			Goto Done
@@ -211,6 +211,8 @@ As
 		-- Now add a new row to T_Quantitation_MDIDs (if @MDID is not Null)
 		If @MDID Is Not Null
 		Begin
+			Set @CurrentLocation = 'Add a new row to T_Quantitation_MDIDs'
+			--
 			INSERT INTO dbo.T_Quantitation_MDIDs
 				(Quantitation_ID, MD_ID, [Replicate], Fraction, TopLevelFraction)
 			VALUES (@Quantitation_ID, @MDID, @Replicate, @Fraction, @TopLevelFraction)
@@ -219,12 +221,11 @@ As
 			--
 			If @myError <> 0 Or @myRowCount <> 1
 			Begin
-				RollBack Transaction TransAddQuantitationDescription
+				RollBack Transaction @TransAddQuantitationDescription
 				Set @myError = 103
 				Set @message = 'Error adding row to T_Quantitation_MDIDs'
 				Set @Quantitation_ID = Null
 				Goto Done
-
 			End
 			--
 			Set @Q_MDID_ID = SCOPE_IDENTITY()		--return ID
@@ -233,7 +234,7 @@ As
 
 		If @myError = 0
 		Begin
-			Commit Transaction TransAddQuantitationDescription
+			Commit Transaction @TransAddQuantitationDescription
 			
 			If @ProcessImmediately = 1
 			Begin
@@ -243,7 +244,7 @@ As
 		End
 		Else
 		Begin
-			RollBack Transaction TransAddQuantitationDescription
+			RollBack Transaction @TransAddQuantitationDescription
 			Set @myError = 104
 			Set @message = 'Unknown error'
 			Set @Quantitation_ID = Null
@@ -252,6 +253,9 @@ As
 
 	End Try
 	Begin Catch
+		If Len(@TransAddQuantitationDescription) > 0
+			RollBack Transaction @TransAddQuantitationDescription
+
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'AddQuantitationDescription')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList = '',

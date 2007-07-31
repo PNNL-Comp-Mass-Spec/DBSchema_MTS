@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.WebGetQRollupsSummary
 /****************************************************
 **	Desc: Returns summary list of Q Rollups for given mass tag database
@@ -13,16 +14,19 @@ CREATE PROCEDURE dbo.WebGetQRollupsSummary
 **      @MTDBName       -- name of mass tag database to use
 **		@message        -- explanation of any error that occurred
 **
-**		Auth: jee
-**		Date: 4/16/2004
+**	Auth:	jee
+**	Date:	04/16/2004
+**			06/13/2007 mem - Now calling GetQRollupsSummaryWithPath
 **    
 *****************************************************/
 	@MTDBName varchar(128) = '',
 	@message varchar(512) = '' output
 As
 	declare @result int
-	exec @result = GetQRollupsSummary @MTDBName, 1, '', @message
+	exec @result = GetQRollupsSummaryWithPath @MTDBName, 1, '', @message
+
 	RETURN @result
+
 
 GO
 GRANT EXECUTE ON [dbo].[WebGetQRollupsSummary] TO [DMS_SP_User]

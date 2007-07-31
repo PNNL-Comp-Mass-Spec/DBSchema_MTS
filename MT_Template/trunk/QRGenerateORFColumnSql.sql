@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 **			05/25/2005 mem - Added underscores at word boundaries in columns QD.SampleName, QR.MassTagCountUniqueObserved, and QR.MassTagCountUsedForAbundanceAvg
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			05/28/2007 mem - Added column MT_Count_Unique_Observed_Both_MS_and_MSMS
+**			06/13/2007 mem - Now truncating T_Proteins.Description at 900 characters, since Visual Studio's SqlDataAdapter tool has problems with text strings over 910 characters in length
 **
 ****************************************************/
 (
@@ -37,7 +38,7 @@ AS
 	Set @sql = @sql + 'SELECT QD.SampleName AS Sample_Name,'
 	Set @sql = @sql + 'QR.Ref_ID,'
 	Set @sql = @sql + 'T_Proteins.Reference,'
-	Set @sql = @sql + 'T_Proteins.Description AS Protein_Description,'
+	Set @sql = @sql + 'Left(T_Proteins.Description, 900) AS Protein_Description,'		-- Truncating Protein Description at 900 characters
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
 	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) AS SLiC_Score_Avg,'

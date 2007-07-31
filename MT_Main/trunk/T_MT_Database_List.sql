@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[T_MT_Database_List](
 	[MTL_Update_Schedule] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MTL_Last_Update] [datetime] NULL,
 	[MTL_Last_Import] [datetime] NULL,
-	[MTL_Import_Holdoff] [int] NULL CONSTRAINT [DF_T_MT_Database_List_MTL_Import_Holdoff]  DEFAULT (48),
+	[MTL_Import_Holdoff] [int] NULL CONSTRAINT [DF_T_MT_Database_List_MTL_Import_Holdoff]  DEFAULT ((12)),
 	[MTL_Created] [datetime] NOT NULL CONSTRAINT [DF_T_MT_Database_List_MTL_Created]  DEFAULT (getdate()),
 	[MTL_Demand_Import] [tinyint] NULL,
 	[MTL_Max_Jobs_To_Process] [int] NULL CONSTRAINT [DF_T_MT_Database_List_MTL_Max_Jobs_To_Process]  DEFAULT (500),

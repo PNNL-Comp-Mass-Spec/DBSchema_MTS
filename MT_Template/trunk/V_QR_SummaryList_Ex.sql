@@ -1,15 +1,16 @@
-/****** Object:  View [dbo].[V_QR_SummaryList] ******/
+/****** Object:  View [dbo].[V_QR_SummaryList_Ex] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW [dbo].[V_QR_SummaryList]
+CREATE VIEW [dbo].[V_QR_SummaryList_Ex]
 AS
 SELECT 
 	QD.Quantitation_ID AS QID, 
 	QD.SampleName AS [Sample Name],
 	QD.Comment, 
+	MDStatsQ.[Results Folder Path], 
 	QD.Fraction_Highest_Abu_To_Use AS [Threshold % For Inclusion],
 	QD.Normalize_To_Standard_Abundances AS Normalize, 
 	QD.Standard_Abundance_Min AS [Std Abu Min], 
@@ -33,6 +34,7 @@ SELECT
 	QD.Last_Affected AS [Last Affected]
 FROM T_Quantitation_Description QD INNER JOIN
         ( SELECT QD.Quantitation_ID AS QID, 
+				MIN(dbo.udfPeakMatchingPathForMDID(QMDIDs.MD_ID)) AS [Results Folder Path], 
 				AVG(MMD.MD_Comparison_Mass_Tag_Count) AS [Comparison Mass Tag Count]
 		  FROM	T_Match_Making_Description MMD INNER JOIN
 				T_Quantitation_MDIDs QMDIDs ON MMD.MD_ID = QMDIDs.MD_ID INNER JOIN

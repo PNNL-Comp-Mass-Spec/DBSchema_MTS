@@ -41,10 +41,11 @@ CREATE Procedure dbo.QRSummary
 **			09/14/2006 mem - Switched from SELECT DISTINCT to SELECT ... GROUP BY when populating @ExperimentList
 **			11/29/2006 mem - Replaced parameter @SortBySampleName with parameter @SortMode, which affects the order in which the results are returned
 **			06/05/2007 mem - Switched to Try/Catch error handling (added parameter @message)
+**			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **
 ****************************************************/
 (
-	@QuantitationIDList varchar(1024),			-- Comma separated list of Quantitation ID's
+	@QuantitationIDList varchar(max),			-- Comma separated list of Quantitation ID's
 	@VerboseColumnOutput tinyint = 1,			-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
 	@SortMode tinyint=2,						-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 	@message varchar(512)='' output

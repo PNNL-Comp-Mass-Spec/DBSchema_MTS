@@ -17,6 +17,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 **							 XTandem results from the datasets corresponding to the jobs in #UMCMatchResultsByJob
 **			06/04/2007 mem - Now filtering on match score if either @MinimumMatchScore or @MinimumDelMatchScore is non-zero
 **			06/06/2007 mem - Now populating Rank_Match_Score_Avg, then filtering based on parameter @MaximumMatchesPerUMCToKeep
+**			06/08/2007 mem - Updated call to QuantitationProcessCheckForMSMSPeptideIDs to include score filters
 **
 ****************************************************/
 (
@@ -716,7 +717,12 @@ AS
 	FROM T_Process_Step_Control
 	WHERE Processing_Step_Name = 'QR_Check_Results_in_Remote_Peptide_DBs'
 	
-	Exec @myError = QuantitationProcessCheckForMSMSPeptideIDs @CheckResultsInRemotePeptideDBs, @message = @message output
+	Exec @myError = QuantitationProcessCheckForMSMSPeptideIDs @CheckResultsInRemotePeptideDBs, 
+								@MinimumMTHighNormalizedScore = @MinimumMTHighNormalizedScore,
+								@MinimumMTHighDiscriminantScore = @MinimumMTHighDiscriminantScore,
+								@MinimumMTPeptideProphetProbability = @MinimumMTPeptideProphetProbability,
+								@MinimumPMTQualityScore = @MinimumPMTQualityScore,
+								@message = @message output
 	
 Done:
 	Return @myError

@@ -61,6 +61,8 @@ AS
 
 
 GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Execution_State]) TO [DMS_SP_User]
+GO
 GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Date]) TO [DMS_SP_User]
 GO
 GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Description]) TO [DMS_SP_User]

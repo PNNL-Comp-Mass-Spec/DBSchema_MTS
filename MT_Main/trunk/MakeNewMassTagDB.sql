@@ -38,6 +38,7 @@ CREATE PROCEDURE MakeNewMassTagDB
 **						   - Removed Sql Server 2000 support
 **			11/29/2006 mem - Updated validation of @peptideDBName to work properly if a list of DBs is provided
 **						   - Added parameter @InfoOnly
+**			06/06/2007 mem - Updated default MTL_Import_Holdoff from 48 to 12 hours
 **    
 *****************************************************/
 (
@@ -453,8 +454,8 @@ AS
 		@NetSqLProvider,
 		@NetOleDBProvider,
 		@dbState,
-		getdate(),
-		48
+		GetDate(),
+		12
 		)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount

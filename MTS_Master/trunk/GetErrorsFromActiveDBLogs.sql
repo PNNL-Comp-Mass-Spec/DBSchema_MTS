@@ -22,6 +22,7 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 **			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
 **			05/13/2006 mem - Moved Master_Sequences from Albert to Daffy
 **			11/21/2006 mem - Moved Master_Sequences from Daffy to ProteinSeqs
+**			07/13/2007 mem - Increased the field sizes in #LE
 **    
 *****************************************************/
 (
@@ -43,7 +44,7 @@ As
 	Set @MaxLogEntriesPerDB = IsNull(@MaxLogEntriesPerDB, 100)
 	Set @message = ''
 
-	declare @SQL nvarchar(1024)
+	declare @SQL nvarchar(2048)
 	declare @result int
 	set @result = 0
 
@@ -84,13 +85,13 @@ As
 	-- temporary table to hold extracted log error entries
 	---------------------------------------------------
 	CREATE TABLE #LE (
-		[Server_Name] varchar(64) NOT NULL,
-		[DBName] [varchar] (128) NOT NULL,
-		[Entry_ID] [int],
-		[posted_by] [varchar] (64) NULL,
-		[posting_time] [datetime],
-		[type] [varchar] (32) NULL,
-		[message] [varchar] (500) NULL
+		Server_Name varchar(64) NOT NULL,
+		DBName varchar(128) NOT NULL,
+		Entry_ID int,
+		posted_by varchar(128) NULL,
+		posting_time datetime,
+		type varchar(128) NULL,
+		message varchar(4096) NULL
 	)
 
 	---------------------------------------------------

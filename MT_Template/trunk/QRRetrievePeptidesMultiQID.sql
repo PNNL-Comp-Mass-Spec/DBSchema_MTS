@@ -44,10 +44,12 @@ CREATE Procedure dbo.QRRetrievePeptidesMultiQID
 **			12/06/2006 mem - No longer using @SortMode if @IncludeRefColumn = 0 (see explanation regarding #TmpQIDSortInfo.SortKey and SELECT DISTINCT)
 **			05/28/2007 mem - Now returning column JobCount_Observed_Both_MS_and_MSMS
 **			06/05/2007 mem - Added parameters @message and @PreviewSql; changed @QRDsql and @Sql to varchar(max); switched to Try/Catch error handling
+**			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
+**			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
 **
 ****************************************************/
 (
-	@QuantitationIDList varchar(1024),					-- Comma separated list of Quantitation ID's
+	@QuantitationIDList varchar(max),					-- Comma separated list of Quantitation ID's
 	@SeparateReplicateDataIDs tinyint = 0,				-- For quantitation ID's with replicates, include separate details for each replicate
 	@IncludeRefColumn tinyint = 1,
 	@Description varchar(32)='' OUTPUT,
@@ -212,8 +214,8 @@ AS
 			Set @Description = 'QIDs '
 
 			-- Make sure @JobList isn't too long
-			If Len(@QuantitationIDList) > 26 - Len(@Description)
-				Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 24 - Len(@Description)) + '..'
+			If Len(@QuantitationIDList) > 23 - Len(@Description)
+				Set @QuantitationIDList = SubString(@QuantitationIDList, 1, 21 - Len(@Description)) + '..'
 
 			-- Append @QuantitationIDList to @Description
 			Set @Description = @Description + @QuantitationIDList + ';Pep'

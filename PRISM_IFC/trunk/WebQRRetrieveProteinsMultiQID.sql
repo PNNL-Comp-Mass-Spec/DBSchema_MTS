@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[WebQRRetrieveProteinsMultiQID] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.WebQRRetrieveProteinsMultiQID
@@ -21,11 +21,12 @@ CREATE PROCEDURE dbo.WebQRRetrieveProteinsMultiQID
 **			04/05/2005 mem - Added parameter @VerboseColumnOutput
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
+**			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(4000)
 **
 ****************************************************/
 (
 	@MTDBName varchar(128) = '',				-- Name of mass tag database to use
-	@QuantitationIDList varchar(1024),			-- Comma separated list of Quantitation ID's
+	@QuantitationIDList varchar(4000),			-- Comma separated list of Quantitation ID's
 	@SeparateReplicateDataIDs tinyint = 0,		-- Set to 1 to separate replicate-based QID's
 	@message varchar(512) = '' output,
 	@ReplicateCountAvgMinimum decimal(9,5)=1,	-- For replicated-based Q rollups, filters the data to only show the results present in this number of replicates or greater
@@ -41,7 +42,7 @@ AS
 	declare @params nvarchar(1024)
 	
 	set @stmt = N'exec [' + @MTDBName + N'].dbo.QRRetrieveProteinsMultiQID @QuantitationIDList, @SeparateReplicateDataIDs, @ReplicateCountAvgMinimum, @Description OUTPUT, @VerboseColumnOutput, @SortMode'
-	set @params = N'@QuantitationIDList varchar(1024), @SeparateReplicateDataIDs tinyint, @ReplicateCountAvgMinimum decimal(9,5), @Description varchar(32) OUTPUT, @VerboseColumnOutput tinyint, @SortMode tinyint'
+	set @params = N'@QuantitationIDList varchar(max), @SeparateReplicateDataIDs tinyint, @ReplicateCountAvgMinimum decimal(9,5), @Description varchar(32) OUTPUT, @VerboseColumnOutput tinyint, @SortMode tinyint'
 	exec @result = sp_executesql @stmt, @params, @QuantitationIDList = @QuantitationIDList, @SeparateReplicateDataIDs = @SeparateReplicateDataIDs, @ReplicateCountAvgMinimum = @ReplicateCountAvgMinimum, @Description = @Description OUTPUT, @VerboseColumnOutput = @VerboseColumnOutput, @SortMode = @SortMode
 	--
 	Declare @UsageMessage varchar(512)

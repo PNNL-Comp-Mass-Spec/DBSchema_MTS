@@ -36,10 +36,11 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
+**			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **
 ****************************************************/
 (
-	@QuantitationIDList varchar(1024),					-- Comma separated list of Quantitation ID's
+	@QuantitationIDList varchar(max),					-- Comma separated list of Quantitation ID's
 	@SeparateReplicateDataIDs tinyint = 1,				-- For quantitation ID's with replicates, separates the resultant crosstab table into a separate column for each replicate
 	@SourceColName varchar(128) = 'MT_Abundance',		-- Column to return; valid columns include MT_Abundance, UMC_Match_Count, SingleMT_MassTagMatchingIonCount
 	@AggregateColName varchar(128) = 'AvgAbu',

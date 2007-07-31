@@ -1,10 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[GetQRollupsSummary] ******/
+/****** Object:  StoredProcedure [dbo].[GetQRollupsSummaryWithPath] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetQRollupsSummary
+CREATE PROCEDURE dbo.GetQRollupsSummaryWithPath
 /****************************************************
 **
 **	Desc: 
@@ -32,7 +32,7 @@ CREATE PROCEDURE dbo.GetQRollupsSummary
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **			09/07/2006 mem - Now returns [Min High Peptide Prophet Prob]
 **			04/10/2007 mem - Replaced ..V_QR_SummaryList with .dbo.V_QR_SummaryList
-**			06/13/2007 mem - Now returns [Max Matches per UMC], but no longer returning [Results Folder Path]
+**			06/13/2007 mem - Now returns [Max Matches per UMC]
 **    
 *****************************************************/
 (
@@ -75,14 +75,14 @@ As
 	--
 	set @sql = ''
 	set @sql = @sql + ' SELECT '
-	set @sql = @sql + ' QID, 0 as Sel, [Sample Name], Comment, '
+	set @sql = @sql + ' QID, 0 as Sel, [Sample Name], Comment, [Results Folder Path],'
 	set @sql = @sql + ' [Unique Mass Tag Count], [Comparison Mass Tag Count], '
 	set @sql = @sql + ' [Threshold % For Inclusion], Normalize, [Std Abu Min], [Std Abu Max],'
 	set @sql = @sql + ' [Force Peak Max Abundance], [Min High MS/MS Score], [Min High Discriminant Score], [Min High Peptide Prophet Prob], [Min PMT Quality Score], '
 	set @sql = @sql + ' [Max Matches per UMC], [Min SLiC Score], [Min Del SLiC Score], [Min Peptide Length], [Min Peptide Rep Count],'
 	set @sql = @sql + ' [ORF Coverage Computation Level], [Rep Norm Stats],'
 	set @sql = @sql + ' [Quantitation State ID], State, [Last Affected]'
-	set @sql = @sql + ' FROM DATABASE..V_QR_SummaryList'
+	set @sql = @sql + ' FROM DATABASE..V_QR_SummaryList_Ex'
 	
 	if @ShowSuperseded = 1
 		set @sql = @sql + ' WHERE [Quantitation State ID] = 3 OR [Quantitation State ID] = 5'
@@ -125,5 +125,5 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetQRollupsSummary] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetQRollupsSummaryWithPath] TO [DMS_SP_User]
 GO

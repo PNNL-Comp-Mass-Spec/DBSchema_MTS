@@ -7,8 +7,8 @@ GO
 CREATE Procedure dbo.ComputePMTQualityScore
 /****************************************************	
 **	Populates the PMT_Quality_Score column in T_Mass Tags by examining
-**   the highest normalized score value for each mass tag and the number
-**   of MS/MS analyses the peptide was observed in
+**   the highest normalized score value for each mass tag, the number
+**   of MS/MS analyses the peptide was observed in, and several other metrics
 **
 **	Auth:	mem
 **	Date:	01/07/2004
@@ -36,6 +36,7 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			07/10/2006 mem - Added support for Peptide Prophet scores
 **			08/26/2006 mem - Added support for RankScore (aka RankXc for Sequest); currently only used with Sequest results
 **			02/07/2007 mem - Added parameter @PreviewSql and switched to using sp_executesql
+**			06/08/2007 mem - Now calling GetPMTQualityScoreFilterSetDetails to populate #FilterSetDetails
 **
 ****************************************************/
 (
@@ -58,6 +59,7 @@ As
 
 	Declare @MassTagCountNonZero int,
 			@MassTagCountZero int,
+			@UniqueRowID int,
 			@Continue int,
 			@FilterSetsEvaluated int
 
@@ -164,15 +166,8 @@ As
 
 
 	-----------------------------------------------------------
-	-- Create the temporary tables to hold the Filter Sets to test
+	-- Create the temporary table to hold the Filter Sets to test
 	-----------------------------------------------------------
-	CREATE TABLE #FilterSetDetailsUnsorted (
-		Filter_Set_Text varchar(256),
-		Filter_Set_ID int NULL,
-		Score_Value real NULL,
-		Experiment_Filter varchar(128) NULL,
-		Unique_Row_ID int Identity(1,1)
-	)
 
 	CREATE TABLE #FilterSetDetails (
 		Filter_Set_Text varchar(256),
@@ -181,25 +176,16 @@ As
 		Experiment_Filter varchar(128) NULL,
 		Unique_Row_ID int Identity(1,1)
 	)
-
-	-----------------------------------------------------------
-	-- Populate the table with the Filter Sets
-	-----------------------------------------------------------
-	INSERT INTO #FilterSetDetailsUnsorted (
-		Filter_Set_Text, Score_Value
-		)
-	SELECT Value, 1 As ScoreValue
-	FROM T_Process_Config
-	WHERE [Name] = 'PMT_Quality_Score_Set_ID_and_Value' And Len(Value) > 0
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
-	--
-	If @myError <> 0
-	Begin
-		Set @Message = 'Error populating #FilterSetDetailsUnsorted in ComputePMTQualityScore'
-		Goto Done
-	End
 	
+	-----------------------------------------------------------
+	-- Populate the table with the Filter Set Info
+	-----------------------------------------------------------
+	--
+	Exec @myError = GetPMTQualityScoreFilterSetDetails @message = @message output
+	
+	If @myError <> 0
+		Goto Done
+		
 	-----------------------------------------------------------
 	-- Lookup the value of PMT_Quality_Score_Uses_Filtered_Peptide_Obs_Count
 	-----------------------------------------------------------
@@ -217,106 +203,6 @@ As
 		Set @UseFilteredPeptideObsCount = 1
 	Else
 		Set @UseFilteredPeptideObsCount = 0
-
-	-----------------------------------------------------------
-	-- Parse the Filter_Set_Text column to split out the Filter_Set_ID
-	-- (and possible Experiment name) from the Score Value
-	-----------------------------------------------------------
-	Declare @UniqueRowID int
-	Declare @CommaLoc int
-	
-	Declare @FilterSetText varchar(128)
-	Declare @FilterSetTextParsed varchar(128)
-	Declare @FilterSetValueParsed varchar(128)
-	Declare @ExperimentFilterParsed varchar(128)
-	
-	Set @UniqueRowID = 0
-	Set @Continue = 1
-	
-	While @Continue > 0
-	Begin
-		Set @FilterSetText = ''
-		Set @FilterSetValueParsed = '1'
-		Set @ExperimentFilterParsed = ''
-		
-		SELECT TOP 1 @FilterSetText = IsNull(Filter_Set_Text, ''),
-					 @UniqueRowID = Unique_Row_ID
-		FROM #FilterSetDetailsUnsorted
-		WHERE Unique_Row_ID > @UniqueRowID
-		--
-		SELECT @myError = @@error, @myRowCount = @@RowCount
-
-		If @myRowCount = 0
-			Set @Continue = 0
-		Else
-		 Begin
-			Set @CommaLoc = CharIndex(',', @FilterSetText)
-			
-			If @CommaLoc > 0
-			 Begin
-				Set @FilterSetTextParsed = LTrim(RTrim(SubString(@FilterSetText, 1, @CommaLoc-1)))
-				Set @FilterSetValueParsed = LTrim(RTrim(SubString(@FilterSetText, @CommaLoc+1, Len(@FilterSetText) - @CommaLoc)))
-
-				Set @CommaLoc = CharIndex(',', @FilterSetValueParsed)
-				
-				If @CommaLoc > 0
-				Begin
-					Set @ExperimentFilterParsed = LTrim(RTrim(SubString(@FilterSetValueParsed, @CommaLoc+1, Len(@FilterSetValueParsed) - @CommaLoc)))
-					Set @FilterSetValueParsed = LTrim(RTrim(SubString(@FilterSetValueParsed, 1, @CommaLoc-1)))
-				End
-				Else
-				Begin
-					set @FilterSetValueParsed = LTrim(RTrim(@FilterSetValueParsed))
-					Set @ExperimentFilterParsed = ''
-				End
-			 End
-			Else
-			 Begin
-				Set @FilterSetTextParsed = LTrim(RTrim(@FilterSetText))
-				Set @FilterSetValueParsed = '1'
-				Set @ExperimentFilterParsed = ''
-			 End
-			
-			If IsNumeric(@FilterSetTextParsed) = 1 AND IsNumeric(@FilterSetValueParsed) = 1
-			 Begin
-				UPDATE #FilterSetDetailsUnsorted
-				SET Filter_Set_ID = Convert(int, @FilterSetTextParsed),
-					Score_Value = Convert(real, @FilterSetValueParsed),
-					Experiment_Filter = @ExperimentFilterParsed
-				WHERE Unique_Row_ID = @UniqueRowID
-				--
-				SELECT @myError = @@error, @myRowCount = @@RowCount
-			 End
-			Else
-				Set @myError = 50000
-			
-			If @myError <> 0
-			Begin
-				-- Invalid filter defined; post message to log, but continue processing
-				Set @message = 'Invalid PMT_Quality_Score_Set_ID_and_Value entry in T_Process_Config: ' + @FilterSetText + '; Should be a Filter_Set_ID and filter score value, separated by a comma'
-				SELECT @message
-				
-				execute PostLogEntry 'Error', @message, 'ComputePMTQualityScore'
-				Set @message = ''
-				Set @myError = 0
-
-				DELETE FROM #FilterSetDetailsUnsorted
-				WHERE Unique_Row_ID = @UniqueRowID
-			End
-		 End		
-	End
-
-	-----------------------------------------------------------
-	-- Copy the data from #FilterSetDetailsUnsorted to #FilterSetDetails,
-	-- sorting on Score_Value
-	-----------------------------------------------------------
-	
-	INSERT INTO #FilterSetDetails (Filter_Set_Text, Filter_Set_ID, Score_Value, Experiment_Filter)
-	SELECT Filter_Set_Text, Filter_Set_ID, Score_Value, Experiment_Filter
-	FROM #FilterSetDetailsUnsorted
-	ORDER BY Score_Value, Unique_Row_ID
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
 	
 	-----------------------------------------------------------
 	-- Define the filter threshold values
@@ -416,6 +302,7 @@ As
 						@UniqueRowID = Unique_Row_ID
 			FROM #FilterSetDetails
 			WHERE Unique_Row_ID > @UniqueRowID
+			ORDER BY Unique_Row_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@RowCount
 
@@ -860,6 +747,10 @@ As
 		EXEC PostLogEntry 'Normal', @message, 'ComputePMTQualityScore'
 
 Done:	
+	If @InfoOnly = 0 And @myError <> 0
+		EXEC PostLogEntry 'Error', @message, 'ComputePMTQualityScore'
+
+
 	DROP INDEX #PeptideStats.#IX_PeptideStats
 	DROP INDEX #NewMassTagScores.#IX_NewMassTagScores
 	
