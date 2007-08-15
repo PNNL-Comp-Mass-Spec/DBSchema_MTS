@@ -35,6 +35,100 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MT_Database_List] ON [dbo].[T_MT_Database
 	[MTL_Name] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
+
+/****** Object:  Trigger [dbo].[trig_d_MT_Database_List] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE Trigger dbo.trig_d_MT_Database_List on [dbo].[T_MT_Database_List]
+For Delete
+/****************************************************
+**
+**	Desc: 
+**		Makes an entry in T_Event_Log for the deleted MT database
+**
+**	Auth:	mem
+**	Date:	08/10/2007
+**    
+*****************************************************/
+AS
+	-- Add entries to T_Event_Log for each job deleted from T_MT_Database_List
+	INSERT INTO T_Event_Log
+		(
+			Target_Type, Target_ID, 
+			Target_State, Prev_Target_State, 
+			Entered
+		)
+	SELECT	1 AS Target_Type, MTL_ID, 
+			0 AS Target_State, MTL_State, 
+			GETDATE()
+	FROM deleted
+	ORDER BY MTL_ID
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_i_MT_Database_List] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+create Trigger trig_i_MT_Database_List on T_MT_Database_List
+For Insert
+/****************************************************
+**
+**	Desc: 
+**		Makes an entry in T_Event_Log for the new MT database
+**
+**	Auth:	mem
+**	Date:	08/10/2007
+**    
+*****************************************************/
+AS
+	If @@RowCount = 0
+		Return
+
+	INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+	SELECT 1, inserted.MTL_ID, inserted.MTL_State, 0, GetDate()
+	FROM inserted
+
+GO
+
+/****** Object:  Trigger [dbo].[trig_u_MT_Database_List] ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+create Trigger trig_u_MT_Database_List on T_MT_Database_List
+For Update
+/****************************************************
+**
+**	Desc: 
+**		Makes an entry in T_Event_Log for the updated MT database
+**
+**	Auth:	mem
+**	Date:	08/10/2007
+**    
+*****************************************************/
+AS
+	If @@RowCount = 0
+		Return
+
+	if update(MTL_State)
+		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+		SELECT 1, inserted.MTL_ID, inserted.MTL_State, deleted.MTL_State, GetDate()
+		FROM deleted INNER JOIN inserted ON deleted.MTL_ID = inserted.MTL_ID
+
+GO
 ALTER TABLE [dbo].[T_MT_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name] FOREIGN KEY([MTL_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
