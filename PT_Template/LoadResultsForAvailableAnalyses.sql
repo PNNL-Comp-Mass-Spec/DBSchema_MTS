@@ -34,6 +34,7 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			07/03/2006 mem - Now populating field RowCount_Loaded in T_Analysis_Description
 **			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
+**			10/11/2007 mem - Now calling ReindexDatabase after varying amounts of data have been loaded
 **    
 *****************************************************/
 (
@@ -67,10 +68,21 @@ AS
 	declare @AnalysisTool varchar(64)
 	declare @ResultType varchar(64)
 	declare @numLoaded int
-	declare @jobprocessed int
+	declare @jobProcessed int
 	
 	declare @NextProcessStateToUse int
+	
+	declare @JobCount int
 
+	declare @LastReindexTime datetime
+	Set @LastReindexTime = '1/1/2000'
+	
+	declare @ReindexDB int
+	set @ReindexDB = 0
+	
+	declare @ReindexMessage varchar(512)
+	set @ReindexMessage = ''
+	
 	declare @count int
 	Set @count = 0
 
@@ -181,7 +193,10 @@ AS
 			Set @jobAvailable = 0
 		Else
 		Begin -- <b>
-			Set @jobprocessed = 0
+			Set @jobProcessed = 0
+			Set @ReindexDB = 0
+			Set @ReindexMessage = ''
+			
 			If (@AnalysisTool = 'Sequest' OR @AnalysisTool = 'AgilentSequest' OR @AnalysisTool = 'XTandem')
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
@@ -192,12 +207,22 @@ AS
 							@numLoaded output,
 							@clientStoragePerspective
 			
-				Set @jobprocessed = 1
+				Set @jobProcessed = 1
+				
+				-- Count the number jobs currently in state @NextProcessStateToUse
+				SELECT @JobCount = COUNT(*)
+				FROM T_Analysis_Description
+				WHERE Process_State = @NextProcessStateToUse
+				
+				-- Reindex after 25 and after 100 Peptide_Hit jobs have been loaded
+				If @JobCount = 25 Or @JobCount = 100
+					Set @ReindexDB = 1
 			End
 
 			If (@AnalysisTool = 'MASIC_Finnigan' OR @AnalysisTool = 'MASIC_Agilent')
 			Begin
 				Set @NextProcessStateToUse = 75
+				
 				exec @result = LoadMASICResultsForOneAnalysis
 								@NextProcessStateToUse,
 								@Job, 
@@ -206,6 +231,31 @@ AS
 								@clientStoragePerspective
 				
 				Set @jobProcessed = 1
+
+				-- Count the number jobs currently in state 75
+				SELECT @JobCount = COUNT(*)
+				FROM T_Analysis_Description
+				WHERE Process_State = @NextProcessStateToUse
+				
+				-- Reindex after 25 SIC jobs have been loaded
+				If @JobCount = 25
+					Set @ReindexDB = 1
+			End
+			
+			If @ReindexDB <> 0
+			Begin
+				-- Reindex, but not if we already did so in this procedure within the last 20 minutes
+				
+				If DateDiff(minute, @LastReindexTime, GetDate()) > 20
+				Begin
+					UPDATE T_Process_Step_Control
+					SET Enabled = 1
+					WHERE (Processing_Step_Name = 'ReindexDatabaseNow')
+					
+					Set @ReindexMessage = 'Database now contains ' + Convert(varchar(12), @JobCount) + ' ' + @ResultType + ' jobs; requesting that the tables be reindexed'
+				End
+				Else
+					Set @ReindexDB = 0
 			End
 			
 			If @jobProcessed = 0
@@ -250,13 +300,32 @@ AS
 				-- bump running count of peptides loaded
 				--
 				Set @count = @count + @numLoaded
+								
+				-- Post a log entry if @ReindexMessage contains a message
+				If Len(@ReindexMessage) > 0
+					Exec PostLogEntry 'Normal', @ReindexMessage, 'LoadResultsForAvailableAnalyses'
+
+				-- Check whether the database needs to be re-indexed
+				-- Don't use the value in @ReindexDB; examine table T_Process_Step_Control in the state was manually changed
 				
+				Set @ReindexDB = 0
+				SELECT @ReindexDB = enabled 
+				FROM T_Process_Step_Control
+				WHERE (Processing_Step_Name = 'ReindexDatabaseNow')
+				
+				If @ReindexDB <> 0
+				Begin
+					Exec @myError = ReindexDatabase @message output
+					Set @LastReindexTime = GetDate()
+				End
+
+
 				-- check number of jobs processed
 				--
 				Set @numJobsProcessed = @numJobsProcessed + 1
 				If @numJobsProcessed >= @numJobsToProcess 
 					Set @jobAvailable = 0
-					
+
 			End -- </c>
 		End -- </b>
 

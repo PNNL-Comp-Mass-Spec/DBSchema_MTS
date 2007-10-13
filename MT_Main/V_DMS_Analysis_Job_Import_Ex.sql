@@ -8,11 +8,12 @@ AS
 SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
     Organism, InstrumentName, InstrumentClass, AnalysisTool, 
     Completed, ParameterFileName, SettingsFileName, 
-    OrganismDBName, ProteinCollectionList, ProteinOptions, 
+    OrganismDBName, Convert(varchar(max), ProteinCollectionList) AS ProteinCollectionList, ProteinOptions, 
     StoragePathClient, StoragePathServer, DatasetFolder, 
     ResultsFolder, Owner, Comment, SeparationSysType, 
     ResultType, [Dataset Int Std], DS_created, EnzymeID, 
-    Labelling, [PreDigest Int Std], [PostDigest Int Std]
+    Labelling, [PreDigest Int Std], [PostDigest Int Std], Processor
 FROM GIGASAX.DMS5.dbo.V_Analysis_Job_Export_Ex AS T1
+
 
 GO

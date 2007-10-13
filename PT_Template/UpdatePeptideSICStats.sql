@@ -24,6 +24,7 @@ CREATE Procedure dbo.UpdatePeptideSICStats
 **			03/01/2006 mem - Now calling ComputeMaxObsAreaByJob for each job processed
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			03/18/2006 mem - No longer calling ComputeMaxObsAreaByJob for each job processed since Seq_ID is required to call that SP
+**			10/12/2007 mem - Now calling ReindexDatabase if InitialDBReindexComplete = 0 or UpdatePeptideSICStatsHadDBReindexed = 0 in T_Process_Step_Control
 **    
 *****************************************************/
 (
@@ -63,6 +64,11 @@ As
 	Declare @RowCountUpdated int
 	Declare @RowCountDefined int
 	Declare @JobFilterList varchar(128)
+	
+	Declare @DBReindexComplete int
+	Declare @UpdateSICStatsMarkDBReindexed int
+	Set @DBReindexComplete = 0
+	Set @UpdateSICStatsMarkDBReindexed = 0
 	
 	----------------------------------------------
 	-- Loop through T_Analysis_Description, processing jobs with Process_State = @ProcessStatematch
@@ -153,6 +159,56 @@ As
 		
 		If @jobAvailable = 1
 		Begin -- <b>
+			
+			If @numJobsProcessed = 0
+			Begin
+				----------------------------------------------
+				-- Prior to processing the first job, check whether 
+				--  the database needs to be re-indexed
+				----------------------------------------------
+
+				SELECT @DBReindexComplete = enabled 
+				FROM T_Process_Step_Control
+				WHERE (Processing_Step_Name = 'InitialDBReindexComplete')
+
+				Set @DBReindexComplete = IsNull(@DBReindexComplete, 0)
+				
+				If @DBReindexComplete <> 0
+				Begin
+					-- DB already re-indexed once, but what about on the first call to this procedure?
+					SELECT @DBReindexComplete = enabled
+					FROM T_Process_Step_Control
+					WHERE (Processing_Step_Name = 'UpdatePeptideSICStatsHadDBReindexed')
+					
+					Set @DBReindexComplete = IsNull(@DBReindexComplete, 0)
+					If @DBReindexComplete = 0
+						Set @UpdateSICStatsMarkDBReindexed = 1
+				End
+				
+
+				If @DBReindexComplete = 0
+				Begin
+					Exec @myError = ReindexDatabase @message output
+					
+					If @UpdateSICStatsMarkDBReindexed <> 0
+					Begin
+						UPDATE T_Process_Step_Control
+						SET Enabled = 1
+						WHERE (Processing_Step_Name = 'UpdatePeptideSICStatsHadDBReindexed')
+						--
+						SELECT @myError = @@error, @myRowCount = @@rowcount
+					
+						If @myRowCount = 0
+						Begin
+							Set @message = 'Entry "UpdatePeptideSICStatsHadDBReindexed" not found in T_Process_Step_Control; adding it'
+							Exec PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
+							
+							INSERT INTO T_Process_Step_Control (Processing_Step_Name, Enabled)
+							VALUES ('UpdatePeptideSICStatsHadDBReindexed', 1)
+						End
+					End
+				End
+			End
 
 			-- Make sure the Job has a SIC_Job associated with it
 			Set @SICJobExists = 0

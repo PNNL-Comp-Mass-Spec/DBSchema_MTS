@@ -52,6 +52,7 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListOverride
 **			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
 **			05/25/2007 mem - Now calling LookupPeptideDBLocations to determine the location of the peptide databases
+**			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
 **
 *****************************************************/
 (
@@ -384,7 +385,7 @@ As
 		[Parameter_File_Name] [varchar] (255) NOT NULL,
 		[Settings_File_Name] [varchar] (255) NULL,
 		[Organism_DB_Name] [varchar] (64) NOT NULL,
-		[Protein_Collection_List] [varchar] (2048) NOT NULL,
+		[Protein_Collection_List] [varchar] (max) NOT NULL,
 		[Protein_Options_List] [varchar] (256) NOT NULL,
 		[Vol_Client] [varchar] (128) NOT NULL,
 		[Vol_Server] [varchar] (128) NULL,

@@ -46,6 +46,7 @@ CREATE Procedure dbo.LoadSequestPeptidesBulk
 **			10/10/2006 mem - Now checking for protein names longer than 34 characters
 **			11/27/2006 mem - Now calling UpdatePeptideStateID
 **			03/06/2007 mem - Now considering @PeptideProphet and @RankScore when filtering
+**			10/10/2007 mem - Now excluding reversed or scrambled proteins when looking for long protein names
 **
 *****************************************************/
 (
@@ -945,13 +946,21 @@ As
 	Begin
 		SELECT @LongProteinNameCount = COUNT(Distinct Reference)
 		FROM #Tmp_Peptide_SeqToProteinMap
-		WHERE Len(Reference) > 34
+		WHERE Len(Reference) > 34 AND
+			  NOT (	Reference LIKE 'reversed[_]%' OR
+					Reference LIKE 'scrambled[_]%' OR
+					Reference LIKE '%[:]reversed'
+				  )
 	End
 	Else
 	Begin
 		SELECT @LongProteinNameCount = COUNT(Distinct Reference)
 		FROM #Tmp_Peptide_Import
-		WHERE Len(Reference) > 34
+		WHERE Len(Reference) > 34 AND
+			  NOT (	Reference LIKE 'reversed[_]%' OR
+					Reference LIKE 'scrambled[_]%' OR
+					Reference LIKE '%[:]reversed'
+				  )
 	End
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error

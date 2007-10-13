@@ -31,6 +31,7 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 **			12/01/2005 mem - Now considering option 'GANET_Avg_Use_Max_Obs_Area_In_Job_Enabled' in T_Process_Config
 **			01/18/2006 mem - Now posting a message to T_Log_Entries on Success
 **			03/13/2006 mem - Now calling UpdateCachedHistograms
+**			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **
 *********************************************************/
 (
@@ -68,6 +69,12 @@ AS
 	Declare @AvgNETShift float
 	Set @AvgNETShift = 0
 
+	declare @lastProgressUpdate datetime
+	Set @lastProgressUpdate = GetDate()
+
+	declare @ProgressUpdateIntervalThresholdSeconds int
+	Set @ProgressUpdateIntervalThresholdSeconds = 120
+	
 	If @GANETWeightedAverageOverride >=0
 	Begin
 		-----------------------------------------------
@@ -95,7 +102,7 @@ AS
 		--
 		If @myError <> 0 Or @myRowCount <> 1
 		Begin
-			Select @message = 'Error looking up GANET_Weighted_Average_Enabled value in T_Process_Config'
+			Set @message = 'Error looking up GANET_Weighted_Average_Enabled value in T_Process_Config'
 			If @myError = 0
 				Set @myError = 50000
 			Goto Done
@@ -133,7 +140,7 @@ AS
 		--
 		If @myError <> 0 Or @myRowCount <> 1
 		Begin
-			Select @message = 'Error looking up GANET_Avg_Use_Max_Obs_Area_In_Job_Enabled value in T_Process_Config'
+			Set @message = 'Error looking up GANET_Avg_Use_Max_Obs_Area_In_Job_Enabled value in T_Process_Config'
 			If @myError = 0
 				Set @myError = 50000
 			Goto Done
@@ -168,7 +175,7 @@ AS
 		--
 		If @myError <> 0
 		Begin
-			Select @message = 'Error looking up GANET_Fit_Minimum_Average_GANET value in T_Process_Config'
+			Set @message = 'Error looking up GANET_Fit_Minimum_Average_GANET value in T_Process_Config'
 			If @myError = 0
 				Set @myError = 50001
 			Goto Done
@@ -200,7 +207,7 @@ AS
 		--
 		If @myError <> 0
 		Begin
-			Select @message = 'Error looking up GANET_RSquared_Minimum_Average_GANET value in T_Process_Config'
+			Set @message = 'Error looking up GANET_RSquared_Minimum_Average_GANET value in T_Process_Config'
 			If @myError = 0
 				Set @myError = 50002
 			Goto Done
@@ -213,7 +220,7 @@ AS
 	
 	If @MinNETFit = -1 And @MinNETRSquared = -1
 	Begin
-		Select @message = 'Error looking up GANET_Fit_Minimum_Average_GANET or GANET_RSquared_Minimum_Average_GANET value in T_Process_Config'
+		Set @message = 'Error looking up GANET_Fit_Minimum_Average_GANET or GANET_RSquared_Minimum_Average_GANET value in T_Process_Config'
 		If @myError = 0
 			Set @myError = 50003
 		Goto Done
@@ -230,7 +237,7 @@ AS
 	--
 	If @myError <> 0
 	Begin
-		Select @message = 'Error counting number of rows in T_Mass_Tags_NET (before addition of new MTs)'
+		Set @message = 'Error counting number of rows in T_Mass_Tags_NET (before addition of new MTs)'
 		Goto Done
 	End
 
@@ -421,8 +428,16 @@ AS
 	--
 	If @myError <> 0
 	Begin
-		Select @message = 'Error populating #NET_Stats_by_Dataset'
+		Set @message = 'Error populating #NET_Stats_by_Dataset'
 		Goto Done
+	End
+
+	if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+	Begin
+		set @message = '...Processing: Populated #NET_Stats_by_Dataset (' + convert(varchar(19), @myRowCount) + ' total rows)'
+		execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
+		set @message = ''
+		set @lastProgressUpdate = GetDate()
 	End
 
 
@@ -474,6 +489,13 @@ AS
 		--
 		SELECT @myError = @myError + @@error, @myRowCount = @@rowcount
 
+		if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+		Begin
+			set @message = '...Processing: Populated #NET_Stats (' + convert(varchar(19), @myRowCount) + ' total rows)'
+			execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
+			set @message = ''
+			set @lastProgressUpdate = GetDate()
+		End
 
 		-----------------------------------------------
 		-- <1-D> Compute Score_NETDiff_Product
@@ -501,6 +523,14 @@ AS
 		WHERE NOT #NET_Stats_by_Dataset.DiscriminantScoreNorm IS NULL
 		--
 		SELECT @myError = @myError + @@error, @myRowCount = @@rowcount
+
+		if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+		Begin
+			set @message = '...Processing: Computed score values in #NET_Stats_by_Dataset (' + convert(varchar(19), @myRowCount) + ' rows updated)'
+			execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
+			set @message = ''
+			set @lastProgressUpdate = GetDate()
+		End
 		
 		
 		-----------------------------------------------
@@ -542,8 +572,16 @@ AS
 		--
 		If @myError <> 0
 		Begin
-			Select @message = 'Error populating NET_StDev in #NET_Stats using a weighted standard deviation (steps 1-B through 1-G)'
+			Set @message = 'Error populating NET_StDev in #NET_Stats using a weighted standard deviation (steps 1-B through 1-G)'
 			Goto Done
+		End
+
+		if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+		Begin
+			set @message = '...Processing: Computed standard error values in #NET_Stats (' + convert(varchar(19), @myRowCount) + ' rows updated)'
+			execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
+			set @message = ''
+			set @lastProgressUpdate = GetDate()
 		End
 
 	End
@@ -567,6 +605,14 @@ AS
 		GROUP BY Mass_Tag_ID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+		Begin
+			set @message = '...Processing: Populated #NET_Stats (' + convert(varchar(19), @myRowCount) + ' total rows)'
+			execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
+			set @message = ''
+			set @lastProgressUpdate = GetDate()
+		End
 
 	End
 
@@ -607,7 +653,7 @@ AS
 	If @myError <> 0
 	Begin
 		rollback transaction @transName
-		Select @message = 'Error setting existing Ganet values to NULL in T_Mass_Tags_NET'
+		Set @message = 'Error setting existing Ganet values to NULL in T_Mass_Tags_NET'
 		Goto Done
 	End
 
@@ -628,7 +674,7 @@ AS
 	If @myError <> 0
 	Begin
 		rollback transaction @transName
-		Select @message = 'Error adding missing Mass_Tag_ID values to T_Mass_Tags_NET'
+		Set @message = 'Error adding missing Mass_Tag_ID values to T_Mass_Tags_NET'
 		Goto Done
 	End
 
@@ -644,7 +690,7 @@ AS
 	If @myError <> 0 OR @myRowCount <> 1
 	Begin
 		rollback transaction @transName
-		Select @message = 'Error counting number of rows in T_Mass_Tags_NET (after addition of new MTs)'
+		Set @message = 'Error counting number of rows in T_Mass_Tags_NET (after addition of new MTs)'
 		If @myError = 0
 			Set @myError = 50004
 		Goto Done
@@ -672,7 +718,7 @@ AS
 	IF @myError <> 0
 		Begin
 			rollback transaction @transName
-			Select @message = 'Error while populating T_Mass_Tags_NET'
+			Set @message = 'Error while populating T_Mass_Tags_NET'
 			GOTO Done
 		End
 	Else

@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 35 ******/
+/****** RowCount: 37 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -27,6 +27,8 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism_DB_File_Name','MS/MS
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Parameter_File_Name','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that were performed with this parameter file')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_DB_Name','MS/MS analysis job import, Peptide hit import',1,99,'Import MS/MS jobs and their associated peptide hits from these peptide databases')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID','Peptide hit import',0,99,'Allow peptide hits that have satisfied this filter')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Thresholds','Statistics Threshold',1,99,'Comma separated list of minimum discriminant score and minimum peptide prophet value to filter on when preparing stats for T_Peptide_Load_Stats')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Update_Interval','Update Interval',1,1,'Defines how often detailed load stats are added to T_Peptide_Load_Stats when loading a large number of analysis job')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Obs_Count_Filter_ID','Info Only',1,1,'Filter ID to use when determining the MS/MS peptide observation count that passes a filter')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('PMT_Quality_Score_Set_ID_and_Value','PMT Quality Score Computation',0,99,'Filter Sets from DMS to test PMTs against for populating the PMT_Quality_Score field in T_Mass_Tags; separate the ID and the value with a comma; if no value, then assumes value = 1.  Can include an experiment name filter as a third, comma separated parameter, for example: 121, 2, Tao-HME%')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('PMT_Quality_Score_Uses_Filtered_Peptide_Obs_Count','PMT Quality Score Computation',1,1,'If 0, then column Number_of_Peptides is used for PMT QS calculations.  If 1 then column Peptide_Obs_Count_Passing_Filter is used')

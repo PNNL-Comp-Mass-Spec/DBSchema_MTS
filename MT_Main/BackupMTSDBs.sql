@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **						   - Replaced parameter @FileAndThreadCount with parameters @FileCount and @ThreadCount
 **						   - Upgraded for use with Sql Backup 5 (replacing the Threads argument with the ThreadCount argument)
 **			05/31/2007 mem - Now including FILEOPTIONS only if @UseLocalTransferFolder is non-zero
+**			09/07/2007 mem - Now returning the contents of #Tmp_DB_Backup_List when @InfoOnly = 1
 **    
 *****************************************************/
 (
@@ -313,7 +314,11 @@ As
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
 	If @myRowCount > 0
+	Begin
 		Set @message = 'Deleted ' + Convert(varchar(9), @myRowCount) + ' non-existent databases'
+		If @InfoOnly = 1
+			SELECT @message AS Warning_Message
+	End
 	
 	
 	---------------------------------------
@@ -356,6 +361,11 @@ As
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End		
 
+
+	If @InfoOnly = 1
+		SELECT *
+		FROM #Tmp_DB_Backup_List
+		ORDER BY DatabaseName
 
 	---------------------------------------
 	-- Count the number of databases in #Tmp_DB_Backup_List

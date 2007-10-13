@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.ComputeMassTagsAnalysisCounts
+CREATE Procedure dbo.ComputeMassTagsAnalysisCounts
 /****************************************************
 **
 **	Desc: 
@@ -27,6 +27,7 @@ CREATE PROCEDURE dbo.ComputeMassTagsAnalysisCounts
 **			07/10/2006 mem - Updated to support Peptide Prophet values
 **			09/06/2006 mem - Now posting a log entry on success
 **			02/07/2007 mem - Switched to using sp_executesql
+**			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **    
 *****************************************************/
 (
@@ -47,6 +48,32 @@ AS
 	declare @ResultTypeID int
 	declare @ResultType varchar(32)
 	Set @ResultType = 'Unknown'
+
+	declare @lastProgressUpdate datetime
+	Set @lastProgressUpdate = GetDate()
+
+	declare @ProgressUpdateIntervalThresholdSeconds int
+	Set @ProgressUpdateIntervalThresholdSeconds = 120
+	
+	declare @TableRowCount int
+	declare @MTRowsUpdated int
+	Set @MTRowsUpdated = 0
+	
+	-- Check the size of T_Peptides; if it contains over 2 million rows,
+	--  then post a log entry saying this procedure is starting
+	
+	Set @TableRowCount = 0
+	SELECT @TableRowCount = TableRowCount
+	FROM V_Table_Row_Counts
+	WHERE (TableName = 'T_Peptides')
+	
+	If @TableRowCount > 2000000
+	Begin
+		Set @message = 'Updating mass tag analysis counts using T_Peptides (' + Convert(varchar(19), @TableRowCount) + ' rows)'
+		execute PostLogEntry 'Progress', @message, 'ComputeMassTagsAnalysisCounts'
+		set @message = ''
+		Set @lastProgressUpdate = GetDate()
+	End
 
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types
@@ -118,7 +145,18 @@ AS
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
 		If @myError <> 0
-			Set @message = 'Error updating Number_Of_Peptides and High_Normalized_Score in T_Mass_Tags'
+		Begin
+			Set @message = 'Error updating Number_Of_Peptides and High_Normalized_Score in T_Mass_Tags: ' + Convert(varchar(12), @myError)
+			execute PostLogEntry 'Error', @message, 'ComputeMassTagsAnalysisCounts'
+		End
+
+		if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+		Begin
+			set @message = '...Processing: Updated the general stats in T_Mass_Tags (' + convert(varchar(19), @myRowCount) + ' rows updated)'
+			execute PostLogEntry 'Progress', @message, 'ComputeMassTagsAnalysisCounts'
+			set @message = ''
+			set @lastProgressUpdate = GetDate()
+		End
 
 		-----------------------------------------------------------
 		--  Verify that Internal_Standard_Only = 0 for all peptides with an entry in T_Peptides
@@ -131,7 +169,7 @@ AS
 		WHERE Internal_Standard_Only = 1
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
-		
+
 	End
 
 
@@ -143,6 +181,8 @@ AS
 	Declare @Sql nvarchar(max)
 	Declare @ConfigValue varchar(128)
 	Declare @FilterSetID int
+	Declare @MTObsStatsRowCount int
+	Set @MTObsStatsRowCount = 0
 	
 	-- Create a temporary table to track which PMTs pass the filter critera
 	-- and the datasets and scan numbers the peptide was observed in
@@ -324,7 +364,7 @@ AS
 					Set @Sql = @sql +   ' GROUP BY Dataset_ID, Mass_Tag_ID, Scan_Number, GANET_Obs, Charge_State'
 					Set @Sql = @sql +   ') AS StatsQ'
   					Set @Sql = @sql +   ' INNER JOIN T_Mass_Tags AS MT ON StatsQ.Mass_Tag_ID = MT.Mass_Tag_ID'
-					Set @Sql = @sql +   ' LEFT OUTER JOIN T_Mass_Tag_to_Protein_Map AS MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID'
+					Set @Sql = @sql + ' LEFT OUTER JOIN T_Mass_Tag_to_Protein_Map AS MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID'
 					Set @Sql = @sql +   ' LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID'
 					Set @Sql = @Sql + ' WHERE '
 					Set @Sql = @Sql +   ' StatsQ.Charge_State ' +  @ChargeStateComparison + Convert(varchar(11), @ChargeStateThreshold) + ' AND '
@@ -342,6 +382,8 @@ AS
 					Exec sp_executesql @Sql
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
+					--
+					Set @MTObsStatsRowCount = @MTObsStatsRowCount + @myRowCount
 				End -- </d>
 
 				If @ResultType = 'XT_Peptide_Hit'
@@ -391,6 +433,8 @@ AS
 					Exec sp_executesql @Sql
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
+					--
+					Set @MTObsStatsRowCount = @MTObsStatsRowCount + @myRowCount
 				End -- </d>
 
 				--
@@ -401,6 +445,14 @@ AS
 					Else
 						set @message = 'Error evaluating filter set criterion'
 					Goto done
+				End
+
+				if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+				Begin
+					set @message = '...Processing: Populating #TmpMTObsStats (has ' + convert(varchar(19), @MTObsStatsRowCount) + ' total rows)'
+					execute PostLogEntry 'Progress', @message, 'ComputeMassTagsAnalysisCounts'
+					set @message = ''
+					set @lastProgressUpdate = GetDate()
 				End
 
 				-----------------------------------------------------------
@@ -417,7 +469,7 @@ AS
 				-- If no more ResultTypes, then set @ResultType to '' so that the While Loop exits
 				If @myRowCount = 0
 					Set @ResultType = ''
-									
+
 			End -- </c>
 			
 			-- Lookup the next set of filters
@@ -463,11 +515,13 @@ AS
 			) AS StatsQ ON T_Mass_Tags.Mass_Tag_ID = StatsQ.Mass_Tag_ID	
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
+		--
+		Set @MTRowsUpdated = @myRowCount
 
 	End -- </a>
 
 	-- Post a log entry
-	Set @message = 'Updated observation counts in T_Mass_Tags using filter set ' + Convert(varchar(9), @FilterSetID)
+	Set @message = 'Updated observation counts in T_Mass_Tags using filter set ' + Convert(varchar(9), @FilterSetID) + '; ' + Convert(varchar(19), @MTRowsUpdated) + ' rows updated'
 	execute PostLogEntry 'Normal', @message, 'ComputeMassTagsAnalysisCounts'
 	
 Done:

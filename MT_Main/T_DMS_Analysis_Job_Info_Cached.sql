@@ -14,11 +14,12 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 	[InstrumentName] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[InstrumentClass] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[AnalysisTool] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Processor] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Completed] [datetime] NULL,
 	[ParameterFileName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[SettingsFileName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[OrganismDBName] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[ProteinCollectionList] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[ProteinCollectionList] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ProteinOptions] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[StoragePathClient] [varchar](8000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[StoragePathServer] [varchar](4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -64,7 +65,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Trigger trig_u_DMS_Analysis_Job_Info_Cached on T_DMS_Analysis_Job_Info_Cached
+create Trigger trig_u_DMS_Analysis_Job_Info_Cached on T_DMS_Analysis_Job_Info_Cached
 For Update
 AS
 	If @@RowCount = 0
@@ -80,6 +81,7 @@ AS
 	   update(InstrumentName) OR
 	   update(InstrumentClass) OR
 	   update(AnalysisTool) OR
+       update(Processor) OR
 	   update(Completed) OR
 	   update(ParameterFileName) OR
 	   update(SettingsFileName) OR

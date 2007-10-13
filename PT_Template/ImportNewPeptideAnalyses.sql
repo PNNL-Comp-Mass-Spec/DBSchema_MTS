@@ -53,6 +53,7 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			03/18/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **			05/10/2007 mem - Added parameter @UseCachedDMSDataTables and parameter @message (Ticket:422)
 **						   - Switched to Try/Catch error handling
+**			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
 **    
 *****************************************************/
 (
@@ -513,7 +514,7 @@ As
 			[Parameter_File_Name] [varchar] (255) NOT NULL ,
 			[Settings_File_Name] [varchar] (255) NULL ,
 			[Organism_DB_Name] [varchar] (64) NOT NULL ,
-			[Protein_Collection_List] [varchar] (2048) NOT NULL,
+			[Protein_Collection_List] [varchar] (max) NOT NULL,
 			[Protein_Options_List] [varchar] (256) NOT NULL,
 			[Vol_Client] [varchar] (128) NOT NULL ,
 			[Vol_Server] [varchar] (128) NULL ,
@@ -631,7 +632,7 @@ As
 					Set @S = @S + '  AND Campaign IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Campaign'')' + @Lf
 
 				if @FilterOnEnzymeID = 1
-					Set @S = @S + '  AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')' + @Lf
+					Set @S = @S + ' AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')' + @Lf
 					
 				if @campaignListCountExcluded > 0
 				begin

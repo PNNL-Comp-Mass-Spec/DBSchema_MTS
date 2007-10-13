@@ -37,6 +37,7 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			08/26/2006 mem - Added support for RankScore (aka RankXc for Sequest); currently only used with Sequest results
 **			02/07/2007 mem - Added parameter @PreviewSql and switched to using sp_executesql
 **			06/08/2007 mem - Now calling GetPMTQualityScoreFilterSetDetails to populate #FilterSetDetails
+**			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **
 ****************************************************/
 (
@@ -60,8 +61,13 @@ As
 	Declare @MassTagCountNonZero int,
 			@MassTagCountZero int,
 			@UniqueRowID int,
-			@Continue int,
-			@FilterSetsEvaluated int
+			@Continue int
+	
+	Declare @FilterSetsEvaluated int
+	Set @FilterSetsEvaluated = 0
+	
+	Declare @RowCountTotalEvaluated int
+	Set @RowCountTotalEvaluated = 0
 
 	Declare @WarningMessage varchar(75),
 			@Sql nvarchar(max),
@@ -75,6 +81,12 @@ As
 	declare @ResultTypeID int
 	declare @ResultType varchar(64)
 	Set @ResultType = 'Unknown'
+
+	declare @lastProgressUpdate datetime
+	Set @lastProgressUpdate = GetDate()
+
+	declare @ProgressUpdateIntervalThresholdSeconds int
+	Set @ProgressUpdateIntervalThresholdSeconds = 120
 
 	-----------------------------------------------
 	-- Validate the inputs
@@ -539,6 +551,14 @@ As
 								Goto Done
 							End
 
+							if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+							Begin
+								set @message = '...Processing: Populated #PeptideStats for Filter Set ID ' + Convert(varchar(12), @FilterSetID) + ' and Criteria Group ' + convert(varchar(19), @CriteriaGroupMatch)
+								execute PostLogEntry 'Progress', @message, 'ComputePMTQualityScore'
+								set @message = ''
+								set @lastProgressUpdate = GetDate()
+							End
+
 							Set @SavedResultType = @ResultType
 							Set @SavedDeltaCnComparison = @DeltaCnComparison
 							Set @SavedDeltaCnThreshold = @DeltaCnThreshold
@@ -593,7 +613,17 @@ As
 							Exec sp_executesql @Sql
 						--
 						SELECT @myError = @@error, @myRowCount = @@RowCount
+						--
+						Set @RowCountTotalEvaluated = @RowCountTotalEvaluated + @myRowCount
 						
+						if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+						Begin
+							set @message = '...Processing: populated PMT_Quality_Score in #NewMassTagScores (' + Convert(varchar(12), @RowCountTotalEvaluated) + ' total rows updated)'
+							execute PostLogEntry 'Progress', @message, 'ComputePMTQualityScore'
+							set @message = ''
+							set @lastProgressUpdate = GetDate()
+						End
+
 
 						-----------------------------------------------------------
 						-- Lookup the next set of filters

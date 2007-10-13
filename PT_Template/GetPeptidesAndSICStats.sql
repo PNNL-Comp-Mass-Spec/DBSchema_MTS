@@ -790,5 +790,3 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [DMS_SP_User]
 GO
-GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [MTUser]
-GO

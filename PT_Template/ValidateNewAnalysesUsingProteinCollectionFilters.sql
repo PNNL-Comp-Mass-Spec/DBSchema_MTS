@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.ValidateNewAnalysesUsingProteinCollectionFilters
 **
 **	Auth:	mem
 **	Date:	06/10/2006
+**			10/07/2007 mem - Increased size of @ProteinCollectionList to varchar(max)
 **    
 *****************************************************/
 (
@@ -42,7 +43,7 @@ As
 	Declare @CurrentJob int
 	Declare @CurrentProcessConfigID int
 	Declare @continue tinyint
-	Declare @ProteinCollectionList varchar(2048)
+	Declare @ProteinCollectionList varchar(max)
 	Declare @ProteinOptionsList varchar(256)
 
 	Declare @NewAnalysisJobsLookupTableName varchar(256)

@@ -1,15 +1,15 @@
 /****** Object:  Database [MT_HistoricLog] ******/
 CREATE DATABASE [MT_HistoricLog] ON  PRIMARY 
-( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog.mdf' , SIZE = 35072KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_dat', FILENAME = N'F:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 373504KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
-( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 2816KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_log', FILENAME = N'D:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 1536KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 EXEC dbo.sp_dbcmptlevel @dbname=N'MT_HistoricLog', @new_cmptlevel=90
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin
-EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'enable'
+EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'disable'
 end
 GO
 ALTER DATABASE [MT_HistoricLog] SET ANSI_NULL_DEFAULT OFF 
@@ -64,9 +64,17 @@ ALTER DATABASE [MT_HistoricLog] SET PAGE_VERIFY TORN_PAGE_DETECTION
 GO
 ALTER DATABASE [MT_HistoricLog] SET DB_CHAINING OFF 
 GO
+GRANT CONNECT TO [d3m578]
+GO
+GRANT CONNECT TO [DMSWebUser]
+GO
+GRANT CONNECT TO [h0693075]
+GO
+GRANT CONNECT TO [msdadmin]
+GO
 GRANT CONNECT TO [MTAdmin]
 GO
-GRANT CONNECT TO [MTS_DB_Dev]
+GRANT CONNECT TO [MTS_DB_DEV]
 GO
 GRANT CONNECT TO [MTS_DB_Lite]
 GO

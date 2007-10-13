@@ -17,6 +17,7 @@ CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
 **	Date:	09/14/2006 mem
 **			11/15/2006 mem - Replaced use of Truncate Table with Delete From
 **			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
+**			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **    
 *****************************************************/
 (
@@ -31,6 +32,12 @@ AS
 	set @myError = 0
 	set @myRowCount = 0
 
+	declare @lastProgressUpdate datetime
+	Set @lastProgressUpdate = GetDate()
+
+	declare @ProgressUpdateIntervalThresholdSeconds int
+	Set @ProgressUpdateIntervalThresholdSeconds = 120
+	
 	---------------------------------------------------
 	-- Clear the outputs
 	---------------------------------------------------
@@ -64,7 +71,7 @@ AS
 	---------------------------------------------------
 	--
 	UPDATE T_Mass_Tag_Peptide_Prophet_Stats
-	SET ObsCount_CS1 = Statsq.ObsCount,
+	SET ObsCount_CS1 = StatsQ.ObsCount,
 		PepProphet_FScore_Max_CS1 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS1 = StatsQ.Peptide_Prophet_Probability_Maximum,
 		PepProphet_FScore_Avg_CS1 = StatsQ.Peptide_Prophet_FScore_Average
@@ -82,12 +89,20 @@ AS
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
+	if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+	Begin
+		set @message = '...Processing: Populated ObsCount_CS1 in T_Mass_Tag_Peptide_Prophet_Stats (' + Convert(varchar(19), @myRowCount) + ' / ' + Convert(varchar(19), @RowCountUpdated) + ' PMT tags updated)'
+		execute PostLogEntry 'Progress', @message, 'UpdateMassTagPeptideProphetStats'
+		set @message = ''
+		set @lastProgressUpdate = GetDate()
+	End
+
 	---------------------------------------------------
 	-- Update stats for 2+ data
 	---------------------------------------------------
 	--
 	UPDATE T_Mass_Tag_Peptide_Prophet_Stats
-	SET ObsCount_CS2 = Statsq.ObsCount,
+	SET ObsCount_CS2 = StatsQ.ObsCount,
 		PepProphet_FScore_Max_CS2 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS2 = StatsQ.Peptide_Prophet_Probability_Maximum,
 		PepProphet_FScore_Avg_CS2 = StatsQ.Peptide_Prophet_FScore_Average
@@ -105,12 +120,20 @@ AS
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
+	if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+	Begin
+		set @message = '...Processing: Populated ObsCount_CS2 in T_Mass_Tag_Peptide_Prophet_Stats (' + Convert(varchar(19), @myRowCount) + ' / ' + Convert(varchar(19), @RowCountUpdated) + ' PMT tags updated)'
+		execute PostLogEntry 'Progress', @message, 'UpdateMassTagPeptideProphetStats'
+		set @message = ''
+		set @lastProgressUpdate = GetDate()
+	End
+
 	---------------------------------------------------
 	-- Update stats for 3+ data
 	---------------------------------------------------
 	--
 	UPDATE T_Mass_Tag_Peptide_Prophet_Stats
-	SET ObsCount_CS3 = Statsq.ObsCount,
+	SET ObsCount_CS3 = StatsQ.ObsCount,
 		PepProphet_FScore_Max_CS3 = StatsQ.Peptide_Prophet_FScore_Maximum,
 		PepProphet_Probability_Max_CS3 = StatsQ.Peptide_Prophet_Probability_Maximum,
 		PepProphet_FScore_Avg_CS3 = StatsQ.Peptide_Prophet_FScore_Average
@@ -127,6 +150,14 @@ AS
 		) StatsQ ON PPS.Mass_Tag_ID = StatsQ.Mass_Tag_ID	
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
+
+	if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+	Begin
+		set @message = '...Processing: Populated ObsCount_CS3 in T_Mass_Tag_Peptide_Prophet_Stats (' + Convert(varchar(19), @myRowCount) + ' / ' + Convert(varchar(19), @RowCountUpdated) + ' PMT tags updated)'
+		execute PostLogEntry 'Progress', @message, 'UpdateMassTagPeptideProphetStats'
+		set @message = ''
+		set @lastProgressUpdate = GetDate()
+	End
 
 	-----------------------------------------------
 	-- Post a message to the log

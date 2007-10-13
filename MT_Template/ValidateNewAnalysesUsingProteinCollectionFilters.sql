@@ -43,7 +43,7 @@ As
 	Declare @CurrentJob int
 	Declare @CurrentProcessConfigID int
 	Declare @continue tinyint
-	Declare @ProteinCollectionList varchar(2048)
+	Declare @ProteinCollectionList varchar(max)
 	Declare @ProteinOptionsList varchar(256)
 
 	Declare @NewAnalysisJobsLookupTableName varchar(256)

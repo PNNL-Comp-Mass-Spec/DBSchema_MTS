@@ -24,7 +24,9 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			10/10/2006 mem - Decreased the number of calls made to AddPeptideLoadStatEntry
 **			11/22/2006 mem - Now calling AddPeptideLoadStatEntry just once for each job, except for the first job loaded and for every 25th job loaded
-**    
+**			09/06/2007 mem - Now looking up the value for 'Peptide_Load_Stats_Detail_Update_Interval' in T_Process_Config
+**			09/07/2007 mem - Now calling AddPeptideLoadStatEntries to add the detailed stat values to T_Peptide_Load_Stats
+**
 *****************************************************/
 (
 	@numJobsToProcess int = 50000,
@@ -55,6 +57,8 @@ As
 	Declare @job int
 	Declare @PDB_ID int
 	Declare @UpdateEnabled tinyint
+	
+	Declare @DetailedStatsInterval int
 	
 	Declare @NumAddedPeptides int
 	Set @NumAddedPeptides = 0
@@ -221,18 +225,22 @@ As
 					execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromAvailableAnalyses'
 				
 			End -- <c>
-			
+
+			-- Lookup the current value for 'Peptide_Load_Stats_Detail_Update_Interval' in T_Process_Config
+			-- Use a default of 25 if not found
+			exec GetProcessConfigValueInt 'Peptide_Load_Stats_Detail_Update_Interval', 25, @DetailedStatsInterval output
+			If @DetailedStatsInterval < 1
+				Set @DetailedStatsInterval = 25
+				
 			-- Only call AddPeptideLoadStatEntry with detailed Discriminant Score and
-			--  Peptide Prophet thresholds for the first job processed and for each 25th job after that
+			--  Peptide Prophet thresholds for the first job processed and for each @DetailedStatsInterval'th job after that
 			-- Otherwise, only call AddPeptideLoadStatEntry once, using a Peptide Prophet threshold of 0.99
-			
-			If @numJobsProcessed % 25 = 0
+
+			If @numJobsProcessed % @DetailedStatsInterval = 0
 			Begin
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.5, @PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.9, @PeptideProphetMinimum=0,  @AnalysisStateMatch=@MassTagUpdatedState
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0.95,@PeptideProphetMinimum=0,   @AnalysisStateMatch=@MassTagUpdatedState
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.5, @AnalysisStateMatch=@MassTagUpdatedState
-				exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.9, @AnalysisStateMatch=@MassTagUpdatedState
+				-- Call AddPeptideLoadStatEntries, it looks for 'Peptide_Load_Stats_Detail_Thresholds' entries
+				--  in T_Process_Config and calls AddPeptideLoadStatEntry for each entry
+				exec AddPeptideLoadStatEntries @AnalysisStateMatch=@MassTagUpdatedState
 			End
 
 			exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0,   @PeptideProphetMinimum=0.99, @AnalysisStateMatch=@MassTagUpdatedState

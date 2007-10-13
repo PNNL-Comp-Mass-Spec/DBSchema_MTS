@@ -16,6 +16,8 @@ CREATE PROCEDURE dbo.GetOrganismDBFileInfo
 **	Date:	06/08/2006
 **			06/13/2006 mem - Updated to parse out the ID value from the file in the Organism_DB_Name field if Protein_Collection_List <> 'na' and Protein_Collection_List <> ''
 **			07/15/2006 mem - Updated to properly report when the GetArchivedFileIDForProteinCollectionList could not be found
+**			09/07/2007 mem - Changed Protein_Sequences server reference to ProteinSeqs
+**			10/07/2007 mem - Increased @ProteinCollectionList size to varchar(max)
 **    
 *****************************************************/
 (
@@ -42,7 +44,7 @@ As
 	Set @message = ''
 
 	declare @OrganismDBName varchar(128)
-	declare @ProteinCollectionList varchar(2048)
+	declare @ProteinCollectionList varchar(max)
 	declare @ProteinOptionsList varchar(256)
 	set @OrganismDBName = ''
 	set @ProteinCollectionList = ''
@@ -143,7 +145,7 @@ As
 			-- @OrganismDBName was 'na' or '' or @OrganismDBName did not start with ID_
 			-- Call GetArchivedFileIDForProteinCollectionList to determine the ID value associated with @ProteinCollectionList and @ProteinOptionsList
 			Set @myError = -9999
-			Exec @myError = Gigasax.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList 
+			Exec @myError = ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList 
 					@ProteinCollectionList, 
 					@ProteinOptionsList, 
 					@ArchivedFileID = @ProteinCollectionFileID output, 
@@ -152,15 +154,15 @@ As
 			If @myError <> 0
 			Begin
 				If @myError = -9999
-					set @message = 'Could not find stored procedure Gigasax.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList; '
+					set @message = 'Could not find stored procedure ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList; '
 				Else
-					set @message = 'Error calling Gigasax.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList for '
+					set @message = 'Error calling ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList for '
 				
 				set @message = @message + 'job ' + @JobStrEx + ' (Error Code ' + Convert(varchar(12), @myError) + ')'
 				goto Done
 			End
 
-			--print 'Called Gigasax.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList to extract the ID'
+			--print 'Called ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList to extract the ID'
 
 			If @ProteinCollectionFileID = 0
 			Begin

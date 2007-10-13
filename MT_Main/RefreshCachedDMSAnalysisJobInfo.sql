@@ -13,6 +13,8 @@ CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 **
 **	Auth:	mem
 **	Date:	05/09/2007 - See Ticket:422
+**			10/03/2007 mem - Now populating the Processor column
+**			10/05/2007 mem - Updated ProteinCollectionList to varchar(max)
 **
 *****************************************************/
 (
@@ -80,11 +82,12 @@ AS
 			InstrumentName varchar(64) NULL,
 			InstrumentClass varchar(64) NULL,
 			AnalysisTool varchar(64) NOT NULL,
+			Processor varchar(128) NULL,
 			Completed datetime NULL,
 			ParameterFileName varchar(255) NOT NULL,
 			SettingsFileName varchar(255) NULL,
 			OrganismDBName varchar(64) NOT NULL,
-			ProteinCollectionList varchar(512) NOT NULL,
+			ProteinCollectionList varchar(max) NOT NULL,
 			ProteinOptions varchar(256) NOT NULL,
 			StoragePathClient varchar(8000) NOT NULL,
 			StoragePathServer varchar(4096) NULL,
@@ -108,7 +111,7 @@ AS
 		-- Populate #Tmp_DMS_Analysis_Job_Import_Ex
 		INSERT INTO #Tmp_DMS_Analysis_Job_Import_Ex (
 			 Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, 
+			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
 			 Completed, ParameterFileName, SettingsFileName, 
 			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
 			 StoragePathClient, StoragePathServer, DatasetFolder, 
@@ -116,7 +119,7 @@ AS
 			 ResultType, [Dataset Int Std], DS_created, EnzymeID, 
 			 Labelling, [PreDigest Int Std], [PostDigest Int Std])
 		SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, 
+			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
 			 Completed, ParameterFileName, SettingsFileName, 
 			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
 			 StoragePathClient, StoragePathServer, DatasetFolder, 
@@ -155,6 +158,7 @@ AS
 			InstrumentName = Src.InstrumentName,
 			InstrumentClass = Src.InstrumentClass,
 			AnalysisTool = Src.AnalysisTool,
+			Processor = Src.Processor,
 			Completed = Src.Completed,
 			ParameterFileName = Src.ParameterFileName,
 			SettingsFileName = Src.SettingsFileName,
@@ -188,6 +192,7 @@ AS
 			  IsNull(Target.InstrumentName, '') <> IsNull(Src.InstrumentName, '') OR
 			  IsNull(Target.InstrumentClass, '') <> IsNull(Src.InstrumentClass, '') OR
 			  Target.AnalysisTool <> Src.AnalysisTool OR
+			  IsNull(Target.Processor, '') <> IsNull(Src.Processor, '') OR
 			  IsNull(Target.Completed, '1/1/1980') <> IsNull(Src.Completed, '1/1/1980') OR
 			  Target.ParameterFileName <> Src.ParameterFileName OR
 			  IsNull(Target.SettingsFileName, '') <> IsNull(Src.SettingsFileName, '') OR
@@ -223,7 +228,7 @@ AS
 		--
 		INSERT INTO T_DMS_Analysis_Job_Info_Cached
 			(Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, 
+			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
 			 Completed, ParameterFileName, SettingsFileName, 
 			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
 			 StoragePathClient, StoragePathServer, DatasetFolder, 
@@ -231,7 +236,7 @@ AS
 			 ResultType, [Dataset Int Std], DS_created, EnzymeID, 
 			 Labelling, [PreDigest Int Std], [PostDigest Int Std], Last_Affected)
 		SELECT Src.Job, Src.Priority, Src.Dataset, Src.Experiment, Src.Campaign, Src.DatasetID, 
-			   Src.Organism, Src.InstrumentName, Src.InstrumentClass, Src.AnalysisTool, 
+			   Src.Organism, Src.InstrumentName, Src.InstrumentClass, Src.AnalysisTool, Src.Processor,
 			   Src.Completed, Src.ParameterFileName, Src.SettingsFileName, 
 			   Src.OrganismDBName, Src.ProteinCollectionList, Src.ProteinOptions, 
 			   Src.StoragePathClient, Src.StoragePathServer, Src.DatasetFolder, 

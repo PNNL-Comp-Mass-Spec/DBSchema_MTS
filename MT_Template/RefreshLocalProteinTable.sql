@@ -27,6 +27,7 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **						   - Updated to work with Protein Collection Lists (the V_DMS_Protein_Collection views in MT_Main)
 **			08/16/2006 mem - Added option @SwitchFromLegacyDBToProteinCollection
 **			09/29/2006 mem - Now verifying that each protein database actually exists on this server.  If it doesn't, then posts an error message if the name is not 'na', '(na)', 'none', or blank
+**			10/07/2007 mem - Increased size of @ProteinCollectionList to varchar(max)
 **    
 *****************************************************/
 (
@@ -52,7 +53,7 @@ As
 	declare @S nvarchar(2048)
 	declare @DBIDString nvarchar(30)
 	
-	Declare @ProteinCollectionList varchar(2048)
+	Declare @ProteinCollectionList varchar(max)
 	Declare @UnknownProteinCollections varchar(2048)
 	Declare @ProteinCollectionName varchar(128)
 	Declare @ProteinCollectionDescription varchar(256)
@@ -119,7 +120,7 @@ As
 		drop table [#T_Tmp_Protein_Collection_Candidates]
 
 		CREATE TABLE #T_Tmp_Protein_Collection_Candidates (
-			Protein_Collection_List varchar(2048),
+			Protein_Collection_List varchar(max),
 			UniqueRowID int identity(1,1)
 		)
 		
