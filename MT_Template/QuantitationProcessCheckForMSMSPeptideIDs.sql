@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.QuantitationProcessCheckForMSMSPeptideIDs
 **	Date:	05/28/2007
 **			06/08/2007 mem - Added parameters to allow filtering on Normalized score (aka XCorr), Discriminant Score, Peptide Prophet Probabiblity, and PMT Quality Score
 **			06/13/2007 mem - Updated to call CheckFilterForAnalysesWork for MTDBs in addition to for Peptide DBs
+**			10/17/2007 mem - Updated to filter on Instrument_Class_Filter if applicable
 **
 ****************************************************/
 (
@@ -54,7 +55,10 @@ AS
 	Declare @ContinuePMTQS tinyint
 	Declare @FilterSetID int
 	Declare @FilterSetExperimentFilter varchar(128)
+	Declare @FilterSetInstrumentClassFilter varchar(128)
+	
 	Declare @SavedExperimentFilter varchar(128)
+	Declare @SavedInstrumentClassFilter varchar(128)
 
 	Declare @JobsTablePopulated tinyint
 	Declare @FilterSetsEvaluated int
@@ -95,6 +99,7 @@ AS
 		Filter_Set_ID int NULL,
 		Score_Value real NULL,
 		Experiment_Filter varchar(128) NULL,
+		Instrument_Class_Filter varchar(128) NULL,
 		Unique_Row_ID int Identity(1,1)
 	)
 
@@ -258,8 +263,10 @@ AS
 
 					If @MinimumPMTQualityScore > 0
 					Begin -- <e>
+						-----------------------------------------------------------
 						-- Also filtering on PMT Quality Score
 						-- Use CheckFilterForAnalysesWork to determine the mass tag IDs that pass @MinimumPMTQualityScore
+						-----------------------------------------------------------
 
 						-----------------------------------------------------------
 						-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
@@ -270,7 +277,8 @@ AS
 						INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
 						SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
 						FROM #UMCMatchResultsByJob
-						WHERE Observed_By_MSMS_in_This_Dataset = 1
+						WHERE Observed_By_MSMS_in_This_Dataset = 1 AND
+						      Job = @CurrentJob
 						--
 						SELECT @myError = @@error, @myRowCount = @@RowCount
 						
@@ -295,6 +303,7 @@ AS
 							
 							SELECT TOP 1 @FilterSetID = Filter_Set_ID,
 										 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
+										 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
 										 @UniqueRowID = Unique_Row_ID
 							FROM #FilterSetDetails
 							WHERE Unique_Row_ID > @UniqueRowID
@@ -308,11 +317,13 @@ AS
 							Begin -- <g>
 							
 								-----------------------------------------------------------
-								-- Populate #JobsInBatch if @FilterSetExperimentFilter is changed
-								-- or if @SavedExperimentFilter Is Null
+								-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
+								--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
 								-----------------------------------------------------------
 								--
-								If @JobsTablePopulated = 0 OR (@SavedExperimentFilter <> @FilterSetExperimentFilter)
+								If @JobsTablePopulated = 0 OR 
+								   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
+								   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
 								Begin
 									DELETE FROM #JobsInBatch
 									
@@ -321,13 +332,20 @@ AS
 									Set @S = @S + ' SELECT Job'
 									Set @S = @S + ' FROM T_Analysis_Description'
 									Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
+									
 									If Len(@FilterSetExperimentFilter) > 0
 										Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+
+									If Len(@FilterSetInstrumentClassFilter) > 0
+										Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+										
 									Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
 									
 									Exec @myError = sp_executesql @S
 
 									Set @SavedExperimentFilter = @FilterSetExperimentFilter
+									Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
+									
 									Set @JobsTablePopulated = 1
 								End
 								
@@ -382,7 +400,8 @@ AS
 							SET Observed_By_MSMS_in_This_Dataset = 0
 							FROM #UMCMatchResultsByJob UMR INNER JOIN
 								 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
-							WHERE Observed_By_MSMS_in_This_Dataset = 1 AND
+							WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
+								  UMR.Job = @CurrentJob AND
 								  QRMTs.Pass_FilterSet = 0
 							--
 							SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -473,8 +492,11 @@ AS
 
 									If @MinimumPMTQualityScore > 0
 									Begin -- <i>
+										-----------------------------------------------------------
 										-- Also filtering on PMT Quality Score
-										-- Use CheckFilterForAnalysesWork in the peptide DB to determine the mass tag IDs that pass @MinimumPMTQualityScore
+										-- Use CheckFilterForAnalysesWork in the peptide DB to determine the Seq IDs (i.e. mass tag IDs)
+										--   that pass @MinimumPMTQualityScore
+										-----------------------------------------------------------
 
 										-----------------------------------------------------------
 										-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
@@ -485,7 +507,8 @@ AS
 										INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
 										SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
 										FROM #UMCMatchResultsByJob
-										WHERE Observed_By_MSMS_in_This_Dataset = 1
+										WHERE Observed_By_MSMS_in_This_Dataset = 1 AND 
+										      Job = @CurrentJob
 										--
 										SELECT @myError = @@error, @myRowCount = @@RowCount
 										
@@ -510,6 +533,7 @@ AS
 											
 											SELECT TOP 1 @FilterSetID = Filter_Set_ID,
 														 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
+														 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
 														 @UniqueRowID = Unique_Row_ID
 											FROM #FilterSetDetails
 											WHERE Unique_Row_ID > @UniqueRowID
@@ -521,13 +545,15 @@ AS
 												Set @ContinuePMTQS = 0
 											Else
 											Begin -- <k>
-											
+												
 												-----------------------------------------------------------
-												-- Populate #JobsInBatch if @FilterSetExperimentFilter is changed
-												-- or if @SavedExperimentFilter Is Null
+												-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
+												--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
 												-----------------------------------------------------------
 												--
-												If @JobsTablePopulated = 0 OR (@SavedExperimentFilter <> @FilterSetExperimentFilter)
+												If @JobsTablePopulated = 0 OR 
+												   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
+												   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
 												Begin
 													DELETE FROM #JobsInBatch
 													
@@ -536,13 +562,20 @@ AS
 													Set @S = @S + ' SELECT Job'
 													Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
 													Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
+													
 													If Len(@FilterSetExperimentFilter) > 0
 														Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
-													Set @S = @S +       ' AND ResultType = ''Peptide_Hit'''
+
+													If Len(@FilterSetInstrumentClassFilter) > 0
+														Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+													
+													Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
 													
 													Exec @myError = sp_executesql @S
 
 													Set @SavedExperimentFilter = @FilterSetExperimentFilter
+													Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
+													
 													Set @JobsTablePopulated = 1
 												End
 												
@@ -602,7 +635,8 @@ AS
 											SET Observed_By_MSMS_in_This_Dataset = 0
 											FROM #UMCMatchResultsByJob UMR INNER JOIN
 												 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
-											WHERE Observed_By_MSMS_in_This_Dataset = 1 AND
+											WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
+												  UMR.Job = @CurrentJob AND
 												  QRMTs.Pass_FilterSet = 0
 											--
 											SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -621,6 +655,5 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO

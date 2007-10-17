@@ -13,7 +13,7 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **	Auth:	mem
 **	Date:	01/07/2004
 **			01/13/2004 mem - added @ResetScoresToZero parameter
-**			01/22/2004 mem - Moved Exec (@Sql) to be between the Begin/End pair constructing @Sql
+**			01/22/2004 mem - Moved Exec (@S) to be between the Begin/End pair constructing @S
 **			02/02/2004 mem - Changed to looser scoring criteria
 **			02/09/2004 mem - Switched from specifying thresholds as input parameters to using T_PMT_Quality_Score_Sets and T_PMT_Quality_Score_SetDetails
 **			03/27/2004 mem - Added Cleavage_State_Threshold to T_PMT_Quality_Score_SetDetails and moved T_PMT_Quality_Score_Sets and T_PMT_Quality_Score_SetDetails to MT_Main
@@ -38,10 +38,12 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			02/07/2007 mem - Added parameter @PreviewSql and switched to using sp_executesql
 **			06/08/2007 mem - Now calling GetPMTQualityScoreFilterSetDetails to populate #FilterSetDetails
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
+**			10/16/2007 mem - Added support for an instrument class filter in T_Process_Config
+**						   - Now also populating T_PMT_QS_Job_Usage with the Job Numbers considered for each filter set tested
 **
 ****************************************************/
 (
-	@message varchar(255)='' Output,
+	@message varchar(512)='' Output,
 	@InfoOnly tinyint = 0,
 	@ResetScoresToZero tinyint = 1,			-- By default, will reset all of the PMT_Quality_Scores to 0 before applying the above filter; set to 0 to not reset the scores
 	@PreviewSql tinyint = 0
@@ -54,9 +56,12 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	Declare @FilterSetID int,
+	Declare @FilterSetText varchar(256),
+			@FilterSetID int,
 			@FilterSetScore float,
-			@FilterSetExperimentFilter varchar(128)
+			@FilterSetExperimentFilter varchar(128),
+			@FilterSetInstrumentClassFilter varchar(128),
+			@FilterSetInfoID int
 
 	Declare @MassTagCountNonZero int,
 			@MassTagCountZero int,
@@ -70,9 +75,9 @@ As
 	Set @RowCountTotalEvaluated = 0
 
 	Declare @WarningMessage varchar(75),
-			@Sql nvarchar(max),
+			@S nvarchar(max),
 			@ObsSql varchar(64),
-			@FilterSetList varchar(128)
+			@FilterSetList varchar(512)
 			
 	Set @message= ''
 	Set @WarningMessage = ''
@@ -178,6 +183,23 @@ As
 
 
 	-----------------------------------------------------------
+	-- Create the temporary tables that tracks the analysis jobs analyzed for each filter set definition
+	-----------------------------------------------------------
+
+	CREATE TABLE #TmpPMTQSJobUsageFilterInfo (
+		Filter_Set_Info_ID_Local int Identity(1,1),
+		Filter_Set_Info varchar(256) NOT NULL,
+		Filter_Set_ID int NOT NULL, 
+		PMT_Quality_Score int NOT NULL,
+		Filter_Set_Info_ID int NULL
+	)
+
+	CREATE TABLE #TmpPMTQSJobUsage (
+		Filter_Set_Info_ID_Local int NOT NULL,
+		Job int NOT NULL
+	)
+
+	-----------------------------------------------------------
 	-- Create the temporary table to hold the Filter Sets to test
 	-----------------------------------------------------------
 
@@ -186,6 +208,7 @@ As
 		Filter_Set_ID int NULL,
 		Score_Value real NULL,
 		Experiment_Filter varchar(128) NULL,
+		Instrument_Class_Filter varchar(128) NULL,
 		Unique_Row_ID int Identity(1,1)
 	)
 	
@@ -269,7 +292,8 @@ As
 			@SavedRankScoreComparison varchar(2),
 			@SavedRankScoreThreshold float,
 			@SavedPeptideStatsRowCount int,
-			@SavedExperimentFilter varchar(128)
+			@SavedExperimentFilter varchar(128),
+			@SavedInstrumentClassFilter varchar(128)
 
 	-- Initialize to impossible values
 	Set @SavedResultType = '~~'
@@ -308,10 +332,12 @@ As
 		Begin -- <b>
 			Set @FilterSetID = 0
 			
-			SELECT TOP 1 @FilterSetID = Filter_Set_ID,
-						@FilterSetScore = IsNull(Score_Value, 1),
-						@FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
-						@UniqueRowID = Unique_Row_ID
+			SELECT TOP 1 @FilterSetText = Filter_Set_Text,
+						 @FilterSetID = Filter_Set_ID,
+						 @FilterSetScore = IsNull(Score_Value, 1),
+						 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
+						 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
+						 @UniqueRowID = Unique_Row_ID
 			FROM #FilterSetDetails
 			WHERE Unique_Row_ID > @UniqueRowID
 			ORDER BY Unique_Row_ID
@@ -361,9 +387,49 @@ As
 						Set @FilterSetList = @FilterSetList + Convert(varchar(11), @FilterSetID) + ' = ' + Convert(varchar(11), @FilterSetScore)
 						
 						If Len(@FilterSetExperimentFilter) > 0
-							Set @FilterSetList = @FilterSetList + '(' + @FilterSetExperimentFilter + ')'
+							Set @FilterSetList = @FilterSetList + ' (' + @FilterSetExperimentFilter + ')'
+
+						If Len(@FilterSetInstrumentClassFilter) > 0
+							Set @FilterSetList = @FilterSetList + ' (' + @FilterSetInstrumentClassFilter + ')'
+
 					End
 
+					-----------------------------------------------------------
+					-- Add the filter set info to #TmpPMTQSJobUsageFilterInfo
+					-----------------------------------------------------------
+					
+					INSERT INTO #TmpPMTQSJobUsageFilterInfo (Filter_Set_Info, Filter_Set_ID, PMT_Quality_Score)
+					VALUES (@FilterSetText, @FilterSetID, @FilterSetScore)
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount, @FilterSetInfoID = SCOPE_IDENTITY()
+
+					
+					-----------------------------------------------------------
+					-- Append #TmpPMTQSJobUsage with the jobs that will be analyzed for this filter set
+					-----------------------------------------------------------
+					--
+					Set @S = ''
+					Set @S = @S + ' INSERT INTO #TmpPMTQSJobUsage (Filter_Set_Info_ID_Local, Job)'
+					Set @S = @S + ' SELECT ' + Convert(varchar(12), @FilterSetInfoID) + ', Job'
+					Set @S = @S + ' FROM T_Analysis_Description AS TAD'
+					Set @S = @S + ' WHERE TAD.ResultType = ''' + @ResultType + ''''
+					
+					If Len(@FilterSetExperimentFilter) > 0
+						Set @S = @S +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+					
+					If Len(@FilterSetInstrumentClassFilter) > 0
+						Set @S = @S +    ' AND TAD.Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+						
+					-- Execute the Sql to populate #TmpPMTQSJobUsage
+					if @PreviewSql <> 0
+						Print @S
+					
+					Exec sp_executesql @S
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+					--
+					
+					
 					-----------------------------------------------------------
 					-- Now call GetThresholdsForFilterSet to get the tresholds to filter against
 					-- Set PMT_Quality_Score to @FilterSetScore in #NewMassTagScores for the matching mass tags
@@ -401,7 +467,8 @@ As
 							-- Do not consider DeltaCN or RankScore for XTandem results
 							If @SavedResultType <> @ResultType OR
 							   @SavedDeltaCn2Comparison <> @DeltaCn2Comparison OR @SavedDeltaCn2Threshold <> @DeltaCn2Threshold OR
-							 @SavedExperimentFilter <> @FilterSetExperimentFilter OR
+							   @SavedExperimentFilter <> @FilterSetExperimentFilter OR
+							   @SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter OR
 							   @SavedPeptideStatsRowCount = 0
 							Set @PopulatePeptideStats = 1
 						End
@@ -412,6 +479,7 @@ As
 							   @SavedDeltaCn2Comparison <> @DeltaCn2Comparison OR @SavedDeltaCn2Threshold <> @DeltaCn2Threshold OR
 							   @SavedRankScoreComparison <> @RankScoreComparison OR @SavedRankScoreThreshold <> @RankScoreThreshold OR
 							   @SavedExperimentFilter <> @FilterSetExperimentFilter OR
+							   @SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter OR
 							   @SavedPeptideStatsRowCount = 0
 							Set @PopulatePeptideStats = 1
 						End
@@ -440,108 +508,115 @@ As
 							Else
 								Set @ObsSql = 'IsNull(MT.Peptide_Obs_Count_Passing_Filter, 0)'
 
-							Set @Sql = ''
-							Set @Sql = @Sql + ' INSERT INTO #PeptideStats ('
-							Set @Sql = @Sql +   ' Mass_Tag_ID, PeptideLength, MonoisotopicMass,'
-							Set @Sql = @Sql +   ' NETDifferenceAbsolute, ProteinCount, MaxCleavageState, MaxTerminusState,'
-							Set @Sql = @Sql +   ' ObservationCount, Charge_State, XCorr_Max, Hyperscore_Max, Log_EValue_Min,'
-							Set @Sql = @Sql +   ' Discriminant_Score_Max, Peptide_Prophet_Max'
-							Set @Sql = @Sql + ' )'
-							Set @Sql = @Sql + ' SELECT	MT.Mass_Tag_ID, '
-							Set @Sql = @Sql +   ' LEN(MT.Peptide) AS PeptideLength,'
-							Set @Sql = @Sql +   ' IsNull(MT.Monoisotopic_Mass, 0) AS MonoisotopicMass,'
-							Set @Sql = @Sql +   ' IsNull(ABS(MTN.Avg_GANET - MTN.PNET), 0) AS NETDifferenceAbsolute,'
-							Set @Sql = @Sql +   ' IsNull(MT.Multiple_Proteins, 0) + 1 AS ProteinCount,'
-							Set @Sql = @Sql +   ' MAX(ISNULL(MTPM.Cleavage_State, 0)) AS MaxCleavageState,'
-							Set @Sql = @Sql +   ' MAX(ISNULL(MTPM.Terminus_State, 0)) AS MaxTerminusState,'
-							Set @Sql = @Sql +   ' ' + @ObsSql + ' AS ObservationCount,'
-							Set @Sql = @Sql +   ' StatsQ.Charge_State,'
-							Set @Sql = @Sql +   ' MAX(StatsQ.XCorr_Max) AS XCorr_Max,'
-							Set @Sql = @Sql +   ' MAX(StatsQ.Hyperscore_Max) AS Hyperscore_Max,'
-							Set @Sql = @Sql +   ' MIN(StatsQ.Log_EValue_Min) AS Log_EValue_Min,'
-							Set @Sql = @Sql +   ' MAX(StatsQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
-							Set @Sql = @Sql +   ' MAX(StatsQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
-							Set @Sql = @Sql + ' FROM ('
-							Set @Sql = @Sql +    ' SELECT Mass_Tag_ID,'
-							Set @Sql = @Sql +      ' Charge_State,'
-							Set @Sql = @Sql +      ' MAX(SubQ.XCorr_Max) AS XCorr_Max,'
-							Set @Sql = @Sql +	   ' MAX(SubQ.Hyperscore_Max) AS Hyperscore_Max,'
-							Set @Sql = @Sql +	   ' MIN(SubQ.Log_EValue_Min) AS Log_EValue_Min,'
-							Set @Sql = @Sql +      ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
-							Set @Sql = @Sql +      ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
-							Set @Sql = @Sql +    ' FROM ('
+							Set @S = ''
+							Set @S = @S + ' INSERT INTO #PeptideStats ('
+							Set @S = @S +   ' Mass_Tag_ID, PeptideLength, MonoisotopicMass,'
+							Set @S = @S +   ' NETDifferenceAbsolute, ProteinCount, MaxCleavageState, MaxTerminusState,'
+							Set @S = @S +   ' ObservationCount, Charge_State, XCorr_Max, Hyperscore_Max, Log_EValue_Min,'
+							Set @S = @S +   ' Discriminant_Score_Max, Peptide_Prophet_Max'
+							Set @S = @S + ' )'
+							Set @S = @S + ' SELECT	MT.Mass_Tag_ID, '
+							Set @S = @S +   ' LEN(MT.Peptide) AS PeptideLength,'
+							Set @S = @S +   ' IsNull(MT.Monoisotopic_Mass, 0) AS MonoisotopicMass,'
+							Set @S = @S +   ' IsNull(ABS(MTN.Avg_GANET - MTN.PNET), 0) AS NETDifferenceAbsolute,'
+							Set @S = @S +   ' IsNull(MT.Multiple_Proteins, 0) + 1 AS ProteinCount,'
+							Set @S = @S +   ' MAX(ISNULL(MTPM.Cleavage_State, 0)) AS MaxCleavageState,'
+							Set @S = @S +   ' MAX(ISNULL(MTPM.Terminus_State, 0)) AS MaxTerminusState,'
+							Set @S = @S +   ' ' + @ObsSql + ' AS ObservationCount,'
+							Set @S = @S +   ' StatsQ.Charge_State,'
+							Set @S = @S +   ' MAX(StatsQ.XCorr_Max) AS XCorr_Max,'
+							Set @S = @S +   ' MAX(StatsQ.Hyperscore_Max) AS Hyperscore_Max,'
+							Set @S = @S +   ' MIN(StatsQ.Log_EValue_Min) AS Log_EValue_Min,'
+							Set @S = @S +   ' MAX(StatsQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
+							Set @S = @S +   ' MAX(StatsQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
+							Set @S = @S + ' FROM ('
+							Set @S = @S +    ' SELECT Mass_Tag_ID,'
+							Set @S = @S +      ' Charge_State,'
+							Set @S = @S +      ' MAX(SubQ.XCorr_Max) AS XCorr_Max,'
+							Set @S = @S +	   ' MAX(SubQ.Hyperscore_Max) AS Hyperscore_Max,'
+							Set @S = @S +	   ' MIN(SubQ.Log_EValue_Min) AS Log_EValue_Min,'
+							Set @S = @S +      ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
+							Set @S = @S +      ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
+							Set @S = @S +    ' FROM ('
 							
 							If @ResultType = 'Peptide_Hit'
 							Begin
-								Set @Sql = @Sql +      ' SELECT P.Mass_Tag_ID,'
-								Set @Sql = @Sql +        ' P.Scan_Number,'
-								Set @Sql = @Sql +        ' P.Charge_State,'
-								Set @Sql = @Sql +        ' MAX(IsNull(SS.XCorr, 0)) AS XCorr_Max,'
-								Set @Sql = @Sql +        ' 0 AS Hyperscore_Max,'
-								Set @Sql = @Sql + ' 0 AS Log_EValue_Min,'
-								Set @Sql = @Sql +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
-								Set @Sql = @Sql +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
-								Set @Sql = @Sql +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
-								Set @Sql = @Sql +        ' LEFT OUTER JOIN T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID'
-								Set @Sql = @Sql +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
-								Set @Sql = @Sql +      ' WHERE TAD.ResultType = ''Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
-								Set @Sql = @sql +        ' SS.DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
-								Set @Sql = @sql +        ' SS.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold) + ' AND '
-								Set @Sql = @sql +        ' SS.RankXc ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
+								Set @S = @S +      ' SELECT P.Mass_Tag_ID,'
+								Set @S = @S +        ' P.Scan_Number,'
+								Set @S = @S +        ' P.Charge_State,'
+								Set @S = @S +        ' MAX(IsNull(SS.XCorr, 0)) AS XCorr_Max,'
+								Set @S = @S +        ' 0 AS Hyperscore_Max,'
+								Set @S = @S +        ' 0 AS Log_EValue_Min,'
+								Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
+								Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
+								Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
+								Set @S = @S +        ' LEFT OUTER JOIN T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID'
+								Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+								Set @S = @S +      ' WHERE TAD.ResultType = ''Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
+								Set @S = @S +        ' SS.DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
+								Set @S = @S +        ' SS.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold) + ' AND '
+								Set @S = @S +        ' SS.RankXc ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
 								
 								If Len(@FilterSetExperimentFilter) > 0
-									Set @Sql = @sql +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+									Set @S = @S +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+								
+								If Len(@FilterSetInstrumentClassFilter) > 0
+									Set @S = @S +    ' AND TAD.Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
 									
-								Set @Sql = @sql +      ' GROUP BY TAD.Dataset_ID,'
-								Set @Sql = @sql +        ' P.Mass_Tag_ID,'
-								Set @Sql = @sql +        ' P.Scan_Number,'
-								Set @Sql = @sql +        ' P.Charge_State'
+								Set @S = @S +      ' GROUP BY TAD.Dataset_ID,'
+								Set @S = @S +        ' P.Mass_Tag_ID,'
+								Set @S = @S +        ' P.Scan_Number,'
+								Set @S = @S +        ' P.Charge_State'
 							End
 
 							If @ResultType = 'XT_Peptide_Hit'
 							Begin
-								Set @Sql = @Sql +      ' SELECT P.Mass_Tag_ID,'
-								Set @Sql = @Sql +        ' P.Scan_Number,'
-								Set @Sql = @Sql +        ' P.Charge_State,'
-								Set @Sql = @Sql +        ' 0 AS XCorr_Max,'
-								Set @Sql = @Sql +        ' MAX(IsNull(X.Hyperscore, 0)) AS Hyperscore_Max,'
-								Set @Sql = @Sql +        ' MIN(IsNull(X.Log_EValue, 0)) AS Log_EValue_Min,'
-								Set @Sql = @Sql +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
-								Set @Sql = @Sql +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
-								Set @Sql = @Sql +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
-								Set @Sql = @Sql +        ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
-								Set @Sql = @Sql +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
-								Set @Sql = @Sql +      ' WHERE TAD.ResultType = ''XT_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
-								Set @Sql = @sql +        ' X.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold)
+								Set @S = @S +      ' SELECT P.Mass_Tag_ID,'
+								Set @S = @S +        ' P.Scan_Number,'
+								Set @S = @S +        ' P.Charge_State,'
+								Set @S = @S +        ' 0 AS XCorr_Max,'
+								Set @S = @S +        ' MAX(IsNull(X.Hyperscore, 0)) AS Hyperscore_Max,'
+								Set @S = @S +        ' MIN(IsNull(X.Log_EValue, 0)) AS Log_EValue_Min,'
+								Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
+								Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
+								Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
+								Set @S = @S +        ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
+								Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+								Set @S = @S +      ' WHERE TAD.ResultType = ''XT_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
+								Set @S = @S +        ' X.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold)
+								
 								If Len(@FilterSetExperimentFilter) > 0
-									Set @Sql = @sql +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+									Set @S = @S +    ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+
+								If Len(@FilterSetInstrumentClassFilter) > 0
+									Set @S = @S +    ' AND TAD.Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
 									
-								Set @Sql = @sql +      ' GROUP BY TAD.Dataset_ID,'
-								Set @Sql = @sql +        ' P.Mass_Tag_ID,'
-								Set @Sql = @sql +        ' P.Scan_Number,'
-								Set @Sql = @sql +        ' P.Charge_State'
+								Set @S = @S +      ' GROUP BY TAD.Dataset_ID,'
+								Set @S = @S +        ' P.Mass_Tag_ID,'
+								Set @S = @S +        ' P.Scan_Number,'
+								Set @S = @S +        ' P.Charge_State'
 							End
 														
-							Set @Sql = @sql +    ' ) AS SubQ'
-							Set @Sql = @sql +    ' GROUP BY Mass_Tag_ID,'
-							Set @Sql = @sql +      ' Charge_State'
-							Set @Sql = @sql + ' ) AS StatsQ'
-  							Set @Sql = @sql +   ' INNER JOIN T_Mass_Tags AS MT ON StatsQ.Mass_Tag_ID = MT.Mass_Tag_ID'
-							Set @Sql = @sql +   ' LEFT OUTER JOIN T_Mass_Tag_to_Protein_Map AS MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID'
-							Set @Sql = @sql +   ' LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID'
-							Set @Sql = @sql + ' GROUP BY MT.Mass_Tag_ID, '
-							Set @Sql = @sql +   ' LEN(MT.Peptide),'
-							Set @Sql = @sql +   ' IsNull(MT.Monoisotopic_Mass, 0),'
-							Set @Sql = @sql +   ' IsNull(ABS(MTN.Avg_GANET - MTN.PNET), 0),'
-							Set @Sql = @sql +   ' IsNull(MT.Multiple_Proteins, 0) + 1,'
-							Set @Sql = @sql +   ' ' + @ObsSql + ','
-							Set @Sql = @sql +   ' StatsQ.Charge_State'
-							Set @Sql = @sql + ' ORDER BY MT.Mass_Tag_ID'
+							Set @S = @S +    ' ) AS SubQ'
+							Set @S = @S +    ' GROUP BY Mass_Tag_ID,'
+							Set @S = @S +      ' Charge_State'
+							Set @S = @S + ' ) AS StatsQ'
+  							Set @S = @S +   ' INNER JOIN T_Mass_Tags AS MT ON StatsQ.Mass_Tag_ID = MT.Mass_Tag_ID'
+							Set @S = @S +   ' LEFT OUTER JOIN T_Mass_Tag_to_Protein_Map AS MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID'
+							Set @S = @S +   ' LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID'
+							Set @S = @S + ' GROUP BY MT.Mass_Tag_ID, '
+							Set @S = @S +   ' LEN(MT.Peptide),'
+							Set @S = @S +   ' IsNull(MT.Monoisotopic_Mass, 0),'
+							Set @S = @S +   ' IsNull(ABS(MTN.Avg_GANET - MTN.PNET), 0),'
+							Set @S = @S +   ' IsNull(MT.Multiple_Proteins, 0) + 1,'
+							Set @S = @S +   ' ' + @ObsSql + ','
+							Set @S = @S +   ' StatsQ.Charge_State'
+							Set @S = @S + ' ORDER BY MT.Mass_Tag_ID'
 
 							if @PreviewSql <> 0
-								Print @Sql
+								Print @S
 							else
-								Exec sp_executesql @Sql
+								Exec sp_executesql @S
 							--
 							SELECT @myError = @@error, @SavedPeptideStatsRowCount = @@RowCount
 							--
@@ -567,6 +642,7 @@ As
 							Set @SavedRankScoreComparison = @RankScoreComparison
 							Set @SavedRankScoreThreshold = @RankScoreThreshold
 							Set @SavedExperimentFilter = @FilterSetExperimentFilter
+							Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
 							
 						End -- </f>
 
@@ -576,45 +652,46 @@ As
 						-- that pass the thresholds
 						-----------------------------------------------------------
 						--
-						Set @Sql = ''
-						Set @Sql = @Sql + ' UPDATE #NewMassTagScores'
-						Set @Sql = @Sql + ' SET PMT_Quality_Score = ' + Convert(varchar(11), @FilterSetScore)
-						Set @Sql = @Sql + ' FROM ('
-						Set @Sql = @Sql +   ' SELECT DISTINCT Mass_Tag_ID'
-						Set @Sql = @Sql +   ' FROM #PeptideStats'
-						Set @Sql = @Sql +   ' WHERE  Charge_State ' +  @ChargeStateComparison +      Convert(varchar(11), @ChargeStateThreshold) + ' AND '
-						Set @Sql = @sql +          ' ObservationCount ' + @SpectrumCountComparison + Convert(varchar(11), @SpectrumCountThreshold) + ' AND '
+						Set @S = ''
+						Set @S = @S + ' UPDATE #NewMassTagScores'
+						Set @S = @S + ' SET PMT_Quality_Score = ' + Convert(varchar(11), @FilterSetScore)
+						Set @S = @S + ' FROM ('
+						Set @S = @S +   ' SELECT DISTINCT Mass_Tag_ID'
+						Set @S = @S +   ' FROM #PeptideStats'
+						Set @S = @S +   ' WHERE  Charge_State ' +  @ChargeStateComparison +      Convert(varchar(11), @ChargeStateThreshold) + ' AND '
+						Set @S = @S +          ' ObservationCount ' + @SpectrumCountComparison + Convert(varchar(11), @SpectrumCountThreshold) + ' AND '
 						
 						If @ResultType = 'Peptide_Hit'
-							Set @Sql = @Sql + ' XCorr_Max ' +  @HighNormalizedScoreComparison +  Convert(varchar(11), @HighNormalizedScoreThreshold) + ' AND '
+							Set @S = @S + ' XCorr_Max ' +  @HighNormalizedScoreComparison +  Convert(varchar(11), @HighNormalizedScoreThreshold) + ' AND '
 							
 						If @ResultType = 'XT_Peptide_Hit'
 						Begin
-							Set @Sql = @Sql +      ' Hyperscore_Max ' +  @XTandemHyperscoreComparison +  Convert(varchar(11), @XTandemHyperscoreThreshold) + ' AND '
-							Set @Sql = @Sql +      ' Log_EValue_Min ' +  @XTandemLogEValueComparison +  Convert(varchar(11), @XTandemLogEValueThreshold) + ' AND '
+							Set @S = @S +      ' Hyperscore_Max ' +  @XTandemHyperscoreComparison +  Convert(varchar(11), @XTandemHyperscoreThreshold) + ' AND '
+							Set @S = @S +      ' Log_EValue_Min ' +  @XTandemLogEValueComparison +  Convert(varchar(11), @XTandemLogEValueThreshold) + ' AND '
 						End
 						
-						Set @Sql = @Sql +          ' MaxCleavageState ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
-						Set @Sql = @Sql +          ' MaxTerminusState ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
-						Set @Sql = @Sql +		   ' PeptideLength ' + @PeptideLengthComparison +    Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
-						Set @Sql = @Sql +		   ' MonoisotopicMass ' + @MassComparison +          Convert(varchar(11), @MassThreshold) + ' AND '
-						Set @Sql = @sql +          ' Discriminant_Score_Max ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-						Set @Sql = @sql +          ' Peptide_Prophet_Max ' + @PeptideProphetComparison +        Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
-						Set @Sql = @sql +          ' NETDifferenceAbsolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
-						Set @Sql = @sql +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold)
-						Set @Sql = @Sql +   ' ) AS CompareQ'
-						Set @Sql = @Sql +   ' WHERE #NewMassTagScores.Mass_Tag_ID = CompareQ.Mass_Tag_ID AND '
-						Set @Sql = @Sql +     Convert(varchar(11), @FilterSetScore) + ' > PMT_Quality_Score'
+						Set @S = @S +          ' MaxCleavageState ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
+						Set @S = @S +          ' MaxTerminusState ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
+						Set @S = @S +		   ' PeptideLength ' + @PeptideLengthComparison +    Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
+						Set @S = @S +		   ' MonoisotopicMass ' + @MassComparison +          Convert(varchar(11), @MassThreshold) + ' AND '
+						Set @S = @S +          ' Discriminant_Score_Max ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
+						Set @S = @S +          ' Peptide_Prophet_Max ' + @PeptideProphetComparison +        Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+						Set @S = @S +          ' NETDifferenceAbsolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
+						Set @S = @S +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold)
+						Set @S = @S +   ' ) AS CompareQ'
+						Set @S = @S +   ' WHERE #NewMassTagScores.Mass_Tag_ID = CompareQ.Mass_Tag_ID AND '
+						Set @S = @S +     ' PMT_Quality_Score < ' + Convert(varchar(11), @FilterSetScore)
 
 						-- Execute the Sql to update the PMT_Quality_Score column
 						if @PreviewSql <> 0
-							Print @Sql
+							Print @S
 						else
-							Exec sp_executesql @Sql
+							Exec sp_executesql @S
 						--
 						SELECT @myError = @@error, @myRowCount = @@RowCount
 						--
 						Set @RowCountTotalEvaluated = @RowCountTotalEvaluated + @myRowCount
+
 						
 						if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
 						Begin
@@ -713,6 +790,7 @@ As
 			Set @message = 'Preview of SQL for updating PMT_Quality_Score values'
 		Else
 			Set @message = 'Preview of update to PMT_Quality_Score values: '
+
 	End
 	Else
 	Begin
@@ -740,8 +818,8 @@ As
 		-----------------------------------------------------------
 		-- Make sure none of the mass tags have a null PMT Quality Score value
 		-- Due to the Internal_Standard_Only = 0 restriction used when
-		-- populating #NewMassTagScores, this will only be true for
-		-- PMTs with Internal_Standard_Only <> 0
+		--  populating #NewMassTagScores, this will only be true for
+		--  PMTs with Internal_Standard_Only <> 0
 		-----------------------------------------------------------
 		UPDATE T_Mass_Tags
 		SET PMT_Quality_Score = 0
@@ -749,6 +827,61 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 
+
+		-----------------------------------------------------------
+		-- Populate T_PMT_QS_Job_Usage_Filter_Info and T_PMT_QS_Job_Usage
+		-----------------------------------------------------------
+
+		-- Add new values to T_PMT_QS_Job_Usage_Filter_Info, if necessary
+		--
+		INSERT INTO T_PMT_QS_Job_Usage_Filter_Info (
+             Filter_Set_Info,
+             Filter_Set_ID,
+             PMT_Quality_Score )
+		SELECT  NewInfo.Filter_Set_Info,
+				NewInfo.Filter_Set_ID,
+				NewInfo.PMT_Quality_Score
+		FROM ( SELECT Filter_Set_Info, Filter_Set_ID, PMT_Quality_Score, 
+		              MIN(Filter_Set_Info_ID_Local) AS Filter_Set_Info_ID_Local
+			   FROM #TmpPMTQSJobUsageFilterInfo 
+			   GROUP BY Filter_Set_Info, Filter_Set_ID, PMT_Quality_Score
+			 ) NewInfo
+			LEFT OUTER JOIN T_PMT_QS_Job_Usage_Filter_Info StoredInfo
+			ON NewInfo.Filter_Set_Info = StoredInfo.Filter_Set_Info AND
+			   NewInfo.Filter_Set_ID = StoredInfo.Filter_Set_ID AND
+			   NewInfo.PMT_Quality_Score = StoredInfo.PMT_Quality_Score
+		WHERE StoredInfo.Filter_Set_Info_ID IS NULL
+		ORDER BY NewInfo.Filter_Set_Info_ID_Local
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+
+
+		-- Populate column Filter_Set_Info_ID in #TmpPMTQSJobUsageFilterInfo
+		-- using T_PMT_QS_Job_Usage_Filter_Info
+		--
+		UPDATE #TmpPMTQSJobUsageFilterInfo
+		SET Filter_Set_Info_ID = StoredInfo.Filter_Set_Info_ID
+		FROM #TmpPMTQSJobUsageFilterInfo NewInfo
+			INNER JOIN T_PMT_QS_Job_Usage_Filter_Info StoredInfo
+			ON NewInfo.Filter_Set_Info = StoredInfo.Filter_Set_Info AND
+			   NewInfo.Filter_Set_ID = StoredInfo.Filter_Set_ID AND
+			   NewInfo.PMT_Quality_Score = StoredInfo.PMT_Quality_Score
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+				
+		
+		-- Populate T_PMT_QS_Job_Usage, using the official Filter_Set_Info_ID value
+		--
+		INSERT INTO T_PMT_QS_Job_Usage (Filter_Set_Info_ID, Job)
+		SELECT FI.Filter_Set_Info_ID, NewInfo.Job
+		FROM #TmpPMTQSJobUsage NewInfo INNER JOIN 
+			 #TmpPMTQSJobUsageFilterInfo FI ON NewInfo.Filter_Set_Info_ID_Local = FI.Filter_Set_Info_ID_Local
+		WHERE NOT FI.Filter_Set_Info Is Null
+		ORDER BY Job, FI.Filter_Set_Info_ID
+		--
+		SELECT @myError = @@error, @myRowCount = @@RowCount
+		
+				
 		-----------------------------------------------------------
 		-- Invalidate any cached histograms with Mode 4 = PMT Quality Score
 		--  or with PMT_Quality_Score_Minimum defined
@@ -785,6 +918,5 @@ Done:
 	DROP INDEX #NewMassTagScores.#IX_NewMassTagScores
 	
 	Return @myError
-
 
 GO
