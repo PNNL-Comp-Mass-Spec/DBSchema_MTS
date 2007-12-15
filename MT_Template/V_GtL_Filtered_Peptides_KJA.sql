@@ -29,11 +29,25 @@ FROM dbo.T_Mass_Tags MT
        ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID
      INNER JOIN dbo.T_Proteins Prot
        ON MTPM.Ref_ID = Prot.Ref_ID
-WHERE (SS.RankXC = 1 AND MTPM.Cleavage_State >=1 AND SS.DeltaCn2 >= 0.1 AND
+WHERE (SS.RankXC = 1 AND Pep.Peptide LIKE '[rk-].%[rk].%' AND 
           (
-		   (Pep.Charge_State = 1 AND SS.XCorr >= 1.8) OR
-		   (Pep.Charge_State = 2 AND SS.XCorr >= 2.5) OR
-		   (Pep.Charge_State >= 3 AND SS.XCorr >= 3.5)
+		   (Pep.Charge_State = 1 AND SS.XCorr >= 1.9 AND SS.DeltaCn2 >= 0.1) OR
+		   (Pep.Charge_State = 2 AND SS.XCorr >= 2.2 AND SS.DeltaCn2 >= 0.1) OR
+		   (Pep.Charge_State >= 3 AND SS.XCorr >= 3.5 AND SS.DeltaCn2 >= 0.1) OR
+		   (SS.XCorr >= 2.6 AND SS.Sp >= 500) OR
+		   (SS.XCorr >= 1.2 AND SS.DeltaCn2 >= 0.2)
           )
-	   )
+	   ) OR
+       (SS.RankXc = 1 AND (Pep.Peptide LIKE '[rkfwyla-].%[rkfwyla].%' OR Pep.Peptide LIKE '%[rk].%') AND
+          (
+		   (Pep.Charge_State = 1 AND SS.XCorr >= 2.4 AND SS.DeltaCn2 >= 0.1) OR
+		   (Pep.Charge_State = 2 AND SS.XCorr >= 2.6 AND SS.DeltaCn2 >= 0.1) OR
+		   (Pep.Charge_State >= 3 AND SS.XCorr >= 3.9 AND SS.DeltaCn2 >= 0.1) OR
+		   (SS.XCorr >= 2.8 AND SS.Sp >= 500) OR
+		   (SS.XCorr >= 1.8 AND SS.DeltaCn2 >= 0.2)
+          )
+       ) OR
+       (SS.RankXC = 1 AND SS.XCorr >= 5)
+
+
 GO

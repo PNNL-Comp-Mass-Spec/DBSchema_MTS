@@ -28,6 +28,7 @@ CREATE Procedure dbo.ComputeMassTagsAnalysisCounts
 **			09/06/2006 mem - Now posting a log entry on success
 **			02/07/2007 mem - Switched to using sp_executesql
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
+**			11/13/2007 mem - Now updating PMTs_Last_Affected in T_Analysis_Description
 **    
 *****************************************************/
 (
@@ -74,6 +75,24 @@ AS
 		set @message = ''
 		Set @lastProgressUpdate = GetDate()
 	End
+
+	-----------------------------------------------
+	-- Update PMTs_Last_Affected in T_Analysis_Description
+	-----------------------------------------------
+	--
+	UPDATE T_Analysis_Description
+	SET PMTs_Last_Affected = LookupQ.Last_Affected
+	FROM T_Analysis_Description TAD INNER JOIN
+		(	SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected
+			FROM T_Mass_Tags MT
+				INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID
+				INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+			GROUP BY TAD.Job
+		) LookupQ ON TAD.Job = LookupQ.Job
+	WHERE IsNull(PMTs_Last_Affected, 0) <> LookupQ.Last_Affected
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+
 
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types

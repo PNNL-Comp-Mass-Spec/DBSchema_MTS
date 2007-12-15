@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.QuoteNameList
 /****************************************************
 **
@@ -14,15 +15,18 @@ CREATE PROCEDURE dbo.QuoteNameList
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 4/7/2004
+**	Auth:	mem
+**	Date:	04/7/2004
+**			11/27/2007 mem - Expanded @entryList and @entryListQuoted to varchar(max)
 **    
 *****************************************************/
-	@entryList varchar(7000) = '',								-- Comma-separated list of values
-	@entryListQuoted varchar(8000) = '' output,
+(
+	@entryList varchar(max) = '',								-- Comma-separated list of values
+	@entryListQuoted varchar(max) = '' output,
 	@message varchar(512) = '' output,
 	@listSeparator char(1) = ',',								-- Default is a comma
 	@quoteCharacter char(1) = ''''								-- Default is a single quote
+)
 As
 	set nocount on
 
@@ -74,6 +78,7 @@ As
 
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[QuoteNameList] TO [DMS_SP_User]

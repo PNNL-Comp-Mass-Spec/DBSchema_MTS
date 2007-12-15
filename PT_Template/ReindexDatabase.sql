@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.ReindexDatabase
 /****************************************************
 **
@@ -17,6 +18,7 @@ CREATE PROCEDURE dbo.ReindexDatabase
 **
 **	Auth:	mem
 **	Date:	10/11/2007
+**			10/30/2007 mem - Now calling VerifyUpdateEnabled
 **    
 *****************************************************/
 (
@@ -32,6 +34,8 @@ As
 	
 	Declare @TableCount int
 	Set @TableCount = 0
+
+	declare @UpdateEnabled tinyint
 	
 	Set @message = ''
 	
@@ -43,30 +47,75 @@ As
 	
 	DBCC DBREINDEX (T_Datasets, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Peptides, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Sequence, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Score_Sequest, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Score_XTandem, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Score_Discriminant, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Proteins, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Peptide_to_Protein_Map, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Dataset_Stats_Scans, '', 90)
 	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
 	
 	DBCC DBREINDEX (T_Dataset_Stats_SIC, '', 90)
 	Set @TableCount = @TableCount + 1

@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[GetProteinJobPeptideCrosstab_Ex] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
+
 CREATE PROCEDURE GetProteinJobPeptideCrosstab_Ex
 /****************************************************
 **	Desc:  
@@ -214,7 +215,7 @@ AS
 	set @sql = @sql + 'INSERT INTO #ORF (S, Reference, Ref_ID, ORF_ID, Monoisotopic_Mass, Description, Reference_Notes) '+ CHAR(10)
 	if @dbVer > 1
 		begin
-			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
+			set @sql = @sql + 'SELECT '''' as S, Reference, Ref_ID, External_Protein_ID as ORF_ID, Monoisotopic_Mass, ''X'' as Description, '''' as Reference_Notes '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins'+ CHAR(10)
 		end
@@ -241,7 +242,7 @@ AS
 	declare @peptideDBName varchar(128), @proteinDBName varchar(128)
 	Exec MT_Main.dbo.GetMTAssignedDBs @MTDBName, @peptideDBName output, @proteinDBName output
 
-	if @proteinDBName <> ''
+	if @proteinDBName <> '' and @proteinDBName <> '(na)'
 	begin
 		set @sql = ''
 		set @sql = @sql + 'update X '
@@ -435,9 +436,6 @@ Done:
 	end
 */
 	return @myError
-
-
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [DMS_SP_User]

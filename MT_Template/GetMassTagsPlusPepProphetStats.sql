@@ -16,7 +16,7 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 **  Auth:	mem
 **	Date:	04/06/2007 mem - Created this procedure by extending GetMassTagsGANETParam to include data in T_Mass_Tag_Peptide_Prophet_Stats
 **			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
-**
+**			11/08/2007 mem - Now returning Cleavage_State as the final column
 **  
 ****************************************************************/
 (
@@ -115,23 +115,38 @@ As
 				MTPPS.PepProphet_Probability_Max_CS3, 
 				MTPPS.PepProphet_FScore_Avg_CS1, 
 				MTPPS.PepProphet_FScore_Avg_CS2, 
-				MTPPS.PepProphet_FScore_Avg_CS3
+				MTPPS.PepProphet_FScore_Avg_CS3,
+				MAX(IsNull(MTPM.Cleavage_State, 0)) AS Cleavage_State
 		FROM #TmpMassTags
 			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
 			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
 			 INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID 
 			 INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+			 INNER JOIN T_Mass_Tag_to_Protein_Map MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID
 			 LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
 		WHERE TAD.Dataset = @DatasetToFilterOn AND
 				P.Max_Obs_Area_In_Job = 1
 		GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, 
 					MT.High_Normalized_Score, MT.High_Discriminant_Score, 
 					MT.Peptide_Obs_Count_Passing_Filter, MT.Mod_Count, MT.Mod_Description, 
-					MTN.PNET, MT.High_Peptide_Prophet_Probability
+					MTN.PNET, MT.High_Peptide_Prophet_Probability,
+					MTPPS.Mass_Tag_ID, 
+					MTPPS.ObsCount_CS1, 
+					MTPPS.ObsCount_CS2, 
+					MTPPS.ObsCount_CS3, 
+					MTPPS.PepProphet_FScore_Max_CS1, 
+					MTPPS.PepProphet_FScore_Max_CS2, 
+					MTPPS.PepProphet_FScore_Max_CS3, 
+					MTPPS.PepProphet_Probability_Max_CS1, 
+					MTPPS.PepProphet_Probability_Max_CS2, 
+					MTPPS.PepProphet_Probability_Max_CS3, 
+					MTPPS.PepProphet_FScore_Avg_CS1, 
+					MTPPS.PepProphet_FScore_Avg_CS2, 
+					MTPPS.PepProphet_FScore_Avg_CS3
 		ORDER BY MT.Monoisotopic_Mass
 	Else
 		-- Return Avg_GANET as Net_Value_To_Use
-		SELECT DISTINCT
+		SELECT 
 			MT.Mass_Tag_ID, 
 			MT.Peptide, 
 			MT.Monoisotopic_Mass, 
@@ -159,11 +174,39 @@ As
 			MTPPS.PepProphet_Probability_Max_CS3, 
 			MTPPS.PepProphet_FScore_Avg_CS1, 
 			MTPPS.PepProphet_FScore_Avg_CS2, 
-			MTPPS.PepProphet_FScore_Avg_CS3
+			MTPPS.PepProphet_FScore_Avg_CS3,
+			MAX(IsNull(MTPM.Cleavage_State, 0)) AS Cleavage_State
 		FROM #TmpMassTags 
 			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
+			INNER JOIN T_Mass_Tag_to_Protein_Map MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID
 			LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
+		GROUP BY MT.Mass_Tag_ID, 
+			MT.Peptide, 
+			MT.Monoisotopic_Mass, 
+			MTN.PNET,
+			MTN.Avg_GANET ,
+			MTN.PNET, 
+			MT.High_Normalized_Score, 
+			MTN.StD_GANET,
+			MT.High_Discriminant_Score,
+			MT.Peptide_Obs_Count_Passing_Filter,
+			MT.Mod_Count,
+			MT.Mod_Description,
+			MT.High_Peptide_Prophet_Probability,
+			MTPPS.Mass_Tag_ID, 
+			MTPPS.ObsCount_CS1, 
+			MTPPS.ObsCount_CS2, 
+			MTPPS.ObsCount_CS3, 
+			MTPPS.PepProphet_FScore_Max_CS1, 
+			MTPPS.PepProphet_FScore_Max_CS2, 
+			MTPPS.PepProphet_FScore_Max_CS3, 
+			MTPPS.PepProphet_Probability_Max_CS1, 
+			MTPPS.PepProphet_Probability_Max_CS2, 
+			MTPPS.PepProphet_Probability_Max_CS3, 
+			MTPPS.PepProphet_FScore_Avg_CS1, 
+			MTPPS.PepProphet_FScore_Avg_CS2, 
+			MTPPS.PepProphet_FScore_Avg_CS3
 		ORDER BY MT.Monoisotopic_Mass
 
 	--

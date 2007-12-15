@@ -41,10 +41,11 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **			03/06/2007 mem - Switched to Try/Catch error handling
 **			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
 **			05/31/2007 mem - Now setting @duplicateEntryHoldoffHours to 4 when calling PostLogEntry for various errors
+**			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
 **    
 *****************************************************/
 (
-	@JobMapUpdateHoldoff int = 18		-- Hours between call to UpdateAnalysisJobToMTDBMap
+	@JobMapUpdateHoldoff int = 4		-- Hours between call to UpdateAnalysisJobToMTDBMap
 )
 As
 	set nocount on
@@ -570,13 +571,13 @@ As
 	
 		-----------------------------------------------------------
 		-- Update T_Analysis_Job_to_MT_DB_Map for all MT Databases (with MTL_State < 10)
-		-- However, only call this SP once every @JobMapUpdateHoldoff hours since it can take a while to run
+		-- However, only call this SP once every @JobMapUpdateHoldoff hours
 		-----------------------------------------------------------
 		--
 		Declare @PostingTime datetime
 		Set @PostingTime = '1/1/2000'
 	
-		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 18)
+		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 4)
 				
 		SELECT TOP 1 @PostingTime = Posting_Time
 		FROM T_Log_Entries
@@ -590,7 +591,7 @@ As
 			Set @CurrentLocation = 'Call UpdateAnalysisJobToMTDBMap'
 			
 			set @message = 'UpdateAnalysisJobToMTDBMap Starting'
-			If @logVerbosity > 0
+			If @logVerbosity > 1
 				execute PostLogEntry 'Normal', @message, 'UpdateAllActiveMTDatabases'
 	
 			Set @message = ''

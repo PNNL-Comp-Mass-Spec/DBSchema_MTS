@@ -24,6 +24,7 @@ CREATE PROCEDURE dbo.SetPermissionRestrictions
 **	Auth:	mem
 **	Date:	05/23/2005
 **			01/11/2006 mem - Added parameter @UsersToExplicitlyGrantSelect
+**			10/17/2007 mem - Updated to use udfParseDelimitedList()
 **    
 *****************************************************/
 (
@@ -39,9 +40,6 @@ As
 	declare @myRowcount int
 	set @myRowcount = 0
 	set @myError = 0
-
-	declare @CommaLoc int
-	declare @ObjectName varchar(256)
 
 	set @message = ''
 
@@ -72,21 +70,9 @@ As
 	-- Split @PublicObjects on commas to populate #Tmp_PublicObjects
 	--------------------------------------------------------------
 	--
-	Set @CommaLoc = CharIndex(',', @PublicObjects)
-	While @CommaLoc > 1
-	Begin
-
-		Set @ObjectName = LTrim(RTrim(Left(@PublicObjects, @CommaLoc-1)))
-		Set @PublicObjects = LTrim(RTrim(SubString(@PublicObjects, @CommaLoc+1, Len(@PublicObjects))))
-
-		INSERT INTO #Tmp_PublicObjects ([ObjectName]) VALUES (@ObjectName)
-	
-		Set @CommaLoc = CharIndex(',', @PublicObjects)
-	End
-	
-	If Len(@PublicObjects) > 0
-		INSERT INTO #Tmp_PublicObjects ([ObjectName]) VALUES (@PublicObjects)
-
+	INSERT INTO #Tmp_PublicObjects (ObjectName)
+	SELECT Value
+	FROM dbo.udfParseDelimitedList(@PublicObjects, ',')
 
 	--------------------------------------------------------------
 	-- First revoke (reset) any previously defined permissions

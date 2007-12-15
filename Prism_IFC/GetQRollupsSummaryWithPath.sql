@@ -33,13 +33,17 @@ CREATE PROCEDURE dbo.GetQRollupsSummaryWithPath
 **			09/07/2006 mem - Now returns [Min High Peptide Prophet Prob]
 **			04/10/2007 mem - Replaced ..V_QR_SummaryList with .dbo.V_QR_SummaryList
 **			06/13/2007 mem - Now returns [Max Matches per UMC]
+**			11/27/2007 mem - Added parameters @QIDMinimum and @QIDMaximum
 **    
 *****************************************************/
 (
 	@MTDBName varchar(128) = '',					-- name of mass tag database to use
 	@ShowSuperseded tinyint = 1,
 	@outputColumnNameList varchar(1024) = '',		-- ignored at present
-	@message varchar(512) = '' output
+	@message varchar(512) = '' output,
+	@InfoOnly tinyint = 0,
+	@QIDMinimum int = 0,							-- Optional, filter
+	@QIDMaximum int = 0
 )
 As
 	set nocount on
@@ -51,6 +55,14 @@ As
 	
 	set @message = ''
 	declare @result int
+
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------
+	Set @MTDBName = IsNull(@MTDBName, '')
+	Set @ShowSuperseded = IsNull(@ShowSuperseded, 1)
+	Set @QIDMinimum = IsNull(@QIDMinimum, 0)
+	Set @QIDMaximum = IsNull(@QIDMaximum, 0)
 	
 	---------------------------------------------------
 	-- validate mass tag DB name
@@ -67,7 +79,7 @@ As
 		set @message = 'Could not resolve mass tag DB name'
 		goto Done
 	end
-
+	
 	---------------------------------------------------
 	-- build basic query to get list of Q Rollups from MTDB
 	---------------------------------------------------
@@ -85,10 +97,16 @@ As
 	set @sql = @sql + ' FROM DATABASE..V_QR_SummaryList_Ex'
 	
 	if @ShowSuperseded = 1
-		set @sql = @sql + ' WHERE [Quantitation State ID] = 3 OR [Quantitation State ID] = 5'
+		set @sql = @sql + ' WHERE ([Quantitation State ID] = 3 OR [Quantitation State ID] = 5)'
 	else
-		set @sql = @sql + ' WHERE [Quantitation State ID] = 3'
-	
+		set @sql = @sql + ' WHERE ([Quantitation State ID] = 3)'
+		
+	If @QIDMinimum > 0
+		set @sql = @sql + ' AND QID >= ' + Convert(varchar(12), @QIDMinimum)
+
+	If @QIDMaximum > 0
+		set @sql = @sql + ' AND QID <= ' + Convert(varchar(12), @QIDMaximum)
+			
 	---------------------------------------------------
 	-- tailor basic query to specific MTDB
 	---------------------------------------------------
@@ -108,14 +126,19 @@ As
 	-- Return list of Q Rollups
 	---------------------------------------------------
 	
-	exec @result = sp_executesql @s
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	Declare @UsageMessage varchar(512)
-	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
-	Exec PostUsageLogEntry 'GetQRollupsSummary', @MTDBName, @UsageMessage
-	
+	if @InfoOnly = 1
+		print @S
+	else
+	Begin
+		exec @result = sp_executesql @s
+		--	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		Declare @UsageMessage varchar(512)
+		Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
+		Exec PostUsageLogEntry 'GetQRollupsSummary', @MTDBName, @UsageMessage
+	End
+		
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------

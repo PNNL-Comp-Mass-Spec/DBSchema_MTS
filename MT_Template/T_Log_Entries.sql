@@ -25,7 +25,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE TRIGGER trig_u_T_Log_Entries ON T_Log_Entries 
+CREATE TRIGGER trig_u_T_Log_Entries ON dbo.T_Log_Entries 
 FOR UPDATE
 AS
 /****************************************************

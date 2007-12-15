@@ -35,6 +35,7 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			07/03/2006 mem - Now populating field RowCount_Loaded in T_Analysis_Description
 **			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
 **			10/11/2007 mem - Now calling ReindexDatabase after varying amounts of data have been loaded
+**			10/30/2007 mem - Fixed bug that examined the wrong table to determine the number of jobs that have reached state @NextProcessStateToUse
 **    
 *****************************************************/
 (
@@ -209,10 +210,10 @@ AS
 			
 				Set @jobProcessed = 1
 				
-				-- Count the number jobs currently in state @NextProcessStateToUse
+				-- Count the number jobs that have ever entered state @NextProcessStateToUse
 				SELECT @JobCount = COUNT(*)
-				FROM T_Analysis_Description
-				WHERE Process_State = @NextProcessStateToUse
+				FROM T_Event_Log
+				WHERE Target_State = @NextProcessStateToUse
 				
 				-- Reindex after 25 and after 100 Peptide_Hit jobs have been loaded
 				If @JobCount = 25 Or @JobCount = 100
@@ -234,8 +235,8 @@ AS
 
 				-- Count the number jobs currently in state 75
 				SELECT @JobCount = COUNT(*)
-				FROM T_Analysis_Description
-				WHERE Process_State = @NextProcessStateToUse
+				FROM T_Event_Log
+				WHERE Target_State = @NextProcessStateToUse
 				
 				-- Reindex after 25 SIC jobs have been loaded
 				If @JobCount = 25
@@ -306,7 +307,7 @@ AS
 					Exec PostLogEntry 'Normal', @ReindexMessage, 'LoadResultsForAvailableAnalyses'
 
 				-- Check whether the database needs to be re-indexed
-				-- Don't use the value in @ReindexDB; examine table T_Process_Step_Control in the state was manually changed
+				-- Don't use the value in @ReindexDB; examine table T_Process_Step_Control in case the state was manually changed
 				
 				Set @ReindexDB = 0
 				SELECT @ReindexDB = enabled 

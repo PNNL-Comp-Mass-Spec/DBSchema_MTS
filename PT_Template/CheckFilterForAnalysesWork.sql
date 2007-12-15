@@ -33,6 +33,7 @@ CREATE PROCEDURE dbo.CheckFilterForAnalysesWork
 **
 **	Auth:	mem
 **	Date:	06/08/2007
+**			10/17/2007 mem - Added support for Peptide Prophet scores and for RankScore (aka RankXc for Sequest)
 **    
 *****************************************************/
 (
@@ -55,7 +56,7 @@ AS
 
 	Declare @Continue tinyint
 	
-	declare @Sql varchar(4000)
+	declare @S varchar(max)
 
 
 	-----------------------------------------------------------
@@ -64,8 +65,8 @@ AS
 	
 	Declare @CriteriaGroupStart int,
 			@CriteriaGroupMatch int,
-			@SpectrumCountComparison varchar(2),		-- Not used in this SP
-			@SpectrumCountThreshold int,				-- Not used in this SP
+			@SpectrumCountComparison varchar(2),			-- Not used in this SP
+			@SpectrumCountThreshold int,					-- Not used in this SP
 			@ChargeStateComparison varchar(2),
 			@ChargeStateThreshold tinyint,
 			@HighNormalizedScoreComparison varchar(2),
@@ -76,24 +77,28 @@ AS
 			@PeptideLengthThreshold smallint,
 			@MassComparison varchar(2),
 			@MassThreshold float,
-			@DeltaCnComparison varchar(2),				-- Only used for Sequest results
-			@DeltaCnThreshold float,					-- Only used for Sequest results
-			@DeltaCn2Comparison varchar(2),				-- Used for both Sequest and XTandem results
-			@DeltaCn2Threshold float,					-- Used for both Sequest and XTandem results
+			@DeltaCnComparison varchar(2),					-- Only used for Sequest results
+			@DeltaCnThreshold float,						-- Only used for Sequest results
+			@DeltaCn2Comparison varchar(2),					-- Used for both Sequest and XTandem results
+			@DeltaCn2Threshold float,						-- Used for both Sequest and XTandem results
 			@DiscriminantScoreComparison varchar(2),
 			@DiscriminantScoreThreshold float,
 			@NETDifferenceAbsoluteComparison varchar(2),
 			@NETDifferenceAbsoluteThreshold float,
 			@DiscriminantInitialFilterComparison varchar(2),
 			@DiscriminantInitialFilterThreshold float,
-			@ProteinCountComparison varchar(2),			-- Not used in this SP
-			@ProteinCountThreshold int,					-- Not used in this SP
+			@ProteinCountComparison varchar(2),					-- Not used in this SP
+			@ProteinCountThreshold int,							-- Not used in this SP
 			@TerminusStateComparison varchar(2),
 			@TerminusStateThreshold tinyint,
-			@XTandemHyperscoreComparison varchar(2),	-- Only used for XTandem results
-			@XTandemHyperscoreThreshold real,			-- Only used for XTandem results
-			@XTandemLogEValueComparison varchar(2),		-- Only used for XTandem results
-			@XTandemLogEValueThreshold real				-- Only used for XTandem results
+			@XTandemHyperscoreComparison varchar(2),		-- Only used for XTandem results
+			@XTandemHyperscoreThreshold real,				-- Only used for XTandem results
+			@XTandemLogEValueComparison varchar(2),			-- Only used for XTandem results
+			@XTandemLogEValueThreshold real,				-- Only used for XTandem results
+			@PeptideProphetComparison varchar(2),
+			@PeptideProphetThreshold float,
+			@RankScoreComparison varchar(2),				-- Only used for Sequest results
+			@RankScoreThreshold smallint					-- Only used for Sequest results
 
 	-----------------------------------------------------------
 	-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -130,6 +135,7 @@ AS
 		PeptideLength smallint NOT NULL,
 		Charge_State smallint NOT NULL,
 		XCorr float NOT NULL,							-- Only used for Sequest data
+		RankScore int NOT NULL,							-- Only used for Sequest data
 		Hyperscore real NOT NULL,						-- Only used for XTandem data
 		Log_EValue real NOT NULL,						-- Only used for XTandem data
 		Cleavage_State tinyint NOT NULL,
@@ -138,6 +144,7 @@ AS
 		DeltaCn float NOT NULL,							-- Only used for Sequest data
 		DeltaCn2 float NOT NULL,
 		Discriminant_Score real NOT NULL,
+		Peptide_Prophet_Probability real NOT NULL,
 		NET_Difference_Absolute float NOT NULL,
 		PassFilt int NOT NULL,							-- aka Discriminant_Initial_Filter; Always 1 for XTandem data
 		Pass_FilterSet_Group tinyint NOT NULL			-- 0 or 1
@@ -164,6 +171,7 @@ AS
 	-----------------------------------------------
 	--
 	DELETE FROM #PeptideFilterResults
+
 	
 	Set @ResultTypeID = 0
 	Set @Continue = 1
@@ -203,23 +211,26 @@ AS
 			If @ResultType = 'Peptide_Hit'
 			Begin
 				INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-											XCorr, Hyperscore, Log_EValue, Cleavage_State, Terminus_State, Mass,
-											DeltaCn, DeltaCn2, Discriminant_Score,
+											XCorr, RankScore, Hyperscore, Log_EValue, Cleavage_State, Terminus_State, Mass,
+											DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 											NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 				SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-						XCorr, 0 AS Hyperscore, 0 AS Log_EValue, Max(Cleavage_State), Max(Terminus_State), MH, 
-						DeltaCN, DeltaCN2, DiscriminantScoreNorm, NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
+						XCorr, RankScore, 0 AS Hyperscore, 0 AS Log_EValue, MAX(Cleavage_State), MAX(Terminus_State), MH, 
+						DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability, 
+						NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
 				FROM (	SELECT	P.Analysis_ID, 
 								P.Peptide_ID, 
 								Len(TS.Clean_Sequence) AS PeptideLength, 
 								IsNull(P.Charge_State, 0) AS Charge_State,
 								IsNull(S.XCorr, 0) AS XCorr, 
+								IsNull(S.RankXc, 1) AS RankScore, 
 								IsNull(PP.Cleavage_State, 0) AS Cleavage_State, 
 								IsNull(PP.Terminus_State, 0) AS Terminus_State, 
 								IsNull(P.MH, 0) AS MH,
 								IsNull(S.DeltaCn, 0) AS DeltaCn, 
 								IsNull(S.DeltaCn2, 0) AS DeltaCn2, 
 								IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
+								IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
 								CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
 								THEN 0
 								ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
@@ -234,8 +245,9 @@ AS
 							 T_Sequence TS ON P.Seq_ID = TS.Seq_ID
 					) LookupQ
 				GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-						XCorr, MH, DeltaCN, DeltaCN2, DiscriminantScoreNorm,
-						NET_Difference_Absolute, PassFilt
+						 XCorr, RankScore, MH, DeltaCN, DeltaCN2, 
+						 DiscriminantScoreNorm, Peptide_Prophet_Probability,
+						 NET_Difference_Absolute, PassFilt
 				ORDER BY Peptide_ID
 				--
 				SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -247,12 +259,13 @@ AS
 				-- It is always 1 and is actually not used in this SP for XTandem data
 				
 				INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-											XCorr, Hyperscore, Log_EValue, Cleavage_State, Terminus_State, Mass,
-											DeltaCn, DeltaCn2, Discriminant_Score,
+											XCorr, RankScore, Hyperscore, Log_EValue, Cleavage_State, Terminus_State, Mass,
+											DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 											NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 				SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-						0 AS XCorr, Hyperscore, Log_EValue, Max(Cleavage_State), Max(Terminus_State), MH, 
-						0 AS DeltaCN, DeltaCN2, DiscriminantScoreNorm, NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
+						0 AS XCorr, 1 AS RankScore, Hyperscore, Log_EValue, Max(Cleavage_State), Max(Terminus_State), MH, 
+						0 AS DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
+						NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
 				FROM (	SELECT	P.Analysis_ID, 
 								P.Peptide_ID, 
 								Len(TS.Clean_Sequence) AS PeptideLength, 
@@ -264,6 +277,7 @@ AS
 								IsNull(P.MH, 0) AS MH,
 								IsNull(X.DeltaCn2, 0) AS DeltaCn2, 
 								IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
+								IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
 								CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
 								THEN 0
 								ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
@@ -278,8 +292,9 @@ AS
 							 T_Sequence TS ON P.Seq_ID = TS.Seq_ID
 					) LookupQ
 				GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-						Hyperscore, Log_EValue, MH, DeltaCN2, DiscriminantScoreNorm,
-						NET_Difference_Absolute, PassFilt
+						 Hyperscore, Log_EValue, MH, DeltaCN2, 
+						 DiscriminantScoreNorm, Peptide_Prophet_Probability,
+						 NET_Difference_Absolute, PassFilt
 				ORDER BY Peptide_ID
 				--
 				SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -295,8 +310,10 @@ AS
 				Goto done
 			End
 
+			-----------------------------------------------------------
 			-- Now call GetThresholdsForFilterSet to get the thresholds to filter against
 			-- Set Pass_FilterSet_Group to 1 in #PeptideStats for the matching peptides
+			-----------------------------------------------------------
 
 			Set @CriteriaGroupStart = 0
 			Set @CriteriaGroupMatch = 0
@@ -315,7 +332,9 @@ AS
 											@ProteinCountComparison OUTPUT, @ProteinCountThreshold OUTPUT,
 											@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 											@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
-											@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT
+											@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
+											@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+											@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
 											
 
 			While @CriteriaGroupMatch > 0
@@ -323,40 +342,44 @@ AS
 
 				-- Construct the Sql Update Query
 				--
-				Set @Sql = ''
-				Set @Sql = @Sql + ' UPDATE #PeptideStats'
-				Set @Sql = @Sql + ' SET Pass_FilterSet_Group = 1'
-				Set @Sql = @Sql + ' WHERE  Charge_State ' +  @ChargeStateComparison +          Convert(varchar(11), @ChargeStateThreshold) + ' AND '
+				Set @S = ''
+				Set @S = @S + ' UPDATE #PeptideStats'
+				Set @S = @S + ' SET Pass_FilterSet_Group = 1'
+				Set @S = @S + ' WHERE  Charge_State ' +  @ChargeStateComparison +          Convert(varchar(11), @ChargeStateThreshold) + ' AND '
 
 				If @ResultType = 'Peptide_Hit'
-					Set @Sql = @Sql +        ' XCorr ' +         @HighNormalizedScoreComparison +  Convert(varchar(11), @HighNormalizedScoreThreshold) + ' AND '
+				Begin
+					Set @S = @S +        ' XCorr ' +         @HighNormalizedScoreComparison +  Convert(varchar(11), @HighNormalizedScoreThreshold) + ' AND '
+					Set @S = @S +        ' RankScore ' +     @RankScoreComparison           +  Convert(varchar(11), @RankScoreThreshold) + ' AND '
+				End
+				
 				If @ResultType = 'XT_Peptide_Hit'
 				Begin
-					Set @Sql = @Sql +        ' Hyperscore ' +         @XTandemHyperscoreComparison +  Convert(varchar(11), @XTandemHyperscoreThreshold) + ' AND '
-					Set @Sql = @Sql +        ' Log_EValue ' +         @XTandemLogEValueComparison +  Convert(varchar(11), @XTandemLogEValueThreshold) + ' AND '
+					Set @S = @S +        ' Hyperscore ' +         @XTandemHyperscoreComparison +  Convert(varchar(11), @XTandemHyperscoreThreshold) + ' AND '
+					Set @S = @S +        ' Log_EValue ' +         @XTandemLogEValueComparison +   Convert(varchar(11), @XTandemLogEValueThreshold) + ' AND '
 				End
 				
-				Set @Sql = @Sql +        ' Cleavage_State ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
-				Set @Sql = @Sql +        ' Terminus_State ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
-				Set @Sql = @Sql +		 ' PeptideLength ' + @PeptideLengthComparison + Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
-				Set @Sql = @Sql +		 ' Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold) + ' AND '
+				Set @S = @S +        ' Cleavage_State ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
+				Set @S = @S +        ' Terminus_State ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
+				Set @S = @S +		 ' PeptideLength ' + @PeptideLengthComparison +  Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
+				Set @S = @S +		 ' Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold) + ' AND '
 
 				If @ResultType = 'Peptide_Hit'
 				Begin
-					Set @Sql = @Sql +		 ' DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
-					Set @Sql = @sql +        ' PassFilt ' + @DiscriminantInitialFilterComparison + Convert(varchar(11), @DiscriminantInitialFilterThreshold) + ' AND '
+					Set @S = @S +		 ' DeltaCn ' + @DeltaCnComparison + Convert(varchar(11), @DeltaCnThreshold) + ' AND '
+					Set @S = @S +        ' PassFilt ' + @DiscriminantInitialFilterComparison + Convert(varchar(11), @DiscriminantInitialFilterThreshold) + ' AND '
 				End
 				
-				Set @Sql = @Sql +		 ' DeltaCn2' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold) + ' AND '
-				Set @Sql = @sql +        ' Discriminant_Score ' + @DiscriminantScoreComparison + Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-				Set @Sql = @sql +        ' NET_Difference_Absolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold)
-
+				Set @S = @S +		 ' DeltaCn2' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold) + ' AND '
+				Set @S = @S +        ' Discriminant_Score ' + @DiscriminantScoreComparison + Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
+				Set @S = @S +        ' Peptide_Prophet_Probability ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+				Set @S = @S +        ' NET_Difference_Absolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold)
 
 				-- Execute the Sql to update the Pass_FilterSet_Group column
 				If @PreviewSql <> 0
-					Print @sql
+					Print @S
 				Else
-					Exec (@Sql)
+					Exec (@S)
 				--
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 				
@@ -381,7 +404,10 @@ AS
 												@ProteinCountComparison OUTPUT, @ProteinCountThreshold OUTPUT,
 												@TerminusStateComparison OUTPUT, @TerminusStateThreshold OUTPUT,
 												@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
-												@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT
+												@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
+												@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
+												@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
+
 				If @myError <> 0
 				Begin
 					Set @Message = 'Error retrieving next entry from GetThresholdsForFilterSet in CheckFilterForAnalysesWork'
@@ -406,7 +432,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[CheckFilterForAnalysesWork] TO [DMS_SP_User]

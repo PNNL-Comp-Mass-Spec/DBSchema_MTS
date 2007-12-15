@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.UpdateUserPermissions
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
 **			08/10/2006 mem - Added MTS_DB_Reader
 **			08/14/2006 mem - Updated to use dynamic sql to run the schema drops on Sql Server 2005; necessary to keep this SP compatible wiht Sql Server 2000
+**			11/14/2007 mem - Updated to grant ShowPlan permissions
 **    
 *****************************************************/
 AS
@@ -153,6 +154,10 @@ AS
 
 	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
+
+	grant showplan to MTS_DB_Dev
+	grant showplan to MTS_DB_Lite
+	grant showplan to MTS_DB_Reader
 
 	Return 0
 

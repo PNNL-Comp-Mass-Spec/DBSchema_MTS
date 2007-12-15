@@ -16,15 +16,20 @@ CREATE PROCEDURE dbo.EnableDisableJobsAllServers
 **			11/14/2006 mem - Removed Prismdev from @AdditionalServers
 **			05/10/2007 mem - Added parameter @UpdateTProcessStepControl
 **						   - Added ProteinSeqs to @AdditionalServers
+**			11/15/2007 mem - Updated @CategoryName to allow comma separated lists
+**						   - Added @EnableTProcessStepControlEvenIfZero
 **    
 *****************************************************/
+(
 	@EnableJobs tinyint,										-- 0 to disable, 1 to enable
-	@CategoryName varchar(255) = 'MTS Auto Update Continuous',
+	@CategoryName varchar(1024) = 'MTS Auto Update Continuous, DMS Continuous, Database Maintenance',		-- Can be comma-separated list
 	@Preview tinyint = 0,										-- 1 to preview jobs that would be affected, 0 to actually make changes
 	@AdditionalServers varchar(512) = 'ProteinSeqs',			-- Additional servers to poll besides those in T_MTS_Servers
 	@SPName varchar(128) = 'MT_Main.dbo.EnableDisableJobs',
 	@UpdateTProcessStepControl tinyint = 1,						-- If 1, then will change Execution_State in MT_Main.T_Process_Control from 3 to 1 or from 1 to 3, depending on @EnableJobs
+	@EnableTProcessStepControlEvenIfZero tinyint = 1,			-- Set to 1 to force MT_Main.T_Process_Control to set the values to 1, even if they are 0; only used when @EnableJobs = 1 and @UpdateTProcessStepControl = 1
 	@message varchar(255) = '' OUTPUT
+)
 AS
 	SET NOCOUNT ON
 
@@ -55,6 +60,7 @@ AS
 	Set @AdditionalServers = IsNull(@AdditionalServers, '')
 	Set @SPName = LTrim(RTrim(IsNull(@SPName, '')))
 	Set @UpdateTProcessStepControl = IsNull(@UpdateTProcessStepControl, 1)
+	Set @EnableTProcessStepControlEvenIfZero = IsNull(@EnableTProcessStepControlEvenIfZero, 0)
 	
 	If Len(@SPName) = 0
 	Begin
@@ -140,9 +146,14 @@ AS
 					Set @S = ''
 					Set @S = @S + ' SELECT  Processing_Step_Name, '
 					Set @S = @S +      ' Convert(varchar(12), Execution_State) + '' --> '' +' 
-					Set @S = @S +      ' CASE WHEN Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
+					If @ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1
+						Set @S = @S +      ' CASE WHEN Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
+					Else
+						Set @S = @S +      ' CASE WHEN Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
+
 					Set @S = @S +      ' THEN  Convert(varchar(12), ' + Convert(varchar(12), @ExecutionStateNew) + ')'
 					Set @S = @S +      ' ELSE ''No Change'''
+
 					Set @S = @S +      ' End AS Execution_State,'
 					Set @S = @S +      ' Last_Query_Date, Last_Query_Description'
 					Set @S = @S + ' FROM ' + @ServerName + '.MT_Main.dbo.T_Process_Step_Control'
@@ -155,8 +166,12 @@ AS
 					Set @S = ''
 					Set @S = @S + ' UPDATE ' + @ServerName + '.MT_Main.dbo.T_Process_Step_Control'
 					Set @S = @S + ' Set Execution_State = ' + Convert(varchar(12), @ExecutionStateNew)
-					Set @S = @S + ' WHERE Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
-					
+
+					If @ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1
+						Set @S = @S + ' WHERE Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
+					Else
+						Set @S = @S + ' WHERE Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
+										
 					Exec sp_executeSql @S
 				End
 			End

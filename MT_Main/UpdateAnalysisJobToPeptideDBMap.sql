@@ -22,10 +22,13 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			09/07/2006 mem - Now populating column Process_State
 **			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
+**			11/13/2007 mem - Added @previewSql and @infoOnly
 **    
 *****************************************************/
 (
 	@PeptideDBNameFilter varchar(128) = '',				-- If supplied, then only examines the Jobs in database @PeptideDBNameFilter
+	@infoOnly tinyint = 0,
+	@previewSql tinyint = 0,
 	@RowCountAdded int = 0 OUTPUT,
 	@message varchar(255) = '' OUTPUT
 )
@@ -39,10 +42,14 @@ As
 
 	-- Validate or clear the input/output parameters
 	Set @PeptideDBNameFilter = IsNull(@PeptideDBNameFilter, '')
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	Set @previewSql = IsNull(@previewSql, 0)
 	Set @message = ''
 	Set @RowCountAdded = 0
 
 	declare @result int
+	Set @result = 0
+	
 	declare @UpdateEnabled tinyint
 	declare @ProcessSingleDB tinyint
 	declare @RowCountUpdated int
@@ -169,7 +176,7 @@ As
 			Begin
 				Set @sql = ''
 				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
-				Set @sql = @sql + ' SELECT Job, ''Peptide_Hit'' AS ResultType, Created, Created AS Last_Affected, IsNull(State, 0)'
+				Set @sql = @sql + ' SELECT Job, ''Peptide_Hit'' AS ResultType, Created, Created AS Last_Affected, IsNull(State, 0) AS Process_State'
 				Set @sql = @sql + ' FROM [' + @PDB_Name + '].dbo.T_Analysis_Description'
 				Set @sql = @sql + ' WHERE Analysis_Tool LIKE ''%sequest%'' AND NOT Created IS NULL'
 			End
@@ -177,11 +184,14 @@ As
 			Begin
 				Set @sql = ''
 				Set @sql = @sql + ' INSERT INTO #Temp_PTDB_Jobs (Job, ResultType, Created, Last_Affected, Process_State)'
-				Set @sql = @sql + ' SELECT Job, ResultType, Created, IsNull(Last_Affected, Created), IsNull(Process_State, 0)'
+				Set @sql = @sql + ' SELECT Job, ResultType, Created, IsNull(Last_Affected, Created), IsNull(Process_State, 0) AS Process_State'
 				Set @sql = @sql + ' FROM [' + @PDB_Name + '].dbo.T_Analysis_Description'
 			End
 			--
-			EXEC @result = sp_executesql @sql
+			If @previewSql <> 0
+				Print @sql
+			Else
+				EXEC @result = sp_executesql @sql
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			
@@ -193,19 +203,38 @@ As
 			 End
 			Else
 			 Begin -- <C>
+				If @infoOnly <> 0 And @previewSql = 0
+					SELECT ResultType,
+					       Process_State,
+					       COUNT(*) AS Job_Count,
+					       MIN(Created) AS Created_Min,
+					       MAX(Created) AS Created_Max,
+					       MIN(Last_Affected) AS Last_Affected_Min,
+					       MAX(Last_Affected) AS Last_Affected_Max
+					FROM #Temp_PTDB_Jobs
+					GROUP BY ResultType, Process_State
+					ORDER BY ResultType, Process_State
+
 				Set @PDB_ID_Text = Convert(nvarchar(24), @PDB_ID)
 				
 				-- Find jobs in #Temp_PTDB_Jobs that are in AJPDM, but do not have the correct PDB_ID
 				-- If any jobs match, delete them
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' DELETE AJPDM'
+				If @infoOnly <> 0 And @previewSql = 0
+					Set @sql = @sql + ' SELECT AJPDM.Job AS Job_to_Delete'
+				Else
+					Set @sql = @sql + ' DELETE AJPDM'
+					
 				Set @sql = @sql + ' FROM T_Analysis_Job_to_Peptide_DB_Map AS AJPDM LEFT OUTER JOIN'
 				Set @sql = @sql +      ' #Temp_PTDB_Jobs AS PTDB ON '
 				Set @sql = @sql +      ' AJPDM.Job = PTDB.Job AND AJPDM.PDB_ID = ' + @PDB_ID_Text
 				Set @sql = @sql + ' WHERE AJPDM.PDB_ID = ' + @PDB_ID_Text + ' AND PTDB.Job IS NULL'
 				
-				EXEC @result = sp_executesql @sql
+				If @previewSql <> 0
+					Print @sql
+				Else
+					EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				Set @RowCountDeleted = @RowCountDeleted + @myRowCount
@@ -213,14 +242,21 @@ As
 				-- Insert missing jobs from #Temp_PTDB_Jobs into AJPDM
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_Peptide_DB_Map (Job, PDB_ID, ResultType, Created, Last_Affected, Process_State)'
-				Set @sql = @sql + ' SELECT PTDB.Job, ' + @PDB_ID_Text + ' AS PDB_ID, PTDB.ResultType, PTDB.Created, PTDB.Last_Affected, IsNull(PTDB.Process_State, 0)'
+				If @infoOnly <> 0 And @previewSql = 0
+					Set @sql = @sql
+				Else
+					Set @sql = @sql + ' INSERT INTO T_Analysis_Job_to_Peptide_DB_Map (Job, PDB_ID, ResultType, Created, Last_Affected, Process_State)'
+					
+				Set @sql = @sql + ' SELECT PTDB.Job AS Job_to_Add, ' + @PDB_ID_Text + ' AS PDB_ID, PTDB.ResultType, PTDB.Created, PTDB.Last_Affected, IsNull(PTDB.Process_State, 0) AS Process_State'
 				Set @sql = @sql + ' FROM #Temp_PTDB_Jobs AS PTDB LEFT OUTER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_Peptide_DB_Map AS AJPDM ON'
 				Set @sql = @sql +      ' PTDB.Job = AJPDM.Job AND AJPDM.PDB_ID = ' + @PDB_ID_Text
 				Set @sql = @sql + ' WHERE AJPDM.Job IS NULL'
 
-				EXEC @result = sp_executesql @sql
+				If @previewSql <> 0
+					Print @sql
+				Else
+					EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				Set @RowCountAdded = @RowCountAdded + @myRowCount
@@ -228,10 +264,16 @@ As
 				-- Update jobs in #Temp_PTDB_Jobs with differing Created, Last_Affected, or Process_State times
 				--
 				Set @sql = ''
-				Set @sql = @sql + ' UPDATE T_Analysis_Job_to_Peptide_DB_Map'
-				Set @sql = @sql + ' SET Created = PTDB.Created, '
-				Set @sql = @sql +     ' Last_Affected = PTDB.Last_Affected,'
-				Set @sql = @sql +     ' Process_State = IsNull(PTDB.Process_State, 0)'
+				If @infoOnly <> 0 And @previewSql = 0
+					Set @sql = @sql + ' SELECT PTDB.Job AS Job_to_Update, PTDB.Created, PTDB.Last_Affected, IsNull(PTDB.Process_State, 0) AS Process_State'
+				Else
+				Begin
+					Set @sql = @sql + ' UPDATE T_Analysis_Job_to_Peptide_DB_Map'
+					Set @sql = @sql + ' SET Created = PTDB.Created, '
+					Set @sql = @sql +     ' Last_Affected = PTDB.Last_Affected,'
+					Set @sql = @sql +     ' Process_State = IsNull(PTDB.Process_State, 0)'
+				End
+				
 				Set @sql = @sql + ' FROM #Temp_PTDB_Jobs AS PTDB INNER JOIN'
 				Set @sql = @sql +      ' T_Analysis_Job_to_Peptide_DB_Map AS AJPDM ON'
 				Set @sql = @sql +      ' PTDB.Job = AJPDM.Job AND AJPDM.PDB_ID = ' + @PDB_ID_Text
@@ -239,7 +281,10 @@ As
 				Set @sql = @sql +       ' AJPDM.Last_Affected <> PTDB.Last_Affected OR '
 				Set @sql = @sql +       ' AJPDM.Process_State <> PTDB.Process_State'
 				
-				EXEC @result = sp_executesql @sql
+				If @previewSql <> 0
+					Print @sql
+				Else
+					EXEC @result = sp_executesql @sql
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				Set @RowCountUpdated = @RowCountUpdated + @myRowCount
@@ -248,13 +293,16 @@ As
 			 End -- </C>
 		End -- </B>
 
-		-- Validate that updating is enabled, abort if not enabled
-		exec VerifyUpdateEnabled 'Peptide_DB_Update', 'UpdateAnalysisJobToPeptideDBMap', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
-		If @UpdateEnabled = 0
+		If @previewSql = 0
 		Begin
-			-- Note: The calling procedure recognizes error 55000 as "Update Aborted"
-			Set @myError = 55000
-			Goto Done
+			-- Validate that updating is enabled, abort if not enabled
+			exec VerifyUpdateEnabled 'Peptide_DB_Update', 'UpdateAnalysisJobToPeptideDBMap', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+			If @UpdateEnabled = 0
+			Begin
+				-- Note: The calling procedure recognizes error 55000 as "Update Aborted"
+				Set @myError = 55000
+				Goto Done
+			End
 		End
 
 	End -- </A>

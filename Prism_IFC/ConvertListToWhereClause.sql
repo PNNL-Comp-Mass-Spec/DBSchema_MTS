@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.ConvertListToWhereClause
 /****************************************************
 **	Desc:  Converts a list of entries to a proper SQL Where clause 
@@ -12,18 +13,21 @@ CREATE PROCEDURE dbo.ConvertListToWhereClause
 **
 **	Parameters:
 **
-**		Auth: mem
-**		Date: 4/7/2004
-**			  9/23/2004 grk - replaced ORF with Entry
+**	Auth:	mem
+**	Date:	04/7/2004
+**			09/23/2004 grk - replaced ORF with Entry
+**			11/27/2007 mem - Expanded @entryList and @entryListWhereClause to varchar(max)
 **    
 *****************************************************/
-	@entryList varchar(7000) = '',								-- Comma-separated list of values
+(
+	@entryList varchar(max) = '',								-- Comma-separated list of values
 	@ColumnName varchar(255) = 'MyColumn',						-- Column for which the Where statements will apply
-	@entryListWhereClause varchar(8000) = '' output,
+	@entryListWhereClause varchar(max) = '' output,
 	@message varchar(512) = '' output,
 	@listSeparator char(1) = ',',								-- Default is a comma
 	@quoteCharacter char(1) = '''',								-- Default is a single quote
 	@wildcardSymbol char(1) = '%'								-- Default is a percent sign
+)
 As
 	set nocount on
 
@@ -36,8 +40,12 @@ As
 	---------------------------------------------------
 	-- Add single quotes around each Entry in @entryList
 	---------------------------------------------------
-	Declare @entryListQuoted varchar(8000)	
-	Exec QuoteNameList @entryList, @entryListQuoted = @entryListQuoted OUTPUT
+	Declare @entryListQuoted varchar(max)
+	If Len(IsNull(@quoteCharacter, '')) > 0
+		Exec QuoteNameList @entryList, @entryListQuoted = @entryListQuoted OUTPUT, @quoteCharacter = @quoteCharacter
+	Else
+		Set @entryListQuoted = @entryList
+		
 
 	---------------------------------------------------
 	-- Now examine each entry in @entryListQuoted to see if it contains @wildcardSymbol
@@ -45,8 +53,8 @@ As
 	-- If not, add to @sqlInClause
 	---------------------------------------------------
 
-	Declare @sqlInClause varchar(8000)	
-	Declare @sqlLikeClause varchar(8000)	
+	Declare @sqlInClause varchar(max)	
+	Declare @sqlLikeClause varchar(max)	
 	
 	Declare @singleEntry varchar(255)
 	Declare @sepLoc int

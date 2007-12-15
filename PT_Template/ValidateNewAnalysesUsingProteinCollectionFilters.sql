@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.ValidateNewAnalysesUsingProteinCollectionFilters
 **	Auth:	mem
 **	Date:	06/10/2006
 **			10/07/2007 mem - Increased size of @ProteinCollectionList to varchar(max)
+**			11/05/2007 mem - Updated to allow use all analysis jobs if T_Process_Config doesn't have any entries for Protein_Collection_Filter or Protein_Collection_and_Protein_Options_Combo
 **    
 *****************************************************/
 (
@@ -49,6 +50,9 @@ As
 	Declare @NewAnalysisJobsLookupTableName varchar(256)
 	Declare @SAddnl varchar(256)
 	
+	Declare @ProteinCollectionFilterDefined tinyint
+	Set @ProteinCollectionFilterDefined = 0
+	
 	---------------------------------------------------
 	-- See if #TmpNewAnalysisJobs contains any jobs that still have Valid = 0
 	---------------------------------------------------
@@ -60,7 +64,7 @@ As
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @MatchCount > 0
-	Begin -- <b>
+	Begin -- <b1>
 		---------------------------------------------------
 		-- Count number of Protein_Collection_and_Protein_Options_Combo
 		-- entries in T_Process_Config
@@ -73,7 +77,9 @@ As
 		WHERE [Name] = 'Protein_Collection_and_Protein_Options_Combo'
 		
 		If @MatchCount > 0
-		Begin -- <c>
+		Begin -- <c1>
+
+			Set @ProteinCollectionFilterDefined = 1
 
 			if exists (select * from dbo.sysobjects where id = object_id(N'[#TmpJobsMatchingProteinCollectionCriteria]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 				TRUNCATE TABLE #TmpJobsMatchingProteinCollectionCriteria
@@ -103,7 +109,7 @@ As
 				goto Done
 			End
 			Else
-			Begin -- <d>
+			Begin -- <d0>
 				INSERT INTO #TmpJobsMatchingProteinCollectionCriteria (Job)
 				SELECT Convert(int, Value) FROM #TmpFilterList
 				--
@@ -121,9 +127,9 @@ As
 					SELECT 'Jobs matching Protein_Collection_and_Protein_Options filter', Convert(varchar(18), Job)
 					FROM #TmpJobsMatchingProteinCollectionCriteria
 
-			End -- </d>
-		End -- </c>
-	End -- </b>
+			End -- </d0>
+		End -- </c1>
+	End -- </b1>
 	
 	---------------------------------------------------
 	-- See if #TmpNewAnalysisJobs contains any jobs that still have Valid = 0
@@ -136,7 +142,7 @@ As
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @MatchCount > 0
-	Begin -- <b>
+	Begin -- <b2>
 		---------------------------------------------------
 		-- Count the number of Protein_Collection_Filter or Seq_Direction_Filter
 		-- entries in T_Process_Config
@@ -148,7 +154,7 @@ As
 		WHERE [Name] IN ('Protein_Collection_Filter', 'Seq_Direction_Filter')
 		--
 		If @MatchCount > 0
-		Begin -- <c>
+		Begin -- <c2>
 			---------------------------------------------------
 			-- Validate the values for Protein_Collection_Filter and Seq_Direction_Filter in fields 
 			--  Protein_Collectionst_List and Protein_Options_List in #TmpNewAnalysisJobs
@@ -237,6 +243,8 @@ As
 			If @MatchCount > 0
 			Begin -- <d2>
 			
+				Set @ProteinCollectionFilterDefined = 1
+				
 				---------------------------------------------------
 				-- Validate the protein collection names
 				---------------------------------------------------
@@ -321,9 +329,21 @@ As
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 
-		End -- </c>
-	End -- </b>		
+		End -- </c2>
 
+		If @ProteinCollectionFilterDefined = 0
+		Begin
+			-- T_Process_Config doesn't have any entries for Protein_Collection_Filter or Protein_Collection_and_Protein_Options_Combo
+			-- Thus, mark all remaining jobs as valid
+			UPDATE #TmpNewAnalysisJobs
+			SET Valid = 1
+			WHERE Valid = 0
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+		End
+
+	End -- </b2>		
+	
 	---------------------------------------------------
 	-- Delete any jobs in #TmpNewAnalysisJobs that still have Valid = 0
 	---------------------------------------------------

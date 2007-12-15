@@ -41,6 +41,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Created_PMT_Tag_DB] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Created_PMT_Tag_DB]  DEFAULT (getdate()),
 	[State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_State]  DEFAULT ((1)),
 	[Import_Priority] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)),
+	[PMTs_Last_Affected] [datetime] NULL,
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,

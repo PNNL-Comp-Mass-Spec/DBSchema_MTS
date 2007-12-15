@@ -32,6 +32,7 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 **			01/18/2006 mem - Now posting a message to T_Log_Entries on Success
 **			03/13/2006 mem - Now calling UpdateCachedHistograms
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
+**			11/12/2007 mem - Added parameter @infoOnly
 **
 *********************************************************/
 (
@@ -39,7 +40,8 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 	@MinGANETFitOverride real = -1,					-- Set to 0 or greater to override the GANET_Fit_Minimum_Average_GANET setting in T_Process_Config
 	@MinGANETRSquaredOverride real = -1,			-- Set to 0 or greater to override the GANET_RSquared_Minimum_Average_GANET setting in T_Process_Config
 	@GANETWeightedAverageOverride smallint = -1,	-- Set to 0 to force GANET Weighted Averaging off and to 1 to force it on; leave at -1 to look up value in T_Process_Config
-	@MaxObsAreaInJobEnabledOverride smallint = -1	-- Set to 0 to force use of the peptide with the maximum observed area in a job off and to 1 to force it on; leave at -1 to look up value in T_Process_Config
+	@MaxObsAreaInJobEnabledOverride smallint = -1,	-- Set to 0 to force use of the peptide with the maximum observed area in a job off and to 1 to force it on; leave at -1 to look up value in T_Process_Config,
+	@infoOnly tinyint = 0
 )
 AS
 
@@ -224,6 +226,16 @@ AS
 		If @myError = 0
 			Set @myError = 50003
 		Goto Done
+	End
+	
+	If @infoOnly <> 0
+	Begin
+		SELECT	@MinNETFit as MinNETFit, 
+				@MinNETRSquared as MinNETRSquared,
+				@WeightedAverageEnabled as WeightedAverageEnabled,
+				@MaxObsAreaInJobEnabled as MaxObsAreaInJobEnabled
+		
+		
 	End
 	
 	-----------------------------------------------
@@ -628,135 +640,149 @@ AS
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 			
 
-	-----------------------------------------------
-	-- Start a transaction
-	-----------------------------------------------
-	--
-	declare @transName varchar(32)
-	set @transName = 'ComputeMassTagsGANET'
-	begin transaction @transName
-
-	
-	-----------------------------------------------
-	-- Clear the existing GANET values in T_Mass_Tag_NET
-	-----------------------------------------------
-	-- 
-	UPDATE T_Mass_Tags_NET WITH (TABLOCKX)
-	SET Min_GANET = NULL, 
-	    Max_GANET = NULL, 
-	    Avg_GANET = NULL,
-	    Cnt_GANET = NULL, 
-	    StD_GANET = NULL
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0
+	If @infoOnly = 0
 	Begin
-		rollback transaction @transName
-		Set @message = 'Error setting existing Ganet values to NULL in T_Mass_Tags_NET'
-		Goto Done
-	End
+		-----------------------------------------------
+		-- Start a transaction
+		-----------------------------------------------
+		--
+		declare @transName varchar(32)
+		set @transName = 'ComputeMassTagsGANET'
+		begin transaction @transName
 
-	-----------------------------------------------
-	-- Add missing Mass_Tag_IDs to T_Mass_Tags_NET	
-	-----------------------------------------------
-	-- 
-	INSERT INTO T_Mass_Tags_NET WITH (TABLOCKX)
-		(Mass_Tag_ID)
-	SELECT MT.Mass_Tag_ID
-	FROM T_Mass_Tags AS MT LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON 
-		MT.Mass_Tag_ID = MTN.Mass_Tag_ID
-	WHERE MT.Internal_Standard_Only = 0 AND MTN.Mass_Tag_ID IS Null
-	ORDER BY MT.Mass_Tag_ID
-	--		
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0
-	Begin
-		rollback transaction @transName
-		Set @message = 'Error adding missing Mass_Tag_ID values to T_Mass_Tags_NET'
-		Goto Done
-	End
-
-	-----------------------------------------------
-	-- Count the new number of mass tags present in T_Mass_Tags_NET
-	-----------------------------------------------
-	-- 
-	SELECT 	@NewMassTagsCount = Count(Mass_Tag_ID)
-	FROM	T_Mass_Tags_NET
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0 OR @myRowCount <> 1
-	Begin
-		rollback transaction @transName
-		Set @message = 'Error counting number of rows in T_Mass_Tags_NET (after addition of new MTs)'
-		If @myError = 0
-			Set @myError = 50004
-		Goto Done
-	End
-
-
-	-----------------------------------------------
-	-- Populate T_Mass_Tags_NET with the GANET Stats
-	-----------------------------------------------
-	--
-	UPDATE T_Mass_Tags_NET
-	SET Min_GANET = NET_Min, 
-		Max_GANET = NET_Max, 
-		Avg_GANET = NET_Avg,
-		Cnt_GANET = NET_Cnt, 
-		--StD_GANET = IsNull(NET_StDev, 0)
-		StD_GANET = IsNull(NET_StDev_Biased, 0),
-		StdError_GANET = IsNull(NET_StandardError, 0)
-	FROM T_Mass_Tags_NET INNER JOIN #NET_Stats ON 
-		 T_Mass_Tags_NET.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
 		
-
-	IF @myError <> 0
+		-----------------------------------------------
+		-- Clear the existing GANET values in T_Mass_Tag_NET
+		-----------------------------------------------
+		-- 
+		UPDATE T_Mass_Tags_NET WITH (TABLOCKX)
+		SET Min_GANET = NULL, 
+			Max_GANET = NULL, 
+			Avg_GANET = NULL,
+			Cnt_GANET = NULL, 
+			StD_GANET = NULL
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0
 		Begin
 			rollback transaction @transName
-			Set @message = 'Error while populating T_Mass_Tags_NET'
-			GOTO Done
+			Set @message = 'Error setting existing Ganet values to NULL in T_Mass_Tags_NET'
+			Goto Done
 		End
-	Else
+
+		-----------------------------------------------
+		-- Add missing Mass_Tag_IDs to T_Mass_Tags_NET	
+		-----------------------------------------------
+		-- 
+		INSERT INTO T_Mass_Tags_NET WITH (TABLOCKX)
+			(Mass_Tag_ID)
+		SELECT MT.Mass_Tag_ID
+		FROM T_Mass_Tags AS MT LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON 
+			MT.Mass_Tag_ID = MTN.Mass_Tag_ID
+		WHERE MT.Internal_Standard_Only = 0 AND MTN.Mass_Tag_ID IS Null
+		ORDER BY MT.Mass_Tag_ID
+		--		
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0
 		Begin
-			commit transaction @transName
-			Set @message = 'Updated T_Mass_Tags_NET; Mass Tags added = ' + convert(varchar(9), (@NewMassTagsCount - @OldMassTagsCount))
-			Set @message = @message + '; Rows updated = ' + convert(varchar(9), @NewMassTagsCount)
+			rollback transaction @transName
+			Set @message = 'Error adding missing Mass_Tag_ID values to T_Mass_Tags_NET'
+			Goto Done
+		End
+
+		-----------------------------------------------
+		-- Count the new number of mass tags present in T_Mass_Tags_NET
+		-----------------------------------------------
+		-- 
+		SELECT 	@NewMassTagsCount = Count(Mass_Tag_ID)
+		FROM	T_Mass_Tags_NET
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		If @myError <> 0 OR @myRowCount <> 1
+		Begin
+			rollback transaction @transName
+			Set @message = 'Error counting number of rows in T_Mass_Tags_NET (after addition of new MTs)'
+			If @myError = 0
+				Set @myError = 50004
+			Goto Done
 		End
 
 
-	-----------------------------------------------------------
-	-- Invalidate any cached histograms with Mode 0 = NET Histogram
-	-----------------------------------------------------------
-	Exec UpdateCachedHistograms @HistogramModeFilter = 0, @InvalidateButDoNotProcess=1
+		-----------------------------------------------
+		-- Populate T_Mass_Tags_NET with the GANET Stats
+		-----------------------------------------------
+		--
+		UPDATE T_Mass_Tags_NET
+		SET Min_GANET = NET_Min, 
+			Max_GANET = NET_Max, 
+			Avg_GANET = NET_Avg,
+			Cnt_GANET = NET_Cnt, 
+			--StD_GANET = IsNull(NET_StDev, 0)
+			StD_GANET = IsNull(NET_StDev_Biased, 0),
+			StdError_GANET = IsNull(NET_StandardError, 0)
+		FROM T_Mass_Tags_NET INNER JOIN #NET_Stats ON 
+			T_Mass_Tags_NET.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+			
 
-	-----------------------------------------------
-	-- Count the number of mass tags with Null GANET values
-	-----------------------------------------------
-	-- 
-	SELECT @MassTagsCountWithNET = Count(Mass_Tag_ID)
-	FROM T_Mass_Tags_NET
-	WHERE NOT Avg_GANET IS NULL
-	--
-	Set @message = @message + '; Rows with NET values = ' + convert(varchar(9), @MassTagsCountWithNET)
+		IF @myError <> 0
+			Begin
+				rollback transaction @transName
+				Set @message = 'Error while populating T_Mass_Tags_NET'
+				GOTO Done
+			End
+		Else
+			Begin
+				commit transaction @transName
+				Set @message = 'Updated T_Mass_Tags_NET; Mass Tags added = ' + convert(varchar(9), (@NewMassTagsCount - @OldMassTagsCount))
+				Set @message = @message + '; Rows updated = ' + convert(varchar(9), @NewMassTagsCount)
+			End
 
+		
+		-----------------------------------------------------------
+		-- Invalidate any cached histograms with Mode 0 = NET Histogram
+		-----------------------------------------------------------
+		Exec UpdateCachedHistograms @HistogramModeFilter = 0, @InvalidateButDoNotProcess=1
+
+		-----------------------------------------------
+		-- Count the number of mass tags with Null GANET values
+		-----------------------------------------------
+		-- 
+		SELECT @MassTagsCountWithNET = Count(Mass_Tag_ID)
+		FROM T_Mass_Tags_NET
+		WHERE NOT Avg_GANET IS NULL
+		--
+		Set @message = @message + '; Rows with NET values = ' + convert(varchar(9), @MassTagsCountWithNET)
+	End
+	
 	If @SamplingSize > 0
 	Begin
-		-- Store the new Avg_GANET values in #GANETSampling
-		UPDATE #GANETSampling
-		SET New_Avg_GANET = T_Mass_Tags_NET.Avg_GANET
-		FROM #GANETSampling, T_Mass_Tags_NET
-		WHERE #GANETSampling.Mass_Tag_ID = T_Mass_Tags_NET.Mass_Tag_ID
+		If @infoOnly <> 0
+		Begin
+			-- Store the new Avg_GANET values in #GANETSampling
+			UPDATE #GANETSampling
+			SET New_Avg_GANET = #NET_Stats.NET_Avg
+			FROM #GANETSampling INNER JOIN #NET_Stats 
+			      ON #GANETSampling.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID
+		End
+		Else
+		Begin
+			-- Store the new Avg_GANET values in #GANETSampling
+			UPDATE #GANETSampling
+			SET New_Avg_GANET = T_Mass_Tags_NET.Avg_GANET
+			FROM #GANETSampling INNER JOIN T_Mass_Tags_NET
+			      ON #GANETSampling.Mass_Tag_ID = T_Mass_Tags_NET.Mass_Tag_ID
+		End
 
 		-- Compute the average shift (absolute change) in the Avg_GANET value
 		SELECT @AvgNETShift = Avg(Avg_GANET - New_Avg_GANET)
 		FROM #GANETSampling
 		WHERE NOT (Avg_GANET IS NULL OR New_Avg_GANET IS NULL)
-		
+				
 		-- Append @AvgNETShift to @message
 		Set @message = @message + '; Average NET shift = ' + convert(varchar(9), IsNull(Round(@AvgNETShift, 6), 0))
 		-- Append @SamplingSize to @message
@@ -772,13 +798,22 @@ AS
 		Set @message = @message + '; Using peptide obs with maximum area'
 
 
-	-----------------------------------------------
-	-- Post @message to the log
-	-----------------------------------------------
-	EXEC PostLogEntry 'Normal', @message, 'ComputeMassTagsGANET'
+	If @infoOnly = 0
+		-----------------------------------------------
+		-- Post @message to the log
+		-----------------------------------------------
+		EXEC PostLogEntry 'Normal', @message, 'ComputeMassTagsGANET'
+	Else
+	Begin		
+		SELECT @message AS Processing_Message	
+		
+		SELECT * 
+		FROM #NET_Stats
+		ORDER BY Mass_Tag_ID
+	End
 	
 Done:
-	Select @message
+
 	Return @MyError
 
 

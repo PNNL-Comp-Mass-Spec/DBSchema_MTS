@@ -43,10 +43,11 @@ CREATE Procedure UpdateAllActivePeptideDatabases
 **			01/17/2007 mem - Updated to skip DBs with state >= 15 even if MTL_Demand_Import is non-zero
 **			03/06/2007 mem - Switched to Try/Catch error handling
 **			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
+**			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
 **    
 *****************************************************/
 (
-	@JobMapUpdateHoldoff int = 12		-- Hours between call to UpdateAnalysisJobToMTDBMap
+	@JobMapUpdateHoldoff int = 4		-- Hours between call to UpdateAnalysisJobToMTDBMap
 )
 As	
 	set nocount on
@@ -603,13 +604,13 @@ As
 
 		-----------------------------------------------------------
 		-- Update T_Analysis_Job_to_Peptide_DB_Map for all Peptide Databases (with PDB_State < 10)
-		-- However, only call this SP once every 12 hours since it can take a while to run
+		-- However, only call this SP once every @JobMapUpdateHoldoff hours
 		-----------------------------------------------------------
 		--
 		Declare @PostingTime datetime
 		Set @PostingTime = '1/1/2000'
 		
-		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 12)
+		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 4)
 		
 		SELECT TOP 1 @PostingTime = Posting_Time
 		FROM T_Log_Entries
@@ -624,7 +625,7 @@ As
 			Set @CurrentLocation = 'Call UpdateAnalysisJobToPeptideDBMap'
 			
 			set @message = 'UpdateAnalysisJobToPeptideDBMap Starting'
-			If @logVerbosity > 0
+			If @logVerbosity > 1
 				execute PostLogEntry 'Normal', @message, 'UpdateAllActivePeptideDatabases'
 
 			Set @message = ''

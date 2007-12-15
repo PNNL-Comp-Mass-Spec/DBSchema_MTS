@@ -30,6 +30,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			11/15/2006 mem - Now updating columns Parameter_File_Name & Settings_File_Name
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **			05/09/2007 mem - Now using T_DMS_Analysis_Job_Info_Cached and T_DMS_Dataset_Info_Cached in MT_Main (Ticket:422)
+**			12/04/2007 mem - Now updating column Experiment
 **    
 *****************************************************/
 (
@@ -80,6 +81,7 @@ As
 		UPDATE T_Analysis_Description
 		SET 
 			Campaign = P.Campaign,
+			Experiment = P.Experiment,
 			Vol_Client = P.StoragePathClient, 
 			Vol_Server = P.StoragePathServer, 
 			Storage_Path = '', 
@@ -95,7 +97,8 @@ As
 			Enzyme_ID = P.EnzymeID,
 			Labelling = P.Labelling
 		FROM T_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Campaign, R.StoragePathClient, R.StoragePathServer, 
+			SELECT L.Job, R.Campaign, R.Experiment, 
+				R.StoragePathClient, R.StoragePathServer, 
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
 				R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], 
@@ -104,6 +107,7 @@ As
 				MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached AS R ON 
 				L.Job = R.Job AND (
 					IsNull(L.Campaign, '') <> R.Campaign OR
+					IsNull(L.Experiment, '') <> R.Experiment OR
 					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
 					IsNull(L.Vol_Server, '') <> R.StoragePathServer OR 
 					IsNull(L.Dataset_Folder, '') <> R.DatasetFolder OR 

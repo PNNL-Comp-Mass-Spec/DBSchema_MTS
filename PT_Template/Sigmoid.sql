@@ -1,14 +1,15 @@
 /****** Object:  UserDefinedFunction [dbo].[Sigmoid] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 CREATE FUNCTION dbo.Sigmoid
 /***************************
 ** Sigmoid function
 ** 
-** Auth: EFS
-** Date: 08-02-04
+** Auth:	EFS
+** Date:	08/02/2004
+**			10/28/2007 mem - Fixed overflow bug that occurred when (@coeff2-@param)/@coeff3 was too large
 ** 
 ***************************/
 (
@@ -20,8 +21,17 @@ CREATE FUNCTION dbo.Sigmoid
 	RETURNS float
 AS  
 BEGIN 
-	Return @coeff1/(1+exp((@coeff2-@param)/@coeff3))
+	Declare @Result float
+	Set @Result = (@coeff2-@param)/@coeff3
+	
+	If @Result < 700
+		Set @Result = @coeff1/(1+exp(@Result))
+	Else
+		Set @Result = 0
+	
+	Return @Result
 END
+
 
 GO
 GRANT EXECUTE ON [dbo].[Sigmoid] TO [DMS_SP_User]

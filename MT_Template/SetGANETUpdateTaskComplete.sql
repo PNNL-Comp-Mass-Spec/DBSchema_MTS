@@ -13,22 +13,24 @@ CREATE PROCEDURE dbo.SetGANETUpdateTaskComplete
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 8/26/2003   
-**			  11/26/2003 grk -- added GANET task state 7
+**	Auth: 	grk
+**	Date: 	08/26/2003   
+**			11/26/2003 grk - added GANET task state 7
+**			11/09/2007 mem - Updated procedure name sent to PostLogEntry
 **
 **
 *****************************************************/
+(
 	@taskID int,
 	@completionCode int = 0, -- 0->Success, 1->UpdateFailed, 2->ResultsFailed
 	@message varchar(512) output
+)
 As
 	set nocount on
 
 	declare @myError int
-	set @myError = 0
-
 	declare @myRowCount int
+	set @myError = 0
 	set @myRowCount = 0
 	
 	set @message = ''
@@ -112,7 +114,7 @@ As
 	if @myError <> 0
 	Begin
 		Set @message = 'GANET update task ' + convert(varchar(19), @taskID) + ' generated error code ' + convert(varchar(19), @myError)
-		Exec PostLogEntry 'Error', @message, 'PeakMatching'
+		Exec PostLogEntry 'Error', @message, 'SetGANETUpdateTaskComplete'
 		Set @message = ''
 	End
 	

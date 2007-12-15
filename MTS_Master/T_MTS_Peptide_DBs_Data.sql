@@ -1,5 +1,5 @@
 /****** Object:  Table [T_MTS_Peptide_DBs] ******/
-/****** RowCount: 129 ******/
+/****** RowCount: 132 ******/
 /****** Columns: Peptide_DB_ID, Peptide_DB_Name, Server_ID, State_ID, Last_Affected, DB_Schema_Version, Comment ******/
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1007,'PT_Deinococcus_A8',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1008,'PT_Shewanella_A9',1,100,'8/2/2005 12:00:53 PM',1,'Taken offline and detached from Pogo July 12, 2006')
@@ -60,7 +60,7 @@ INSERT INTO [T_MTS_Peptide_DBs] VALUES (1068,'PT_Synechocystis_A69',2,5,'8/2/200
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1069,'PT_Y_Pestis_A70',2,3,'7/17/2006 8:10:02 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1070,'PT_Yeast_A71',3,5,'8/3/2007 3:10:01 PM',2,'Moved from Pogo to Albert in November 2004')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1071,'PT_BSA_X72',1,100,'3/15/2006 2:10:01 AM',2,'Taken offline and detached from Pogo July 12, 2006')
-INSERT INTO [T_MTS_Peptide_DBs] VALUES (1072,'PT_S_typhimurium_A73',2,5,'8/2/2005 12:00:54 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1072,'PT_S_typhimurium_A73',2,5,'11/26/2007 12:10:01 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1073,'PT_Vaccinia_A74',2,5,'8/2/2005 12:00:54 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1074,'PT_P_Falciparum_A75',2,5,'9/13/2006 5:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1075,'PT_S_Typhi_A76',2,5,'8/30/2006 2:10:00 PM',2,'')
@@ -76,7 +76,7 @@ INSERT INTO [T_MTS_Peptide_DBs] VALUES (1084,'PT_C_Elegans_A85',2,5,'8/2/2005 12
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1085,'PT_Human_A86',2,5,'6/9/2006 3:26:52 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1086,'PT_T_reesei_A87',2,5,'8/2/2005 12:00:54 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1087,'PT_Mouse_Reversed_A88',1,3,'8/3/2006 3:02:21 PM',2,'Moved from Albert to Pogo in August 2006')
-INSERT INTO [T_MTS_Peptide_DBs] VALUES (1088,'PT_Monkeypox_A89',2,5,'8/2/2005 12:00:54 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1088,'PT_Monkeypox_A89',2,5,'11/26/2007 12:10:01 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1089,'PT_S_Baltica_A90',3,5,'8/3/2007 3:10:01 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1090,'PT_Mouse_A91',1,5,'1/5/2007 7:10:01 PM',2,'Moved from Albert to Pogo in August 2006')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1091,'PT_S_Typhimurium_Reversed_X92',2,100,'8/8/2005 3:10:00 PM',2,'Taken offline and detached from Albert August 9, 2007')
@@ -123,10 +123,13 @@ INSERT INTO [T_MTS_Peptide_DBs] VALUES (1131,'PT_G_Uraniumreducens_A132',3,5,'8/
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1132,'PT_Caulobacter_X133',3,5,'8/3/2007 3:10:01 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1133,'PT_Hamster_A134',1,5,'5/4/2007 3:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1134,'PT_B_mallei_Schutzer_A135',3,5,'8/3/2007 3:10:01 PM',2,'')
-INSERT INTO [T_MTS_Peptide_DBs] VALUES (1135,'PT_S_Baltica_OS185_A136',3,5,'8/24/2007 12:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1135,'PT_S_Baltica_OS185_A136',3,5,'12/11/2007 2:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1136,'PT_A_phagocytophilium_A137',1,5,'8/3/2007 3:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1137,'PT_BATS_A138',2,5,'8/21/2007 4:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1138,'PT_D_proteobacterium_A139',3,5,'9/3/2007 9:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1139,'PT_Rifle_Community_A140',1,5,'10/9/2007 1:53:46 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1140,'PT_B_anthracis_A141',1,5,'10/9/2007 2:10:00 PM',2,'')
 INSERT INTO [T_MTS_Peptide_DBs] VALUES (1141,'PT_K_radiotolerans_A142',1,5,'10/11/2007 4:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1142,'PT_OR_Seawater_A143',2,5,'11/1/2007 4:40:57 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1143,'PT_Shewanella_spp_A144',3,5,'11/5/2007 5:10:00 PM',2,'')
+INSERT INTO [T_MTS_Peptide_DBs] VALUES (1144,'PT_Macaque_A145',1,5,'11/28/2007 7:41:57 PM',2,'')
