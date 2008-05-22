@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.StoreSeqIDMapInfo
 **
 **	Auth:	mem
 **	Date:	06/07/2006
+**			01/10/2008 mem - Now using a temporary table to determine the Seq_ID values that do not need to be added to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map
 **    
 *****************************************************/
 (
@@ -35,7 +36,9 @@ AS
 	Declare @MapValue nvarchar(64)
 	
 	Declare @S nvarchar(2048)
-
+	Declare @AddSeqIDTrans varchar(32)
+	Set @AddSeqIDTrans = 'AddSeqID'
+	
 	-----------------------------------------------------------
 	-- Add entries to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map 
 	-- for the sequences in @SequencesTableName
@@ -58,22 +61,37 @@ AS
 	
 	If Len(@TargetTableName) > 0
 	Begin
+		CREATE TABLE #Tmp_Seq_ID_Ignore_List (
+			Seq_ID int NOT NULL
+		)
+		
+		Begin Transaction @AddSeqIDTrans
+		
+		set @S = ''
+		set @S = @S + ' INSERT INTO #Tmp_Seq_ID_Ignore_List (Seq_ID) '
+		set @S = @S + ' SELECT Pep.Seq_ID'
+		set @S = @S + ' FROM ' + @TargetTableName + ' MapTable INNER JOIN '
+		set @S = @S +        @SequencesTableName + ' AS Pep ON '
+		set @S = @S +        ' MapTable.Seq_ID = Pep.Seq_ID'
+		set @S = @S + ' WHERE MapTable.' + @MapField + ' = ' + @MapValue
+		set @S = @S + ' GROUP BY Pep.Seq_ID'
+		--
+		Exec sp_executesql @S
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+		
 		set @S = ''		
 		set @S = @S + ' INSERT INTO ' + @TargetTableName + ' (Seq_ID, ' + @MapField + ')'
 		set @S = @S + ' SELECT Seq_ID, ' + @MapValue + ' AS [File_ID]'
 		set @S = @S + ' FROM ' + @SequencesTableName
-		set @S = @S + ' WHERE Seq_ID NOT IN'
-		set @S = @S +     ' (SELECT Pep.Seq_ID'
-		set @S = @S +      ' FROM ' + @TargetTableName + ' MapTable INNER JOIN '
-		set @S = @S +        @SequencesTableName + ' AS Pep ON '
-		set @S = @S +      ' MapTable.Seq_ID = Pep.Seq_ID'
-		set @S = @S +      ' WHERE MapTable.' + @MapField + ' = ' + @MapValue
-		set @S = @S +      ' GROUP BY Pep.Seq_ID)'
-		set @S = @S + 'GROUP BY Seq_ID'
+		set @S = @S + ' WHERE Seq_ID NOT IN (SELECT Seq_ID FROM #Tmp_Seq_ID_Ignore_List)'
+		set @S = @S + ' GROUP BY Seq_ID'
 		--
-		Exec (@S)
+		Exec sp_executesql @S
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
+		
+		Commit Transaction @AddSeqIDTrans
 	End
 	
 Done:

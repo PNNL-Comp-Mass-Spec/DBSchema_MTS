@@ -1,8 +1,8 @@
 /****** Object:  Database [Master_Seq_Scratch] ******/
 CREATE DATABASE [Master_Seq_Scratch] ON  PRIMARY 
-( NAME = N'Master_Seq_Scratch_Data', FILENAME = N'I:\SQLServerData\Master_Seq_Scratch.mdf' , SIZE = 2560KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Seq_Scratch_Data', FILENAME = N'I:\SQLServerData\Master_Seq_Scratch.mdf' , SIZE = 5696KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 1024KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 80768KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 EXEC dbo.sp_dbcmptlevel @dbname=N'Master_Seq_Scratch', @new_cmptlevel=90

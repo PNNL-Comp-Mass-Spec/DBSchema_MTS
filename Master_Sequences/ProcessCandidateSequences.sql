@@ -29,6 +29,7 @@ CREATE PROCEDURE dbo.ProcessCandidateSequences
 **			05/23/2007 mem - Added parameters @SourceDatabase, @NewSequencesBatchSize, and @PreviewSql
 **						   - Added a queuing mechanism that prevents multiple processes from searching/updating T_Sequences using candidate sequence tables
 **						   - Switched to Try/Catch error handling
+**			05/02/2008 mem - Now checking for Queue_State changing from 1 to another value by an external process
 **    
 *****************************************************/
 (
@@ -73,7 +74,8 @@ As
 
 	Declare @Continue tinyint
 	Declare @UniqueIDMin int
-
+	Declare @QueueState int
+	
 	Declare @MatchCount int
 	Declare @NewSequenceCountExpected int
 	Declare @NewSequenceCountAdded int
@@ -240,8 +242,32 @@ As
 
 				UPDATE T_Candidate_Seq_Processing_History
 				SET Last_Affected = GetDate()
-				WHERE Entry_ID = @ProcessingHistoryEntryIDCurrent
+				WHERE Entry_ID = @ProcessingHistoryEntryIDCurrent AND Queue_State = 1
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
 
+				If @myRowCount = 0
+				Begin
+					-- Update was not successful; either entry @ProcessingHistoryEntryIDCurrent is no longer in the table
+					--  or (more likely) its Queue_State value was changed by another process
+					-- Determine the reason, then abort processing
+					
+					Set @QueueState = 0
+					SELECT @QueueState = Queue_State
+					FROM T_Candidate_Seq_Processing_History
+					WHERE Entry_ID = @ProcessingHistoryEntryIDCurrent
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+
+					If @myRowCount = 0
+						Set @Message = 'Entry_ID ' + Convert(varchar(12), @ProcessingHistoryEntryIDCurrent) + ' is not present in T_Candidate_Seq_Processing_History; this is unexpected.  Aborting processing.'
+					Else
+						Set @Message = 'Entry_ID ' + Convert(varchar(12), @ProcessingHistoryEntryIDCurrent) + ' has had its T_Candidate_Seq_Processing_History.Queue_State value changed from 1 to ' + Convert(varchar(12), @QueueState) + ' by an external process; this is unexpected.  Aborting processing.'
+						
+					Set @myError = 53010
+					Goto Done
+
+				End
 			End
 			
 		End -- </a>
