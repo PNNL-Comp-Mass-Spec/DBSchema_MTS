@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSSICJobs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.RefreshMSMSSICJobs
+CREATE Procedure RefreshMSMSSICJobs
 /****************************************************
 **
 **	Desc: 
@@ -22,6 +22,7 @@ CREATE Procedure dbo.RefreshMSMSSICJobs
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @peptideDBName from 64 to 128 characters
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
+**			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **    
 *****************************************************/
 (
@@ -71,7 +72,7 @@ As
 		PeptideDBPath varchar(256) NULL
 	)
 
-	CREATE TABLE #T_Jobs_To_Update (
+	CREATE TABLE #T_Tmp_JobsToRefreshSICJob (
 		Job int NOT NULL
 	)
 
@@ -169,11 +170,11 @@ As
 		Else
 		Begin -- <b>
 
-			TRUNCATE TABLE #T_Jobs_To_Update
+			TRUNCATE TABLE #T_Tmp_JobsToRefreshSICJob
 			Set @jobCountToUpdate = 0
 			
 			Set @S = ''
-			Set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + 'INSERT INTO #T_Tmp_JobsToRefreshSICJob (Job)'
 			Set @S = @S + ' SELECT TAD.Job'
 			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
 			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
@@ -232,7 +233,7 @@ As
 				Set @S = @S +     ' TAD.Job = PepTAD.Job INNER JOIN '
 				Set @S = @S +     ' ' + @PeptideDBPath + '.dbo.T_Datasets AS DS ON '
 				Set @S = @S +     ' PepTAD.Dataset_ID = DS.Dataset_ID INNER JOIN'
-				Set @S = @S +     ' #T_Jobs_To_Update AS JTU ON TAD.Job = JTU.Job'
+				Set @S = @S +     ' #T_Tmp_JobsToRefreshSICJob AS JTU ON TAD.Job = JTU.Job'
 
 				If @infoOnly <> 0
 				Begin
@@ -250,20 +251,20 @@ As
 				end
 					
 				---------------------------------------------------
-				-- Call RefreshMSMSSICStats for each job in #T_Jobs_To_Update
+				-- Call RefreshMSMSSICStats for each job in #T_Tmp_JobsToRefreshSICJob
 				---------------------------------------------------
 				Set @SICStatsContinue = 1
 				While @SICStatsContinue = 1
 				Begin -- <d>
 					SELECT TOP 1 @Job = Job
-					FROM #T_Jobs_To_Update
+					FROM #T_Tmp_JobsToRefreshSICJob
 					ORDER BY Job
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 					--
 					if @myError <> 0
 					begin
-						Set @message = 'Error obtaining next job from #T_Jobs_To_Update in RefreshMSMSSICStats loop'
+						Set @message = 'Error obtaining next job from #T_Tmp_JobsToRefreshSICJob in RefreshMSMSSICStats loop'
 						goto Done
 					end
 
@@ -271,7 +272,7 @@ As
 						Set @SICStatsContinue = 0
 					Else
 					Begin
-						DELETE FROM #T_Jobs_To_Update
+						DELETE FROM #T_Tmp_JobsToRefreshSICJob
 						WHERE Job = @Job 
 						--
 						SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -328,8 +329,10 @@ Done:
 				Select 'InfoOnly: No jobs needing to be updated were found' As RefreshMSMSSICJobs_Message
 		End
 	End
-	
-	return @myError
 
+	DROP TABLE #T_Peptide_Database_List
+	DROP TABLE #T_Tmp_JobsToRefreshSICJob
+			
+	return @myError
 
 GO

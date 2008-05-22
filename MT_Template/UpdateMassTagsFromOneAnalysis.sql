@@ -43,6 +43,8 @@ CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
 **			07/10/2006 mem - Updated to support Peptide Prophet values
 **			09/12/2006 mem - Now populating column RowCount_Loaded
 **			09/19/2006 mem - Replaced parameter @PeptideDBName with @PeptideDBPath
+**			02/25/2008 mem - Moved Commit Transaction statement to earlier in the processing to reduce the overhead required
+**			04/04/2008 mem - Now updating Cleavage_State_Max in T_Mass_Tags
 **
 *****************************************************/
 (
@@ -360,8 +362,8 @@ As
 
 	set @S = ''
 	set @S = @S + ' SELECT @MaxA = MaxScanNumberPeptideHit, '
-	set @S = @S + ' @MaxB = MaxScanNumberSICs,'
-	set @S = @S + ' @MaxC = MaxScanNumberAllScans'
+	set @S = @S +        ' @MaxB = MaxScanNumberSICs,'
+	set @S = @S +        ' @MaxC = MaxScanNumberAllScans'
 	set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.V_PeptideHit_Job_Scan_Max'
 	set @S = @S + ' WHERE (Job = ' + @jobStr + ') '
 
@@ -560,154 +562,6 @@ As
 		goto Done
 	end
 
-
-	-----------------------------------------------------------
-	-- Update existing entries in T_Mass_Tags_NET that have 
-	-- PNET Values different than those in #ImportedMassTags
-	-----------------------------------------------------------
-	--
-	UPDATE T_Mass_Tags_NET
-	SET PNET = IMT.GANET_Predicted, PNET_Variance = 0
-	FROM #ImportedMassTags AS IMT INNER JOIN
-	    T_Mass_Tags_NET AS MTN ON IMT.Mass_Tag_ID = MTN.Mass_Tag_ID
-	WHERE MTN.PNET <> IMT.GANET_Predicted
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem updating PNET entries in T_Mass_Tags_NET for job ' + @jobStr
-		Set @myError = 50014
-		goto Done
-	end
-
-	-----------------------------------------------------------
-	-- Add new entries to T_Mass_Tags_NET
-	-----------------------------------------------------------
-	--
-	INSERT INTO T_Mass_Tags_NET (
-		Mass_Tag_ID, PNET, PNET_Variance
-		)
-	SELECT IMT.Mass_Tag_ID, IMT.GANET_Predicted, 0 AS PNET_Variance
-	FROM #ImportedMassTags AS IMT LEFT OUTER JOIN
-	    T_Mass_Tags_NET AS MTN ON IMT.Mass_Tag_ID = MTN.Mass_Tag_ID
-	WHERE MTN.Mass_Tag_ID IS NULL
-	ORDER BY IMT.Mass_Tag_ID
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem appending new entries to T_Mass_Tags_NET for job ' + @jobStr
-		Set @myError = 50015
-		goto Done
-	end
-
-
-	-----------------------------------------------------------
-	-- Add new proteins T_Proteins
-	-----------------------------------------------------------
-	--
-	INSERT INTO T_Proteins (
-		Reference
-		)
-	SELECT DISTINCT PPI.Reference
-	FROM #PeptideToProteinMapImported AS PPI LEFT OUTER JOIN
-		 T_Proteins ON PPI.Reference = T_Proteins.Reference
-	WHERE T_Proteins.Reference Is Null
-	ORDER BY PPI.Reference
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem appending new entries to T_Proteins for job ' + @jobStr
-		Set @myError = 50016
-		goto Done
-	end
-
-
-	-----------------------------------------------------------
-	-- Populate Ref_ID_New in #PeptideToProteinMapImported
-	-----------------------------------------------------------
-	--
-	UPDATE #PeptideToProteinMapImported
-	SET Ref_ID_New = T_Proteins.Ref_ID
-	FROM #PeptideToProteinMapImported AS PPI INNER JOIN
-		 T_Proteins ON PPI.Reference = T_Proteins.Reference
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem populating Ref_ID_New column in #PeptideToProteinMapImported for job ' + @jobStr
-		Set @myError = 50017
-		goto Done
-	end
-
-
-	-----------------------------------------------
-    -- Check for entries in #PeptideToProteinMapImported with conflicting
-    --  Cleavage_State or Terminus_State values
-    -- If any conflicts are found, update Cleavage_State and Terminus_State to Null,
-    --  and allow NamePeptides to populate those fields
-    -----------------------------------------------
- 
-    UPDATE PPI
-	SET Cleavage_State = NULL, Terminus_State = NULL
-	FROM #PeptideToProteinMapImported AS PPI INNER JOIN
-			(	SELECT DISTINCT PPI.Seq_ID, PPI.Ref_ID_New
-				FROM #PeptideToProteinMapImported PPI INNER JOIN
-					 #PeptideToProteinMapImported PPI_Compare ON 
-						PPI.Seq_ID = PPI_Compare.Seq_ID AND 
-						PPI.Ref_ID_New = PPI_Compare.Ref_ID_New
-				WHERE ISNULL(PPI.Cleavage_State, 0) <> ISNULL(PPI_Compare.Cleavage_State, 0) OR
-					  ISNULL(PPI.Terminus_State, 0) <> ISNULL(PPI_Compare.Terminus_State, 0)
-			) AS DiffQ ON 
-				PPI.Ref_ID_New = DiffQ.Ref_ID_New AND 
-				PPI.Seq_ID = DiffQ.Seq_ID
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error looking for conflicting entries in #PeptideToProteinMapImported for job ' + @jobStr
-		set @myError = 50018
-		goto Done
-	end	
-    
-
-	-----------------------------------------------------------
-	-- Add new entries to T_Mass_Tag_to_Protein_Map
-	-----------------------------------------------------------
-	--
-	INSERT INTO T_Mass_Tag_to_Protein_Map (
-		Mass_Tag_ID, Ref_ID, Cleavage_State, Terminus_State
-		)
-	SELECT DISTINCT PPI.Seq_ID, PPI.Ref_ID_New, PPI.Cleavage_State, PPI.Terminus_State
-	FROM #PeptideToProteinMapImported As PPI LEFT OUTER JOIN 
-		 T_Mass_Tag_to_Protein_Map As MTPM ON 
-			PPI.Seq_ID = MTPM.Mass_Tag_ID AND
-			PPI.Ref_ID_New = MTPM.Ref_ID
-	WHERE MTPM.Mass_Tag_ID Is Null
-	ORDER BY PPI.Seq_ID, PPI.Ref_ID_New
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem appending new entries to T_Mass_Tag_to_Protein_Map for job ' + @jobStr
-		Set @myError = 50019
-		goto Done
-	end
-
-
 	-----------------------------------------------------------
 	-- Add new entries to T_Peptides
 	-----------------------------------------------------------
@@ -734,6 +588,7 @@ As
 	end
 	--
 	Set @numAddedPeptides = @myRowCount
+
 
 	Declare @ResultTypeValid tinyint
 	Set @ResultTypeValid = 0
@@ -886,7 +741,158 @@ As
 		goto Done
 	End
 
+	-----------------------------------------------
+	-- Commit changes to T_Peptides, T_Score_Sequest, etc. if we made it this far
+	-----------------------------------------------------------
+	-- 
+	commit transaction @transName
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Error committing transaction for for job ' + @jobStr
+		Set @myError = 50027
+		goto Done
+	end
 
+	-----------------------------------------------------------
+	-- Update existing entries in T_Mass_Tags_NET that have 
+	-- PNET Values different than those in #ImportedMassTags
+	-----------------------------------------------------------
+	--
+	UPDATE T_Mass_Tags_NET
+	SET PNET = IMT.GANET_Predicted, PNET_Variance = 0
+	FROM #ImportedMassTags AS IMT INNER JOIN
+	    T_Mass_Tags_NET AS MTN ON IMT.Mass_Tag_ID = MTN.Mass_Tag_ID
+	WHERE MTN.PNET <> IMT.GANET_Predicted
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem updating PNET entries in T_Mass_Tags_NET for job ' + @jobStr
+		Set @myError = 50014
+		goto Done
+	end
+
+	-----------------------------------------------------------
+	-- Add new entries to T_Mass_Tags_NET
+	-----------------------------------------------------------
+	--
+	INSERT INTO T_Mass_Tags_NET (
+		Mass_Tag_ID, PNET, PNET_Variance
+		)
+	SELECT IMT.Mass_Tag_ID, IMT.GANET_Predicted, 0 AS PNET_Variance
+	FROM #ImportedMassTags AS IMT LEFT OUTER JOIN
+	    T_Mass_Tags_NET AS MTN ON IMT.Mass_Tag_ID = MTN.Mass_Tag_ID
+	WHERE MTN.Mass_Tag_ID IS NULL
+	ORDER BY IMT.Mass_Tag_ID
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem appending new entries to T_Mass_Tags_NET for job ' + @jobStr
+		Set @myError = 50015
+		goto Done
+	end
+
+	-----------------------------------------------------------
+	-- Add new proteins T_Proteins
+	-----------------------------------------------------------
+	--
+	INSERT INTO T_Proteins (Reference)
+	SELECT DISTINCT PPI.Reference
+	FROM #PeptideToProteinMapImported AS PPI LEFT OUTER JOIN
+		 T_Proteins ON PPI.Reference = T_Proteins.Reference
+	WHERE T_Proteins.Reference Is Null
+	ORDER BY PPI.Reference
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem appending new entries to T_Proteins for job ' + @jobStr
+		Set @myError = 50016
+		goto Done
+	end
+
+
+	-----------------------------------------------------------
+	-- Populate Ref_ID_New in #PeptideToProteinMapImported
+	-----------------------------------------------------------
+	--
+	UPDATE #PeptideToProteinMapImported
+	SET Ref_ID_New = T_Proteins.Ref_ID
+	FROM #PeptideToProteinMapImported AS PPI INNER JOIN
+		 T_Proteins ON PPI.Reference = T_Proteins.Reference
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem populating Ref_ID_New column in #PeptideToProteinMapImported for job ' + @jobStr
+		Set @myError = 50017
+		goto Done
+	end
+
+
+	-----------------------------------------------
+    -- Check for entries in #PeptideToProteinMapImported with conflicting
+    --  Cleavage_State or Terminus_State values
+    -- If any conflicts are found, update Cleavage_State and Terminus_State to Null,
+    --  and allow NamePeptides to populate those fields
+    -----------------------------------------------
+ 
+    UPDATE PPI
+	SET Cleavage_State = NULL, Terminus_State = NULL
+	FROM #PeptideToProteinMapImported AS PPI INNER JOIN
+			(	SELECT DISTINCT PPI.Seq_ID, PPI.Ref_ID_New
+				FROM #PeptideToProteinMapImported PPI INNER JOIN
+					 #PeptideToProteinMapImported PPI_Compare ON 
+						PPI.Seq_ID = PPI_Compare.Seq_ID AND 
+						PPI.Ref_ID_New = PPI_Compare.Ref_ID_New
+				WHERE ISNULL(PPI.Cleavage_State, 0) <> ISNULL(PPI_Compare.Cleavage_State, 0) OR
+					  ISNULL(PPI.Terminus_State, 0) <> ISNULL(PPI_Compare.Terminus_State, 0)
+			) AS DiffQ ON 
+				PPI.Ref_ID_New = DiffQ.Ref_ID_New AND 
+				PPI.Seq_ID = DiffQ.Seq_ID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Error looking for conflicting entries in #PeptideToProteinMapImported for job ' + @jobStr
+		set @myError = 50018
+		goto Done
+	end	
+    
+
+	-----------------------------------------------------------
+	-- Add new entries to T_Mass_Tag_to_Protein_Map
+	-----------------------------------------------------------
+	--
+	INSERT INTO T_Mass_Tag_to_Protein_Map (
+		Mass_Tag_ID, Ref_ID, Cleavage_State, Terminus_State
+		)
+	SELECT DISTINCT PPI.Seq_ID, PPI.Ref_ID_New, PPI.Cleavage_State, PPI.Terminus_State
+	FROM #PeptideToProteinMapImported As PPI LEFT OUTER JOIN 
+		 T_Mass_Tag_to_Protein_Map As MTPM ON 
+			PPI.Seq_ID = MTPM.Mass_Tag_ID AND
+			PPI.Ref_ID_New = MTPM.Ref_ID
+	WHERE MTPM.Mass_Tag_ID Is Null
+	ORDER BY PPI.Seq_ID, PPI.Ref_ID_New
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem appending new entries to T_Mass_Tag_to_Protein_Map for job ' + @jobStr
+		Set @myError = 50019
+		goto Done
+	end
+	
 	-----------------------------------------------------------
 	-- Call ComputeMaxObsAreaByJob to populate the Max_Obs_Area_In_Job column
 	-----------------------------------------------------------
@@ -916,25 +922,31 @@ As
 	--
 	if @myError <> 0
 	begin
-		rollback transaction @transName
 		set @message = 'Problem updating stats in T_Mass_Tags for job ' + @jobStr
 		Set @myError = 50026
 		goto Done
 	end
 
-
 	-----------------------------------------------------------
-	-- Finalize the changes
+	-- Update Cleavage_State_Max in T_Mass_Tags
 	-----------------------------------------------------------
-	-- 
-	commit transaction @transName
 	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
+	UPDATE T_Mass_Tags
+	SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
+	FROM T_Mass_Tags MT
+	     INNER JOIN ( SELECT Seq_ID AS Mass_Tag_ID,
+	                         Max(IsNull(Cleavage_State, 0)) AS Cleavage_State_Max
+	                  FROM #PeptideToProteinMapImported
+	                  GROUP BY Seq_ID) LookupQ
+	       ON MT.Mass_Tag_ID = LookupQ.Mass_Tag_ID
+	WHERE LookupQ.Cleavage_State_Max > IsNull(MT.Cleavage_State_Max, 0)
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	if @myError <> 0
 	begin
-		set @message = 'Error committing transaction for for job ' + @jobStr
-		Set @myError = 50027
+		set @message = 'Problem updating Cleavage_State_Max in T_Mass_Tags for job ' + @jobStr
+		Set @myError = 50028
 		goto Done
 	end
 

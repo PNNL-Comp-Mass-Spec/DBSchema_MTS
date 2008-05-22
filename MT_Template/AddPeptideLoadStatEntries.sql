@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.AddPeptideLoadStatEntries
 **
 **	Auth:	mem
 **	Date:	09/07/2007
+**			02/26/2008 mem - Added call to VerifyUpdateEnabled
 **    
 *****************************************************/
 (
@@ -41,6 +42,7 @@ AS
 	Declare @PeptideProphetMinimum real
 	
 	Declare @message varchar(255)
+	Declare @UpdateEnabled tinyint
 	
 	-----------------------------------------------------
 	-- Validate the inputs
@@ -158,6 +160,11 @@ AS
 	Set @continue = 1
 	While @continue = 1
 	Begin
+
+		-- Validate that updating is enabled, abort if not enabled (but allow pausing)
+		exec VerifyUpdateEnabled @CallingFunctionDescription = 'AddPeptideLoadStatEntries', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+		If @UpdateEnabled = 0
+			Goto Done
 
 		SELECT TOP 1 @SortIndexCurrent = SortOrder,
 					 @DiscriminantScoreMinimum = DiscriminantScoreMinimum,

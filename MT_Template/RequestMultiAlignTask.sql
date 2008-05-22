@@ -1,14 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[RequestPeakMatchingTask] ******/
+/****** Object:  StoredProcedure [dbo].[RequestMultiAlignTask] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.RequestPeakMatchingTask
+CREATE Procedure dbo.RequestMultiAlignTask
 /****************************************************
 **
 **	Desc: 
-**		Looks for a task in T_Peak_Matching_Task with a
+**		Looks for a task in T_MultiAlign_Task with a
 **      Processing_State value = 1
 **      If found, task is assigned to caller, 
 **      @TaskAvailable is set to 1, and the task 
@@ -16,46 +16,19 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **      If not found or error, then @message will contain
 **      explanatory text.
 **
-**	Auth:	grk
-**	Date:	5/21/2003
-**			06/20/2003 mem - 
-**			06/23/2003 mem - 
-**			07/01/2003 mem - 
-**			07/07/2003 mem - 
-**			07/22/2003 mem - 
-**			10/06/2003 mem - Now checking if Ini_File_Name contains a UNC path (begins with \\)
-**			11/26/2003 mem - Assignment logic includes GANET task queue
-**			12/29/2003 mem - Added NetValueType parameter and check for existence of T_GANET_Update_Task
-**			01/06/2004 mem - Added support for Minimum_PMT_Quality_Score
-**			05/20/2004 mem - Added state 7 as a T_GANET_Update_Task.Processing_State value that will prevent a peak matching task from being returned
-**			09/20/2004 mem - Updated for new MTDB schema
-**			12/31/2004 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_FT intact
-**			02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter and switched from using data type decimal(9,5) to real
-**			12/20/2005 mem - Added parameters @LimitToPMTsFromDataset and @InternalStdExplicit
-**			01/14/2006 mem - Updated parsing of @OutputFolderPrefix to keep LTQ_Orb intact
-**			07/01/2007 mem - Removed check for jobs in T_GANET_Update_Task since NET alignment now occurs in the Peptide DB
-**			07/18/2006 mem - Updated to use dbo.udfCombinePaths
-**			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability
-**			12/29/2006 mem - Updated to allow @TaskID values of 0
-**			03/17/2007 mem - Updated to preferentially use Instrument to determine the output folder prefix
-**						   - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
-**						   - Added parameter @infoOnly
-**			01/03/2008 mem - Moved output folder name logic to after the Transaction Commit
+**	Auth:	mem
+**	Date:	01/03/2008 mem
 **			01/10/2008 mem - No longer including the DB_Name in the final output folder name since that can lead to path lengths over 255 characters when the .Ini file is copied over
 **    
 *****************************************************/
 (
 	@processorName varchar(128),
-	@clientPerspective tinyint = 1,				-- 0 means running SP from local server; 1 means running SP from client
 	@priorityMin tinyint = 1,					-- only tasks with a priority >= to this value will get returned
 	@priorityMax tinyint = 10,					-- only tasks with a priority <= to this value will get returned
 	@taskID int=0 output,
 	@taskPriority tinyint=0 output,				-- the actual priority of the task
-	@analysisJob int=0 output,
-	@analysisResultsFolderPath varchar(256)='' output,
+	@analysisJobList varchar(8000)='' output,
 	@mtdbName varchar(128)='' output,
-	@confirmedOnly tinyint=0 output,
-	@modList varchar(128)='' output,
 	@MinimumHighNormalizedScore real=0 output,
 	@MinimumHighDiscriminantScore real=0 output,
 	@MinimumPeptideProphetProbability real=0 output,
@@ -65,23 +38,26 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 	@LimitToPMTsFromDataset tinyint = 0 output,
 	@InternalStdExplicit varchar(255) = '' output,
 	@NETValueType tinyint=0 output,
-	@iniFilePath varchar(255)='' output,
+	@paramFilePath varchar(255)='' output,
 	@outputFolderPath varchar(255)='' output,
 	@logFilePath varchar(255)='' output,
 	@taskAvailable tinyint=0 output,
 	@message varchar(512)='' output,
-	@infoOnly tinyint=0						-- Set to 1 to preview the next peak matching task that would be assigned
+	@infoOnly tinyint=0						-- Set to 1 to preview the next MultiAlign task that would be assigned
 )
 As
 	set nocount on
 
-	Declare @IniFileName varchar(255)
-	set @IniFileName = ''
+	Declare @ParamFileName varchar(255)
+	set @ParamFileName = ''
 	
 	declare @myError int
 	declare @myRowCount int
 	set @myError = 0
 	set @myRowCount = 0
+	
+	declare @JobMin int
+	declare @JobMax int
 	
 	set @message = ''
 		
@@ -89,11 +65,8 @@ As
 	-- clear the output arguments
 	---------------------------------------------------
 	set @taskID = 0
-	set @analysisJob = 0
-	set @analysisResultsFolderPath = ''
+	set @analysisJobList = ''
 	set @mtdbName = db_name()
-	set @confirmedOnly = 0
-	set @modList = ''
 	set @MinimumHighNormalizedScore = 0
 	set @MinimumHighDiscriminantScore = 0
 	set @MinimumPeptideProphetProbability = 0
@@ -104,7 +77,7 @@ As
 	set @InternalStdExplicit = ''
 	set @NETValueType = 0
 	
-	set @iniFilePath = ''
+	set @paramFilePath = ''
 	set @outputFolderPath = ''
 	set @logFilePath = ''
 	set @TaskAvailable = 0
@@ -141,23 +114,22 @@ As
 	---------------------------------------------------
 
 	CREATE TABLE #XPD (
-		Task_ID  int, 
-		Job int
+		Task_ID  int
 	) 
 
 	---------------------------------------------------
 	-- populate temporary table with a small pool of 
-	-- Peak Matching tasks
-	-- Note:  This takes no locks on any tables
+	-- available MultiAlign tasks
 	---------------------------------------------------
 
-	INSERT INTO #XPD (Task_ID, Job)
-	SELECT TOP 5 Task_ID, Job
-	FROM T_Peak_Matching_Task
+	INSERT INTO #XPD (Task_ID)
+	SELECT TOP 5 Task_ID
+	FROM T_MultiAlign_Task
 	WHERE	Processing_State = 1
 			AND Priority >= @PriorityMin
 			AND Priority <= @PriorityMax
-			AND Len(LTrim(RTrim(Ini_File_Name))) > 0
+			AND Len(LTrim(RTrim(Param_File_Name))) > 0
+			AND Job_Count > 0
 	ORDER BY Priority, Task_ID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -190,31 +162,31 @@ As
 		@parRootPathClient = Client_Path, 
 		@parRootPathServer = Server_Path
 	FROM MT_Main.dbo.V_Folder_Paths
-	WHERE ([Function] = 'Peak Matching Results')
+	WHERE ([Function] = 'MultiAlign Results')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0
 	begin
-		set @message = 'Could not get root path for Peak Matching Parameters'
+		set @message = 'Could not get root path for MultiAlign Results'
 		goto done
 	end
 
 
-	declare @iniRootPathClient varchar(255)
-	declare @iniRootPathServer varchar(255)
+	declare @ParamRootPathClient varchar(255)
+	declare @ParamRootPathServer varchar(255)
 
 	SELECT     
-		@iniRootPathClient = Client_Path, 
-		@iniRootPathServer = Server_Path
+		@ParamRootPathClient = Client_Path, 
+		@ParamRootPathServer = Server_Path
 	FROM MT_Main.dbo.V_Folder_Paths
-	WHERE ([Function] = 'Peak Matching Parameters')
+	WHERE ([Function] = 'MultiAlign Parameters')
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
-	if @myError <> 0
+	if @myError <> 0 OR @myRowCount = 0
 	begin
-		set @message = 'Could not get root path for Peak Matching Results'
+		set @message = 'Could not get root path for MultiAlign Parameters'
 		goto done
 	end
 
@@ -222,36 +194,27 @@ As
 	-- initialize paths with root path parts
 	---------------------------------------------------
 
-	if @ClientPerspective > 0
-		begin
-		set @outputFolderPath = @parRootPathClient
-		set @iniFilePath = @iniRootPathClient
-		end
-	else
-		begin
-		set @outputFolderPath = @parRootPathServer
-		set @iniFilePath = @iniRootPathServer
-		end
+	set @outputFolderPath = @parRootPathClient
+	set @paramFilePath = @ParamRootPathClient
 
 	---------------------------------------------------
 	-- Start transaction
 	---------------------------------------------------
 	--
 	declare @transName varchar(32)
-	set @transName = 'RequestPeakMatchingTask'
+	set @transName = 'RequestMultiAlignTask'
 	begin transaction @transName
 	
 	---------------------------------------------------
 	-- find a task matching the input request
-	-- only grab the taskID and Job number at this time
+	-- only grab the taskID at this time
 	---------------------------------------------------
 
 	SELECT TOP 1 
-		@taskID = PM.Task_ID,
-		@analysisJob = PM.Job
-	FROM T_Peak_Matching_Task PM WITH (HoldLock)
-		 INNER JOIN #XPD ON #XPD.Task_ID = PM.Task_ID 
-	WHERE PM.Processing_State = 1
+		@taskID = MaT.Task_ID
+	FROM T_MultiAlign_Task MaT WITH (HoldLock)
+		 INNER JOIN #XPD ON #XPD.Task_ID = MaT.Task_ID 
+	WHERE MaT.Processing_State = 1
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -273,18 +236,70 @@ As
 		goto done
 	end
 
+	---------------------------------------------------
+	-- Populate @analysisJobList
+	---------------------------------------------------
+	
+	Set @analysisJobList = Null
+	
+	SELECT @analysisJobList = COALESCE(@analysisJobList + ',', '') + Convert(varchar(12), Job)
+	FROM T_MultiAlign_Task_Jobs
+	WHERE Task_ID = @taskID
+	ORDER BY Job
+	
+	If Len(IsNull(@analysisJobList, '')) = 0
+	Begin
+		-- No Jobs Defined
+		Set @analysisJobList = ''
 		
+		set @myError = 113
+		set @message = 'Jobs not defined in T_MultiAlign_Task_Jobs for Task_ID ' + Convert(varchar(12), @taskID) + '; unable to continue'
+
+		if @infoOnly = 0
+		Begin
+			-- Set the task to state 4=Failed so it isn't repeatedly chosen as a candidate
+			UPDATE T_MultiAlign_Task
+			SET Processing_State = 4, 
+				Task_Start = GETDATE()
+			WHERE (Task_ID = @taskID)
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			Execute PostLogEntry 'Error', @message, 'RequestMultiAlignTask'
+		End
+		
+		commit transaction @transName		
+		
+		goto done
+	End
+
+
+	---------------------------------------------------
+	-- Determine the minimum and maximum job numbers in T_MultiAlign_Task_Jobs
+	---------------------------------------------------
+
+	SELECT @JobMin = MIN(Job), 
+		   @JobMax = MAX(Job)
+	FROM T_MultiAlign_Task_Jobs
+	WHERE Task_ID = @taskID
+	GROUP BY Task_ID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	Set @JobMin = IsNull(@JobMin, 0)
+	Set @JobMax = IsNull(@JobMax, 0)
+	
 	If @infoOnly = 0
 	Begin
 		---------------------------------------------------
 		-- set state and path for task
 		---------------------------------------------------
 
-		UPDATE T_Peak_Matching_Task
+		UPDATE T_MultiAlign_Task
 		SET 
 			Processing_State = 2, 
-			PM_Start = GETDATE(),
-			PM_AssignedProcessorName = @ProcessorName
+			Task_Start = GETDATE(),
+			Task_AssignedProcessorName = @ProcessorName
 		WHERE (Task_ID = @taskID)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -294,34 +309,31 @@ As
 			rollback transaction @transName
 			set @message = 'Update operation failed'
 			goto done
-		end
-	End	
+		end	
+	End
 
 	---------------------------------------------------
 	-- commit transaction
 	---------------------------------------------------
 	commit transaction @transName
 
-
 	---------------------------------------------------
 	-- generate folder and file names and set paths
 	---------------------------------------------------
 
 	Declare @OutputFolderPrefix varchar(256)
-	Declare @Instrument varchar(128)
-	Declare @StoragePathClient varchar(256)
-	Declare @LegacyStoragePath varchar(256)
+	Declare @Instrument varchar(256)
 	
 	Declare @CharLoc int
 	Declare @StartPos int
 	
-	SELECT	@Instrument = FAD.Instrument,
-			@StoragePathClient = IsNull(FAD.Vol_Client, ''),
-			@LegacyStoragePath = IsNull(FAD.Storage_Path, '')
-	FROM	T_Peak_Matching_Task PM INNER JOIN
+	Set @Instrument = 'Unknown'
+	SELECT	TOP 1 @Instrument = FAD.Instrument
+	FROM	T_MultiAlign_Task MaT INNER JOIN
+			T_MultiAlign_Task_Jobs MTJ on MaT.Task_ID = MTJ.Task_ID LEFT OUTER JOIN
 			T_FTICR_Analysis_Description FAD ON 
-			PM.Job = FAD.Job
-	WHERE (PM.Task_ID = @taskID)
+			MTJ.Job = FAD.Job
+	WHERE (MaT.Task_ID = @taskID)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -334,23 +346,6 @@ As
 
 	If Len(@Instrument) > 0
 		Set @OutputFolderPrefix = @Instrument
-	Else
-	Begin
-		If Len(@LegacyStoragePath) > 0
-			Set @OutputFolderPrefix = @LegacyStoragePath
-		Else
-		Begin
-			-- See if @StoragePathClient contains a server name plus a share and folder name
-			-- If it does, extract out the final folder name
-			-- For example, given "\\n2.emsl.pnl.gov\dmsarch\LTQ_FT1_2\" extract out "LTQ_FT1_2"
-			set @CharLoc = CharIndex('\', Reverse(@StoragePathClient), 2)
-			
-			If @CharLoc > 0
-			Begin
-				Set @OutputFolderPrefix = Substring(@StoragePathClient, Len(@StoragePathClient) - @CharLoc + 2, 128) 
-			End
-		End
-	End
 	
 	If Len(IsNull(@OutputFolderPrefix, '')) = 0
 		Set @OutputFolderPrefix = 'Unknown'
@@ -375,12 +370,17 @@ As
 	
 	-- Construct the Output Folder Name
 	declare @Output_Folder_Name varchar(255)
-	set @Output_Folder_Name = 'Job' + convert(varchar(12), @analysisJob) + '_auto_pm_' + convert(varchar(12), @taskID)
+	set @Output_Folder_Name = 'MA_' + convert(varchar(12), @taskID)
 	
+	If @JobMin = @JobMax
+		set @Output_Folder_Name = @Output_Folder_Name + '_Job' + convert(varchar(12), @JobMin)
+	Else
+		set @Output_Folder_Name = @Output_Folder_Name + '_Jobs' + convert(varchar(12), @JobMin) + '-' + convert(varchar(12), @JobMax)
+
 	set @Output_Folder_Name = dbo.udfCombinePaths(@OutputFolderPrefix, @Output_Folder_Name)
 
 	set @outputFolderPath = dbo.udfCombinePaths(dbo.udfCombinePaths(@outputFolderPath, DB_Name()), @Output_Folder_Name)
-	
+
 
 	---------------------------------------------------
 	-- Update Output_Folder_Name if @infoOnly = 0
@@ -388,18 +388,16 @@ As
 
 	If @infoOnly = 0
 	Begin
-		UPDATE T_Peak_Matching_Task
+		UPDATE T_MultiAlign_Task
 		SET Output_Folder_Name = @Output_Folder_Name
 		WHERE (Task_ID = @taskID)
 	End
-		
+	
 	---------------------------------------------------
 	-- get task parameters
 	---------------------------------------------------
 	
 	SELECT
-		@confirmedOnly = Confirmed_Only, 
-		@modList = Mod_List, 
 		@MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
 		@MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score,
 		@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
@@ -409,9 +407,9 @@ As
 		@LimitToPMTsFromDataset = Limit_To_PMTs_From_Dataset,
 		@InternalStdExplicit = Internal_Std_Explicit,
 		@NetValueType = NET_Value_Type,
- 		@IniFileName = LTrim(RTrim(Ini_File_Name)), 
+ 		@ParamFileName = LTrim(RTrim(Param_File_Name)), 
 		@taskPriority = Priority
-	FROM T_Peak_Matching_Task
+	FROM T_MultiAlign_Task
 	WHERE (Task_ID = @taskID)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -423,54 +421,21 @@ As
 		goto done
 	end
 	
-	-- Check for @IniFileName containing a UNC path
-	-- If it does not contain a UNC path, prepend @IniFileName with @iniFilePath
-	If Len(@IniFileName) > 2
+	-- Check for @ParamFileName containing a UNC path
+	-- If it does not contain a UNC path, prepend @ParamFileName with @paramFilePath
+	If Len(@ParamFileName) > 2
 	Begin
-		If SubString(@IniFileName, 1, 2) = '\\'
-			Set @iniFilePath = @IniFileName
+		If SubString(@ParamFileName, 1, 2) = '\\'
+			Set @paramFilePath = @ParamFileName
 		Else
-			Set @iniFilePath = dbo.udfCombinePaths(@iniFilePath, @IniFileName)
+			Set @paramFilePath = dbo.udfCombinePaths(@paramFilePath, @ParamFileName)
 	End
-	
-	---------------------------------------------------
-	-- Get path to analysis job results folder
-	---------------------------------------------------
-	
-	Declare @analysisResultsFolderPathAlt varchar(255)
-	Declare @FolderExists tinyint
-	
-	SELECT @analysisResultsFolderPath = dbo.udfCombinePaths(
-										dbo.udfCombinePaths(
-										dbo.udfCombinePaths(Vol_Client, Storage_Path), Dataset_Folder), Results_Folder),
-		   @analysisResultsFolderPathAlt = dbo.udfCombinePaths(
-										dbo.udfCombinePaths(
-										dbo.udfCombinePaths(Vol_Server, Storage_Path), Dataset_Folder), Results_Folder)
-	FROM T_FTICR_Analysis_Description
-	WHERE (Job = @analysisJob)
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0
-	begin
-		set @myError = 113
-		set @message = 'Could not get task parameters'
-		goto done
-	end
-
-	---------------------------------------------------
-	-- See if folder @analysisResultsFolderPathAlt exists
-	-- If it does, preferentially use it
-	---------------------------------------------------
-	exec ValidateFolderExists @analysisResultsFolderPathAlt, @CreateIfMissing = 0, @FolderExists = @FolderExists output
-	If @FolderExists <> 0
-		Set @analysisResultsFolderPath = @analysisResultsFolderPathAlt
 	
 	---------------------------------------------------
 	-- Define the log file path
 	---------------------------------------------------
 
-	set @logFilePath = dbo.udfCombinePaths(@outputFolderPath, 'Job' + convert(varchar(12), @analysisJob) + '_log.txt')
+	set @logFilePath = dbo.udfCombinePaths(@outputFolderPath, 'MultiAlign_Task_' + convert(varchar(12), @taskID) + '_log.txt')
 
 	---------------------------------------------------
 	-- If we get to this point, then all went fine
@@ -503,11 +468,8 @@ Done:
 					@Message AS Message, 
 					@taskID AS TaskID,
 					@taskPriority AS TaskPriority,
-					@analysisJob AS Job,
-					@analysisResultsFolderPath AS Results_Folder_Path,
+					@analysisJobList AS Job_List,
 					@mtdbName AS Database_Name,
-					@confirmedOnly AS Confirmed_Only,
-					@modList AS Mod_List,
 					@MinimumHighNormalizedScore AS Minimum_High_Normalized_Score,
 					@MinimumHighDiscriminantScore AS Minimum_High_Discriminant_Score,
 					@MinimumPeptideProphetProbability AS Minimum_Peptide_Prophet_Probability,
@@ -517,7 +479,7 @@ Done:
 					@LimitToPMTsFromDataset AS Limit_To_PMTs_From_Dataset,
 					@InternalStdExplicit AS Internal_Std_Explicit,
 					@NETValueType AS NET_Value_Type,
-					@iniFilePath AS Ini_File_Path,
+					@paramFilePath AS Param_File_Path,
 					@outputFolderPath AS Output_Folder_Path,
 					@logFilePath AS Log_File_Path
 				End
@@ -529,5 +491,5 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [DMS_SP_User]
 GO

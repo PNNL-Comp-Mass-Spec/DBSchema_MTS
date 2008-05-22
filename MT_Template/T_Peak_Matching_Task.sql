@@ -37,7 +37,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
 
 GO
 
-/****** Object:  Trigger [dbo].[trig_i_PeakMatchingTask] ******/
+/****** Object:  Trigger [dbo].[trig_i_T_PeakMatchingTask] ******/
 SET ANSI_NULLS ON
 GO
 
@@ -56,32 +56,13 @@ AS
 
 GO
 
-/****** Object:  Trigger [dbo].[trig_u_PeakMatchingTask] ******/
-SET ANSI_NULLS ON
-GO
-
-SET QUOTED_IDENTIFIER ON
-GO
-
-CREATE Trigger trig_u_PeakMatchingTask on dbo.T_Peak_Matching_Task
-For Update
-AS
-	If @@RowCount = 0
-		Return
-
-	if update(Processing_State)
-		INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
-		SELECT 3, inserted.Task_ID, inserted.Processing_State, deleted.Processing_State, GetDate()
-		FROM deleted INNER JOIN inserted ON deleted.Task_ID = inserted.Task_ID
-
-GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Peak_Matching_Task] ******/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 CREATE TRIGGER [trig_u_T_Peak_Matching_Task] ON dbo.T_Peak_Matching_Task 
 FOR UPDATE
@@ -132,6 +113,11 @@ AS
 	
 			If @MatchCount > 0
 				Set @UpdateEnteredBy = 1
+
+			INSERT INTO T_Event_Log	(Target_Type, Target_ID, Target_State, Prev_Target_State, Entered)
+			SELECT 3, inserted.Task_ID, inserted.Processing_State, deleted.Processing_State, GetDate()
+			FROM deleted INNER JOIN inserted ON deleted.Task_ID = inserted.Task_ID
+
 		End
 		Else
 		Begin
@@ -162,6 +148,7 @@ AS
 				) LookupQ ON T_Peak_Matching_Task.Task_ID = LookupQ.Task_ID
 
 	End
+
 
 GO
 GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]

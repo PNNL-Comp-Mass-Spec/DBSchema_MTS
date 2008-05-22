@@ -42,6 +42,7 @@ CREATE Procedure dbo.QRSummary
 **			11/29/2006 mem - Replaced parameter @SortBySampleName with parameter @SortMode, which affects the order in which the results are returned
 **			06/05/2007 mem - Switched to Try/Catch error handling (added parameter @message)
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
+**			01/24/2007 mem - Expanded the size of @WorkingList to varchar(max)
 **
 ****************************************************/
 (
@@ -59,7 +60,7 @@ AS
 	Set @myRowcount = 0
 	Set @myError = 0
 
-	Declare @WorkingList varchar(1024),
+	Declare @WorkingList varchar(max),
 			@JobList varchar(1024),
 			@MDIDList varchar(1024),
 			@ExperimentList varchar(1024)

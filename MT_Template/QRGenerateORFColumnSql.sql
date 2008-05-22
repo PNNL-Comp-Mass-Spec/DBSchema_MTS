@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE PROCEDURE dbo.QRGenerateORFColumnSql
+CREATE PROCEDURE QRGenerateORFColumnSql
 /****************************************************	
 **  Desc: Generates the sql for the ORF column data
 **		  obtained from T_Quantitation_Results
@@ -24,21 +24,30 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			05/28/2007 mem - Added column MT_Count_Unique_Observed_Both_MS_and_MSMS
 **			06/13/2007 mem - Now truncating T_Proteins.Description at 900 characters, since Visual Studio's SqlDataAdapter tool has problems with text strings over 910 characters in length
+**			01/24/2008 mem - Added parameter @IncludeProteinDescription and @IncludeQID
 **
 ****************************************************/
 (
 	@ERValuesPresent float = 0,
-	@OrfColumnSql varchar(2048) = '' OUTPUT
+	@OrfColumnSql varchar(2048) = '' OUTPUT,
+	@IncludeProteinDescription tinyint = 1,
+	@IncludeQID tinyint = 0
 )
 AS
 
 	Declare @sql varchar(2048)
 	
+	Set @IncludeProteinDescription = IsNull(@IncludeProteinDescription, 1)
+	Set @IncludeQID = IsNull(@IncludeQID, 0)
+	
 	Set @sql = ''
 	Set @sql = @sql + 'SELECT QD.SampleName AS Sample_Name,'
+	If @IncludeQID <> 0
+		Set @sql = @sql + 'QD.Quantitation_ID AS QID,'
 	Set @sql = @sql + 'QR.Ref_ID,'
 	Set @sql = @sql + 'T_Proteins.Reference,'
-	Set @sql = @sql + 'Left(T_Proteins.Description, 900) AS Protein_Description,'		-- Truncating Protein Description at 900 characters
+	If @IncludeProteinDescription <> 0
+		Set @sql = @sql + 'Left(T_Proteins.Description, 900) AS Protein_Description,'		-- Truncating Protein Description at 900 characters
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
 	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) AS SLiC_Score_Avg,'
@@ -70,7 +79,6 @@ AS
 	Set @OrfColumnSql = @sql
 	
 	Return 0
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRGenerateORFColumnSql] TO [DMS_SP_User]

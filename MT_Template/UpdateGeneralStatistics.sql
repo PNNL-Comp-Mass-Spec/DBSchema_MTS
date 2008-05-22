@@ -31,6 +31,8 @@ CREATE Procedure dbo.UpdateGeneralStatistics
 **			03/13/2006 mem - Switched to reporting stats by minimum PMT Quality Score rather than for each PMT Quality Score
 **						   - Added protein stats
 **			06/04/2006 mem - Now examining Protein_Collection_List and Protein_Options_List in T_Analysis_Description
+**			01/13/2008 mem - Increased field sizes in #StatsSaved
+**			04/05/2008 mem - Updated to use Cleavage_State_Max in T_Mass_Tags
 **    
 *****************************************************/
 As
@@ -62,9 +64,9 @@ As
 	-- Create a temporary table to hold the current statistics
 	--
 	CREATE TABLE #StatsSaved (
-		[Category] [varchar] (128) NULL ,
-		[Label] [varchar] (128) NULL ,
-		[Value] [varchar] (255) NULL ,
+		[Category] [varchar] (512) NULL ,
+		[Label] [varchar] (2048) NULL ,
+		[Value] [varchar] (1024) NULL ,
 		[Entry_ID] [int] NOT NULL 
 	)
 	
@@ -189,16 +191,10 @@ As
 					@MinimumPMTQS AS PMT_Quality_Score_Minimum,
 					'Mass Tags' AS category, 
 					'Tryptic PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label, 
-					COUNT(DISTINCT Mass_Tag_ID) AS Value
-			FROM (	SELECT T_Mass_Tags.Mass_Tag_ID, 
-						   MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
-					FROM T_Mass_Tags INNER JOIN
-						 T_Mass_Tag_to_Protein_Map ON 
-						 T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
-					WHERE Internal_Standard_Only = 0 AND PMT_Quality_Score >= @MinimumPMTQS
-					GROUP BY T_Mass_Tags.Mass_Tag_ID
-				) LookupQ
-			WHERE Cleavage_State_Max = 2 
+					COUNT(Mass_Tag_ID) AS Value
+			FROM T_Mass_Tags
+			WHERE Internal_Standard_Only = 0 AND Cleavage_State_Max = 2 AND
+				  PMT_Quality_Score >= @MinimumPMTQS 
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount	
 
@@ -210,16 +206,10 @@ As
 					@MinimumPMTQS AS PMT_Quality_Score_Minimum,
 					'Mass Tags' AS category, 
 					'Partially Tryptic PMTs With PMT Quality Score >= ' + Convert(varchar(9), @MinimumPMTQS) AS Label,
-					COUNT(DISTINCT Mass_Tag_ID) AS Value
-			FROM (	SELECT T_Mass_Tags.Mass_Tag_ID, 
-						   MAX(T_Mass_Tag_to_Protein_Map.Cleavage_State) AS Cleavage_State_Max
-					FROM T_Mass_Tags INNER JOIN
-						 T_Mass_Tag_to_Protein_Map ON 
-						 T_Mass_Tags.Mass_Tag_ID = T_Mass_Tag_to_Protein_Map.Mass_Tag_ID
-					WHERE Internal_Standard_Only = 0 AND PMT_Quality_Score >= @MinimumPMTQS
-					GROUP BY T_Mass_Tags.Mass_Tag_ID
-				) LookupQ
-			WHERE Cleavage_State_Max = 1 
+					COUNT(Mass_Tag_ID) AS Value
+			FROM T_Mass_Tags
+			WHERE Internal_Standard_Only = 0 AND Cleavage_State_Max = 1 AND
+				  PMT_Quality_Score >= @MinimumPMTQS 
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount	
 

@@ -22,6 +22,7 @@ CREATE Procedure dbo.ExportGANETPeptideFile
 **			12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @DBName from 64 to 128 characters
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
+**			01/24/2008 mem - Now specifying the sort order when querying V_GANET_Peptides
 **    
 *****************************************************/
 (
@@ -47,7 +48,7 @@ As
 
 	declare @outFilePath varchar(512)
 
-	declare @cmd varchar(512)
+	declare @cmd varchar(1024)
 	declare @result int
 
 	declare @lockerCount varchar(12)
@@ -75,7 +76,7 @@ As
 	-- dump the peptides into a temporary file
 	--------------------------------------------------------------
 	-- 
-	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + ']..V_GANET_Peptides" queryout ' + @pepFilePath + ' -c -T'
+	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + '].dbo.V_GANET_Peptides ORDER BY Analysis_ID, Scan_Number, Charge_State, Normalized_Score DESC" queryout ' + @pepFilePath + ' -c -T'
 	--
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	Set @myError = @result

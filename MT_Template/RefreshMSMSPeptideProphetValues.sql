@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSPeptideProphetValues] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.RefreshMSMSPeptideProphetValues
+CREATE Procedure RefreshMSMSPeptideProphetValues
 /****************************************************
 **
 **	Desc: 
@@ -21,6 +21,7 @@ CREATE Procedure dbo.RefreshMSMSPeptideProphetValues
 **	Date:	07/10/2006
 **			07/20/2006 mem - Expanded size of @JobFilterList from 1024 to 4000
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
+**			04/23/2008 mem - Now explicitly dropping the temporary table created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **    
 *****************************************************/
 (
@@ -68,7 +69,7 @@ As
 		PeptideDBPath varchar(256) NULL
 	)
 
-	CREATE TABLE #T_Jobs_To_Update (
+	CREATE TABLE #T_Tmp_JobsToUpdatePepProphet (
 		Job int NOT NULL
 	)
 
@@ -166,11 +167,11 @@ As
 		Else
 		Begin -- <b>
 
-			TRUNCATE TABLE #T_Jobs_To_Update
+			TRUNCATE TABLE #T_Tmp_JobsToUpdatePepProphet
 			Set @jobCountToUpdate = 0
 			
 			Set @S = ''
-			Set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + 'INSERT INTO #T_Tmp_JobsToUpdatePepProphet (Job)'
 			Set @S = @S + ' SELECT TAD.Job'
 			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
 			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
@@ -237,7 +238,7 @@ As
 				Set @S = @S +      ' P_Src.Peptide_ID = SD_Src.Peptide_ID INNER JOIN'
 				Set @S = @S +      ' T_Score_Discriminant SD_Target ON'
 				Set @S = @S +      ' P_Target.Peptide_ID = SD_Target.Peptide_ID INNER JOIN'
-				Set @S = @S +      ' #T_Jobs_To_Update AS JTU ON P_Src.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' #T_Tmp_JobsToUpdatePepProphet AS JTU ON P_Src.Analysis_ID = JTU.Job'
 				Set @S = @S + ' WHERE NOT SD_Src.Peptide_Prophet_Probability IS Null AND SD_Src.Peptide_Prophet_Probability <> IsNull(SD_Target.Peptide_Prophet_Probability, -12345) OR '
 				Set @S = @S +      ' (SD_Src.Peptide_Prophet_Probability IS Null AND NOT SD_Target.Peptide_Prophet_Probability IS Null)'
 
@@ -311,8 +312,10 @@ Done:
 				Select 'InfoOnly: No jobs needing to be updated were found' As Message
 		End
 	End
-	
-	return @myError
 
+	DROP TABLE #T_Peptide_Database_List
+	DROP TABLE #T_Tmp_JobsToUpdatePepProphet
+			
+	return @myError
 
 GO

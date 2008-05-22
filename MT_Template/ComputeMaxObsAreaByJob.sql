@@ -1,9 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[ComputeMaxObsAreaByJob] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
-CREATE Procedure dbo.ComputeMaxObsAreaByJob
+
+CREATE Procedure ComputeMaxObsAreaByJob
 /****************************************************
 **
 **	Desc: 
@@ -21,6 +22,7 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
 **		  	10/12/2005 mem - Added parameter @PostLogEntryOnSuccess
 **			03/01/2006 mem - Added parameter @JobBatchSize
 **			03/03/2006 mem - Added parameter @MaxJobsToProcess
+**			04/23/2008 mem - Now explicitly dropping the temporary table created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **    
 *****************************************************/
 (
@@ -56,7 +58,7 @@ As
 	-- Create a temporary tables
 	---------------------------------------------------
 	--
-	CREATE TABLE #T_Jobs_To_Update (
+	CREATE TABLE #T_Tmp_JobsToComputeArea (
 		Unique_Row_ID int Identity(1,1),
 		Job int NOT NULL
 	)
@@ -65,7 +67,7 @@ As
 	-- Look for jobs having Max_Obs_Area_In_Job=0 for all peptides
 	---------------------------------------------------
 	set @S = ''	
-	set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
+	set @S = @S + ' INSERT INTO #T_Tmp_JobsToComputeArea (Job)'
 	set @S = @S + ' SELECT Analysis_ID'
 	set @S = @S + ' FROM T_Peptides'
 	If Len(IsNull(@JobFilterList, '')) > 0
@@ -86,13 +88,13 @@ As
 	If Len(@JobFilterList) > 0
 	Begin
 		---------------------------------------------------
-		-- Append the jobs in @JobFilterList to #T_Jobs_To_Update
+		-- Append the jobs in @JobFilterList to #T_Tmp_JobsToComputeArea
 		---------------------------------------------------
 		set @S = ''	
-		set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
+		set @S = @S + ' INSERT INTO #T_Tmp_JobsToComputeArea (Job)'
 		set @S = @S + ' SELECT TAD.Job'
 		set @S = @S + ' FROM T_Analysis_Description AS TAD LEFT OUTER JOIN '
-		set @S = @S +      ' #T_Jobs_To_Update AS JTU ON TAD.Job = JTU.Job'
+		set @S = @S +      ' #T_Tmp_JobsToComputeArea AS JTU ON TAD.Job = JTU.Job'
 		set @S = @S + ' WHERE TAD.Job In (' + @JobFilterList + ')'
 		set @S = @S +       ' AND JTU.Job Is Null'
 
@@ -101,9 +103,9 @@ As
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 
-	-- Count the number of jobs in #T_Jobs_To_Update	
+	-- Count the number of jobs in #T_Tmp_JobsToComputeArea	
 	SELECT @JobsToUpdate = COUNT(Job)
-	FROM #T_Jobs_To_Update
+	FROM #T_Tmp_JobsToComputeArea
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -117,7 +119,7 @@ As
 			Set @JobBatchSize = 10
 
 		SELECT @MinUniqueRowID = MIN(Unique_Row_ID)
-		FROM #T_Jobs_To_Update
+		FROM #T_Tmp_JobsToComputeArea
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -130,13 +132,13 @@ As
 			If @infoOnly = 0
 			Begin -- <c>
 				---------------------------------------------------
-				-- Reset Max_Obs_Area_In_Job to 0 for the jobs in #T_Jobs_To_Update
+				-- Reset Max_Obs_Area_In_Job to 0 for the jobs in #T_Tmp_JobsToComputeArea
 				---------------------------------------------------
 				--
 				UPDATE T_Peptides
 				SET Max_Obs_Area_In_Job = 0
 				FROM T_Peptides AS Pep INNER JOIN
-					#T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job
+					#T_Tmp_JobsToComputeArea AS JTU ON Pep.Analysis_ID = JTU.Job
 				WHERE (JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID) AND
 					  Max_Obs_Area_In_Job <> 0
 				--
@@ -145,7 +147,7 @@ As
 			
 			---------------------------------------------------
 			-- Compute the value for Max_Obs_Area_In_Job for the given jobs
-			-- Values for jobs in #T_Jobs_To_Update will have been reset to 0 above,
+			-- Values for jobs in #T_Tmp_JobsToComputeArea will have been reset to 0 above,
 			--  causing them to be processed by this query
 			---------------------------------------------------
 			--
@@ -169,7 +171,7 @@ As
 			set @S = @S +              ' (  SELECT Pep.Analysis_ID, Pep.Mass_Tag_ID,'
 			set @S = @S +                        ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
 			set @S = @S +                 ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +                      ' #T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job'
+			set @S = @S +                      ' #T_Tmp_JobsToComputeArea AS JTU ON Pep.Analysis_ID = JTU.Job'
 			set @S = @S +                 ' WHERE (JTU.Unique_Row_ID BETWEEN ' + Convert(varchar(19), @MinUniqueRowID) + ' AND ' + Convert(varchar(19), @MaxUniqueRowID) + ')'
 			set @S = @S +                 ' GROUP BY Pep.Analysis_ID, Pep.Mass_Tag_ID'
 			set @S = @S +              ' ) AS LookupQ ON'
@@ -200,7 +202,7 @@ As
 
 			-- Count the number of jobs updated in this batch and update @JobsUpdated
 			SELECT @myRowCount = COUNT(*)
-			FROM #T_Jobs_To_Update JTU
+			FROM #T_Tmp_JobsToComputeArea JTU
 			WHERE (JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID)
 			--
 			Set @JobsUpdated = @JobsUpdated + @myRowCount
@@ -208,9 +210,9 @@ As
 			-- Update @MinUniqueRowID
 			Set @MinUniqueRowID = @MinUniqueRowID + @JobBatchSize
 			
-			-- See if any jobs remain in #T_Jobs_To_Update to process
+			-- See if any jobs remain in #T_Tmp_JobsToComputeArea to process
 			SELECT @Continue = Count(*)
-			FROM #T_Jobs_To_Update
+			FROM #T_Tmp_JobsToComputeArea
 			WHERE Unique_Row_ID >= @MinUniqueRowID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -253,6 +255,8 @@ Done:
 				Select 'InfoOnly: No jobs needing to be updated were found' As ComputeMaxObsAreaByJob_Message
 		End
 	End
+
+	DROP TABLE #T_Tmp_JobsToComputeArea
 	
 	return @myError
 

@@ -1,32 +1,28 @@
-/****** Object:  StoredProcedure [dbo].[SetPeakMatchingTaskComplete] ******/
+/****** Object:  StoredProcedure [dbo].[SetMultiAlignTaskComplete] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.SetPeakMatchingTaskComplete
+CREATE Procedure dbo.SetMultiAlignTaskComplete
 /****************************************************
 **
-**	Desc:	Sets the state of a peak matching task to
+**	Desc:	Sets the state of a MultiAlign task to
 **			3=Success or 4=Failure
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
-**	Auth:	grk
-**	Date:	04/16/2003   
-**			06/23/2003 mem
-**			08/06/2003 mem
-**			06/14/2006 mem - Expanded error handling and removed parameter @mtdbName
-**			01/05/2008 mem - Now ignoring @errorCode and/or @warningCode if they are Null
+**	Auth:	mem
+**	Date:	01/05/2008
 **
 *****************************************************/
 (
 	@taskID int,
 	@errorCode int = 0,
 	@warningCode int = 0,
-	@MDID int = NULL,				-- MD_ID value in T_Match_Making_Description, if any
+	@AnalysisResultsID int = NULL,				-- Reserved for future use
 	@message varchar(512) output
 )
 As
@@ -41,8 +37,8 @@ As
 
 	declare @taskState int
 
-	declare @PMTaskText varchar(64)
-	Set @PMTaskText = 'Peak matching task ' + Convert(varchar(19), @taskID)
+	declare @TaskText varchar(64)
+	Set @TaskText = 'MultiAlign task ' + Convert(varchar(19), @taskID)
 
 	---------------------------------------------------
 	-- Resolve task ID to state
@@ -51,7 +47,7 @@ As
 	set @taskState = 0
 	--
 	SELECT @taskState = Processing_State
-	FROM T_Peak_Matching_Task
+	FROM T_MultiAlign_Task
 	WHERE Task_ID = @taskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -59,7 +55,7 @@ As
 	if @myError <> 0 or @myRowCount <> 1
 	begin
 		set @myError = 51220
-		set @message = 'Could not get information for ' + @PMTaskText
+		set @message = 'Could not get information for ' + @TaskText
 		goto done
 	end
 
@@ -69,7 +65,7 @@ As
 	if @taskState <> 2
 	begin
 		set @myError = 51221
-		set @message = 'State not correct for ' + @PMTaskText + '; state is ' + convert(varchar(12), @taskState) + ' but expecting state 2'
+		set @message = 'State not correct for ' + @TaskText + '; state is ' + convert(varchar(12), @taskState) + ' but expecting state 2'
 		goto done
 	end
 
@@ -82,27 +78,27 @@ As
 	else
 		set @taskState = 4 -- failure
 
-	UPDATE T_Peak_Matching_Task
+	UPDATE T_MultiAlign_Task
 	SET Processing_State = @taskState, 
-		Processing_Error_Code = IsNull(@errorCode, Processing_Error_Code), 
-		Processing_Warning_Code = IsNull(@warningCode, Processing_Warning_Code), 
-		PM_Finish = GETDATE(),
-		MD_ID = @MDID
+		Processing_Error_Code = IsNull(@errorCode, Processing_Error_Code),
+		Processing_Warning_Code = IsNull(@warningCode, Processing_Warning_Code),
+		Task_Finish = GETDATE(),
+		Analysis_Results_ID = @AnalysisResultsID
 	WHERE Task_ID = @taskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
 	if @myError <> 0 or @myRowCount <> 1
 	begin
-		set @message = 'Update operation failed for ' + @PMTaskText
+		set @message = 'Update operation failed for ' + @TaskText
 		set @myError = 51222
 		goto done
 	end
 	
 	if IsNull(@errorCode, 0) <> 0
 	Begin
-		Set @message = @PMTaskText + ' generated error code ' + convert(varchar(19), @errorCode)
-		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingTaskComplete'
+		Set @message = @TaskText + ' generated error code ' + convert(varchar(19), @errorCode)
+		Exec PostLogEntry 'Error', @message, 'SetMultiAlignTaskComplete'
 		Set @message = ''
 	End
 	
@@ -114,12 +110,12 @@ Done:
 
 	If @myError <> 0
 	Begin
-		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingTaskComplete', 4
+		Exec PostLogEntry 'Error', @message, 'SetMultiAlignTaskComplete', 4
 	End
 
 	return @myError
 
 
 GO
-GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskComplete] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[SetMultiAlignTaskComplete] TO [DMS_SP_User]
 GO

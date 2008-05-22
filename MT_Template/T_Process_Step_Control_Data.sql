@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Step_Control] ******/
-/****** RowCount: 25 ******/
+/****** RowCount: 28 ******/
 /****** Columns: Processing_Step_Name, enabled, Last_Affected, Entered_By ******/
 INSERT INTO [T_Process_Step_Control] VALUES ('AddDefaultPeakMatchingTasks',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('AddGANETUpdateTask',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -7,14 +7,17 @@ INSERT INTO [T_Process_Step_Control] VALUES ('AutoComputeHistograms',1,'9/1/2006
 INSERT INTO [T_Process_Step_Control] VALUES ('CalculateMonoisotopicMass',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ComputeMassTagsGANET',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ComputePMTQualityScore',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('ComputePMTQualityScoreLocal',0,'4/7/2008 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ComputeProteinCoverage',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ComputeProteinCoverageResidueLevel',0,'10/5/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ExportGANET',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('ExtractMTModInfo',1,'3/11/2008 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ForceMSMSProcessingOnNextUpdate',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('GeneralStatisticsIncludesExtendedInfo',0,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ImportMSJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('ImportMSMSJobs',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('LogLevel',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Step_Control] VALUES ('PopulateMTtoProteinModMap',1,'3/27/2008 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('QR_Check_Results_in_Remote_Peptide_DBs',1,'5/28/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('QuantitationProcessing',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Step_Control] VALUES ('RefreshAnalysisDescriptionInfo',1,'9/1/2006 12:00:00 AM','PNL\mtsadmin')

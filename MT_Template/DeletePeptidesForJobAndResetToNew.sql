@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[DeletePeptidesForJobAndResetToNew] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
@@ -177,9 +178,7 @@ AS
 
 	If @DataDeleted <> 0
 		exec PostLogEntry 'Normal', @message, 'DeletePeptidesForJobAndResetToNew'
-	--
-	SELECT @message
-
+	
 Done:
 	Return @myError
 

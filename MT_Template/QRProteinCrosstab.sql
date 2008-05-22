@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRProteinCrosstab] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.QRProteinCrosstab
+CREATE Procedure QRProteinCrosstab
 /****************************************************	
 **  Desc: Generates a cross tab query of the proteins observed
 **		  in 1 or more QuantitationID tasks
@@ -29,6 +29,7 @@ CREATE Procedure dbo.QRProteinCrosstab
 **			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
+**			01/24/2008 mem - Added column @DateStampHeaderColumn
 **
 ****************************************************/
 (
@@ -37,9 +38,12 @@ CREATE Procedure dbo.QRProteinCrosstab
 	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return; valid columns include Abundance_Average, MassTagCountUniqueObserved, MassTagCountUsedForAbundanceAvg, FractionScansMatchingSingleMassTag, etc.
 	@AggregateColName varchar(128) = 'AvgAbu',
 	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
-	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job), 5 = Dataset Acq_Time_Start
 	@message varchar(512)='' output,
-	@PreviewSql tinyint=0
+	@PreviewSql tinyint=0,
+	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
+	@DateStampHeaderColumn tinyint = 0,
+	@MinimumPeptidesPerProtein tinyint = 0				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
 )
 AS
 
@@ -70,6 +74,20 @@ AS
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
+	
+		--------------------------------------------------------------
+		-- Validate the inputs
+		--------------------------------------------------------------
+		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
+		Set @SourceColName  = IsNull(@SourceColName, 'Abundance_Average')
+		Set @AggregateColName  = IsNull(@AggregateColName, 'AvgAbu')
+		Set @AverageAcrossColumns  = IsNull(@AverageAcrossColumns, 0)
+		Set @SortMode  = IsNull(@SortMode, 0)
+		set @message = ''
+		Set @PreviewSql  = IsNull(@PreviewSql, 0)
+		Set @IncludeProteinDescription  = IsNull(@IncludeProteinDescription, 1)
+		Set @DateStampHeaderColumn = IsNull(@DateStampHeaderColumn, 0)
+		Set @MinimumPeptidesPerProtein  = IsNull(@MinimumPeptidesPerProtein, 0)
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -99,7 +117,8 @@ AS
 									@QuantitationIDListSql = @QuantitationIDListSql output,
 									@ERValuesPresent = @ERValuesPresent output,
 									@ModsPresent = @ModsPresent output,
-									@QuantitationIDListClean = @QuantitationIDListClean output
+									@QuantitationIDListClean = @QuantitationIDListClean output,
+									@DateStampHeaderColumn = @DateStampHeaderColumn
 
 
 		--------------------------------------------------------------
@@ -110,12 +129,16 @@ AS
 		
 		Set @sql = ''
 		Set @sql = @sql + ' SELECT PivotResults.Ref_ID, Prot.Reference,'
-		Set @sql = @sql +        ' Prot.Description As Protein_Description,'
+		If @IncludeProteinDescription <> 0
+			Set @sql = @sql +        ' Prot.Description As Protein_Description,'
+			
 		Set @sql = @sql +        @PivotColumnsSql
 		Set @sql = @sql + ' FROM (SELECT QR.Quantitation_ID, QR.Ref_ID,'
 		Set @sql = @sql +       ' CONVERT(VARCHAR(19), QR.' + @SourceColName + ') AS ' + @SourceColName
 		Set @sql = @sql +       ' FROM  #TmpQIDSortInfo INNER JOIN '
 		Set @sql = @sql +             ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID'
+		If @MinimumPeptidesPerProtein > 0
+			Set @sql = @sql +   ' WHERE QR.MassTagCountUniqueObserved >= ' + Convert(varchar(12), @MinimumPeptidesPerProtein)
 		Set @sql = @sql +       ') AS DataQ'
 		Set @sql = @sql +       ' PIVOT ('
 		Set @sql = @sql +       '   MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
@@ -155,7 +178,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRProteinCrosstab] TO [DMS_SP_User]

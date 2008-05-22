@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[MasterUpdateMassTags] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.MasterUpdateMassTags
 /****************************************************
 ** 
@@ -49,6 +50,10 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			09/15/2006 mem - Added call to UpdateMassTagPeptideProphetStats
 **			10/06/2006 mem - No longer posting the message returned by ComputeProteinCoverage to the log since ComputeProteinCoverage is now doing that itself
 **			12/14/2006 mem - Now sending @PostLogEntryOnSuccess=0 to RefreshMSMSJobNETs
+**			03/11/2008 mem - Added call to ExtractMTModPositions
+**			03/27/2008 mem - Added call to UpdateMassTagToProteinModMap
+**			04/07/2008 mem - Now sending @ComputePMTQualityScoreLocal to ComputePMTQualityScore
+**			04/23/2008 mem - Minor changes to the status messages posted to T_Log_Entries
 **    
 *****************************************************/
 (
@@ -75,10 +80,12 @@ As
 	declare @ForceGeneralStatisticsUpdate tinyint
 	declare @ComputeProteinCoverage tinyint
 	declare @ProteinCoverageComputed tinyint
+	declare @ComputePMTQualityScoreLocal tinyint
 	
 	set @ForceGeneralStatisticsUpdate = 0
 	set @ComputeProteinCoverage = 0
 	set @ProteinCoverageComputed = 0
+	set @ComputePMTQualityScoreLocal = 0
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateMassTags', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -95,7 +102,7 @@ As
 	Set @logLevel = @result
 
 	set @message = 'Begin Master Update Mass Tags for ' + DB_NAME()
-	If @logLevel > 1
+	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 
@@ -115,13 +122,13 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin ImportNewMSMSAnalyses', 'MasterUpdateMassTags'
 		EXEC @result = ImportNewMSMSAnalyses @entriesAdded OUTPUT, @message OUTPUT
-		set @message = 'Complete ' + @message
+		set @message = 'Complete ImportNewMSMSAnalyses: ' + @message
 	end
 	else
 		set @message = 'Skipped ImportMSMSJobs'
 	--
 	-- Note: ImportNewMSMSAnalyses will post an entry to the log if @entriesAdded is greater than 0
-	If @entriesAdded = 0 And @logLevel > 1
+	If @entriesAdded = 0 And @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -150,12 +157,12 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshMSMSJobNETs', 'MasterUpdateMassTags'
 		EXEC @result = RefreshMSMSJobNETs @jobNETsUpdated OUTPUT, @peptideRowsUpdated OUTPUT, @message OUTPUT, @PostLogEntryOnSuccess=0
-		set @message = 'Complete ' + @message
+		set @message = 'Complete RefreshMSMSJobNETs: ' + @message
 	end
 	else
 		set @message = 'Skipped RefreshMSMSJobNETs'
 
-	If @logLevel > 1 Or ((@jobNETsUpdated + @peptideRowsUpdated) > 0 And @logLevel >= 1)
+	If @logLevel >= 2 Or ((@jobNETsUpdated + @peptideRowsUpdated) > 0 And @logLevel >= 1)
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -182,12 +189,12 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshMSMSSICJobs', 'MasterUpdateMassTags'
 		EXEC @result = RefreshMSMSSICJobs @jobsUpdated OUTPUT, @message OUTPUT
-		set @message = 'Complete ' + @message
+		set @message = 'Complete RefreshMSMSSICJobs: ' + @message
 	end
 	else
 		set @message = 'Skipped RefreshMSMSSICJobs'
 
-	If @logLevel > 1 Or (@jobsUpdated > 0 And @logLevel >= 1)
+	If @logLevel >= 2 Or (@jobsUpdated > 0 And @logLevel >= 1)
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -277,7 +284,7 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshProteins', 'MasterUpdateMassTags'
 		exec @result = RefreshLocalProteinTable @message OUTPUT
-		set @message = 'Complete ' + @message
+		set @message = 'Complete RefreshLocalProteinTable: ' + @message
 	end
 	else
 		set @message = 'Skipped RefreshProteins'
@@ -402,10 +409,13 @@ As
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ComputePMTQualityScore')
 	if @result > 0
 	begin
+		Set @ComputePMTQualityScoreLocal = 0
+		SELECT @ComputePMTQualityScoreLocal = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ComputePMTQualityScoreLocal')
+		
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin ComputePMTQualityScore', 'MasterUpdateMassTags'
 		
-		EXEC @result = ComputePMTQualityScore @message output
+		EXEC @result = ComputePMTQualityScore @message output, @ComputePMTQualityScoreLocal = @ComputePMTQualityScoreLocal
 		
 		if @result = 0
 		Begin
@@ -431,7 +441,7 @@ As
 		Goto Done
 
 
-	-- < J >
+	-- < J1 >
 	--------------------------------------------------------------
 	-- Update the Peptide Prophet Stats cached in T_Mass_Tag_Peptide_Prophet_Stats
 	--------------------------------------------------------------
@@ -469,7 +479,7 @@ As
 		Goto Done
 
 
-	-- < J >
+	-- < J2 >
 	--------------------------------------------------------------
 	-- Run any custom MS/MS processing SPs
 	--------------------------------------------------------------
@@ -493,7 +503,7 @@ As
 	else
 		set @message = 'Skipped RunCustomSPs'
 	--
-	If @logLevel > 1
+	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -531,7 +541,7 @@ As
 	else
 	begin
 		set @message = 'Skipped ExportGANET'
-		If @logLevel > 1
+		If @logLevel >= 2
 			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 	end
 
@@ -581,7 +591,7 @@ As
 		if @result = 0
 		Begin
 			set @message = 'Complete UpdateCachedHistograms: ' + @message
-			If @logLevel > 1 Or (@count > 0 And @logLevel >= 1)
+			If @logLevel >= 2 Or (@count > 0 And @logLevel >= 1)
 				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 		End
 		else
@@ -599,6 +609,79 @@ As
 	End
 
 
+	-- < N1 >
+	--------------------------------------------------------------
+	-- Populate T_Mass_Tag_Mod_Info
+	--------------------------------------------------------------
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ExtractMTModInfo')
+
+	if @result > 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Begin ExtractMTModPositions', 'MasterUpdateMassTags'
+		
+		EXEC @result = ExtractMTModPositions @message = @message output
+		
+		if @result = 0
+		Begin
+			set @message = 'Complete ExtractMTModPositions: ' + @message
+			If @logLevel >= 2
+				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		End
+		else
+		Begin
+			set @message = 'Complete ExtractMTModPositions: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+			If @logLevel >= 1
+				EXEC PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+		End
+	end
+	else
+	Begin
+		set @message = 'Skipped ExtractMTModPositions'
+		If @logLevel >= 2
+			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+	End
+
+
+	-- < N2 >
+	--------------------------------------------------------------
+	-- Populate T_Protein_Residue_Mods and T_Mass_Tag_to_Protein_Mod_Map
+	--------------------------------------------------------------
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'PopulateMTtoProteinModMap')
+
+	if @result > 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Begin UpdateMassTagToProteinModMap', 'MasterUpdateMassTags'
+		
+		EXEC @result = UpdateMassTagToProteinModMap @message = @message output
+		
+		if @result = 0
+		Begin
+			set @message = 'Complete UpdateMassTagToProteinModMap: ' + @message
+			If @logLevel >= 2
+				EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+		End
+		else
+		Begin
+			set @message = 'Complete UpdateMassTagToProteinModMap: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+			If @logLevel >= 1
+				EXEC PostLogEntry 'Error', @message, 'MasterUpdateMassTags'
+		End
+	end
+	else
+	Begin
+		set @message = 'Skipped UpdateMassTagToProteinModMap'
+		If @logLevel >= 2
+			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
+	End
+	
+	
+
 	--------------------------------------------------------------
 	-- Mark that we need to compute protein coverage (if enabled)
 	--------------------------------------------------------------
@@ -612,7 +695,7 @@ As
 	
 	
 DoMSJobs:
-	-- < N >
+	-- < O >
 	--------------------------------------------------------------
 	-- import new LC-MS analyses
 	--------------------------------------------------------------
@@ -627,13 +710,13 @@ DoMSJobs:
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin ImportNewMSAnalyses', 'MasterUpdateMassTags'
 		EXEC @result = ImportNewMSAnalyses  @entriesAdded OUTPUT, @message OUTPUT
-		set @message = 'Complete ' + @message
+		set @message = 'Complete ImportNewMSAnalyses: ' + @message
 	end
 	else
 		set @message = 'Skipped ImportNewMSAnalyses'
 	--
 	-- Note: ImportNewMSAnalyses will post an entry to the log if @entriesAdded is greater than 0
-	If @entriesAdded = 0 And @logLevel > 1
+	If @entriesAdded = 0 And @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -642,7 +725,7 @@ DoMSJobs:
 		Goto Done
 
 
-	-- < O >
+	-- < P >
 	--------------------------------------------------------------
 	-- Check for GANET update task with results ready
 	-- We don't actually load the results into the database, but we
@@ -684,7 +767,7 @@ DoMSJobs:
 		Goto Done
 
 
-	-- < P >
+	-- < Q >
 	--------------------------------------------------------------
 	-- Possibly update the general statistics
 	--------------------------------------------------------------
@@ -751,7 +834,7 @@ DoMSJobs:
 		Goto Done
 
 
-	-- < Q >
+	-- < R >
 	-------------------------------------------------------------
 	-- Synchronize the analysis description information with DMS
 	-------------------------------------------------------------
@@ -776,7 +859,7 @@ DoMSJobs:
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshAnalysisDescriptionInfo', 'MasterUpdateMassTags'
 		exec @result = RefreshAnalysisDescriptionInfo @UpdateInterval, @message OUTPUT
-		set @message = 'Complete ' + @message
+		set @message = 'Complete RefreshAnalysisDescriptionInfo: ' + @message
 	end
 	else
 		set @message = 'Skipped RefreshAnalysisDescriptionInfo'
@@ -790,7 +873,7 @@ DoMSJobs:
 		Goto Done
 
 
-	-- < R >
+	-- < S >
 	--------------------------------------------------------------
 	-- Update the Protein Coverage table (if necessary)
 	--------------------------------------------------------------
@@ -844,7 +927,7 @@ DoMSJobs:
 		Goto Done
 
 
-	-- < S >
+	-- < T >
 	--------------------------------------------------------------
 	-- Add default peak matching tasks
 	--------------------------------------------------------------

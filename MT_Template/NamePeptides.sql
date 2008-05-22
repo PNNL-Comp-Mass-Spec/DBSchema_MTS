@@ -13,6 +13,8 @@ CREATE Procedure dbo.NamePeptides
 **			Residue_End, Repeat_Count, Terminus_State) in 
 **			Mass_Tag_to_Protein_Map
 **
+**		Also updates Cleavage_State_Max in T_Mass_Tags
+**
 **		Return values: 0: success, otherwise, error code
 ** 
 **	Parameters: see below
@@ -31,6 +33,7 @@ CREATE Procedure dbo.NamePeptides
 **			08/10/2006 mem - Now populating Missed_Cleavage_Count
 **			06/04/2007 mem - Added parameters @MTIDMinimum, @MTIDMaximum, and @SkipRepeatCountCheck
 **						   - No longer storing peptide sequence or protein name in #TMPTags
+**			04/08/2008 mem - Now updating Cleavage_State_Max in T_Mass_Tags for any affected MTs
 **    
 *****************************************************/
 (
@@ -63,14 +66,16 @@ AS
 	
 	--results extracted for each row are stored in these
 	declare @peptide varchar(850)
-	declare @Mass_Tag_ID int
-	declare @Ref_ID int
+	declare @MassTagID int
+	declare @CleavageStateMax tinyint
+	declare @RefID int
 	declare @Reference varchar(128)
 	declare @RefIDCached int
 
 	set @peptide = ''
-	set @Mass_Tag_ID = -1
-	set @Ref_ID = -1
+	set @MassTagID = -1
+	set @CleavageStateMax = 0
+	set @RefID = -1
 	Set @RefIDCached = -2
 	set @Reference = ''
 	
@@ -170,22 +175,22 @@ AS
 	Set @done = @myRowCount
 	Set @LastUniqueRowID = 0
 	
-	-- Lookup the first @Ref_ID value in #TMPTags, then
+	-- Lookup the first @RefID value in #TMPTags, then
 	-- make sure @RefIDCached is different
-	SELECT TOP 1 @Ref_ID = Ref_ID
+	SELECT TOP 1 @RefID = Ref_ID
 	FROM #TMPTags
 	ORDER BY Unique_Row_ID
 	
-	If @RefIDCached = @Ref_ID
-		Set @RefIDCached = IsNull(@Ref_ID,-1) - 1
+	If @RefIDCached = @RefID
+		Set @RefIDCached = IsNull(@RefID,-1) - 1
 	
 	While @done > 0
 	Begin -- <a>
 		-- Select data about one Mass_Tag_ID/Ref_ID pair from the temporary table
   		SELECT TOP 1 
   			@LastUniqueRowID = Unique_Row_ID,
-			@Mass_Tag_ID = Mass_Tag_ID, 
-			@Ref_ID = Ref_ID
+			@MassTagID = Mass_Tag_ID, 
+			@RefID = Ref_ID
 		FROM #TMPTags
 		WHERE Unique_Row_ID > @LastUniqueRowID
 		ORDER BY Unique_Row_ID
@@ -207,22 +212,24 @@ AS
 			-- Get this peptide's sequence, the protein name, and the length of the protein sequence
 			------------------------------------------------
 			
-			If @RefIDCached = @Ref_ID
+			If @RefIDCached = @RefID
 			Begin
-				SELECT @peptide = Peptide
+				SELECT @peptide = Peptide,
+					   @CleavageStateMax = Cleavage_State_Max
 				FROM T_Mass_Tags
-				WHERE Mass_Tag_ID = @Mass_Tag_ID
+				WHERE Mass_Tag_ID = @MassTagID
 			End
 			Else
 			Begin
 				SELECT	@peptide = MT.Peptide,
+						@CleavageStateMax = MT.Cleavage_State_Max,
 						@Reference = PR.Reference,
 						@ProteinLength = IsNull(DataLength(PR.Protein_Sequence), 0),
 						@RefIDCached = MTPM.Ref_ID
 				FROM T_Mass_Tag_to_Protein_Map AS MTPM INNER JOIN T_Mass_Tags AS MT ON 
 					 MTPM.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN T_Proteins AS PR ON
 					 MTPM.Ref_ID = PR.Ref_ID
-				WHERE MTPM.Mass_Tag_ID = @Mass_Tag_ID AND MTPM.Ref_ID = @Ref_ID
+				WHERE MTPM.Mass_Tag_ID = @MassTagID AND MTPM.Ref_ID = @RefID
 			End
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -233,8 +240,8 @@ AS
 			------------------------------------------------
 			--find the start and end indexes of the peptide in the Protein
 			EXEC @myError = GetPeptideIndexes 
-					@peptide = @peptide, 
-					@Ref_ID = @Ref_ID,
+					@peptide, 
+					@RefID,
 					@startIndex = @residueStart output, 
 					@endIndex = @residueEnd output,
 					@message = @message output
@@ -251,7 +258,7 @@ AS
 
 			-- Determine cleavage state
 			EXEC @cleavageState = ComputeCleavageState
-					@Ref_ID,
+					@RefID,
 					@residueStart,
 					@residueEnd,
 					@ProteinLength
@@ -263,13 +270,13 @@ AS
 			Begin -- <c>
 				-- Both ends cleaved, so compute fragment number
 				EXEC @fragmentNumber = ComputePeptideFragmentNumber
-						@Ref_ID,
+						@RefID,
 						@residueStart,
 						@ProteinLength
 
 				-- Compute fragment span
 				EXEC @fragmentSpan = ComputeCleavagesInPeptide
-						@Ref_ID,
+						@RefID,
 						@residueStart,
 						@residueEnd,
 						@ProteinLength
@@ -280,7 +287,7 @@ AS
 
 			If @SkipRepeatCountCheck = 0
 				-- Count the number of times the peptide occurs in the protein sequence	
-				EXEC @repeatCount = CountSubstringInProtein @Ref_ID, @peptide
+				EXEC @repeatCount = CountSubstringInProtein @RefID, @peptide
 			Else
 				Set @repeatCount = Null
 			
@@ -315,18 +322,28 @@ AS
 				Repeat_Count = IsNull(@repeatCount, Repeat_Count),
 				Terminus_State = @terminusState,
 				Missed_Cleavage_Count = @missedCleavageCount
-			WHERE Mass_Tag_ID = @Mass_Tag_ID AND Ref_ID = @Ref_ID
+			WHERE Mass_Tag_ID = @MassTagID AND Ref_ID = @RefID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
 			if @myError <> 0 OR @myRowCount <> 1
 			begin
 				set @message = 'Row missing (not updated) or multiple rows updated for Mass_Tag_ID = ' 
-					+ Convert(varchar(11), @Mass_Tag_ID) + ' and Ref_ID ' + Convert(varchar(11), @Ref_ID)
+					+ Convert(varchar(11), @MassTagID) + ' and Ref_ID ' + Convert(varchar(11), @RefID)
 				set @myError = 75002
 				if @AbortOnError <> 0
 					goto done
 			end
+
+			If @CleavageState > @CleavageStateMax
+			Begin
+				-- Update the cached Cleavage_State_Max value in T_Mass_Tags
+				UPDATE T_Mass_Tags
+				SET Cleavage_State_Max = @CleavageState
+				WHERE Mass_Tag_ID = @MassTagID
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+			End
 				
 	errorCleanup:
 			set @count = @count + 1
@@ -354,7 +371,6 @@ AS
 		End -- </b>
 
 	End -- </a>
-
 
 	--------------------------------------------------
 	-- Exit

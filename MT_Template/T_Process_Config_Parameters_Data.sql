@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 37 ******/
+/****** RowCount: 39 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -27,6 +27,8 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism_DB_File_Name','MS/MS
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Parameter_File_Name','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that were performed with this parameter file')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_DB_Name','MS/MS analysis job import, Peptide hit import',1,99,'Import MS/MS jobs and their associated peptide hits from these peptide databases')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID','Peptide hit import',0,99,'Allow peptide hits that have satisfied this filter')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_MaxJobsPerBatch','MS/MS analysis job import',1,1,'Number of jobs to process in each batch of jobs whose Peptide_hit data is being imported')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_MaxPeptidesPerBatch','MS/MS analysis job import',1,1,'Number of peptides to process in each batch of jobs whose Peptide_hit data is being imported')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Thresholds','Statistics Threshold',1,99,'Comma separated list of minimum discriminant score and minimum peptide prophet value to filter on when preparing stats for T_Peptide_Load_Stats')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Update_Interval','Update Interval',1,1,'Defines how often detailed load stats are added to T_Peptide_Load_Stats when loading a large number of analysis job')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Obs_Count_Filter_ID','Info Only',1,1,'Filter ID to use when determining the MS/MS peptide observation count that passes a filter')

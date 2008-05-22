@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRGenerateCrossTabSql] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.QRGenerateCrossTabSql
+CREATE Procedure QRGenerateCrossTabSql
 /****************************************************	
 **  Desc:	Parses the values in @QuantitationIDList (separated by commas)
 **		     to construct appropriate Sql for a pivot query
@@ -44,6 +44,7 @@ CREATE Procedure dbo.QRGenerateCrossTabSql
 **			06/04/2007 mem - Increased several variables to varchar(max)
 **			06/05/2007 mem - Updated for use with the PIVOT operator to create the crosstab
 **						   - Now reporting [Observation Count] in @CrossTabSqlGroupBy
+**			01/24/2008 mem - Added column @DateStampHeaderColumn
 **
 ****************************************************/
 (
@@ -52,14 +53,15 @@ CREATE Procedure dbo.QRGenerateCrossTabSql
 	@AggregateColName varchar(128) = 'AbuAvg', 
 	@AverageAcrossColumnsEnabled tinyint = 0,			-- If 1, then record Null when missing, otherwise record '''' when missing
 	@SeparateReplicateDataIDs tinyint = 1,				-- Only applies to the generation of @QuantitationIDListSql and @CrossTabSqlGroupBy
-	@SortMode tinyint = 2,
+	@SortMode tinyint = 2,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job), 5=Dataset Acq_Time_Start
 	@SkipCrossTabSqlGeneration tinyint = 0,				-- If 1, then doesn't populate @CrossTabSqlGroupBy, which allows one to process longer lists of QID values
 	@PivotColumnsSql varchar(max) = '' Output,
 	@CrossTabSqlGroupBy varchar(max) = '' Output,
 	@QuantitationIDListSql varchar(max) = '' Output,	-- List of QID values determined using @QuantitationIDList
 	@ERValuesPresent tinyint=0 Output,
 	@ModsPresent tinyint=0 Output,
-	@QuantitationIDListClean varchar(max)='' Output	-- Reduction of @QuantitationIDList into a unique list of numbers; additionally, is not affected by @SeparateReplicateDataIDs in that @QuantitationIDListClean will still contain replicate-based QIDs if present in @QuantitationIDList
+	@QuantitationIDListClean varchar(max)='' Output,	-- Reduction of @QuantitationIDList into a unique list of numbers; additionally, is not affected by @SeparateReplicateDataIDs in that @QuantitationIDListClean will still contain replicate-based QIDs if present in @QuantitationIDList
+	@DateStampHeaderColumn tinyint=0
 )
 AS
 	Set NoCount On
@@ -101,7 +103,8 @@ AS
 			@QIDColName varchar(64),
 			@AggregateFn varchar(max),
 			@AggregateFnSum varchar(max),
-			@AggregateFnCount varchar(max)
+			@AggregateFnCount varchar(max),
+			@TimeStamp varchar(64)
 
 	Declare @FractionHighestAbuToUse decimal(9,8),
 			@NormalizeToStandardAbundances tinyint,
@@ -109,7 +112,8 @@ AS
 			@StandardAbundanceMax float,
 			@QuantitationID int,
 			@CurrentSortKey int,
-			@continue tinyint
+			@continue tinyint,
+			@DatasetDateMinimum datetime
 
 	-- Assure that the following are blank
 	Set @AggregateFn = ''
@@ -254,8 +258,9 @@ AS
 	--------------------------------------------------------------
 	--
 	CREATE TABLE #TmpQIDValues (
-			UniqueRowID int identity(1,1),
-			QID int NOT NULL)
+		UniqueRowID int identity(1,1),
+		QID int NOT NULL
+	)
 	--
 	INSERT INTO #TmpQIDValues (QID)
 	SELECT Value
@@ -315,41 +320,66 @@ AS
 			If Len(@QuantitationIDListSql) > 0
 				Set @QuantitationIDListSql = @QuantitationIDListSql + ','
 		
-			-- Lookup the job numbers that this QuantitationID corresponds to
-			Set @JobList = ''
-			
-			SELECT	@JobList = @JobList + ',' + LTrim(RTrim(Convert(varchar(19), MMD.MD_Reference_Job)))
-			FROM	T_Quantitation_Description QD INNER JOIN
-					T_Quantitation_MDIDs QMDIDs ON QD.Quantitation_ID = QMDIDs.Quantitation_ID INNER JOIN
-					T_Match_Making_Description MMD ON QMDIDs.MD_ID = MMD.MD_ID
-			WHERE	QD.Quantitation_ID = @QuantitationID
-			ORDER BY MD_Reference_Job
-			--
-			Set @JobListCount = @@RowCount
-			
-			If @JobListCount <= 0
-				-- This shouldn't happen
-				Set @JobList = 'Job 0'
+			If @DateStampHeaderColumn = 0
+			Begin
+				
+				-- Lookup the job numbers that this QuantitationID corresponds to
+				Set @JobList = ''
+				
+				SELECT	@JobList = @JobList + ',' + LTrim(RTrim(Convert(varchar(19), MMD.MD_Reference_Job)))
+				FROM	T_Quantitation_Description QD INNER JOIN
+						T_Quantitation_MDIDs QMDIDs ON QD.Quantitation_ID = QMDIDs.Quantitation_ID INNER JOIN
+						T_Match_Making_Description MMD ON QMDIDs.MD_ID = MMD.MD_ID
+				WHERE	QD.Quantitation_ID = @QuantitationID
+				ORDER BY MD_Reference_Job
+				--
+				Set @JobListCount = @@RowCount
+				
+				If @JobListCount <= 0
+					-- This shouldn't happen
+					Set @JobList = 'Job 0'
+				Else
+				Begin
+					-- Remove the leading ,
+					Set @JobList = SubString(@JobList, 2, Len(@JobList)-1)
+					
+					If @JobListCount = 1
+						-- Just one job
+						Set @JobList = 'Job ' + @JobList
+					Else
+						-- Multiple jobs
+						Set @JobList = 'Jobs ' + @JobList
+				End
+				
+				-- Make sure @JobList isn't too long
+				If Len(@JobList) > 45
+					Set @JobList = SubString(@JobList, 1, 42) + '...'
+				
+				-- Define @QIDColName, surrounding with brackets, and appending a space
+				Set @QIDColName = '[' + @JobList + ' (QID' + @QuantitationIDText + ')]'
+			End
 			Else
 			Begin
-				-- Remove the leading ,
-				Set @JobList = SubString(@JobList, 2, Len(@JobList)-1)
+				-- Generate a datestamp based on the minimum Dataset Date associated with this QID
 				
-				If @JobListCount = 1
-					-- Just one job
-					Set @JobList = 'Job ' + @JobList
-				Else
-					-- Multiple jobs
-					Set @JobList = 'Jobs ' + @JobList
+				Set @DatasetDateMinimum = Null
+				
+				SELECT @DatasetDateMinimum = MIN(ISNULL(FAD.Dataset_Acq_Time_Start, FAD.Dataset_Created_DMS))
+				FROM T_Quantitation_Description QD INNER JOIN 
+					 T_Quantitation_MDIDs QMD ON QD.Quantitation_ID = QMD.Quantitation_ID INNER JOIN 
+					 T_Match_Making_Description MMD ON QMD.MD_ID = MMD.MD_ID INNER JOIN 
+					 T_FTICR_Analysis_Description FAD ON MMD.MD_Reference_Job = FAD.Job
+				WHERE QD.Quantitation_ID = @QuantitationID
+				GROUP BY QD.Quantitation_ID
+				
+				Set @DatasetDateMinimum = IsNull(@DatasetDateMinimum, '1/1/2000')
+				Set @TimeStamp = dbo.udfTimeStampText(@DatasetDateMinimum)
+				
+				-- Define @QIDColName, surrounding with brackets, and appending a space
+				Set @QIDColName = '[' + @TimeStamp + ' (QID' + @QuantitationIDText + ')]'
+				
 			End
 			
-			-- Make sure @JobList isn't too long
-			If Len(@JobList) > 45
-				Set @JobList = SubString(@JobList, 1, 42) + '...'
-			
-			-- Define @QIDColName, surrounding with brackets, and appending a space
-			Set @QIDColName = '[' + @JobList + ' (QID' + @QuantitationIDText + ')]'
-
 			-- The PIVOT command requires the values for the IN clause to be surrounded with square brackets
 			Set @QuantitationIDListSql = @QuantitationIDListSql + '[' + @QuantitationIDText + ']'
 			
@@ -400,7 +430,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRGenerateCrossTabSql] TO [DMS_SP_User]

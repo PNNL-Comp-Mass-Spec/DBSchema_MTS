@@ -19,6 +19,7 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Peak_Area] [real] NULL,
 	[Peak_SN_Ratio] [real] NULL,
 	[Max_Obs_Area_In_Job] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0),
+	[PMT_Quality_Score_Local] [real] NULL,
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_ID] ASC

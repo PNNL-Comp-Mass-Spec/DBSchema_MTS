@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
 GO
-CREATE Procedure dbo.RefreshMSMSJobNETs
+
+CREATE Procedure RefreshMSMSJobNETs
 /****************************************************
 **
 **	Desc: 
@@ -31,6 +32,7 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **						   - Increased size of @peptideDBName from 64 to 128 characters
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			12/14/2006 mem - Updated @PostLogEntryOnSuccess to 1 and switched from using exec sp_executesql @S to Exec (@S)
+**			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **    
 *****************************************************/
 (
@@ -78,7 +80,7 @@ As
 		PeptideDBPath varchar(256) NULL
 	)
 
-	CREATE TABLE #T_Jobs_To_Update (
+	CREATE TABLE #T_Tmp_JobsToUpdateNETs (
 		Job int NOT NULL
 	)
 
@@ -176,11 +178,11 @@ As
 		Else
 		Begin -- <b>
 
-			TRUNCATE TABLE #T_Jobs_To_Update
+			TRUNCATE TABLE #T_Tmp_JobsToUpdateNETs
 			Set @jobCountToUpdate = 0
 			
 			Set @S = ''
-			Set @S = @S + 'INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + 'INSERT INTO #T_Tmp_JobsToUpdateNETs (Job)'
 			Set @S = @S + ' SELECT TAD.Job'
 			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
 			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
@@ -214,7 +216,7 @@ As
 			-- Look for jobs with undefined Scan_Time_Peak_Apex values, 
 			-- but available Scan_Time info in the peptide DB
 			Set @S = ''
-			Set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + ' INSERT INTO #T_Tmp_JobsToUpdateNETs (Job)'
 			Set @S = @S + ' SELECT LookupQ.Job'
 			Set @S = @S + ' FROM (SELECT TAD.Job,'
 			Set @S = @S +              ' COUNT(TP.Peptide_ID) AS NullScanTimeCount'
@@ -224,9 +226,9 @@ As
 			Set @S = @S +              ' GROUP BY TAD.Job'
 			Set @S = @S +      ' ) LookupQ INNER JOIN '
 			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
-			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Jobs_To_Update'
-			Set @S = @S + '   ON LookupQ.Job = #T_Jobs_To_Update.Job'
-			Set @S = @S + ' WHERE (LookupQ.NullScanTimeCount > 0) AND #T_Jobs_To_Update.Job IS NULL'
+			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Tmp_JobsToUpdateNETs'
+			Set @S = @S + '   ON LookupQ.Job = #T_Tmp_JobsToUpdateNETs.Job'
+			Set @S = @S + ' WHERE (LookupQ.NullScanTimeCount > 0) AND #T_Tmp_JobsToUpdateNETs.Job IS NULL'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND LookupQ.Job In (' + @JobFilterList + ')'
@@ -282,7 +284,7 @@ As
 				Set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID AND'
 				Set @S = @S +      ' (IsNull(TP.GANET_Obs,0) <> PepTP.GANET_Obs OR'
 				Set @S = @S +       ' IsNull(TP.Scan_Time_Peak_Apex,0) <> PepTP.Scan_Time_Peak_Apex)'
-				Set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Analysis_ID = JTU.Job'
 				If @infoOnly <> 0
 				Begin
 					Set @S = @S + ' GROUP BY JTU.Job'
@@ -333,7 +335,7 @@ As
 				Set @S = @S +      ' PepTP.Peptide_ID = PepSD.Peptide_ID AND '
 				Set @S = @S +      ' (IsNull(SD.DiscriminantScore,0) <> PepSD.DiscriminantScore OR '
 				Set @S = @S +       ' IsNull(SD.DiscriminantScoreNorm,0) <> PepSD.DiscriminantScoreNorm)'
-				Set @S = @S +      ' INNER JOIN #T_Jobs_To_Update AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Analysis_ID = JTU.Job'
 
 				If @infoOnly <> 0
 				Begin
@@ -383,7 +385,7 @@ As
 				End
 
 				Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
-				Set @S = @S + '	    #T_Jobs_To_Update AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
+				Set @S = @S + '	    #T_Tmp_JobsToUpdateNETs AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
 				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PTAD ON'
 				Set @S = @S + '	    TAD.Job = PTAD.Job'
 
@@ -453,8 +455,10 @@ Done:
 				Select 'InfoOnly: No jobs needing to be updated were found' As RefreshMSMSJobNETs_Message
 		End
 	End
-	
-	return @myError
 
+	DROP TABLE #T_Peptide_Database_List
+	DROP TABLE #T_Tmp_JobsToUpdateNETs
+			
+	return @myError
 
 GO

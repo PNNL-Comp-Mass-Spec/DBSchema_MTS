@@ -19,6 +19,7 @@ CREATE Procedure dbo.ExportGANETData
 **			12/02/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @DBName from 64 to 128 characters
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
+**			01/24/2008 mem - Now explicitly sorting by Job when querying V_MSMS_Analysis_Jobs
 **    
 *****************************************************/
 (
@@ -43,7 +44,7 @@ As
 	declare @outFileFolderPath varchar(256)
 	declare @JobStatsFilePath varchar(512)
 
-	declare @cmd varchar(512)
+	declare @cmd varchar(1024)
 	declare @result int
 		    
 	--------------------------------------------------------------
@@ -85,7 +86,7 @@ As
 	-- dump the peptides into a temporary file
 	--------------------------------------------------------------
 	-- 
-	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + ']..V_MSMS_Analysis_Jobs" queryout ' + @JobStatsFilePath + ' -c -T'
+	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + '].dbo.V_MSMS_Analysis_Jobs ORDER BY Job" queryout ' + @JobStatsFilePath + ' -c -T'
 	--
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	Set @myError = @result

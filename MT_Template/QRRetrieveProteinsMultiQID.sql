@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRRetrieveProteinsMultiQID] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.QRRetrieveProteinsMultiQID
+CREATE Procedure QRRetrieveProteinsMultiQID
 /****************************************************	
 **  Desc: Returns the proteins and associated statistics
 **		    for the given list of QuantitationID's
@@ -44,6 +44,7 @@ CREATE Procedure dbo.QRRetrieveProteinsMultiQID
 **			06/04/2007 mem - Added parameters @message and @PreviewSql; changed @Sql to varchar(max); switched to Try/Catch error handling
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
+**			01/24/2008 mem - Added @IncludeProteinDescription and @MinimumPeptidesPerProtein
 **
 ****************************************************/
 (
@@ -52,9 +53,12 @@ CREATE Procedure dbo.QRRetrieveProteinsMultiQID
 	@ReplicateCountAvgMinimum decimal(9,5) = 1,			-- Ignored if the given QuantitationID only has one MDID defined
 	@Description varchar(32)='' OUTPUT,
 	@VerboseColumnOutput tinyint = 1,					-- Set to 1 to include all of the output columns; 0 to hide the less commonly used columns
-	@SortMode tinyint=2,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@SortMode tinyint=2,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job), 5=Dataset Acq_Time_Start
 	@message varchar(512)='' output,
-	@PreviewSql tinyint=0
+	@PreviewSql tinyint=0,
+	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
+	@IncludeQID tinyint = 0,							-- Set to 1 to include the Quantitation ID in column QID, just after the Sample Name
+	@MinimumPeptidesPerProtein tinyint = 0				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
 )
 AS 
 
@@ -103,6 +107,20 @@ AS
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
+
+		--------------------------------------------------------------
+		-- Validate the inputs
+		--------------------------------------------------------------
+		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
+		Set @ReplicateCountAvgMinimum  = IsNull(@ReplicateCountAvgMinimum, 1)
+		Set @Description  = IsNull(@Description, '')
+		Set @VerboseColumnOutput  = IsNull(@VerboseColumnOutput, 1)
+		Set @SortMode  = IsNull(@SortMode, 2)
+		set @message = ''
+		Set @PreviewSql  = IsNull(@PreviewSql, 0)
+		Set @IncludeProteinDescription  = IsNull(@IncludeProteinDescription, 1)
+		Set @IncludeQID = IsNull(@IncludeQID, 0)
+		Set @MinimumPeptidesPerProtein  = IsNull(@MinimumPeptidesPerProtein, 0)
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -242,7 +260,7 @@ AS
 		Set @CurrentLocation = 'Populate @Sql'
 		
 		-- Generate the sql for the ORF columns in T_Quantitation_Results
-		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
+		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT, @IncludeProteinDescription=@IncludeProteinDescription, @IncludeQID=@IncludeQID
 		Set @Sql = @ORFColumnSql
 		
 		Set @Sql = @Sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
@@ -254,6 +272,8 @@ AS
 		Set @Sql = @Sql +      ' T_Quantitation_Description QD ON QR.Quantitation_ID = QD.Quantitation_ID LEFT OUTER JOIN'
 		Set @Sql = @Sql +      ' T_Proteins ON QR.Ref_ID = T_Proteins.Ref_ID'
 		Set @Sql = @Sql + ' WHERE QR.ReplicateCountAvg >= ' + Convert(varchar(19), @ReplicateCountAvgMinimum)
+		If @MinimumPeptidesPerProtein > 0
+			Set @Sql = @Sql + ' AND QR.MassTagCountUniqueObserved >= ' + Convert(varchar(12), @MinimumPeptidesPerProtein)
 		Set @Sql = @Sql + ' ORDER BY #TmpQIDSortInfo.SortKey, QR.Abundance_Average DESC, T_Proteins.Reference'
 		
 		Set @CurrentLocation = 'Execute @Sql'
@@ -277,7 +297,6 @@ AS
 Done:
 	--
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRRetrieveProteinsMultiQID] TO [DMS_SP_User]

@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSSICStats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.RefreshMSMSSICStats
+CREATE Procedure RefreshMSMSSICStats
 /****************************************************
 **
 **	Desc: 
@@ -23,6 +23,7 @@ CREATE Procedure dbo.RefreshMSMSSICStats
 **			12/01/2005 mem - Added brackets around @peptideDBName as needed to allow for DBs with dashes in the name
 **						   - Increased size of @peptideDBName from 64 to 128 characters
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
+**			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **    
 *****************************************************/
 (
@@ -69,7 +70,7 @@ As
 		PeptideDBPath varchar(256) NULL
 	)
 
-	CREATE TABLE #T_Jobs_To_Update (
+	CREATE TABLE #T_Tmp_JobsToRefreshSICStats (
 		Job int NOT NULL
 	)
 
@@ -167,7 +168,7 @@ As
 		Else
 		Begin -- <b>
 
-			TRUNCATE TABLE #T_Jobs_To_Update
+			TRUNCATE TABLE #T_Tmp_JobsToRefreshSICStats
 			Set @jobCountToUpdate = 0
 			
 	
@@ -175,7 +176,7 @@ As
 			-- Peak_Area values, or Peak_SN_Ratio values, yet 
 			-- available values in the peptide DB
 			Set @S = ''
-			Set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job)'
+			Set @S = @S + ' INSERT INTO #T_Tmp_JobsToRefreshSICStats (Job)'
 			Set @S = @S + ' SELECT LookupQ.Job'
 			Set @S = @S + ' FROM (SELECT TAD.Job,'
 			Set @S = @S + '   COUNT(TP.Peptide_ID) AS NullInfoCount'
@@ -186,9 +187,9 @@ As
 			Set @S = @S + '   GROUP BY TAD.Job'
 			Set @S = @S + '   ) LookupQ INNER JOIN '
 			Set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
-			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Jobs_To_Update'
-			Set @S = @S + '   ON LookupQ.Job = #T_Jobs_To_Update.Job'
-			Set @S = @S + ' WHERE (LookupQ.NullInfoCount > 0) AND #T_Jobs_To_Update.Job IS NULL'
+			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Tmp_JobsToRefreshSICStats'
+			Set @S = @S + '   ON LookupQ.Job = #T_Tmp_JobsToRefreshSICStats.Job'
+			Set @S = @S + ' WHERE (LookupQ.NullInfoCount > 0) AND #T_Tmp_JobsToRefreshSICStats.Job IS NULL'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND LookupQ.Job In (' + @JobFilterList + ')'
@@ -238,7 +239,7 @@ As
 					Set @S = @S +     ' Peak_SN_Ratio = PepTP.Peak_SN_Ratio'
 				End
 
-				Set @S = @S + ' FROM #T_Jobs_To_Update AS JTU INNER JOIN'
+				Set @S = @S + ' FROM #T_Tmp_JobsToRefreshSICStats AS JTU INNER JOIN'
 				Set @S = @S +      ' T_Peptides AS TP ON JTU.Job = TP.Analysis_ID INNER JOIN '
 				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON '
 				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND'
@@ -249,7 +250,7 @@ As
 
 				/* 
 				** Use the following to grab the data directly from T_Dataset_Stats_SIC and T_Dataset_Stats_Scans
-				Set @S = @S + ' FROM #T_Jobs_To_Update AS JTU INNER JOIN'
+				Set @S = @S + ' FROM #T_Tmp_JobsToRefreshSICStats AS JTU INNER JOIN'
 				Set @S = @S + '   T_Peptides AS TP ON JTU.Job = TP.Analysis_ID INNER JOIN '
 				Set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map AS JobMap ON '
 				Set @S = @S + '   JTU.Job = JobMap.Job INNER JOIN '
@@ -289,7 +290,7 @@ As
 					--
 					UPDATE T_Peptides
 					Set Max_Obs_Area_In_Job = 0
-					FROM T_Peptides INNER JOIN #T_Jobs_To_Update AS JTU ON
+					FROM T_Peptides INNER JOIN #T_Tmp_JobsToRefreshSICStats AS JTU ON
 						T_Peptides.Analysis_ID = JTU.Job 
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -311,7 +312,7 @@ As
 	Begin
 		---------------------------------------------------
 		-- Compute the value for Max_Obs_Area_In_Job for the given jobs
-		-- Values for jobs in #T_Jobs_To_Update will have been reset to 0 above,
+		-- Values for jobs in #T_Tmp_JobsToRefreshSICStats will have been reset to 0 above,
 		--  causing them to be processed by ComputeMaxObsAreaByJob
 		-- Note that ComputeMaxObsAreaByJob will also look for other jobs where
 		--  Max_Obs_Area_In_Job is 0 for all peptides in the job
@@ -357,8 +358,10 @@ Done:
 				Select 'InfoOnly: No jobs needing to be updated were found' As RefreshMSMSSICStats_Message
 		End
 	End
-	
-	return @myError
 
+	DROP TABLE #T_Peptide_Database_List
+	DROP TABLE #T_Tmp_JobsToRefreshSICStats
+		
+	return @myError
 
 GO

@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRDetermineSortOrder] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.QRDetermineSortOrder
+CREATE Procedure QRDetermineSortOrder
 /****************************************************	
 **  Desc:	Copies QID values from temporary table #TmpQIDValues 
 **			 to temporary table #TmpQIDSortInfo, sorting based on @SortMode
@@ -23,10 +23,11 @@ CREATE Procedure dbo.QRDetermineSortOrder
 **
 **  Auth:	mem
 **	Date:	11/28/2006
+**			01/24/2008 mem - Added mode 5: Dataset Acq_Time_Start
 **
 ****************************************************/
 (
-	@SortMode tinyint=2				-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
+	@SortMode tinyint=2				-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job), 5=Dataset Acq_Time_Start
 )
 AS
 	Set NoCount On
@@ -95,6 +96,25 @@ AS
 		Set @MatchFound = 1
 	End
 
+	If @SortMode = 5
+	Begin
+		-- Sort by Dataset Acq_Time_Start
+		INSERT INTO #TmpQIDSortInfo (QID)
+		SELECT QID
+		FROM #TmpQIDValues QV LEFT OUTER JOIN
+			 (	SELECT QD.Quantitation_ID,
+					   MIN(ISNULL(FAD.Dataset_Acq_Time_Start, FAD.Dataset_Created_DMS)) AS Dataset_Date
+				FROM T_Quantitation_Description QD INNER JOIN 
+					 T_Quantitation_MDIDs QMD ON QD.Quantitation_ID = QMD.Quantitation_ID INNER JOIN 
+					 T_Match_Making_Description MMD ON QMD.MD_ID = MMD.MD_ID INNER JOIN 
+					 T_FTICR_Analysis_Description FAD ON MMD.MD_Reference_Job = FAD.Job
+				GROUP BY QD.Quantitation_ID
+			) DateByQID ON QV.QID = DateByQID.Quantitation_ID
+		ORDER BY IsNull(DateByQID.Dataset_Date, QV.QID)
+		
+		Set @MatchFound = 1
+	End
+	
 	If @SortMode = 0 OR @MatchFound = 0
 	Begin
 		-- Sort by the order added to #TmpQIDValues
@@ -109,7 +129,6 @@ AS
 	
 Done:	
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRDetermineSortOrder] TO [DMS_SP_User]

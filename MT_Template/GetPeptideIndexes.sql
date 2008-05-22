@@ -6,30 +6,31 @@ GO
 
 CREATE PROCEDURE dbo.GetPeptideIndexes
 /****************************************************
-**		Desc: 
+**	Desc: 
 **			Given a peptide and Ref_ID for a Protein, returns the
 **			index of the first character of the peptide in the Protein
 **			and the index for the last character of the peptide
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **			@peptide - peptide to find indexes for
-**			@ref_id - Ref_ID to look up protein sequence in T_Proteins
+**			@RefID - Ref_ID to look up protein sequence in T_Proteins
 **
-**		Outputs:
+**	Outputs:
 **			@startIndex - character index for first amino acid of peptide in Protein
 **			@endIndex - character index for last amino acid of peptide in Protein
 **			@message - error message if something went wrong
 **			
-**		Auth: kal
-**		Date: 7/11/2003
-**			  9/18/2004 mem - Replaced ORF references with Protein references
+**	Auth:	kal
+**	Date:	07/11/2003
+**			09/18/2004 mem - Replaced ORF references with Protein references
+**			04/08/2008 mem - Renamed @RefID parameter to be consistent with NamePeptides
 **
 *****************************************************/
 (
 	@peptide varchar(850),
-	@ref_id int,
+	@RefID int,
 	@startIndex int = -1 output,
 	@endIndex int = -1 output,
 	@message varchar(512) = ''output
@@ -37,17 +38,21 @@ CREATE PROCEDURE dbo.GetPeptideIndexes
 AS
 	SET NOCOUNT ON
 	
-	declare @myError int
-	set @myError = 0
 	declare @myRowCount int
+	declare @myError int
+	set @myRowCount = 0
+	set @myError = 0
 	
-	--find start index, have to use patindex instead of charindex because
-	--Protein_Sequence is a text field
-	SELECT @startIndex = patindex('%' + @peptide + '%', Protein_Sequence)
-	FROM T_Proteins WHERE Ref_ID = @ref_id
+	-- Find start index
+	-- Use patindex instead of charindex because
+	-- Protein_Sequence is a text field
 	
-	--check for error, or row not found
+	SELECT @startIndex = PatIndex('%' + @peptide + '%', Protein_Sequence)
+	FROM T_Proteins 
+	WHERE Ref_ID = @RefID
+	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
 	if (@myError <> 0)
 	begin
 		set @message = 'Error in computing peptide indexes.'
@@ -57,18 +62,15 @@ AS
 	if (@myRowCount <> 1)
 	begin
 		set @myError = 76002
-		set @message = 'Invalid number of rows.  ' + ltrim(rtrim(str(@myRowCount))) +
-		' found for Protein Ref_ID ' + ltrim(rtrim(str(@ref_id))) + '.'
+		set @message = 'Invalid number of rows.  ' + LTrim(RTrim(Str(@myRowCount))) + ' found for Protein Ref_ID ' + LTrim(RTrim(Str(@RefID))) + '.'
 		goto done
 	end
 	
-	--check for peptide not found in Protein
+	-- Check for peptide not found in Protein
 	if @startIndex = 0
 	begin
 		set @myError = 76005
-		set @message = 'Peptide not found in Protein.  ' +
-			'Incompatible peptide ' + @peptide + ' and Protein Ref_ID ' +
-			ltrim(rtrim(str(@ref_id))) + '.'
+		set @message = 'Peptide not found in Protein.  ' + 'Incompatible peptide ' + @peptide + ' and Protein Ref_ID ' + LTrim(RTrim(Str(@RefID))) + '.'
 	end
 	
 	--set endIndex to the index of last amino acid, not the one following it	
