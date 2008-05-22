@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 **
 **	Auth:	mem
 **	Date:	07/01/2006
+**			01/03/2008 mem - Added additional tables
 **
 *****************************************************/
 (
@@ -78,9 +79,12 @@ AS
 	-- Define the tables to update
 	--------------------------------------------------------------
 	--
-	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Log_Entries',				'Entry_ID')
-	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Peak_Matching_History',		'PM_History_ID')
-	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_QR_Export_Job',		'jobkey')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Log_Entries',					'Entry_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_QR_Export_Job',					'jobkey')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Analysis_Job',					'Job_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Analysis_Job_Processors',		'ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Analysis_Task_Candidate_DBs',	'Entry_ID')
+
 
 	--------------------------------------------------------------
 	-- The following is used in the call to sp_executesql

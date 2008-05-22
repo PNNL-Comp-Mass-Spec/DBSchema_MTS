@@ -1,9 +1,9 @@
-/****** Object:  Table [dbo].[T_Peak_Matching_Processors] ******/
+/****** Object:  Table [dbo].[x_T_Peak_Matching_Processors] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE TABLE [dbo].[T_Peak_Matching_Processors](
+CREATE TABLE [dbo].[x_T_Peak_Matching_Processors](
 	[PM_AssignedProcessorName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Active] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Processors_Active]  DEFAULT (1),
  CONSTRAINT [PK_T_Peak_Matching_Processors] PRIMARY KEY CLUSTERED 

@@ -3,20 +3,19 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW dbo.V_Peak_Matching_Activity
+CREATE VIEW [dbo].[V_Peak_Matching_Activity]
 AS
-SELECT TOP (100) PERCENT t1.PM_AssignedProcessorName, 
-    t1.PM_ToolVersion, t1.PM_ToolQueryDate, t1.Working, 
-    t1.Server_Name, t1.MTDBName, t1.TaskID, t1.Job, 
-    t1.Output_Folder_Path, t1.PM_Start, t1.PM_Finish, 
-    t1.TasksCompleted, t1.PM_History_ID, 
-    ISNULL(dbo.T_Peak_Matching_Processors.Active, 0) 
-    AS Active_Processor
-FROM dbo.T_Peak_Matching_Activity AS t1 LEFT OUTER JOIN
-    dbo.T_Peak_Matching_Processors ON 
-    t1.PM_AssignedProcessorName = dbo.T_Peak_Matching_Processors.PM_AssignedProcessorName
-WHERE (t1.PM_Start >= GETDATE() - 90) AND 
-    (ISNULL(dbo.T_Peak_Matching_Processors.Active, 0) < 100)
-ORDER BY t1.PM_ToolQueryDate DESC
+SELECT TOP (100) PERCENT PMA.Assigned_Processor_Name, 
+    PMA.Tool_Version, PMA.Tool_Query_Date, PMA.Working, 
+    PMA.Server_Name, PMA.Database_Name, PMA.Task_ID, PMA.Job AS DMS_Job, 
+    PMA.Output_Folder_Path, PMA.Task_Start, PMA.Task_Finish, 
+    PMA.Tasks_Completed, PMA.Job_ID, 
+     ISNULL(AJP.State, 'D') AS Processor_State
+FROM dbo.T_Peak_Matching_Activity PMA LEFT OUTER JOIN
+    dbo.T_Analysis_Job_Processors AJP ON
+    PMA.Assigned_Processor_Name = AJP.Processor_Name
+WHERE (PMA.Task_Start >= GETDATE() - 90) AND 
+    (ISNULL(AJP.State, 'D') <> 'I')
+ORDER BY PMA.Tool_Query_Date DESC
 
 GO

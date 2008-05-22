@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Procedure dbo.SetPeakMatchingTaskToRestartMaster
 /****************************************************
 **
@@ -15,6 +14,7 @@ CREATE Procedure dbo.SetPeakMatchingTaskToRestartMaster
 **
 **	Auth:	mem
 **	Date:	06/14/2006
+**			01/03/2008 mem - Now using T_Analysis_Job to track assigned tasks
 **			
 *****************************************************/
 (
@@ -41,7 +41,7 @@ As
 	
 	---------------------------------------------------
 	-- Call SetPeakMatchingActivityValuesToComplete to update
-	-- T_Peak_Matching_Activity and T_Peak_Matching_History for the given task
+	-- T_Peak_Matching_Activity and T_Analysis_Job for the given task
 	---------------------------------------------------
 	--
 	Exec SetPeakMatchingActivityValuesToComplete @taskID, @serverName, @mtdbName

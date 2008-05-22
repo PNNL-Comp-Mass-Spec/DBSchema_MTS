@@ -1,89 +1,56 @@
-/****** Object:  StoredProcedure [dbo].[RequestPeakMatchingTaskMaster] ******/
+/****** Object:  StoredProcedure [dbo].[RequestMultiAlignTaskMaster] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
+CREATE PROCEDURE dbo.RequestMultiAlignTaskMaster
 /****************************************************
 **
-**	Desc:	For each database listed in T_MT_Database_List, calls the RequestPeakMatchingTask SP
+**	Desc:	For each database listed in T_MT_Database_List, calls the RequestMultiAlignTask SP
 **			If @TaskAvailable = 1, then exits the loop and exits this SP, returning 
-**			 the parameters returned by the RequestPeakMatchingTask SP.  If @TaskAvailable = 0, 
-**			 then continues calling RequestPeakMatchingTask in each database until all have been called.
+**			 the parameters returned by the RequestMultiAlignTask SP.  If @TaskAvailable = 0, 
+**			 then continues calling RequestMultiAlignTask in each database until all have been called.
 **
 **			If @serverName and @mtdbName are provided, then will check that DB first
 **			If @RestrictToMtdbName = 1, then only checks @mtdbName (on @serverName)
 **			Can limit which priority tasks to return using @PriorityMin and @PriorityMax
 **
-**			If a task is returned to the calling computer, then updates T_Peak_Matching_Activity 
+**			If a task is returned to the calling computer, then updates T_MultiAlign_Activity 
 **			with the relevant information
 **
 **	Auth:	mem
-**	Date:	06/19/2003
-**			06/20/2003
-**			07/01/2003
-**			07/22/2003
-**			07/23/2003
-**			08/14/2003
-**			08/27/2003
-**			12/29/2003 mem - Added NETValueType parameter
-**			01/06/2004 mem - Added support for Minimum_PMT_Quality_Score
-**			02/19/2004 mem - Added check to confirm that each database actually exists
-**			09/20/2004 mem - Updated to support MTDB schema version 2
-**			12/12/2004 mem - Ported to PRISM_RPT, updated to use MTS_Master, and added @serverName parameter
-**			02/05/2005 mem - Added parameters @MinimumHighDiscriminantScore, @ExperimentFilter, and @ExperimentExclusionFilter and switched from using data type decimal(9,5) to real
-**			05/20/2005 mem - Now populating T_Peak_Matching_History; also, renamed field Output_Folder_Name to Output_Folder_Path
-**			11/08/2005 mem - Added call to CheckStalledPeakMatchingProcessors
-**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
-**			12/08/2005 mem - Added parameter @toolVersion
-**						   - Now populating fields Tool_Version and Tool_Query_Date in T_Peak_Matching_Activity
-**			12/11/2005 mem - Moved call to CheckStalledPeakMatchingProcessors to the End of this SP
-**			12/22/2005 mem - Added output parameters @LimitToPMTsFromDataset and @InternalStdExplicit
-**			03/11/2006 mem - Now calling VerifyUpdateEnabled on each server to verify that updating is enabled
-**			10/09/2006 mem - Added parameter @MinimumPeptideProphetProbability
-**			02/19/2007 mem - Added Try/Catch error handling
-**			12/21/2007 mem - Updated to use T_Analysis_Task_Candidate_DBs to determine which DBs to query (however, if @restrictToMtdbName = 1, then will always check the given DB, regardless of the contents of T_Analysis_Task_Candidate_DBs)
-**			01/02/2008 mem - Now updating Last_Processing_Date in T_Analysis_Task_Candidate_DBs when a task is assigned
-**			01/04/2008 mem - Switched to using T_Analysis_Job to track assigned tasks instead of T_Peak_Matching_History
-**						   - Added parameter @infoOnly
-**			01/08/2008 mem - Updated to store the settings in T_Peak_Matching_Params_Cached if @CacheSettingsForAnalysisManager = 1
+**	Date:	01/08/2008 mem - Initial version modelled after RequestPeakMatchingTaskMaster
+**			01/15/2008 mem - Now allowing for a DMS Job List of length > 8000 when populating T_MultiAlign_Params_Cached
 **
 *****************************************************/
 (
 	@processorName varchar(128),
-	@clientPerspective tinyint = 1,					-- 0 means running SP from local server; 1 means running SP from client
 	@priorityMin tinyint = 1,						-- only tasks with a priority >= to this value will get returned
 	@priorityMax tinyint = 10,						-- only tasks with a priority <= to this value will get returned
 	@restrictToMtdbName tinyint = 0,				-- If 1, will only check the DB named mtdbName on serverName (ignored if @mtdbName or @serverName is blank)
 	@taskID int = 0 output,
 	@taskPriority tinyint = 0 output,				-- the actual priority of the task
-	@analysisJob int = 0 output,
-	@analysisResultsFolderPath varchar(256) = '' output,
+	@analysisJobList varchar(max) = '' output,
 	@serverName varchar(128) = '' output,			-- Note: if @serverName and @mtdbName are provided, then will preferentially query that mass tag database first
 	@mtdbName varchar(128)= ''  output,
-	@amtsOnly tinyint = 0 output,					-- Not used by MTDB schema version 2
-	@confirmedOnly tinyint = 0 output,
-	@lockersOnly tinyint = 0 output,				-- Not used by MTDB schema version 2
 	@LimitToPMTsFromDataset tinyint = 0 output,		-- Not used by MTDB schema version 1
-	@mtSubsetID int = 0 output,						-- Not used by MTDB schema version 2
-	@modList varchar(128) = '' output,
 	@MinimumHighNormalizedScore real=0 output,
 	@MinimumHighDiscriminantScore real=0 output,	-- Not used by MTDB schema version 1
+	@MinimumPeptideProphetProbability real=0 output,
 	@MinimumPMTQualityScore real=0 output,
 	@ExperimentFilter varchar(64)='' output,			-- Not used by MTDB schema version 1
 	@ExperimentExclusionFilter varchar(64)='' output,	-- Not used by MTDB schema version 1
 	@InternalStdExplicit varchar(255) = '' output,		-- Not used by MTDB schema version 1
 	@NETValueType tinyint=0 output,
-	@iniFilePath varchar(255) = '' output,
+	@paramFilePath varchar(255) = '' output,
 	@outputFolderPath varchar(255) = '' output,
 	@logFilePath varchar(255) = '' output,
 	@taskAvailable tinyint = 0 output,
 	@message varchar(512) = '' output,
 	@DBSchemaVersion real = 1 output,
 	@toolVersion varchar(128) = 'Unknown',
-	@MinimumPeptideProphetProbability real=0 output,
 	@AssignedJobID int = 0 output,
-	@CacheSettingsForAnalysisManager tinyint = 0,
+	@CacheSettingsForAnalysisManager tinyint = 1,
 	@infoOnly tinyint = 0
 )
 As
@@ -97,25 +64,26 @@ As
 	declare @Continue tinyint,
 			@WorkingStatus int,
 			@WorkingTaskID int,
-			@WorkingJob int,
 			@WorkingTaskStart datetime,
 			@WorkingServerName varchar(128),
 			@WorkingMTDBName varchar(128),
-			@ErrorMessage varchar(512)
-
+			@ErrorMessage varchar(512),
+			@DMSJobCount int,
+			@DMSJobMin int,
+			@DMSJobMax int
+	
 	set @WorkingStatus = 0
 	set @WorkingTaskID = 0
-	set @WorkingJob = 0
 	set @WorkingTaskStart = 0
 	set @WorkingServerName = ''
 	set @WorkingMTDBName = ''
-
+	
 	declare @SPRowCount int
 	declare @UpdateEnabled tinyint
 	declare @DBCountChecked int
 	set @SPRowCount = 0
 	set @DBCountChecked = 0
-
+	
 	declare @TransferFolderPath varchar(255)
 	declare @ResultsFolderName varchar(255)
 	declare @ParamFileStoragePath varchar(255)
@@ -133,7 +101,8 @@ As
 			@SPToExec varchar(512),
 			@PreferredServerName varchar(255),
 			@PreferredDBName varchar(255),
-			@WorkingServerPrefix varchar(255)
+			@WorkingServerPrefix varchar(255),
+			@analysisJobListCrossServer varchar(8000)
 
 	set @S = ''
 	set @CurrentServer = ''
@@ -148,20 +117,14 @@ As
 	set @infoOnly = IsNull(@infoOnly, 0)
 	
 	set @message = ''
-
+		
 	---------------------------------------------------
 	-- Clear the output arguments
 	---------------------------------------------------
 	set @taskID = 0
-	set @analysisJob = 0
-	set @analysisResultsFolderPath = ''
+	set @analysisJobList = ''
 	set @serverName = ''
 	set @mtdbName = ''
-	set @amtsOnly = 0
-	set @confirmedOnly = 0
-	set @lockersOnly = 0
-	set @mtsubsetID = 0
-	set @modList = ''
 	set @MinimumHighNormalizedScore = 0
 	set @MinimumHighDiscriminantScore = 0
 	set @MinimumPeptideProphetProbability = 0
@@ -171,7 +134,7 @@ As
 	set @LimitToPMTsFromDataset = 0
 	set @InternalStdExplicit = ''
 	set @NETValueType = 0
-	set @iniFilePath = ''
+	set @paramFilePath = ''
 	set @outputFolderPath = ''
 	set @logFilePath = ''
 	set @taskAvailable = 0
@@ -182,8 +145,8 @@ As
 	Set @CurrentLocation = 'Start'
 
 	Declare @ToolID int
-	Set @ToolID = 1
-
+	Set @ToolID = 2
+	
 	Begin Try
 
 		Set @CurrentLocation = 'Create temporary tables'
@@ -195,10 +158,10 @@ As
 			Entry_ID int identity(1,1),
 			Server_Name varchar(128),
 			Database_Name varchar(128)
-		)
+		) 
 
 		CREATE CLUSTERED INDEX #IX_XMTDBNames_Entry_ID ON #XMTDBNames([Entry_ID]) ON [PRIMARY]
-		
+
 		---------------------------------------------------
 		-- Populate the temporary table with list of mass tag
 		-- databases that have tasks available according to T_Analysis_Task_Candidate_DBs
@@ -265,7 +228,7 @@ As
 				-- Query T_Process_Step_Control on the given server
 				Set @S = ''
 				Set @S = @S + ' exec ' + @WorkingServerPrefix + 'MT_Main.dbo.VerifyUpdateEnabled ''MS_Peak_Matching'','
-				Set @S = @S + ' ''RequestPeakMatchingTaskMaster'', @AllowPausing = 0, @PostLogEntryIfDisabled = 0,'
+				Set @S = @S + ' ''RequestMultiAlignTaskMaster'', @AllowPausing = 0, @PostLogEntryIfDisabled = 0,'
 				Set @S = @S + ' @MinimumHealthUpdateIntervalSeconds = 300, @UpdateEnabled = @UpdateEnabled output'
 
 				Set @UpdateEnabled = 1
@@ -277,7 +240,7 @@ As
 					WHERE Server_Name = @CurrentServer
 					
 					If @infoOnly <> 0
-						Print 'Note: Peak Matching is disabled on server "' + @CurrentServer + '"'
+						Print 'Note: MultiAlign processing is disabled on server "' + @CurrentServer + '"'
 				End
 			End
 		End
@@ -291,7 +254,7 @@ As
 		Set @toolVersion = IsNull(@toolVersion, 'Unknown')
 		If @toolVersion = 'Unknown'
 		Begin
-			Set @message = 'This version of Viper is out of date for automated peak matching; no tasks will be returned'
+			Set @message = 'This version of MultiAlign is out of date for automated analysis; no tasks will be returned'
 			Set @toolVersion = @toolVersion + ' - Unsupported version'
 			set @Continue = 0
 		End
@@ -300,8 +263,8 @@ As
 
 		---------------------------------------------------
 		-- Step through the mass tag database list and call
-		-- RequestPeakMatchingTask in each one (if it exists)
-		-- If a peak matching task is found, then exit the
+		-- RequestMultiAlignTask in each one (if it exists)
+		-- If a MultiAlign task is found, then exit the
 		-- While loop
 		---------------------------------------------------
 
@@ -356,7 +319,7 @@ As
 			If @myRowCount > 0
 			Begin -- <b>
 			
-				Set @CurrentLocation = 'Prepare for call to RequestPeakMatchingTask on ' + @CurrentMTDB
+				Set @CurrentLocation = 'Prepare for call to RequestMultiAlignTask on ' + @CurrentMTDB
 				
 				-- Construct the working server prefix
 				If Lower(@@ServerName) = Lower(@CurrentServer)
@@ -381,15 +344,15 @@ As
 				
 					Begin Try
 						
-						Set @CurrentLocation = 'Look for RequestPeakMatchingTask in ' + @DBPath + '.dbo.sysobjects'
+						Set @CurrentLocation = 'Look for RequestMultiAlignTask in ' + @DBPath + '.dbo.sysobjects'
 						
-						-- Check if the RequestPeakMatchingTask SP exists for @CurrentMTDB
+						-- Check if the RequestMultiAlignTask SP exists for @CurrentMTDB
 
 						Set @SPRowCount = 0
 						Set @S = ''				
 						Set @S = @S + ' SELECT @SPRowCount = COUNT(*)'
 						Set @S = @S + ' FROM ' + @DBPath + '.dbo.sysobjects'
-						Set @S = @S + ' WHERE name = ''RequestPeakMatchingTask'''
+						Set @S = @S + ' WHERE name = ''RequestMultiAlignTask'''
 									
 						EXEC sp_executesql @S, N'@SPRowCount int OUTPUT', @SPRowCount OUTPUT
 
@@ -405,63 +368,29 @@ As
 							Set @DBSchemaVersion = 1
 							Exec @myError = @SPToExec @DBSchemaVersion output
 							
-							-- Call RequestPeakMatchingTask in @CurrentMTDB
-							Set @SPToExec = @DBPath + '.dbo.RequestPeakMatchingTask'
+							-- Call RequestMultiAlignTask in @CurrentMTDB
+							Set @SPToExec = @DBPath + '.dbo.RequestMultiAlignTask'
 
 							Set @CurrentLocation = 'Call ' + @SPToExec
 
 							Set @TaskAvailable = 0
 							If @DBSchemaVersion < 2
 							Begin
-								-- The following are not used in schema version 1
-								Set @MinimumHighDiscriminantScore = 0
-								Set @MinimumPeptideProphetProbability = 0
-								Set @ExperimentFilter = ''
-								Set @ExperimentExclusionFilter = ''
-								Set @InternalStdExplicit = ''
-								Set @LimitToPMTsFromDataset = 0
-								
-								Exec @myError = @SPToExec	@ProcessorName,
-															@ClientPerspective, 
-															@PriorityMin, 
-															@PriorityMax,
-															@taskID = @taskID output, 
-															@taskPriority = @taskPriority output,
-															@analysisJob = @analysisJob output,
-															@analysisResultsFolderPath = @analysisResultsFolderPath output,
-															@mtdbName = @mtdbName output,
-															@amtsOnly = @amtsOnly  output,
-															@confirmedOnly = @confirmedOnly output,
-															@lockersOnly = @lockersOnly output,
-															@mtsubsetID = @mtsubsetID output,
-															@modList = @modList output,
-															@MinimumHighNormalizedScore = @MinimumHighNormalizedScore output,
-															@MinimumPMTQualityScore = @MinimumPMTQualityScore output,
-															@NETValueType = @NETValueType output,
-															@iniFilePath = @iniFilePath output,
-															@outputFolderPath = @outputFolderPath output,
-															@logFilePath = @logFilePath output,
-															@TaskAvailable = @TaskAvailable output,
-															@message = @message output
+								-- MultiAlign tasks are not supported on DBSchema Version 1; skip this DB
+								Set @TaskAvailable = 0
 							End
 							Else
 							Begin
-								-- The following are not used in schema version 2
-								Set @amtsOnly = 0
-								Set @lockersOnly = 0
-								Set @mtsubsetID = 0
+								-- Note that we can only use varchar(8000) variables when calling remote stored procedures; varchar(max) variables are not allowed
+								set @analysisJobListCrossServer = ''
 								
 								Exec @myError = @SPToExec	@ProcessorName,
-															@ClientPerspective, 
 															@PriorityMin, 
 															@PriorityMax,
 															@taskID = @taskID output, 
 															@taskPriority = @taskPriority output,
-															@analysisJob = @analysisJob output,
-															@analysisResultsFolderPath = @analysisResultsFolderPath output,
+															@analysisJobList = @analysisJobListCrossServer output,
 															@mtdbName = @mtdbName output,
-															@confirmedOnly = @confirmedOnly output,
-															@modList = @modList output,
 															@MinimumHighNormalizedScore = @MinimumHighNormalizedScore output,
 															@MinimumHighDiscriminantScore = @MinimumHighDiscriminantScore output,
 															@MinimumPeptideProphetProbability = @MinimumPeptideProphetProbability output,
@@ -471,7 +400,7 @@ As
 															@LimitToPMTsFromDataset = @LimitToPMTsFromDataset output,
 															@InternalStdExplicit = @InternalStdExplicit output,
 															@NETValueType = @NETValueType output,
-															@iniFilePath = @iniFilePath output,
+															@paramFilePath = @paramFilePath output,
 															@outputFolderPath = @outputFolderPath output,
 															@logFilePath = @logFilePath output,
 															@TaskAvailable = @TaskAvailable output,
@@ -491,7 +420,7 @@ As
 							-- If a task was found, and no error occurred, then set @Continue = 0 so that the While loop exits
 							If @TaskAvailable = 1 And @myError = 0
 							Begin -- <e>
-							
+
 								If @infoOnly <> 0
 									Goto Done
 
@@ -511,10 +440,73 @@ As
 									  Tool_ID = @ToolID
 								--
 								SELECT @myError = @@error, @myRowCount = @@rowcount
+								
+								
+								Set @CurrentLocation = 'Task found; populate #TmpMultiAlignJobList'
 
+
+								-- Create a temporary table to hold the Job Numbers in @analysisJobList
+								CREATE TABLE #TmpMultiAlignJobList (
+									Job int
+								)
+								
+								-- Populate #TmpMultiAlignJobList
+								Set @analysisJobListCrossServer = IsNull(@analysisJobListCrossServer, '')
+								
+								If Len(@analysisJobListCrossServer) < 7950
+								Begin
+									Set @analysisJobList = @analysisJobListCrossServer
+									
+									-- Split @analysisJobList on a comma to populate #TmpMultiAlignJobList
+									If Len(@analysisJobList) > 0
+									Begin
+										INSERT INTO #TmpMultiAlignJobList (Job)
+										SELECT Value
+										FROM dbo.udfParseDelimitedIntegerList(@analysisJobList, ',')
+										--
+										SELECT @myError = @@error, @myRowCount = @@rowcount
+									End
+
+								End
+								Else
+								Begin
+									-- @analysisJobListCrossServer is > 7950 characters long, so we possibly have a list of jobs over 8000 characters in length
+									-- Poll T_MultiAlign_Task_Jobs directly in the source database to obtain the list of jobs
+										
+									Set @S = ''
+									Set @S = @S + ' INSERT INTO #TmpMultiAlignJobList (Job) '
+									Set @S = @S + ' SELECT Job '
+									Set @S = @S + ' FROM ' + @DBPath + '.dbo.T_MultiAlign_Task_Jobs'
+									Set @S = @S + ' WHERE Task_ID = ' + Convert(varchar(12), @taskID)
+
+									EXEC sp_executesql @S
+									
+									-- Now update @analysisJobList (which is varchar(max)) using #TmpMultiAlignJobList
+
+									Set @analysisJobList = Null
+									
+									SELECT @analysisJobList = COALESCE(@analysisJobList + ',', '') + Convert(varchar(12), Job)
+									FROM #TmpMultiAlignJobList
+									ORDER BY Job						
+									--
+									SELECT @myError = @@error, @myRowCount = @@rowcount
+
+								End
+
+
+								-- Parse the Jobs in #TmpMultiAlignJobList
+								Set @DMSJobCount = 0
+								Set @DMSJobMin = 0
+								Set @DMSJobMax = 0
+
+								SELECT @DMSJobCount = COUNT(*), 
+										@DMSJobMin = MIN(Job), 
+										@DMSJobMax = MAX(Job)
+								FROM #TmpMultiAlignJobList
+										
 
 								Set @CurrentLocation = 'Task found; add a new entry to T_Analysis_Job'
-								
+
 								-- Add a new entry to T_Analysis_Job
 								-- Cache the identity value assigned to the new row
 								INSERT INTO T_Analysis_Job (
@@ -526,18 +518,17 @@ As
 								VALUES (@TimeStarted, @ToolID, '', 2,
 										@TaskID, @serverName, @mtdbName,
 										@ProcessorName, @toolVersion, 
-										1, @analysisJob, @analysisJob,
+										@DMSJobCount, @DMSJobMin, @DMSJobMax,
 										@outputFolderPath)
 								--
 								SELECT @myError = @@error, @myRowCount = @@rowcount, @AssignedJobID = SCOPE_IDENTITY()
 
 
-
-								-- Update status of Processor in T_Peak_Matching_Activity
+								-- Update status of Processor in T_MultiAlign_Activity
 								-- First make sure an entry exists for @ProcessorName
-								IF NOT EXISTS (SELECT Assigned_Processor_Name FROM T_Peak_Matching_Activity WHERE Assigned_Processor_Name = @ProcessorName)
+								IF NOT EXISTS (SELECT Assigned_Processor_Name FROM T_MultiAlign_Activity WHERE Assigned_Processor_Name = @ProcessorName)
 								Begin
-									INSERT INTO T_Peak_Matching_Activity (
+									INSERT INTO T_MultiAlign_Activity (
 											Assigned_Processor_Name, Tool_Version, Tool_Query_Date)
 									SELECT @ProcessorName, @toolVersion, GetDate()
 									--
@@ -545,17 +536,16 @@ As
 								End
 								Else
 									Set @myError = 0
-						
-								
+																
 								If @myError = 0
 								Begin -- <f>
-									-- Next, lookup the current status for @ProcessorName in T_Peak_Matching_Activity
+									-- Next, lookup the current status for @ProcessorName in T_MultiAlign_Activity
 									-- If the status is 1, then the processor didn't finish processing the
 									--  previous analysis; in this case, post an error to the log
 									SELECT	@WorkingStatus = Working, @WorkingServerName = Server_Name,
 											@WorkingMTDBName = Database_Name, @WorkingTaskID = Task_ID, 
-											@WorkingJob = Job, @WorkingTaskStart = Task_Start
-									FROM T_Peak_Matching_Activity
+											@WorkingTaskStart = Task_Start
+									FROM T_MultiAlign_Activity
 									WHERE Assigned_Processor_Name = @ProcessorName
 									--
 									SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -564,62 +554,63 @@ As
 									Begin
 										-- Post an error message to T_Log_Entries stating that the given processor requested
 										-- a new task, but it had failed to mark an old one as processed
-										Set @ErrorMessage = 'Processor ' + @ProcessorName + ' requested a new peak matching task, but it had failed to mark the previous one as completed; previous task info: '
+										Set @ErrorMessage = 'Processor ' + @ProcessorName + ' requested a new analysis task, but it had failed to mark the previous one as completed; previous task info: '
 										Set @ErrorMessage = @ErrorMessage + 'Server = ' + @WorkingServerName
 										Set @ErrorMessage = @ErrorMessage + '; DB = ' + @WorkingMTDBName 
 										Set @ErrorMessage = @ErrorMessage + '; TaskID = ' + convert(varchar(19), @WorkingTaskID)
-										Set @ErrorMessage = @ErrorMessage + '; Job = ' + convert(varchar(19), @WorkingJob)
 										Set @ErrorMessage = @ErrorMessage + '; ProcessingStartTime = ' + convert(varchar(19), @WorkingTaskStart)
 										
-										Exec PostLogEntry 'Error', @ErrorMessage, 'RequestPeakMatchingTaskMaster'
+										Exec PostLogEntry 'Error', @ErrorMessage, 'RequestMultiAlignTaskMaster'
 									End
 									
 									-- Finally, update the status for @ProcessorName to have Working = 1
-									-- Record the details of the current peak matching task
-									UPDATE T_Peak_Matching_Activity
+									-- Record the details of the current MultiAlign task
+									UPDATE T_MultiAlign_Activity
 									SET Tool_Version = @toolVersion,
 										Tool_Query_Date = GetDate(),
 										Working = 1,
 										Server_Name = @serverName,
 										Database_Name = @mtdbName,
 										Task_ID = @TaskID,
-										Job = @analysisJob,
 										Output_Folder_Path = @outputFolderPath,
 										Task_Start = @TimeStarted,
 										Task_Finish = NULL,
 										Job_ID = @AssignedJobID
 									WHERE Assigned_Processor_Name = @ProcessorName
+
 									--
 									SELECT @myError = @@error, @myRowCount = @@rowcount
 								End -- </f>
 								
-								Set @CurrentLocation = 'Call UpdateCachedAnalysisTasksOneTool from RequestPeakMatchingTaskMaster'
+								Set @CurrentLocation = 'Call UpdateCachedAnalysisTasksOneTool from RequestMultiAlignTaskMaster'
 								
 								-- Call UpdateCachedAnalysisTasksOneTool for this DB
 								Exec @myError = UpdateCachedAnalysisTasksOneTool @ToolID, @serverName, @mtdbName, @message = @message output
 								
 								If @CacheSettingsForAnalysisManager <> 0
 								Begin
-									-- Make sure @AssignedJobID is not already in T_Peak_Matching_Params_Cached
-									DELETE FROM T_Peak_Matching_Params_Cached
+									-- Make sure @AssignedJobID is not already in T_MultiAlign_Params_Cached
+									DELETE FROM T_MultiAlign_Params_Cached
 									WHERE Job_ID = @AssignedJobID
 									--
 									SELECT @myError = @@error, @myRowCount = @@rowcount
+
 
 									-- Split @outputFolderPath into @TransferFolderPath and @ResultsFolderName
 									Exec @myError = SplitPath @outputFolderPath, @TransferFolderPath output, @ResultsFolderName output
 									
 									-- Split @paramFilePath into @ParamFileName and @ParamFileStoragePath
-									Exec @myError = SplitPath @iniFilePath, @ParamFileStoragePath output, @ParamFileName output
+									Exec @myError = SplitPath @paramFilePath, @ParamFileStoragePath output, @ParamFileName output
+
 									
-									-- Cache the parameters in T_Peak_Matching_Params_Cached
-									INSERT INTO T_Peak_Matching_Params_Cached (
+									-- Cache the parameters in T_MultiAlign_Params_Cached
+									INSERT INTO T_MultiAlign_Params_Cached (
 											Job_ID,
 											Task_ID,
 											Task_Server,
 											Task_Database,
 											Priority,
-											DMS_Job,
+											DMS_Job_List,
 											Minimum_High_Normalized_Score,
 											Minimum_High_Discriminant_Score,
 											Minimum_Peptide_Prophet_Probability,
@@ -640,7 +631,7 @@ As
 											@serverName, 
 											@mtdbName,
 											@taskPriority,
-											@analysisJob,
+											@analysisJobList,
 											@MinimumHighNormalizedScore,
 											@MinimumHighDiscriminantScore,
 											@MinimumPeptideProphetProbability,
@@ -656,7 +647,7 @@ As
 											@ResultsFolderName
 										)
 								End
-																
+								
 							End -- </e1>
 							Else 
 							Begin -- <e>
@@ -670,7 +661,7 @@ As
 					End Try
 					Begin Catch
 						-- Error caught; log the error but continue processing
-						Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestPeakMatchingTaskMaster')
+						Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestMultiAlignTaskMaster')
 						exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 												@ErrorNum = @myError output, @message = @message output,
 								                @duplicateEntryHoldoffHours = 1
@@ -700,23 +691,23 @@ As
 		If @TaskAvailable = 0 And @myError = 0
 		Begin
 			-- No available tasks were found
-			-- Update the Viper tool version listed in T_Peak_Matching_Activity
+			-- Update the MultiAlign tool version listed in T_MultiAlign_Activity
 			-- if it doesn't match @toolVersion
-			UPDATE T_Peak_Matching_Activity
+			UPDATE T_MultiAlign_Activity
 			SET Tool_Version = @toolVersion, Tool_Query_Date = GetDate()
 			WHERE Assigned_Processor_Name = @ProcessorName
 		End
 
 		---------------------------------------------------
-		-- Call CheckStalledPeakMatchingProcessors to look for stalled processors
+		-- Call CheckStalledMultiAlignProcessors to look for stalled processors
 		---------------------------------------------------
 		
-		Exec CheckStalledPeakMatchingProcessors 48
+		Exec CheckStalledMultiAlignProcessors 48
 
 	End Try
 	Begin Catch
 		-- Error caught; log the error then abort processing
-		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestPeakMatchingTaskMaster')
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestMultiAlignTaskMaster')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 								@ErrorNum = @myError output, @message = @message output,
 								@duplicateEntryHoldoffHours = 1
@@ -730,6 +721,7 @@ As
 Done:
 	Return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[RequestPeakMatchingTaskMaster] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTaskMaster] TO [DMS_SP_User]
 GO

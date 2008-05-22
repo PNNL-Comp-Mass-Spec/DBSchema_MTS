@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.LocalErrorHandler
 **
 **	Auth:	mem
 **	Date:	11/30/2006
+**			01/03/2008 mem - Added parameter @duplicateEntryHoldoffHours
 **    
 *****************************************************/
 (
@@ -25,7 +26,8 @@ CREATE PROCEDURE dbo.LocalErrorHandler
 	@LogWarningErrorList varchar(512) = '1205',	-- Comma separated list of errors that should be treated as warnings if logging to T_Log_Entries
 	@ErrorSeverity int=0 output,
 	@ErrorNum int=0 output,
-	@message varchar(512)='' output				-- Populated with a description of the error
+	@message varchar(512)='' output,			-- Populated with a description of the error
+	@duplicateEntryHoldoffHours int = 0			-- Set this to a value greater than 0 to prevent duplicate entries being posted within the given number of hours
 )
 As
 	Set NoCount On
@@ -99,7 +101,7 @@ As
 				Set @LogErrorType = 'Error'
 				
 			Set @CurrentLocation = 'Calling PostLogEntry'
-			execute PostLogEntry @LogErrorType, @message, @CallingProcName
+			execute PostLogEntry @LogErrorType, @message, @CallingProcName, @duplicateEntryHoldoffHours
 		End
 
 		If @DisplayError <> 0

@@ -1,28 +1,19 @@
-/****** Object:  StoredProcedure [dbo].[SetPeakMatchingTaskCompleteMaster] ******/
+/****** Object:  StoredProcedure [dbo].[SetMultiAlignTaskCompleteMaster] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.SetPeakMatchingTaskCompleteMaster
+CREATE PROCEDURE dbo.SetMultiAlignTaskCompleteMaster
 /****************************************************
 **
-**	Desc: Calls SetPeakMatchingTaskComplete in the specified database on the specified server
+**	Desc: Calls SetMultiAlignTaskComplete in the specified database on the specified server
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	05/20/2003   
-**			07/01/2003
-**			08/13/2003
-**			09/19/2003
-**			12/12/2004 mem - Ported to PRISM_RPT and added @serverName parameter
-**			01/03/2005 mem - No longer posting error messages to this DB since they're already posted in the working DB
-**			05/20/2005 mem - Now updating T_Peak_Matching_History with the completion time
-**			11/23/2005 mem - Added brackets around @mtdbname as needed to allow for DBs with dashes in the name
-**			06/14/2006 mem - Added call to SetPeakMatchingActivityValuesToComplete and updated call to SetPeakMatchingTaskComplete to not pass parameter @mtdbName
-**			01/04/2008 mem - Now using T_Analysis_Job to track assigned tasks
+**	Date:	01/04/2008
 **
 *****************************************************/
 (
@@ -31,9 +22,9 @@ CREATE PROCEDURE dbo.SetPeakMatchingTaskCompleteMaster
 	@mtdbName varchar (128),
 	@errorCode int = 0,
 	@warningCode int = 0,
-	@MDID int = NULL,						-- MD_ID value in T_Match_Making_Description, if any
+	@AnalysisResultsID int = 0,
 	@message varchar(512) output,
-	@JobID int = NULL,						-- Job number in T_Analysis_Job
+	@JobID int = NULL,						-- Job number in T_Analysis_Job; if provided, then this procedure verifies that @taskID, @serverName, and @mtdbName are correct for the given Job
 	@JobStateID int = 3
 )
 As
@@ -53,7 +44,7 @@ As
 	declare @WorkingServerPrefix varchar(128)
 	
 	Set @JobID = IsNull(@JobID, 0)
-
+	
 	If @JobID <> 0
 	Begin
 		-- Make sure @taskID, @serverName, and @mtdbName are correct for job @JobID
@@ -62,15 +53,15 @@ As
 	End
 	
 	---------------------------------------------------
-	-- Call SetPeakMatchingActivityValuesToComplete to update
-	-- T_Peak_Matching_Activity and T_Analysis_Job for the given task
+	-- Call SetMultiAlignActivityValuesToComplete to update
+	-- T_MultiAlign_Activity and T_Analysis_Job for the given task
 	---------------------------------------------------
 	--
-	Exec SetPeakMatchingActivityValuesToComplete @taskID, @serverName, @mtdbName, @JobID, @JobStateID
+	Exec SetMultiAlignActivityValuesToComplete @taskID, @serverName, @mtdbName, @JobID, @JobStateID
 
 
 	---------------------------------------------------
-	-- Call SetPeakMatchingTaskComplete in the given database
+	-- Call SetMultiAlignTaskComplete in the given database
 	---------------------------------------------------
 	
 	-- Construct the working server prefix
@@ -79,12 +70,12 @@ As
 	Else
 		Set @WorkingServerPrefix = @serverName + '.'
 	
-	set @SPToExec = @WorkingServerPrefix + '[' + @mtdbname + '].dbo.SetPeakMatchingTaskComplete'
+	set @SPToExec = @WorkingServerPrefix + '[' + @mtdbname + '].dbo.SetMultiAlignTaskComplete'
 
 	exec @myError = @SPToExec	@taskID, 
 								@errorCode, 
 								@warningCode, 
-								@MDID,
+								@AnalysisResultsID,
 								@message = @message Output
 
 	---------------------------------------------------
@@ -94,6 +85,4 @@ As
 Done:
 	return @myError
 
-GO
-GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskCompleteMaster] TO [DMS_SP_User]
 GO

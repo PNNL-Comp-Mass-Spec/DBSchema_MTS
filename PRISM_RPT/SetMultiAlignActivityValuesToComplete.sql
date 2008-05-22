@@ -1,21 +1,20 @@
-/****** Object:  StoredProcedure [dbo].[SetPeakMatchingActivityValuesToComplete] ******/
+/****** Object:  StoredProcedure [dbo].[SetMultiAlignActivityValuesToComplete] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
+CREATE Procedure dbo.SetMultiAlignActivityValuesToComplete
 /****************************************************
 **
-**	Desc: Updates T_Peak_Matching_Activity and T_Analysis_Job for the given task
+**	Desc: Updates T_MultiAlign_Activity and T_Analysis_Job for the given task
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	06/14/2006
-**			01/03/2008 mem - Now using T_Analysis_Job to track assigned tasks
+**	Date:	01/03/2008
 **			
 *****************************************************/
 (
@@ -48,7 +47,7 @@ As
 	Begin
 		-- Look for @JobID in T_Analysis_Job to determine the Processor Name
 		SELECT TOP 1 @AssignedProcessor = Assigned_Processor_Name
-		FROM T_Peak_Matching_Activity
+		FROM T_MultiAlign_Activity
 		WHERE Job_ID = @JobID
 		ORDER BY Task_Start DESC
 		--
@@ -56,8 +55,8 @@ As
 		
 		If @myRowCount = 0
 		Begin
-			Set @message = 'No match found in T_Peak_Matching_Activity for Job ID ' + Convert(varchar(12), @JobID) + ' (Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + '); unable to mark the task as "Complete"'
-			Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
+			Set @message = 'No match found in T_MultiAlign_Activity for Job ID ' + Convert(varchar(12), @JobID) + ' (Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + '); unable to mark the task as "Complete"'
+			Exec PostLogEntry 'Error', @message, 'SetMultiAlignActivityValuesToComplete'
 			Goto Done
 		End
 
@@ -70,7 +69,7 @@ As
 		---------------------------------------------------
 
 		SELECT TOP 1 @AssignedProcessor = Assigned_Processor_Name
-		FROM T_Peak_Matching_Activity
+		FROM T_MultiAlign_Activity
 		WHERE Server_Name = @serverName AND Database_Name = @mtdbName AND Task_ID = @taskID
 		ORDER BY Task_Start DESC
 		--
@@ -78,30 +77,29 @@ As
 		
 		If @myRowCount = 0
 		Begin
-			Set @message = 'No match found in T_Peak_Matching_Activity for Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + '; unable to mark the task as "Complete"'
-			Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
+			Set @message = 'No match found in T_MultiAlign_Activity for Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + '; unable to mark the task as "Complete"'
+			Exec PostLogEntry 'Error', @message, 'SetMultiAlignActivityValuesToComplete'
 			Goto Done
 		End
-			
-
+		
 		---------------------------------------------------
 		-- Lookup the cached Job ID
 		---------------------------------------------------
 		
 		Set @JobID = 0
 		SELECT	@JobID = Job_ID
-		FROM T_Peak_Matching_Activity
+		FROM T_MultiAlign_Activity
 		WHERE Assigned_Processor_Name = @AssignedProcessor
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 	
 	---------------------------------------------------
-	-- Update T_Peak_Matching_Activity with the current time
+	-- Update T_MultiAlign_Activity with the current time
 	-- Set Working = 0 and increment TasksCompleted
 	---------------------------------------------------
 
-	UPDATE T_Peak_Matching_Activity
+	UPDATE T_MultiAlign_Activity
 	SET Working = 0, Task_Finish = @TimeCompleted,
 		Tasks_Completed = Tasks_Completed + 1
 	WHERE Assigned_Processor_Name = @AssignedProcessor
@@ -132,6 +130,4 @@ Done:
 	return @myError
 
 
-GO
-GRANT EXECUTE ON [dbo].[SetPeakMatchingActivityValuesToComplete] TO [DMS_SP_User]
 GO
