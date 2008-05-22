@@ -14,12 +14,14 @@ CREATE PROCEDURE dbo.FixDuplicatePeptideToProteinEntries
 **
 **	Auth:	mem
 **	Date:	02/27/2007
+**			04/23/2008 mem - Added @PreviewPeptideRowsToDeleteOrUpdate
 **
 *****************************************************/
 (
 	@DeleteExtraProteins tinyint = 1,
 	@infoOnly tinyint = 0,
-	@PreviewDuplicateProteins tinyint = 0,					-- Only used if @infoOnly <> 0
+	@PreviewDuplicateProteins tinyint = 0,						-- Only used if @infoOnly <> 0
+	@PreviewPeptideRowsToDeleteOrUpdate tinyint = 0,			-- Only used if @infoOnly <> 0
 	@PeptideToProteinMapEntriesUpdated int = 0 output,
 	@PeptideToProteinMapEntriesDeleted int = 0 output,
 	@ProteinEntriesDeleted int = 0 output,
@@ -49,6 +51,7 @@ As
 		set @DeleteExtraProteins = IsNull(@DeleteExtraProteins, 0)
 		set @infoOnly = IsNull(@infoOnly, 0)
 		set @PreviewDuplicateProteins = IsNull(@PreviewDuplicateProteins, 0)
+		set @PreviewPeptideRowsToDeleteOrUpdate = IsNull(@PreviewPeptideRowsToDeleteOrUpdate, 0)
 		set @message = ''
 		set @PeptideToProteinMapEntriesUpdated = 0
 		set @PeptideToProteinMapEntriesDeleted = 0
@@ -56,7 +59,7 @@ As
 
 		
 		---------------------------------------------------
-		-- Create a temporary tables
+		-- Create some temporary tables
 		---------------------------------------------------
 		--
 		CREATE TABLE #Tmp_Ref_ID_Updates (
@@ -66,6 +69,15 @@ As
 
 		CREATE CLUSTERED INDEX #IX_Tmp_Ref_ID_Updates_Ref_ID ON #Tmp_Ref_ID_Updates (Ref_ID)
 
+
+		CREATE TABLE #Tmp_EntriesToDelete (
+			Peptide_ID int NOT NULL,
+			Ref_ID int NOT NULL
+		)
+		
+		CREATE CLUSTERED INDEX #IX_Tmp_EntriesToDelete_Peptide_ID ON #Tmp_EntriesToDelete (Peptide_ID)
+		
+		
 		---------------------------------------------------
 		-- Populate #Tmp_Ref_ID_Updates
 		---------------------------------------------------
@@ -134,17 +146,58 @@ As
 						) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
 						
 
+				If @PreviewPeptideRowsToDeleteOrUpdate <> 0
+				Begin
+					SELECT Row_Number() OVER (ORDER BY PPM.Peptide_ID, PPM.Ref_ID) AS Entry_to_Delete,
+					       PPM.*
+					FROM T_Peptide_to_Protein_Map PPM INNER JOIN
+							(	SELECT PPM.Peptide_ID, PPM.Ref_ID
+								FROM T_Peptide_to_Protein_Map PPM INNER JOIN
+									#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+									T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
+										PPM.Peptide_ID = PPM_Master.Peptide_ID
+							) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
+					ORDER BY PPM.Peptide_ID, PPM.Ref_ID
+					
+					INSERT INTO #Tmp_EntriesToDelete (Peptide_ID, Ref_ID)
+					SELECT PPM.Peptide_ID, PPM.Ref_ID
+					FROM T_Peptide_to_Protein_Map PPM INNER JOIN
+							(	SELECT PPM.Peptide_ID, PPM.Ref_ID
+								FROM T_Peptide_to_Protein_Map PPM INNER JOIN
+									#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+									T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
+										PPM.Peptide_ID = PPM_Master.Peptide_ID
+							) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
+					
+										
+				End
+						
 				Set @CurrentLocation = 'Count the number of entries in T_Peptide_to_Protein_Map that would be updated'
 				-- 
 				SELECT @PeptideToProteinMapEntriesUpdated = COUNT(*)
 				FROM T_Peptide_to_Protein_Map PPM INNER JOIN 
 					#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID
-				
+
 				If @PeptideToProteinMapEntriesUpdated > 0 And @PeptideToProteinMapEntriesDeleted > 0
 				Begin
 					-- Note: We need to correct @PeptideToProteinMapEntriesUpdated using @PeptideToProteinMapEntriesDeleted
 					--       since peptides that match the first query will also match the second query
 					Set @PeptideToProteinMapEntriesUpdated = @PeptideToProteinMapEntriesUpdated - @PeptideToProteinMapEntriesDeleted
+				End
+				
+				If @PreviewPeptideRowsToDeleteOrUpdate <> 0
+				Begin
+					SELECT Row_Number() OVER (ORDER BY PPM.Peptide_ID, PPM.Ref_ID) AS Entry_to_Update,
+					       PPM.Peptide_ID AS Peptide_ID_to_Update,
+					       PPM.Ref_ID AS Ref_ID_Old,
+					       U.Ref_ID_Master AS Ref_ID_New
+					FROM T_Peptide_to_Protein_Map PPM
+					     INNER JOIN #Tmp_Ref_ID_Updates U
+					       ON PPM.Ref_ID = U.Ref_ID
+					     LEFT OUTER JOIN #Tmp_EntriesToDelete ED
+					       ON PPM.Peptide_ID = ED.Peptide_ID AND
+					          PPM.Ref_ID = ED.Ref_ID
+					WHERE ED.Peptide_ID IS NULL
 				End
 				
 				Set @CurrentLocation = 'Update the status message'
@@ -283,6 +336,7 @@ As
 	--
 Done:
 	DROP TABLE #Tmp_Ref_ID_Updates
+	DROP TABLE #Tmp_EntriesToDelete
 	
 	return @myError
 

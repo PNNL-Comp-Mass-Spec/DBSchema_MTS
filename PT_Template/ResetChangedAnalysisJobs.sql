@@ -23,6 +23,8 @@ CREATE PROCEDURE dbo.ResetChangedAnalysisJobs
 **			11/09/2005 mem - Now updating jobs in state 3 or with a state >= @NextProcessState; previously, was updating jobs with a state > @NextProcessState
 **			06/04/2006 mem - Now updating Protein_Collection_List and Protein_Options_List in T_Analysis_Description
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import
+**			03/21/2008 mem - Updated to use T_DMS_Analysis_Job_Info_Cached in MT_Main rather than directly polling DMS via the V_DMS view
+**			04/26/2008 mem - Now calling RefreshAnalysisDescriptionInfo to perform the updates.  This has the advantage of storing old and new values in T_Analysis_Description_Updates
 **    
 *****************************************************/
 (
@@ -45,6 +47,16 @@ As
 	Declare @sql varchar(2048)
 	Declare @ProcessState varchar(9)
 	
+	Declare @JobList varchar(max)
+	
+	
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------
+	--
+	Set @NextProcessState = IsNull(@NextProcessState, 10)
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	
 	---------------------------------------------------
 	-- get organism name for this peptide database
 	---------------------------------------------------
@@ -60,9 +72,8 @@ As
 		return 33
 	end
 
-
 	Set @ProcessState = Convert(varchar(9), @NextProcessState)
-		
+
 	---------------------------------------------------
 	-- Find changed analysis jobs
 	---------------------------------------------------
@@ -71,39 +82,58 @@ As
 
 	If @infoOnly = 0
 	Begin
-		Set @sql = @sql + ' UPDATE T_Analysis_Description'
-		Set @sql = @sql + ' SET process_state = ' + @ProcessState + ','
-		Set @sql = @sql +     ' Parameter_File_Name = AJI.ParameterFileName,'
-		Set @sql = @sql +     ' Settings_File_Name = AJI.SettingsFileName,'
-		Set @sql = @sql +     ' Organism_DB_Name = AJI.OrganismDBName,'
-		Set @sql = @sql +     ' Protein_Collection_List = AJI.ProteinCollectionList,'
-		Set @sql = @sql +     ' Protein_Options_List = AJI.ProteinOptions,'
-		Set @sql = @sql +     ' Vol_Client = AJI.StoragePathClient,' 
-		Set @sql = @sql +     ' Vol_Server = AJI.StoragePathServer,'
-		Set @sql = @sql +     ' Storage_Path = '''','
-		Set @sql = @sql +     ' Dataset_Folder = AJI.DatasetFolder,'
-		Set @sql = @sql +     ' Results_Folder = AJI.ResultsFolder,'
-		Set @sql = @sql +     ' Completed = AJI.Completed,'
-		Set @sql = @sql +     ' Last_Affected = GetDate()'
+		CREATE Table #TmpJobsWithNewResultsFolder (
+			Job int NOT NULL
+		)
+				
+		Set @sql = @sql + ' INSERT INTO #TmpJobsWithNewResultsFolder (Job)'
+		Set @sql = @sql + ' SELECT TAD.Job '
 	End
 	Else
 	Begin
-		Set @Sql = @Sql + ' SELECT TAD.Job, TAD.Dataset, AJI.ParameterFileName, AJI.SettingsFileName,'
-		Set @Sql = @Sql +        ' AJI.OrganismDBName, AJI.ProteinCollectionList, AJI.ProteinOptions,'
-		Set @Sql = @Sql +        ' TAD.Results_Folder, AJI.ResultsFolder, TAD.Process_State, TAD.Last_Affected'
+		Set @Sql = @Sql + ' SELECT TAD.Job, TAD.Dataset, DAJI.ParameterFileName, DAJI.SettingsFileName,'
+		Set @Sql = @Sql +        ' DAJI.OrganismDBName, DAJI.ProteinCollectionList, DAJI.ProteinOptions,'
+		Set @Sql = @Sql +        ' TAD.Results_Folder, DAJI.ResultsFolder, TAD.Process_State, TAD.Last_Affected'
 	End
 	
 	Set @sql = @sql + ' FROM T_Analysis_Description TAD INNER JOIN'
-	Set @sql = @sql +      ' MT_Main.dbo.V_DMS_Analysis_Job_Import AJI ON TAD.Job = AJI.Job'
-	Set @sql = @sql + ' WHERE TAD.Results_Folder <> AJI.ResultsFolder AND AJI.Organism = ''' + @organism + ''''
+	Set @sql = @sql +      ' MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON TAD.Job = DAJI.Job'
+	Set @sql = @sql + ' WHERE TAD.Results_Folder <> DAJI.ResultsFolder AND DAJI.Organism = ''' + @organism + ''''
 	Set @sql = @sql +       ' AND (TAD.Process_State >= ' + @ProcessState + ' OR TAD.Process_State = 3)'
-	If @infoOnly <> 0
-		Set @sql = @sql + ' ORDER BY TAD.Job'
+	Set @sql = @sql + ' ORDER BY TAD.Job'
 	
 	Exec (@sql)
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
+	If @infoOnly = 0
+	Begin
+		SELECT @myRowCount = COUNT(*)
+		FROM #TmpJobsWithNewResultsFolder
+		
+		If @myRowCount > 0
+		Begin
+			-- Construct a comma separated list of the jobs in #TmpJobsWithNewResultsFolder
+			SELECT @JobList = Coalesce(@JobList + ',', '') + Convert(varchar(19), Job)
+			FROM #TmpJobsWithNewResultsFolder
+			ORDER BY Job
+			
+			Exec @myError = RefreshAnalysisDescriptionInfo @UpdateInterval=0, @message=@message output, @infoOnly=0, @JobListForceUpdate = @JobList
+			
+			If @myError = 0
+			Begin
+				UPDATE T_Analysis_Description
+				SET Process_State = @ProcessState
+				FROM T_Analysis_Description TAD INNER JOIN #TmpJobsWithNewResultsFolder U
+				     ON TAD.Job = U.Job
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
+
+			End
+			
+			
+		End
+	End
 	
 	If @infoOnly = 0
 	Begin

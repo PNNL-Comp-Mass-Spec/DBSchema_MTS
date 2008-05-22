@@ -27,6 +27,7 @@ CREATE Procedure dbo.GetPeptidesAndSICStats
 **						   - Added parameter @ReportHighestScoreStatsInJob
 **			02/11/2007 mem - Added parameter @GroupByChargeState
 **			05/15/2007 mem - Added parameter @JobPeptideFilterTableName
+**			01/02/2008 mem - Now returning the MS/MS Scan number that corresponds to the area returned for the given peptide
 **    
 *****************************************************/
 (
@@ -223,7 +224,8 @@ As
 		Peak_StDev real NULL,
 		Peak_Skew real NULL,
 		Peak_KSStat real NULL,
-		StatMoments_DataCount_Used smallint NULL
+		StatMoments_DataCount_Used smallint NULL,
+		MSMS_Scan_Number int NULL
 	)
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -431,7 +433,8 @@ As
 		Set @S = @S +   ' Peak_StDev,'
 		Set @S = @S +   ' Peak_Skew,'
 		Set @S = @S +   ' Peak_KSStat,'
-		Set @S = @S +   ' StatMoments_DataCount_Used'
+		Set @S = @S +   ' StatMoments_DataCount_Used,'
+		Set @S = @S +   ' MSMS_Scan_Number'
 
 		If @Loop = 1
 			Set @ColumnNameSqlPeptideHit = @S
@@ -657,7 +660,8 @@ As
 			Set @S = @S +   ' Peak_StDev,'
 			Set @S = @S +   ' Peak_Skew,'
 			Set @S = @S +   ' Peak_KSStat,'
-			Set @S = @S +   ' StatMoments_DataCount_Used'
+			Set @S = @S +   ' StatMoments_DataCount_Used,'
+			Set @S = @S +   ' S.Scan_Number'
 			Set @S = @S + ' FROM #TmpPeptidesAndSICStats S INNER JOIN'
 			Set @S = @S +   ' T_Dataset_Stats_Scans DS_Scans ON'
 			Set @S = @S +   ' S.SIC_Job = DS_Scans.Job AND'
@@ -688,14 +692,15 @@ As
 					Set @S = @S + ' UPDATE #TmpPeptidesAndSICStats_Results'
 					Set @S = @S + ' SET XCorr = MaxValuesQ.XCorr,'
 					Set @S = @S +     ' DeltaCn2 = MaxValuesQ.DeltaCn2,'
-					Set @S = @S +     ' Charge_State = MaxValuesQ.Charge_State'
+					Set @S = @S +     ' Charge_State = MaxValuesQ.Charge_State,'
+					Set @S = @S +     ' MSMS_Scan_Number = MaxValuesQ.Scan_Number'
 					If @JobIsXTPeptideHit = 1
 					Begin
 						Set @S = @S + ' , Hyperscore = MaxValuesQ.Hyperscore'
 						Set @S = @S + ' , Log_EValue = MaxValuesQ.Log_EValue'
 					End
 					Set @S = @S + ' FROM #TmpPeptidesAndSICStats_Results Target INNER JOIN'
-					Set @S = @S + ' ( SELECT S.SIC_Job, S.Seq_ID, S.XCorr, S.DeltaCn2, S.Charge_State'
+					Set @S = @S + ' ( SELECT S.SIC_Job, S.Seq_ID, S.XCorr, S.DeltaCn2, S.Charge_State, S.Scan_Number'
 					If @JobIsXTPeptideHit = 1
 						Set @S = @S +    ' , S.Hyperscore, S.Log_EValue'
 
@@ -789,4 +794,6 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [DMS_SP_User]
+GO
+GRANT EXECUTE ON [dbo].[GetPeptidesAndSICStats] TO [MTUser]
 GO
