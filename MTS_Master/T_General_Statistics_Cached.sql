@@ -6,9 +6,9 @@ GO
 CREATE TABLE [dbo].[T_General_Statistics_Cached](
 	[Server_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[DBName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Category] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Label] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Value] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Category] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Label] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Value] [varchar](1024) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Entry_ID] [int] NOT NULL,
  CONSTRAINT [PK_T_General_Statistics_MT_DBs] PRIMARY KEY CLUSTERED 
 (

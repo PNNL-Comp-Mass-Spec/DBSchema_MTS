@@ -24,6 +24,7 @@ CREATE Procedure UpdateAnalysisJobToMTDBMap
 **			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
 **			11/13/2007 mem - Updated to use PMTs_Last_Affected instead of querying T_Mass_Tags to determine the most recently changed peptides for each analysis job
 **						   - Added @previewSql and @infoOnly
+**			03/11/2008 mem - Added parameters @DBStateMin and @DBStateMax
 **    
 *****************************************************/
 (
@@ -31,7 +32,9 @@ CREATE Procedure UpdateAnalysisJobToMTDBMap
 	@infoOnly tinyint = 0,
 	@previewSql tinyint = 0,
 	@RowCountAdded int = 0 OUTPUT,
-	@message varchar(255) = '' OUTPUT
+	@message varchar(255) = '' OUTPUT,
+	@DBStateMin int = 0,						-- Ignored if @MTDBNameFilter contains a DB name
+	@DBStateMax int = 9							-- Ignored if @MTDBNameFilter contains a DB name
 )
 As	
 	set nocount on
@@ -46,6 +49,9 @@ As
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	Set @previewSql = IsNull(@previewSql, 0)
 	Set @message = ''
+	Set @DBStateMin = IsNull(@DBStateMin, 0)
+	Set @DBStateMax = IsNull(@DBStateMax, 9)
+	
 	Set @RowCountAdded = 0
 
 	declare @result int
@@ -95,7 +101,7 @@ As
 		INSERT INTO #Temp_MTL_List (MTL_ID, MTL_Name)
 		SELECT MTL_ID, MTL_Name
 		FROM T_MT_Database_List
-		WHERE MTL_State < 10
+		WHERE MTL_State >= @DBStateMin AND MTL_State <= @DBStateMax
 		ORDER BY MTL_Name
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount

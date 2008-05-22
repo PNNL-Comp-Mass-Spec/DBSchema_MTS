@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE UpdateUserPermissions
+
+CREATE PROCEDURE UpdateUserPermissions
 /****************************************************
 **
 **	Desc: Updates user permissions in the current DB
@@ -17,6 +18,7 @@ create PROCEDURE UpdateUserPermissions
 **			01/27/2005 mem - Added MTS_DB_Dev and MTS_DB_Lite
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
 **			08/10/2006 mem - Added MTS_DB_Reader
+**			04/21/2008 mem - Updated to grant ShowPlan permissions
 **    
 *****************************************************/
 AS
@@ -136,6 +138,12 @@ AS
 	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 
+	grant showplan to MTS_DB_Dev
+	grant showplan to MTS_DB_Lite
+	grant showplan to MTS_DB_Reader
+	grant showplan to MTUser
+
 	Return 0
+
 
 GO

@@ -37,6 +37,7 @@ CREATE PROCEDURE MakeNewPeptideDB
 **			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
 **			11/29/2006 mem - Added parameter @InfoOnly
+**			03/24/2008 mem - Changed value for @dbState from 1 to 5
 **    
 *****************************************************/
 (
@@ -49,7 +50,7 @@ CREATE PROCEDURE MakeNewPeptideDB
 	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\PT_Template_01\PT_Template_01.bak',
 	@dataStoragePath varchar(256) = '',			-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
 	@logStoragePath varchar(256) = '',			-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
-	@dbState int = 1,
+	@dbState int = 5,
 	@InfoOnly tinyint = 0						-- Set to 1 to validate the inputs and preview the values that will be used to create the new database
 )
 AS

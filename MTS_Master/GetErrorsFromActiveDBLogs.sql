@@ -23,12 +23,14 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 **			05/13/2006 mem - Moved Master_Sequences from Albert to Daffy
 **			11/21/2006 mem - Moved Master_Sequences from Daffy to ProteinSeqs
 **			07/13/2007 mem - Increased the field sizes in #LE
+**			02/19/2008 mem - Now populating T_MTS_DB_Errors with the errors found; use AckErrors to view these errors and optionally change them to ErrorIgnore
 **    
 *****************************************************/
 (
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the databases on the given Server
-	@errorsOnly int = 1,							-- If 1, then only returns error entries
-	@MaxLogEntriesPerDB int = 10,					-- Set to 0 to disable filtering number of entries for each DB
+	@errorsOnly int = 1,							-- If 1, then only returns error entries; ignored if @CacheErrorsOnly = 1
+	@MaxLogEntriesPerDB int = 10,					-- Set to 0 to disable filtering number of entries for each DB; affects the errors returned in the resultset
+	@CacheErrorsOnly tinyint = 0,					-- Set to 1 to populate T_MTS_DB_Errors but not return the errors as a resultset
 	@message varchar(255) = '' OUTPUT
 )
 As	
@@ -39,11 +41,21 @@ As
 	set @myError = 0
 	set @myRowCount = 0
 
-	-- Validate or clear the input/output parameters
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------
+	
 	Set @ServerFilter = IsNull(@ServerFilter, '')
+	Set @errorsOnly = IsNull(@errorsOnly, 1)
 	Set @MaxLogEntriesPerDB = IsNull(@MaxLogEntriesPerDB, 100)
+	Set @CacheErrorsOnly = IsNull(@CacheErrorsOnly, 0)
 	Set @message = ''
 
+	If @CacheErrorsOnly <> 0
+	Begin
+		Set @errorsOnly = 1
+	End
+	
 	declare @SQL nvarchar(2048)
 	declare @result int
 	set @result = 0
@@ -63,12 +75,6 @@ As
 		Set @ProcessSingleServer = 1
 	Else
 		Set @ProcessSingleServer = 0
-
-	declare @MaxRowCountText nvarchar(40)
-	if @MaxLogEntriesPerDB <=0
-		set @MaxRowCountText = N' '
-	else
-		set @MaxRowCountText = N' TOP ' + Convert(nvarchar(24), @MaxLogEntriesPerDB) + N' '
 	
 	declare @Server varchar(128)
 	declare @CurrentServerPrefix varchar(128)
@@ -78,6 +84,8 @@ As
 	declare @DBNameMatch varchar(128)
 	
 	declare @Continue int
+	declare @DBExists tinyint
+	
 	declare @ServerDBsDone int
 	declare @processCount int			-- Count of servers processed
 
@@ -85,15 +93,24 @@ As
 	-- temporary table to hold extracted log error entries
 	---------------------------------------------------
 	CREATE TABLE #LE (
-		Server_Name varchar(64) NOT NULL,
-		DBName varchar(128) NOT NULL,
+		Server_Name varchar(128) NOT NULL,
+		DBName varchar(256) NOT NULL,
 		Entry_ID int,
-		posted_by varchar(128) NULL,
+		posted_by varchar(256) NULL,
 		posting_time datetime,
 		type varchar(128) NULL,
-		message varchar(4096) NULL
+		message varchar(4096) NULL,
+		Entered_By varchar(256) NULL,
+		Entry_Rank int NULL
 	)
-
+	
+	CREATE UNIQUE CLUSTERED INDEX [#IX_Tmp_LE] ON [dbo].[#LE] 
+	(
+		[Server_Name] ASC,
+		[DBName] ASC,
+		[Entry_ID] ASC
+	)
+		
 	---------------------------------------------------
 	-- temporary table to hold list of databases to process
 	---------------------------------------------------
@@ -113,7 +130,7 @@ As
 	set @Continue = 1
 	--	
 	While @Continue > 0 and @myError = 0
-	Begin -- <A>
+	Begin -- <a>
 
 		SELECT TOP 1
 			@ServerID = Server_ID,
@@ -133,7 +150,7 @@ As
 		Set @continue = @myRowCount
 
 		If @continue > 0 And (@ProcessSingleServer = 0 Or Lower(@Server) = Lower(@ServerFilter))
-		Begin -- <B>
+		Begin -- <b>
 
 			-- If @Server is actually this server, then we do not need to prepend table names with the text
 			If Lower(@Server) = Lower(@@ServerName)
@@ -209,7 +226,7 @@ As
 			set @ServerDBsDone = 0
 
 			WHILE @ServerDBsDone = 0 and @myError = 0  
-			BEGIN --<a>
+			BEGIN -- <c>
 			
 				-- get next available entry from #XMTDBNames
 				--
@@ -229,142 +246,148 @@ As
 				-- terminate loop if no more unprocessed entries in temporary table
 				--
 				if @myRowCount = 0
-					begin
-						set @ServerDBsDone = 1
-					end
+				begin
+					set @ServerDBsDone = 1
+				end
 				else
-					begin --<b>
+				begin -- <d>
+				
+					-- mark entry in temporary table as processed
+					--
+					UPDATE	#XMTDBNames
+					SET		Processed = 1
+					WHERE	(DBName = @CurrentDB)
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+					--
+					if @myError <> 0 
+					begin
+						set @message = 'Could not update the database list temp table'
+						set @myError = 51
+						goto Done
+					end
 					
-						-- mark entry in temporary table as processed
-						--
-						UPDATE	#XMTDBNames
-						SET		Processed = 1
-						WHERE	(DBName = @CurrentDB)
-						--
-						SELECT @myError = @@error, @myRowCount = @@rowcount
-						--
-						if @myError <> 0 
-						begin
-							set @message = 'Could not update the database list temp table'
-							set @myError = 51
-							goto Done
-						end
-						
-						-- Check if @CurrentDB exists
-						--
-						Set @DBNameMatch = ''
-						
-						Set @sql = ''
-						Set @sql = @sql + ' SELECT @DBNameMatch = [name]'
-						Set @sql = @sql + ' FROM ' + @CurrentServerPrefix + 'master.dbo.sysdatabases'
-						Set @sql = @sql + ' WHERE [name] = ''' + @CurrentDB + ''''
-						--
-						EXEC @result = sp_executesql @sql, N'@DBNameMatch varchar(128) OUTPUT', @DBNameMatch = @DBNameMatch OUTPUT
-						--
-						SELECT @myError = @@error, @myRowCount = @@rowcount
-						--
-						if @result <> 0 
-						begin
-							set @message = 'Could not check existence of database'
-							set @myError = 53
-							goto Done
-						end
-						--
-						-- skip further processing if database does not exist
-						--
-						if (@myRowCount = 0 or Len(IsNull(@DBNameMatch, '')) = 0)
-							begin
-								set @message = 'Database "' + @CurrentDB + '" does not exist on ' + @Server
-								if @logVerbosity > 1
-									execute PostLogEntry 'Error', @message, 'GetErrorsFromActiveDBLogs'
-								set @message = ''
-								goto NextPass
-							end
-
-						-- get error entries for log from target DB into temporary table
-						--
-						Set @Sql = ''				
-						Set @Sql = @Sql + ' INSERT INTO #LE'
-						Set @Sql = @Sql + ' (Server_Name, DBName, Entry_ID, posted_by, posting_time, type, message)'
-						Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''' + @Server + ''', ''' + @CurrentDB + ''', '
-						Set @Sql = @Sql + '   Entry_ID, posted_by, posting_time, type, message'
-						Set @Sql = @Sql + ' FROM ' + @CurrentServerPrefix + '[' + @CurrentDB + '].dbo.T_Log_Entries'
-						if @errorsOnly = 1
-						begin
-							Set @Sql = @Sql + ' WHERE type = ''error'''
-						end
-									
-						EXEC sp_executesql @Sql	
-						--
-						SELECT @myError = @@error, @myRowCount = @@rowcount	
-									
-					end --<b>	
-			NextPass:	   
-			END --<a>
+					-- Check if @CurrentDB exists
+					--
+					Set @DBNameMatch = ''
+					
+					Set @sql = ''
+					Set @sql = @sql + ' SELECT @DBNameMatch = [name]'
+					Set @sql = @sql + ' FROM ' + @CurrentServerPrefix + 'master.dbo.sysdatabases'
+					Set @sql = @sql + ' WHERE [name] = ''' + @CurrentDB + ''''
+					--
+					EXEC @result = sp_executesql @sql, N'@DBNameMatch varchar(128) OUTPUT', @DBNameMatch = @DBNameMatch OUTPUT
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+					--
+					if @result <> 0 
+					begin
+						set @message = 'Could not check existence of database'
+						set @myError = 53
+						goto Done
+					end
+					--
+					-- skip further processing if database does not exist
+					--
+					if (@myRowCount = 0 or Len(IsNull(@DBNameMatch, '')) = 0)
+					begin
+						set @message = 'Database "' + @CurrentDB + '" does not exist on ' + @Server
+						if @logVerbosity > 1
+							execute PostLogEntry 'Error', @message, 'GetErrorsFromActiveDBLogs'
+						set @message = ''
+						set @DBExists = 0
+					end
+					else
+					begin
+						set @DBExists = 1
+					end
+					
+					-- Get error log entries from the target DB; place in the #LE temporary table
+					if @DBExists = 1
+						Exec GetErrorsFromSingleDB @Server, @CurrentDB, @errorsOnly, @MaxLogEntriesPerDB, @message output
+														
+				end -- </d>
+			   
+			END -- </c>
 
 			Set @processCount = @processCount + 1
 			
-		End -- </B>
+		End -- </b>
 			
-	End -- </A>
+	End -- </a>
 	
 	-----------------------------------------------------------
 	-- Get errors from ProteinSeqs.Master_Sequences
 	-----------------------------------------------------------
 
-	Set @Sql = ''				
-	Set @Sql = @Sql + ' INSERT INTO #LE'
-	Set @Sql = @Sql + ' (Server_Name, DBName, Entry_ID, posted_by, posting_time, type, message)'
-	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''ProteinSeqs'', ''Master_Sequences'', '
-	Set @Sql = @Sql + '   Entry_ID, posted_by, posting_time, type, message'
-	Set @Sql = @Sql + ' FROM ProteinSeqs.Master_Sequences.dbo.T_Log_Entries'
-	if @errorsOnly = 1
-	begin
-		Set @Sql = @Sql + ' WHERE type = ''error'''
-	end
-				
-	EXEC sp_executesql @Sql	
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount	
-
-
+	Exec GetErrorsFromSingleDB 'ProteinSeqs', 'Master_Sequences', @errorsOnly, @MaxLogEntriesPerDB, @message output
 
 	-----------------------------------------------------------
 	-- Get errors from this DB (MTS_Master)
 	-----------------------------------------------------------
 
-	Set @Sql = ''				
-	Set @Sql = @Sql + ' INSERT INTO #LE'
-	Set @Sql = @Sql + ' (Server_Name, DBName, Entry_ID, posted_by, posting_time, type, message)'
-	Set @Sql = @Sql + ' SELECT ' + @MaxRowCountText + '''' + @@ServerName + ''', ''' + DB_Name() + ''', '
-	Set @Sql = @Sql + '   Entry_ID, posted_by, posting_time, type, message'
-	Set @Sql = @Sql + ' FROM T_Log_Entries'
-	if @errorsOnly = 1
-	begin
-		Set @Sql = @Sql + ' WHERE type = ''error'''
-	end
-				
-	EXEC sp_executesql @Sql	
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount	
-	
+	Set @Server = @@ServerName
+	Set @CurrentDB = DB_Name()
+	Exec GetErrorsFromSingleDB @Server, @CurrentDB, @errorsOnly, @MaxLogEntriesPerDB, @message output
 
+	-----------------------------------------------------------
+	-- Populate the Entry_Rank column
+	-----------------------------------------------------------
+
+	UPDATE #LE
+	SET Entry_Rank = RankingQ.RowRank
+	FROM #LE Target INNER JOIN (
+		SELECT Server_Name, DBName, Entry_ID, 
+			Row_Number() OVER (Partition By Server_Name, DBName Order By Entry_ID) AS RowRank
+		FROM #LE
+		) RankingQ ON 
+			Target.Server_Name = RankingQ.Server_Name AND
+		Target.DBName = RankingQ.DBName AND
+		Target.Entry_ID = RankingQ.Entry_ID 
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	-----------------------------------------------------------
+	-- Add errors to T_MTS_DB_Errors (if not already present)
+	-----------------------------------------------------------
+	
+	INSERT INTO T_MTS_DB_Errors (
+		Server_Name, Database_Name, Entry_ID, Posted_By, 
+		Posting_Time, Type, Message, Entered_By)
+	SELECT Src.Server_Name, Src.DBName, Src.Entry_ID, Src.Posted_By, 
+	       Src.Posting_Time, Src.Type, Src.Message, Src.Entered_By
+	FROM #LE Src LEFT OUTER JOIN T_MTS_DB_Errors Target ON
+		  Src.Server_Name = Target.Server_Name AND
+		  Src.DBName = Target.Database_Name AND
+		  Src.Entry_ID = Target.Entry_ID AND
+		  Src.Posting_Time = Target.Posting_Time
+	WHERE Src.Type = 'Error' AND Target.Entry_ID Is Null
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	
 	-----------------------------------------------------------
 	-- Return the data
 	-----------------------------------------------------------
 	--
-	SELECT * FROM #LE
-	ORDER BY Server_Name, DBName
+	If @CacheErrorsOnly = 0
+	Begin
+		SELECT Server_Name, DBName, Entry_ID, posted_by, 
+               posting_time, type, message, Entered_By
+		FROM #LE
+		WHERE @MaxLogEntriesPerDB <= 0 OR Entry_Rank <= @MaxLogEntriesPerDB
+		ORDER BY Server_Name, DBName, Entry_ID
 		--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0 
-	begin
-		set @message = 'Error returning data from #CurrentActivity'
-		set @myError = 50004
-		goto Done
-	end
-	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0 
+		begin
+			set @message = 'Error returning data from #LE'
+			set @myError = 50004
+			goto Done
+		end
+	End
+		
 Done:
 	-----------------------------------------------------------
 	-- Exit

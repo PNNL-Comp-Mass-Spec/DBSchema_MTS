@@ -14,11 +14,12 @@ CREATE PROCEDURE dbo.RefreshCachedGeneralStatistics
 **	Parameters:
 **		@message   -- explanation of any error that occurred
 **
-**		Auth: mem
-**		Date: 12/06/2004
-**			  12/16/2004 mem - Now making entries in T_General_Statistics_Cached for entries that have a blank T_General_Statistics table
-**			  08/02/2005 mem - Now checking for discrepancies between General_Statistics entries of DB_Schema_Version and the value stored in T_MTS_MT_DBs or T_MTS_Peptide_DBs
-**			  11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	12/06/2004
+**			12/16/2004 mem - Now making entries in T_General_Statistics_Cached for entries that have a blank T_General_Statistics table
+**			08/02/2005 mem - Now checking for discrepancies between General_Statistics entries of DB_Schema_Version and the value stored in T_MTS_MT_DBs or T_MTS_Peptide_DBs
+**			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
+**			01/10/2008 mem - Expanded the field sizes in #GeneralStatisticsCached
 **    
 *****************************************************/
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
@@ -88,9 +89,9 @@ As
 	CREATE TABLE #GeneralStatisticsCached (
 		[Server_Name] [varchar] (64) NOT NULL ,
 		[DBName] [varchar] (128) NOT NULL ,
-		[Category] [varchar] (128) NULL ,
-		[Label] [varchar] (128) NULL ,
-		[Value] [varchar] (255) NULL ,
+		[Category] [varchar] (512) NULL ,
+		[Label] [varchar] (2048) NULL ,
+		[Value] [varchar] (1024) NULL ,
 		[Entry_ID] [int] NOT NULL 
 	)
 

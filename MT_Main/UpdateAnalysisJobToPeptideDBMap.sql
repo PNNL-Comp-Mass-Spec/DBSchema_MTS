@@ -23,14 +23,17 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 **			09/07/2006 mem - Now populating column Process_State
 **			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
 **			11/13/2007 mem - Added @previewSql and @infoOnly
+**			03/11/2008 mem - Added parameters @DBStateMin and @DBStateMax
 **    
 *****************************************************/
 (
-	@PeptideDBNameFilter varchar(128) = '',				-- If supplied, then only examines the Jobs in database @PeptideDBNameFilter
+	@PeptideDBNameFilter varchar(128) = '',			-- If supplied, then only examines the Jobs in database @PeptideDBNameFilter
 	@infoOnly tinyint = 0,
 	@previewSql tinyint = 0,
 	@RowCountAdded int = 0 OUTPUT,
-	@message varchar(255) = '' OUTPUT
+	@message varchar(255) = '' OUTPUT,
+	@DBStateMin int = 0,							-- Ignored if @PeptideDBNameFilter contains a DB name
+	@DBStateMax int = 9								-- Ignored if @PeptideDBNameFilter contains a DB name
 )
 As	
 	set nocount on
@@ -45,6 +48,9 @@ As
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	Set @previewSql = IsNull(@previewSql, 0)
 	Set @message = ''
+	Set @DBStateMin = IsNull(@DBStateMin, 0)
+	Set @DBStateMax = IsNull(@DBStateMax, 9)
+
 	Set @RowCountAdded = 0
 
 	declare @result int
@@ -94,7 +100,7 @@ As
 		INSERT INTO #Temp_PDB_List (PDB_ID, PDB_Name)
 		SELECT PDB_ID, PDB_Name
 		FROM T_Peptide_Database_List
-		WHERE PDB_State < 10
+		WHERE PDB_State >= @DBStateMin AND PDB_State <= @DBStateMax
 		ORDER BY PDB_Name
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount

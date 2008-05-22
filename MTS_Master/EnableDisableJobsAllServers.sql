@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.EnableDisableJobsAllServers
 **						   - Added ProteinSeqs to @AdditionalServers
 **			11/15/2007 mem - Updated @CategoryName to allow comma separated lists
 **						   - Added @EnableTProcessStepControlEvenIfZero
+**			03/13/2008 mem - Added parameter @ExecutionStateNewOverride
 **    
 *****************************************************/
 (
@@ -28,6 +29,7 @@ CREATE PROCEDURE dbo.EnableDisableJobsAllServers
 	@SPName varchar(128) = 'MT_Main.dbo.EnableDisableJobs',
 	@UpdateTProcessStepControl tinyint = 1,						-- If 1, then will change Execution_State in MT_Main.T_Process_Control from 3 to 1 or from 1 to 3, depending on @EnableJobs
 	@EnableTProcessStepControlEvenIfZero tinyint = 1,			-- Set to 1 to force MT_Main.T_Process_Control to set the values to 1, even if they are 0; only used when @EnableJobs = 1 and @UpdateTProcessStepControl = 1
+	@ExecutionStateNewOverride int = -1,						-- If 0 or higher, then this value is used for the new Execution_State for table T_Process_Step_Control; if negative, then the default value is used (1 if enabling, 3 if disabling)
 	@message varchar(255) = '' OUTPUT
 )
 AS
@@ -61,6 +63,7 @@ AS
 	Set @SPName = LTrim(RTrim(IsNull(@SPName, '')))
 	Set @UpdateTProcessStepControl = IsNull(@UpdateTProcessStepControl, 1)
 	Set @EnableTProcessStepControlEvenIfZero = IsNull(@EnableTProcessStepControlEvenIfZero, 0)
+	Set @ExecutionStateNewOverride = IsNull(@ExecutionStateNewOverride, -1)
 	
 	If Len(@SPName) = 0
 	Begin
@@ -80,12 +83,18 @@ AS
 	If @EnableJobs = 0
 	Begin
 		Set @ExecutionStateMatch = 1
-		Set @ExecutionStateNew = 3
+		If @ExecutionStateNewOverride < 0
+			Set @ExecutionStateNew = 3
+		Else
+			Set @ExecutionStateNew = @ExecutionStateNewOverride
 	End
 	Else
 	Begin
 		Set @ExecutionStateMatch = 3
-		Set @ExecutionStateNew = 1
+		If @ExecutionStateNewOverride < 0
+			Set @ExecutionStateNew = 1
+		Else
+			Set @ExecutionStateNew = @ExecutionStateNewOverride
 	End
 	
 	-------------------------------------------------
@@ -146,7 +155,9 @@ AS
 					Set @S = ''
 					Set @S = @S + ' SELECT  Processing_Step_Name, '
 					Set @S = @S +      ' Convert(varchar(12), Execution_State) + '' --> '' +' 
-					If @ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1
+					If (@ExecutionStateNewOverride >= 0) OR 
+					   (@ExecutionStateNew = 0) OR 
+					   (@ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1)
 						Set @S = @S +      ' CASE WHEN Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
 					Else
 						Set @S = @S +      ' CASE WHEN Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
@@ -167,7 +178,9 @@ AS
 					Set @S = @S + ' UPDATE ' + @ServerName + '.MT_Main.dbo.T_Process_Step_Control'
 					Set @S = @S + ' Set Execution_State = ' + Convert(varchar(12), @ExecutionStateNew)
 
-					If @ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1
+					If (@ExecutionStateNewOverride >= 0) OR 
+					   (@ExecutionStateNew = 0) OR 
+					   (@ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1)
 						Set @S = @S + ' WHERE Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
 					Else
 						Set @S = @S + ' WHERE Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
