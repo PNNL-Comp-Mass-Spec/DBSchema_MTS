@@ -83,3 +83,7 @@ AS
 GO
 GRANT EXECUTE ON [dbo].[QRGenerateORFColumnSql] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Lite]
+GO

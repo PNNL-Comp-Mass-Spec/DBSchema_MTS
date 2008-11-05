@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRGenerateCrossTabSql] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure QRGenerateCrossTabSql
+CREATE Procedure dbo.QRGenerateCrossTabSql
 /****************************************************	
 **  Desc:	Parses the values in @QuantitationIDList (separated by commas)
 **		     to construct appropriate Sql for a pivot query
@@ -45,6 +45,7 @@ CREATE Procedure QRGenerateCrossTabSql
 **			06/05/2007 mem - Updated for use with the PIVOT operator to create the crosstab
 **						   - Now reporting [Observation Count] in @CrossTabSqlGroupBy
 **			01/24/2008 mem - Added column @DateStampHeaderColumn
+**			08/12/2008 mem - Added column @XTandemDataPresent
 **
 ****************************************************/
 (
@@ -61,7 +62,8 @@ CREATE Procedure QRGenerateCrossTabSql
 	@ERValuesPresent tinyint=0 Output,
 	@ModsPresent tinyint=0 Output,
 	@QuantitationIDListClean varchar(max)='' Output,	-- Reduction of @QuantitationIDList into a unique list of numbers; additionally, is not affected by @SeparateReplicateDataIDs in that @QuantitationIDListClean will still contain replicate-based QIDs if present in @QuantitationIDList
-	@DateStampHeaderColumn tinyint=0
+	@DateStampHeaderColumn tinyint=0,
+	@XTandemDataPresent tinyint=0 Output
 )
 AS
 	Set NoCount On
@@ -87,6 +89,7 @@ AS
 	Set @QuantitationIDListSql = ''
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
+	Set @XTandemDataPresent = 0
 	Set @QuantitationIDListClean = ''
 
 
@@ -411,11 +414,12 @@ AS
 			End -- </d>
 
 			-- Determine if this QuantitationID has any nonzero ER values or modified mass tags
-			-- Note that QRLookupOptionalColumns leaves @ERValuesPresent or @ModsPresent at a non-zero
+			-- Note that QRLookupOptionalColumns leaves @ERValuesPresent, @ModsPresent, or @XTandemDataPresent at a non-zero
 			--  value if they are non-zero when passed into the SP
 			Exec QRLookupOptionalColumns @QuantitationID, 
 					@ERValuesPresent = @ERValuesPresent OUTPUT, 
-					@ModsPresent = @ModsPresent OUTPUT
+					@ModsPresent = @ModsPresent OUTPUT,
+					@XTandemDataPresent = @XTandemDataPresent OUTPUT
 
 			Set @MatchCount = @MatchCount + 1
 			
@@ -431,6 +435,11 @@ AS
 Done:
 	Return @myError
 
+
 GO
 GRANT EXECUTE ON [dbo].[QRGenerateCrossTabSql] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateCrossTabSql] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateCrossTabSql] TO [MTS_DB_Lite]
 GO

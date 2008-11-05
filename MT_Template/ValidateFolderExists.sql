@@ -180,3 +180,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ValidateFolderExists] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ValidateFolderExists] TO [MTS_DB_Lite]
+GO

@@ -120,3 +120,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[LocalErrorHandler] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[LocalErrorHandler] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LocalErrorHandler] TO [MTS_DB_Lite]
+GO

@@ -63,7 +63,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE TRIGGER [trig_u_T_Peak_Matching_Task] ON dbo.T_Peak_Matching_Task 
 FOR UPDATE
 AS
@@ -148,7 +147,6 @@ AS
 				) LookupQ ON T_Peak_Matching_Task.Task_ID = LookupQ.Task_ID
 
 	End
-
 
 GO
 GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]

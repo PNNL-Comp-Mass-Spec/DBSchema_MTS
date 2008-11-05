@@ -282,3 +282,7 @@ DoneSkipLog:
 GO
 GRANT EXECUTE ON [dbo].[AddQuantitationDescription] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AddQuantitationDescription] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AddQuantitationDescription] TO [MTS_DB_Lite]
+GO

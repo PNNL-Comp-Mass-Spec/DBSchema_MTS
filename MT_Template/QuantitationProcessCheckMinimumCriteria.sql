@@ -109,3 +109,7 @@ AS
 GO
 GRANT EXECUTE ON [dbo].[QuantitationProcessCheckMinimumCriteria] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessCheckMinimumCriteria] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessCheckMinimumCriteria] TO [MTS_DB_Lite]
+GO

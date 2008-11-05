@@ -53,6 +53,7 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
 **			05/25/2007 mem - Now calling LookupPeptideDBLocations to determine the location of the peptide databases
 **			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
+**			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Description
 **
 *****************************************************/
 (
@@ -378,7 +379,7 @@ As
 		[Campaign] [varchar] (64) NULL,
 		[PDB_ID] [int] NULL,
 		[Dataset_SIC_Job] [int] NULL,
-		[Organism] [varchar] (50) NOT NULL,
+		[Experiment_Organism] [varchar] (50) NOT NULL,
 		[Instrument_Class] [varchar] (32) NOT NULL,
 		[Instrument] [varchar] (64) NULL,
 		[Analysis_Tool] [varchar] (64) NOT NULL,
@@ -641,7 +642,7 @@ As
 			set @S = @S + ' Job, Dataset, Dataset_ID,'
 			set @S = @S + ' Dataset_Created_DMS, Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count,'
 			set @S = @S + ' Experiment, Campaign, PDB_ID,'
-			set @S = @S + ' Dataset_SIC_Job, Organism, Instrument_Class, Instrument, Analysis_Tool,'
+			set @S = @S + ' Dataset_SIC_Job, Experiment_Organism, Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + ' Parameter_File_Name, Settings_File_Name,'
 			set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
 			set @S = @S + ' Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder,'
@@ -657,7 +658,7 @@ As
 			set @S = @S + '	 PT.Job, PT.Dataset, PT.Dataset_ID,' + @Lf
 			set @S = @S + '  DS.Created_DMS, DS.Acq_Time_Start, DS.Acq_Time_End, DS.Scan_Count,' + @Lf
 			set @S = @S + '  PT.Experiment, PT.Campaign, ' + Convert(varchar(11), @peptideDBID) + ' AS PDB_ID,' + @Lf
-			set @S = @S + '  DS.SIC_Job, PT.Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,' + @Lf
+			set @S = @S + '  DS.SIC_Job, PT.Experiment_Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,' + @Lf
 			set @S = @S + '  PT.Parameter_File_Name,	PT.Settings_File_Name,' + @Lf
 			set @S = @S + '  PT.Organism_DB_Name, PT.Protein_Collection_List, PT.Protein_Options_List,' + @Lf
 			set @S = @S + '  PT.Vol_Client, PT.Vol_Server, PT.Storage_Path, PT.Dataset_Folder, PT.Results_Folder,' + @Lf
@@ -798,7 +799,7 @@ As
 						Job, Dataset, Dataset_ID, Dataset_Created_DMS, 
 						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count, 
 						Experiment, Campaign, PDB_ID, Dataset_SIC_Job, 
-						Organism, Instrument_Class, Instrument, 
+						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
 						Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
 						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, 
@@ -812,7 +813,7 @@ As
 						Job, Dataset, Dataset_ID, Dataset_Created_DMS, 
 						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count, 
 						Experiment, Campaign, PDB_ID, Dataset_SIC_Job, 
-						Organism, Instrument_Class, Instrument, 
+						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
 						Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
 						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, 
@@ -884,4 +885,8 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Lite]
 GO

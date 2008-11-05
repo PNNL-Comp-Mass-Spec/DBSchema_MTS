@@ -76,3 +76,7 @@ AS
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[CountSubstringInProtein] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CountSubstringInProtein] TO [MTS_DB_Lite]
+GO

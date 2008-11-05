@@ -21,6 +21,8 @@ CREATE PROCEDURE dbo.QuantitationProcessCheckForMSMSPeptideIDs
 **			06/08/2007 mem - Added parameters to allow filtering on Normalized score (aka XCorr), Discriminant Score, Peptide Prophet Probabiblity, and PMT Quality Score
 **			06/13/2007 mem - Updated to call CheckFilterForAnalysesWork for MTDBs in addition to for Peptide DBs
 **			10/17/2007 mem - Updated to filter on Instrument_Class_Filter if applicable
+**			10/20/2008 mem - Re-worked the #TmpQRFilterPassingMTs update query to explicitly define the table-joining order
+**						   - Added Try/Catch error handling
 **
 ****************************************************/
 (
@@ -64,141 +66,86 @@ AS
 	Declare @FilterSetsEvaluated int
 	Set @FilterSetsEvaluated = 0
 	
-	-----------------------------------------------------------
-	-- Validate the inputs
-	-----------------------------------------------------------
-	--	
-	Set @CheckResultsInRemotePeptideDBs = IsNull(@CheckResultsInRemotePeptideDBs, 1)
-	Set @message = ''
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start'
 
-	Set @MinimumMTHighNormalizedScore = IsNull(@MinimumMTHighNormalizedScore, 0)
-	Set @MinimumMTHighDiscriminantScore = IsNull(@MinimumMTHighDiscriminantScore, 0)
-	Set @MinimumMTPeptideProphetProbability = IsNull(@MinimumMTPeptideProphetProbability, 0)
-	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
+	Begin Try
 
-	-----------------------------------------------------------
-	-- Create several temporary tables
-	-----------------------------------------------------------
-	--	
-	CREATE TABLE #TmpQRJobsToProcess (
-		Job int NOT NULL
-	)
+		-----------------------------------------------------------
+		-- Validate the inputs
+		-----------------------------------------------------------
+		--	
+		Set @CheckResultsInRemotePeptideDBs = IsNull(@CheckResultsInRemotePeptideDBs, 1)
+		Set @message = ''
 
-	-- Note: SP LookupPeptideDBLocations uses this table and expects it to be named #T_Peptide_Database_List
-	CREATE TABLE #T_Peptide_Database_List (
-		UniqueID int identity(1,1),
-		PeptideDBName varchar(128) NULL,
-		PeptideDBID int NULL,
-		PeptideDBServer varchar(128) NULL,
-		PeptideDBPath varchar(256) NULL
-	)
+		Set @MinimumMTHighNormalizedScore = IsNull(@MinimumMTHighNormalizedScore, 0)
+		Set @MinimumMTHighDiscriminantScore = IsNull(@MinimumMTHighDiscriminantScore, 0)
+		Set @MinimumMTPeptideProphetProbability = IsNull(@MinimumMTPeptideProphetProbability, 0)
+		Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
 
-	-- Note: SP GetPMTQualityScoreFilterSetDetails uses this table
-	CREATE TABLE #FilterSetDetails (
-		Filter_Set_Text varchar(256),
-		Filter_Set_ID int NULL,
-		Score_Value real NULL,
-		Experiment_Filter varchar(128) NULL,
-		Instrument_Class_Filter varchar(128) NULL,
-		Unique_Row_ID int Identity(1,1)
-	)
+		-----------------------------------------------------------
+		-- Create several temporary tables
+		-----------------------------------------------------------
+		--	
+		CREATE TABLE #TmpQRJobsToProcess (
+			Job int NOT NULL
+		)
 
-	-- Note: SP CheckFilterForAnalysesWork uses this table
-	CREATE TABLE #JobsInBatch (
-		Job int
-	)
+		-- Note: SP LookupPeptideDBLocations uses this table and expects it to be named #T_Peptide_Database_List
+		CREATE TABLE #T_Peptide_Database_List (
+			UniqueID int identity(1,1),
+			PeptideDBName varchar(128) NULL,
+			PeptideDBID int NULL,
+			PeptideDBServer varchar(128) NULL,
+			PeptideDBPath varchar(256) NULL
+		)
 
-	-- Note: SP CheckFilterForAnalysesWork uses this table
-	CREATE TABLE #PeptideFilterResults (
-		Analysis_ID int NOT NULL ,
-		Peptide_ID int NOT NULL ,
-		Pass_FilterSet tinyint NOT NULL		
-	)
+		-- Note: SP GetPMTQualityScoreFilterSetDetails uses this table
+		CREATE TABLE #FilterSetDetails (
+			Filter_Set_Text varchar(256),
+			Filter_Set_ID int NULL,
+			Score_Value real NULL,
+			Experiment_Filter varchar(128) NULL,
+			Instrument_Class_Filter varchar(128) NULL,
+			Unique_Row_ID int Identity(1,1)
+		)
 
-	CREATE TABLE #TmpQRFilterPassingMTs (
-		Mass_Tag_ID int NOT NULL,
-		Pass_FilterSet tinyint NOT NULL
-	)
+		-- Note: SP CheckFilterForAnalysesWork uses this table
+		CREATE TABLE #JobsInBatch (
+			Job int
+		)
 
-	CREATE UNIQUE INDEX #IX_TmpQRFilterPassingMTs ON #TmpQRFilterPassingMTs (Mass_Tag_ID)
+		-- Note: SP CheckFilterForAnalysesWork uses this table
+		CREATE TABLE #PeptideFilterResults (
+			Analysis_ID int NOT NULL ,
+			Peptide_ID int NOT NULL ,
+			Pass_FilterSet tinyint NOT NULL		
+		)
+
+		CREATE TABLE #TmpQRFilterPassingMTs (
+			Mass_Tag_ID int NOT NULL,
+			Pass_FilterSet tinyint NOT NULL
+		)
+
+		CREATE UNIQUE INDEX #IX_TmpQRFilterPassingMTs ON #TmpQRFilterPassingMTs (Mass_Tag_ID)
+
+		CREATE TABLE #TmpPepIDToSeqIDMap (
+			Peptide_ID int NOT NULL ,
+			Mass_Tag_ID int NOT NULL,
+		)
+
+		CREATE INDEX #IX_TmpPepIDToSeqIDMap ON #TmpQRFilterPassingMTs (Mass_Tag_ID)
+
 		
-	-----------------------------------------------------------
-	-- Populate #TmpQRJobsToProcess using #UMCMatchResultsByJob
-	-----------------------------------------------------------
-	--
-	INSERT INTO #TmpQRJobsToProcess (Job)
-	SELECT Job
-	FROM #UMCMatchResultsByJob
-	GROUP BY Job
-	ORDER BY Job
-	--
-	SELECT @myError = @@error, @myRowCount = @@RowCount
-
-	If @myRowCount = 0
-		Set @ProcessNextJob = 0
-	Else
-		Set @ProcessNextJob = 1
-	
-	If @ProcessNextJob = 1
-	Begin
-		-- Initialize @CurrentJob
-		Set @CurrentJob = 0
-		
-		SELECT @CurrentJob = MIN(Job)-1
-		FROM #TmpQRJobsToProcess
-		
-		If @CheckResultsInRemotePeptideDBs <> 0
-		Begin
-			-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
-			--
-			Exec @myError = LookupPeptideDBLocations @message = @message output
-			
-			-- Note that @myError will be 40000 if no peptide DBs are defined
-			-- We'll ignore errors returned by LookupPeptideDBLocations
-		End
-
-		If @MinimumPMTQualityScore > 0
-		Begin
-			-- Populate #FilterSetDetails
-			exec @myError = GetPMTQualityScoreFilterSetDetails @message = @message output
-			
-			If @myError <> 0
-			Begin
-				-- Post an entry to the log, but continue processing
-				execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
-				Set @message = ''
-				Set @myError = 0
-			End
-			
-			-- Remove filter sets from #FilterSetDetails that have Score_Values below @MinimumPMTQualityScore
-			DELETE FROM #FilterSetDetails
-			WHERE Score_Value < @MinimumPMTQualityScore
-			
-			-- See if #FilterSetDetails still contains any rows
-			-- If not, set @MinimumPMTQualityScore to 0
-			
-			Set @MatchCount = 0
-			SELECT @MatchCount = Count(*)
-			FROM #FilterSetDetails
-			
-			If @MatchCount = 0
-				Set @MinimumPMTQualityScore = 0
-		End
-
-	End
-
-	-----------------------------------------------------------
-	-- Process each of the jobs in #TmpQRJobsToProcess
-	-----------------------------------------------------------
-	--	
-
-	While @ProcessNextJob = 1
-	Begin -- <a>
-		-- Get the next job from #TmpQRJobsToProcess
+		-----------------------------------------------------------
+		-- Populate #TmpQRJobsToProcess using #UMCMatchResultsByJob
+		-----------------------------------------------------------
 		--
-		SELECT TOP 1 @CurrentJob = Job
-		FROM #TmpQRJobsToProcess
-		WHERE Job > @CurrentJob
+		INSERT INTO #TmpQRJobsToProcess (Job)
+		SELECT Job
+		FROM #UMCMatchResultsByJob
+		GROUP BY Job
 		ORDER BY Job
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -206,454 +153,562 @@ AS
 		If @myRowCount = 0
 			Set @ProcessNextJob = 0
 		Else
-		Begin -- <b>
-			-- Lookup the Dataset_ID corresponding to @CurrentJob
+			Set @ProcessNextJob = 1
+		
+		If @ProcessNextJob = 1
+		Begin
+			-- Initialize @CurrentJob
+			Set @CurrentJob = 0
+			
+			SELECT @CurrentJob = MIN(Job)-1
+			FROM #TmpQRJobsToProcess
+			
+			If @CheckResultsInRemotePeptideDBs <> 0
+			Begin
+				-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
+				--
+				Exec @myError = LookupPeptideDBLocations @message = @message output
+				
+				-- Note that @myError will be 40000 if no peptide DBs are defined
+				-- We'll ignore errors returned by LookupPeptideDBLocations
+			End
+
+			If @MinimumPMTQualityScore > 0
+			Begin
+				-- Populate #FilterSetDetails
+				exec @myError = GetPMTQualityScoreFilterSetDetails @message = @message output
+				
+				If @myError <> 0
+				Begin
+					-- Post an entry to the log, but continue processing
+					execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
+					Set @message = ''
+					Set @myError = 0
+				End
+				
+				-- Remove filter sets from #FilterSetDetails that have Score_Values below @MinimumPMTQualityScore
+				DELETE FROM #FilterSetDetails
+				WHERE Score_Value < @MinimumPMTQualityScore
+				
+				-- See if #FilterSetDetails still contains any rows
+				-- If not, set @MinimumPMTQualityScore to 0
+				
+				Set @MatchCount = 0
+				SELECT @MatchCount = Count(*)
+				FROM #FilterSetDetails
+				
+				If @MatchCount = 0
+					Set @MinimumPMTQualityScore = 0
+			End
+
+		End
+
+		-----------------------------------------------------------
+		-- Process each of the jobs in #TmpQRJobsToProcess
+		-----------------------------------------------------------
+		--	
+
+		While @ProcessNextJob = 1
+		Begin -- <a>
+			-- Get the next job from #TmpQRJobsToProcess
 			--
-			SELECT @DatasetID = Dataset_ID
-			FROM T_FTICR_Analysis_Description
-			WHERE Job = @CurrentJob
+			SELECT TOP 1 @CurrentJob = Job
+			FROM #TmpQRJobsToProcess
+			WHERE Job > @CurrentJob
+			ORDER BY Job
 			--
 			SELECT @myError = @@error, @myRowCount = @@RowCount
-			
+
 			If @myRowCount = 0
-			Begin
-				Set @message = 'Job ' + Convert(varchar(19), @CurrentJob) + ' not found in T_FTICR_Analysis_Description; this is unexpected'
-				Execute PostLogEntry 'Error', @message, 'QuantitationProcessWorkStepB'
-				Print @message
-				Set @message = ''
-			End
+				Set @ProcessNextJob = 0
 			Else
-			Begin -- <c>
-				-- Look for @DatasetID in T_Analysis_Description in this DB
-				Set @MatchCount = 0
+			Begin -- <b>
+				-- Lookup the Dataset_ID corresponding to @CurrentJob
+				--
+				SELECT @DatasetID = Dataset_ID
+				FROM T_FTICR_Analysis_Description
+				WHERE Job = @CurrentJob
+				--
+				SELECT @myError = @@error, @myRowCount = @@RowCount
 				
-				SELECT @MatchCount = COUNT(*)
-				FROM T_Analysis_Description
-				WHERE Dataset_ID = @DatasetID
-				
-				If @MatchCount > 0
-				Begin -- <d1>
-
-					-- This database contains Sequest or XTandem results for this dataset; 
-					-- look for matching Mass Tags that pass the score filters
-					--
-					UPDATE #UMCMatchResultsByJob
-					SET Observed_By_MSMS_in_This_Dataset = 1
-					FROM #UMCMatchResultsByJob UMR INNER JOIN
-						(	SELECT DISTINCT Pep.Mass_Tag_ID
-							FROM T_Analysis_Description TAD INNER JOIN 
-								 T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN 
-								 T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN 
-								 T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN 
-								 T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID
-							WHERE (TAD.Dataset_ID = @DatasetID) AND
-								   (SD.DiscriminantScoreNorm IS NULL OR
-									SD.DiscriminantScoreNorm >= @MinimumMTHighDiscriminantScore) AND
-								   (SD.Peptide_Prophet_Probability IS NULL OR
-									SD.Peptide_Prophet_Probability >= @MinimumMTPeptideProphetProbability) AND
-								   (SS.XCorr IS NULL OR
-									SS.XCorr >= @MinimumMTHighNormalizedScore) AND
-								   (XT.Normalized_Score IS NULL OR
-									XT.Normalized_Score >= @MinimumMTHighNormalizedScore)
-						) LookupQ ON
-						  UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND
-						  UMR.Job = @CurrentJob
-					--
-					SELECT @myError = @@error, @myRowCount = @@RowCount
-
-					If @MinimumPMTQualityScore > 0
-					Begin -- <e>
-						-----------------------------------------------------------
-						-- Also filtering on PMT Quality Score
-						-- Use CheckFilterForAnalysesWork to determine the mass tag IDs that pass @MinimumPMTQualityScore
-						-----------------------------------------------------------
-
-						-----------------------------------------------------------
-						-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
-						-----------------------------------------------------------
-						--
-						DELETE FROM #TmpQRFilterPassingMTs
-						--
-						INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
-						SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
-						FROM #UMCMatchResultsByJob
-						WHERE Observed_By_MSMS_in_This_Dataset = 1 AND
-						      Job = @CurrentJob
-						--
-						SELECT @myError = @@error, @myRowCount = @@RowCount
-						
-						-----------------------------------------------------------
-						-- Now loop through the Filter_Set_ID values in #FilterSetDetails
-						-- Call CheckFilterForAnalysesWork for each
-						-----------------------------------------------------------
-
-						Set @UniqueRowID = 0
-						Set @ContinuePMTQS = 1
-						Set @FilterSetsEvaluated = 0
-						Set @JobsTablePopulated = 0
-						Set @SavedExperimentFilter = ''
-						
-						While @ContinuePMTQS > 0
-						Begin -- <f1>
-
-							-- Process the filter sets in #FilterSetDetails with PMT QS >= @MinimumPMTQualityScore
-							-- Keep track of the Mass Tags that pass each filter set
-
-							Set @FilterSetID = 0
-							
-							SELECT TOP 1 @FilterSetID = Filter_Set_ID,
-										 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
-										 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
-										 @UniqueRowID = Unique_Row_ID
-							FROM #FilterSetDetails
-							WHERE Unique_Row_ID > @UniqueRowID
-							ORDER BY Unique_Row_ID
-							--
-							SELECT @myError = @@error, @myRowCount = @@RowCount
-
-							If @myRowCount = 0
-								Set @ContinuePMTQS = 0
-							Else
-							Begin -- <g>
-							
-								-----------------------------------------------------------
-								-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
-								--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
-								-----------------------------------------------------------
-								--
-								If @JobsTablePopulated = 0 OR 
-								   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
-								   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
-								Begin
-									DELETE FROM #JobsInBatch
-									
-									Set @S = ''
-									Set @S = @S + ' INSERT INTO #JobsInBatch (Job)'
-									Set @S = @S + ' SELECT Job'
-									Set @S = @S + ' FROM T_Analysis_Description'
-									Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
-									
-									If Len(@FilterSetExperimentFilter) > 0
-										Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
-
-									If Len(@FilterSetInstrumentClassFilter) > 0
-										Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
-										
-									Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
-									
-									Exec @myError = sp_executesql @S
-
-									Set @SavedExperimentFilter = @FilterSetExperimentFilter
-									Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
-									
-									Set @JobsTablePopulated = 1
-								End
-								
-								-- Only continue if #JobsInBatch contains 1 or more jobs
-								Set @MatchCount = 0
-								SELECT @MatchCount = COUNT(*)
-								FROM #JobsInBatch
-								
-								If @MatchCount > 0
-								Begin  -- <h>
-									DELETE FROM #PeptideFilterResults
-									
-									exec @myError = CheckFilterForAnalysesWork @FilterSetID, @message = @message output
-									
-									If @myError <> 0
-									Begin
-										If Len(@message) = 0
-											Set @message = 'Error calling CheckFilterForAnalysesWork in this DB'
-											
-										execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
-										Set @message = ''
-										Set @myError = 0
-									End
-									Else
-									Begin -- <i>
-										-- Update #TmpQRFilterPassingMTs using #PeptideFilterResults
-										-- The trick here is that #PeptideFilterResults contains Peptide_ID but not Mass_Tag_ID
-																				
-										UPDATE #TmpQRFilterPassingMTs
-										SET Pass_FilterSet = 1
-										FROM #TmpQRFilterPassingMTs QRMTs INNER JOIN
-											T_Peptides P ON P.Mass_Tag_ID = QRMTs.Mass_Tag_ID INNER JOIN
-											#PeptideFilterResults PFR ON P.Peptide_ID = PFR.Peptide_ID
-										WHERE PFR.Pass_FilterSet <> 0
-										--
-										SELECT @myError = @@error, @myRowCount = @@RowCount
-										
-										
-										Set @FilterSetsEvaluated = @FilterSetsEvaluated + 1
-									End -- </i>
-									
-								End -- </h>												
-							End -- </g>
-						End  -- </f1>
-						
-						If @FilterSetsEvaluated > 0
-						Begin -- <f2>
-							-- Un-flag any flagged entries in #UMCMatchResultsByJob
-							--  that do not have Pass_FilterSet = 1 in #TmpQRFilterPassingMTs
-							
-							UPDATE #UMCMatchResultsByJob
-							SET Observed_By_MSMS_in_This_Dataset = 0
-							FROM #UMCMatchResultsByJob UMR INNER JOIN
-								 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
-							WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
-								  UMR.Job = @CurrentJob AND
-								  QRMTs.Pass_FilterSet = 0
-							--
-							SELECT @myError = @@error, @myRowCount = @@RowCount
-							
-						End -- </f2>
-						
-					End -- </e>
-
-				End -- </d1>
+				If @myRowCount = 0
+				Begin
+					Set @message = 'Job ' + Convert(varchar(19), @CurrentJob) + ' not found in T_FTICR_Analysis_Description; this is unexpected'
+					Execute PostLogEntry 'Error', @message, 'QuantitationProcessWorkStepB'
+					Print @message
+					Set @message = ''
+				End
 				Else
-				Begin -- <d2>
-					-- This database does not contain Sequest or XTandem results for this dataset
-					-- Look for @DatasetID in the PT Databases linked to this DB (defined in #T_Peptide_Database_List)
+				Begin -- <c>
+					-- Look for @DatasetID in T_Analysis_Description in this DB
+					Set @MatchCount = 0
 					
-					If @CheckResultsInRemotePeptideDBs <> 0
-					Begin -- <e>
-						Set @PepDBUniqueID = 0
-						
-						SELECT @PepDBUniqueID = MIN(UniqueID)-1
-						FROM #T_Peptide_Database_List
+					SELECT @MatchCount = COUNT(*)
+					FROM T_Analysis_Description
+					WHERE Dataset_ID = @DatasetID
+					
+					If @MatchCount > 0
+					Begin -- <d1>
+
+						-- This database contains Sequest or XTandem results for this dataset; 
+						-- look for matching Mass Tags that pass the score filters
+						--
+						UPDATE #UMCMatchResultsByJob
+						SET Observed_By_MSMS_in_This_Dataset = 1
+						FROM #UMCMatchResultsByJob UMR INNER JOIN
+							(	SELECT DISTINCT Pep.Mass_Tag_ID
+								FROM T_Analysis_Description TAD INNER JOIN 
+									 T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN 
+									 T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN 
+									 T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN 
+									 T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID
+								WHERE (TAD.Dataset_ID = @DatasetID) AND
+									   (SD.DiscriminantScoreNorm IS NULL OR
+										SD.DiscriminantScoreNorm >= @MinimumMTHighDiscriminantScore) AND
+									   (SD.Peptide_Prophet_Probability IS NULL OR
+										SD.Peptide_Prophet_Probability >= @MinimumMTPeptideProphetProbability) AND
+									   (SS.XCorr IS NULL OR
+										SS.XCorr >= @MinimumMTHighNormalizedScore) AND
+									   (XT.Normalized_Score IS NULL OR
+										XT.Normalized_Score >= @MinimumMTHighNormalizedScore)
+							) LookupQ ON
+							  UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND
+							  UMR.Job = @CurrentJob
 						--
 						SELECT @myError = @@error, @myRowCount = @@RowCount
-						
-						If @myRowCount = 0
-							Set @ProcessNextPeptideDB = 0
-						Else
-							Set @ProcessNextPeptideDB = 1
 
-						While @ProcessNextPeptideDB = 1
-						Begin -- <f>
-						
-							-- Get the next Peptide DB from #T_Peptide_Database_List
+						If @MinimumPMTQualityScore > 0
+						Begin -- <e>
+							-----------------------------------------------------------
+							-- Also filtering on PMT Quality Score
+							-- Use CheckFilterForAnalysesWork to determine the mass tag IDs that pass @MinimumPMTQualityScore
+							-----------------------------------------------------------
+
+							-----------------------------------------------------------
+							-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
+							-----------------------------------------------------------
 							--
-							SELECT TOP 1 @PeptideDBPath = PeptideDBPath, @PepDBUniqueID = UniqueID
-							FROM #T_Peptide_Database_List
-							WHERE UniqueID > @PepDBUniqueID
-							ORDER BY UniqueID
+							DELETE FROM #TmpQRFilterPassingMTs
+							--
+							INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
+							SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
+							FROM #UMCMatchResultsByJob
+							WHERE Observed_By_MSMS_in_This_Dataset = 1 AND
+								  Job = @CurrentJob
 							--
 							SELECT @myError = @@error, @myRowCount = @@RowCount
+							
+							-----------------------------------------------------------
+							-- Now loop through the Filter_Set_ID values in #FilterSetDetails
+							-- Call CheckFilterForAnalysesWork for each
+							-----------------------------------------------------------
 
+							Set @UniqueRowID = 0
+							Set @ContinuePMTQS = 1
+							Set @FilterSetsEvaluated = 0
+							Set @JobsTablePopulated = 0
+							Set @SavedExperimentFilter = ''
+							
+							While @ContinuePMTQS > 0
+							Begin -- <f1>
+
+								-- Process the filter sets in #FilterSetDetails with PMT QS >= @MinimumPMTQualityScore
+								-- Keep track of the Mass Tags that pass each filter set
+
+								Set @FilterSetID = 0
+								
+								SELECT TOP 1 @FilterSetID = Filter_Set_ID,
+											 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
+											 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
+											 @UniqueRowID = Unique_Row_ID
+								FROM #FilterSetDetails
+								WHERE Unique_Row_ID > @UniqueRowID
+								ORDER BY Unique_Row_ID
+								--
+								SELECT @myError = @@error, @myRowCount = @@RowCount
+
+								If @myRowCount = 0
+									Set @ContinuePMTQS = 0
+								Else
+								Begin -- <g>
+								
+									-----------------------------------------------------------
+									-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
+									--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
+									-----------------------------------------------------------
+									--
+									If @JobsTablePopulated = 0 OR 
+									   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
+									   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
+									Begin
+										DELETE FROM #JobsInBatch
+										
+										Set @S = ''
+										Set @S = @S + ' INSERT INTO #JobsInBatch (Job)'
+										Set @S = @S + ' SELECT Job'
+										Set @S = @S + ' FROM T_Analysis_Description'
+										Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
+										
+										If Len(@FilterSetExperimentFilter) > 0
+											Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+
+										If Len(@FilterSetInstrumentClassFilter) > 0
+											Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+											
+										Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
+										
+										Exec @myError = sp_executesql @S
+
+										Set @SavedExperimentFilter = @FilterSetExperimentFilter
+										Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
+										
+										Set @JobsTablePopulated = 1
+									End
+									
+									-- Only continue if #JobsInBatch contains 1 or more jobs
+									Set @MatchCount = 0
+									SELECT @MatchCount = COUNT(*)
+									FROM #JobsInBatch
+									
+									If @MatchCount > 0
+									Begin  -- <h>
+										DELETE FROM #PeptideFilterResults
+										
+										exec @myError = CheckFilterForAnalysesWork @FilterSetID, @message = @message output
+										
+										If @myError <> 0
+										Begin
+											If Len(@message) = 0
+												Set @message = 'Error calling CheckFilterForAnalysesWork in this DB'
+												
+											execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
+											Set @message = ''
+											Set @myError = 0
+										End
+										Else
+										Begin -- <i>
+											-- Update #TmpQRFilterPassingMTs using #PeptideFilterResults
+											-- The trick here is that #PeptideFilterResults contains Peptide_ID but not Mass_Tag_ID
+																					
+											UPDATE #TmpQRFilterPassingMTs
+											SET Pass_FilterSet = 1
+											FROM #TmpQRFilterPassingMTs QRMTs INNER JOIN
+												T_Peptides P ON P.Mass_Tag_ID = QRMTs.Mass_Tag_ID INNER JOIN
+												#PeptideFilterResults PFR ON P.Peptide_ID = PFR.Peptide_ID
+											WHERE PFR.Pass_FilterSet <> 0
+											--
+											SELECT @myError = @@error, @myRowCount = @@RowCount
+											
+											
+											Set @FilterSetsEvaluated = @FilterSetsEvaluated + 1
+										End -- </i>
+										
+									End -- </h>												
+								End -- </g>
+							End  -- </f1>
+							
+							If @FilterSetsEvaluated > 0
+							Begin -- <f2>
+								-- Un-flag any flagged entries in #UMCMatchResultsByJob
+								--  that do not have Pass_FilterSet = 1 in #TmpQRFilterPassingMTs
+								
+								UPDATE #UMCMatchResultsByJob
+								SET Observed_By_MSMS_in_This_Dataset = 0
+								FROM #UMCMatchResultsByJob UMR INNER JOIN
+									 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
+								WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
+									  UMR.Job = @CurrentJob AND
+									  QRMTs.Pass_FilterSet = 0
+								--
+								SELECT @myError = @@error, @myRowCount = @@RowCount
+								
+							End -- </f2>
+							
+						End -- </e>
+
+					End -- </d1>
+					Else
+					Begin -- <d2>
+						-- This database does not contain Sequest or XTandem results for this dataset
+						-- Look for @DatasetID in the PT Databases linked to this DB (defined in #T_Peptide_Database_List)
+						
+						If @CheckResultsInRemotePeptideDBs <> 0
+						Begin -- <e>
+							Set @PepDBUniqueID = 0
+							
+							SELECT @PepDBUniqueID = MIN(UniqueID)-1
+							FROM #T_Peptide_Database_List
+							--
+							SELECT @myError = @@error, @myRowCount = @@RowCount
+							
 							If @myRowCount = 0
 								Set @ProcessNextPeptideDB = 0
 							Else
-							Begin -- <g>
-								-- Look for @DatasetID in T_Analysis_Description in the remote DB
-								Set @S = ''
-								Set @S = @S + ' SELECT @MatchCount = COUNT(*)'
-								Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
-								Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
-								Set @S = @S +       ' AND ResultType = ''Peptide_Hit'''
-								
-								Set @MatchCount = 0
-								Set @SParams = '@MatchCount int output'
+								Set @ProcessNextPeptideDB = 1
+
+							While @ProcessNextPeptideDB = 1
+							Begin -- <f>
+							
+								-- Get the next Peptide DB from #T_Peptide_Database_List
 								--
-								Exec sp_executesql @S, @SParams, @MatchCount = @MatchCount output
-								
-								If IsNull(@MatchCount, 0) > 0
-								Begin -- <h>
-									-- The dataset was found
-									-- First test the Score Filters
-									
+								SELECT TOP 1 @PeptideDBPath = PeptideDBPath, @PepDBUniqueID = UniqueID
+								FROM #T_Peptide_Database_List
+								WHERE UniqueID > @PepDBUniqueID
+								ORDER BY UniqueID
+								--
+								SELECT @myError = @@error, @myRowCount = @@RowCount
+
+								If @myRowCount = 0
+									Set @ProcessNextPeptideDB = 0
+								Else
+								Begin -- <g>
+									-- Look for @DatasetID in T_Analysis_Description in the remote DB
 									Set @S = ''
-									Set @S = @S + ' UPDATE #UMCMatchResultsByJob '
-									Set @S = @S + ' SET Observed_By_MSMS_in_This_Dataset = 1 '
-									Set @S = @S + ' FROM #UMCMatchResultsByJob UMR INNER JOIN '
-									Set @S = @S +     ' (SELECT DISTINCT Pep.Seq_ID AS Mass_Tag_ID '
-									Set @S = @S +      ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description TAD INNER JOIN '
-									Set @S = @S +                 @PeptideDBPath + '.dbo.T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN'
-									Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN '
-									Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN '
-									Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID '
-									Set @S = @S +      ' WHERE TAD.Dataset_ID = ' + Convert(varchar(19), @DatasetID) + ' AND '
-									Set @S = @S +           ' (SD.DiscriminantScoreNorm IS NULL OR '
-									Set @S = @S +            ' SD.DiscriminantScoreNorm >= ' + Convert(varchar(19), @MinimumMTHighDiscriminantScore) + ') AND '
-									Set @S = @S +           ' (SD.Peptide_Prophet_Probability IS NULL OR '
-									Set @S = @S +            ' SD.Peptide_Prophet_Probability >= ' + Convert(varchar(19), @MinimumMTPeptideProphetProbability) + ') AND '
-									Set @S = @S +           ' (SS.XCorr IS NULL OR '
-									Set @S = @S +            ' SS.XCorr >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
-									Set @S = @S +           ' (XT.Normalized_Score IS NULL OR '
-									Set @S = @S +            ' XT.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ')'
-									Set @S = @S +     ' ) LookupQ ON '
-									Set @S = @S +   ' UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND '
-									Set @S = @S +   ' UMR.Job = ' + Convert(varchar(19), @CurrentJob)
+									Set @S = @S + ' SELECT @MatchCount = COUNT(*)'
+									Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
+									Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
+									Set @S = @S +       ' AND ResultType = ''Peptide_Hit'''
+									
+									Set @MatchCount = 0
+									Set @SParams = '@MatchCount int output'
 									--
-									Exec sp_executesql @S
-									--
-									SELECT @myError = @@error, @myRowCount = @@RowCount
-
-									If @MinimumPMTQualityScore > 0
-									Begin -- <i>
-										-----------------------------------------------------------
-										-- Also filtering on PMT Quality Score
-										-- Use CheckFilterForAnalysesWork in the peptide DB to determine the Seq IDs (i.e. mass tag IDs)
-										--   that pass @MinimumPMTQualityScore
-										-----------------------------------------------------------
-
-										-----------------------------------------------------------
-										-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
-										-----------------------------------------------------------
+									Exec sp_executesql @S, @SParams, @MatchCount = @MatchCount output
+									
+									If IsNull(@MatchCount, 0) > 0
+									Begin -- <h>
+										-- The dataset was found
+										-- First test the Score Filters
+										
+										Set @S = ''
+										Set @S = @S + ' UPDATE #UMCMatchResultsByJob '
+										Set @S = @S + ' SET Observed_By_MSMS_in_This_Dataset = 1 '
+										Set @S = @S + ' FROM #UMCMatchResultsByJob UMR INNER JOIN '
+										Set @S = @S +     ' (SELECT DISTINCT Pep.Seq_ID AS Mass_Tag_ID '
+										Set @S = @S +      ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description TAD INNER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN'
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID '
+										Set @S = @S +      ' WHERE TAD.Dataset_ID = ' + Convert(varchar(19), @DatasetID) + ' AND '
+										Set @S = @S +           ' (SD.DiscriminantScoreNorm IS NULL OR '
+										Set @S = @S +            ' SD.DiscriminantScoreNorm >= ' + Convert(varchar(19), @MinimumMTHighDiscriminantScore) + ') AND '
+										Set @S = @S +           ' (SD.Peptide_Prophet_Probability IS NULL OR '
+										Set @S = @S +            ' SD.Peptide_Prophet_Probability >= ' + Convert(varchar(19), @MinimumMTPeptideProphetProbability) + ') AND '
+										Set @S = @S +           ' (SS.XCorr IS NULL OR '
+										Set @S = @S +            ' SS.XCorr >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
+										Set @S = @S +           ' (XT.Normalized_Score IS NULL OR '
+										Set @S = @S +            ' XT.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ')'
+										Set @S = @S +     ' ) LookupQ ON '
+										Set @S = @S +   ' UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND '
+										Set @S = @S +   ' UMR.Job = ' + Convert(varchar(19), @CurrentJob)
 										--
-										DELETE FROM #TmpQRFilterPassingMTs
-										--
-										INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
-										SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
-										FROM #UMCMatchResultsByJob
-										WHERE Observed_By_MSMS_in_This_Dataset = 1 AND 
-										      Job = @CurrentJob
+										Exec sp_executesql @S
 										--
 										SELECT @myError = @@error, @myRowCount = @@RowCount
-										
-										-----------------------------------------------------------
-										-- Now loop through the Filter_Set_ID values in #FilterSetDetails
-										-- Call CheckFilterForAnalysesWork for each
-										-----------------------------------------------------------
 
-										Set @UniqueRowID = 0
-										Set @ContinuePMTQS = 1
-										Set @FilterSetsEvaluated = 0
-										Set @JobsTablePopulated = 0
-										Set @SavedExperimentFilter = ''
-										
-										While @ContinuePMTQS > 0
-										Begin -- <j1>
+										If @MinimumPMTQualityScore > 0
+										Begin -- <i>
+											-----------------------------------------------------------
+											-- Also filtering on PMT Quality Score
+											-- Use CheckFilterForAnalysesWork in the peptide DB to determine the Seq IDs (i.e. mass tag IDs)
+											--   that pass @MinimumPMTQualityScore
+											-----------------------------------------------------------
 
-											-- Process the filter sets in #FilterSetDetails with PMT QS >= @MinimumPMTQualityScore
-											-- Keep track of the Mass Tags that pass each filter set
-
-											Set @FilterSetID = 0
-											
-											SELECT TOP 1 @FilterSetID = Filter_Set_ID,
-														 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
-														 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
-														 @UniqueRowID = Unique_Row_ID
-											FROM #FilterSetDetails
-											WHERE Unique_Row_ID > @UniqueRowID
-											ORDER BY Unique_Row_ID
+											-----------------------------------------------------------
+											-- First populate #TmpQRFilterPassingMTs using only those MTs that passed the score filters
+											-----------------------------------------------------------
+											--
+											DELETE FROM #TmpQRFilterPassingMTs
+											--
+											INSERT INTO #TmpQRFilterPassingMTs (Mass_Tag_ID, Pass_FilterSet)
+											SELECT DISTINCT Mass_Tag_ID, 0 AS Pass_FilterSet
+											FROM #UMCMatchResultsByJob
+											WHERE Observed_By_MSMS_in_This_Dataset = 1 AND 
+												  Job = @CurrentJob
 											--
 											SELECT @myError = @@error, @myRowCount = @@RowCount
+											
+											-----------------------------------------------------------
+											-- Now loop through the Filter_Set_ID values in #FilterSetDetails
+											-- Call CheckFilterForAnalysesWork for each
+											-----------------------------------------------------------
 
-											If @myRowCount = 0
-												Set @ContinuePMTQS = 0
-											Else
-											Begin -- <k>
+											Set @UniqueRowID = 0
+											Set @ContinuePMTQS = 1
+											Set @FilterSetsEvaluated = 0
+											Set @JobsTablePopulated = 0
+											Set @SavedExperimentFilter = ''
+											
+											While @ContinuePMTQS > 0
+											Begin -- <j1>
+
+												-- Process the filter sets in #FilterSetDetails with PMT QS >= @MinimumPMTQualityScore
+												-- Keep track of the Mass Tags that pass each filter set
+
+												Set @FilterSetID = 0
 												
-												-----------------------------------------------------------
-												-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
-												--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
-												-----------------------------------------------------------
+												SELECT TOP 1 @FilterSetID = Filter_Set_ID,
+															 @FilterSetExperimentFilter = IsNull(Experiment_Filter, ''),
+															 @FilterSetInstrumentClassFilter = IsNull(Instrument_Class_Filter, ''),
+															 @UniqueRowID = Unique_Row_ID
+												FROM #FilterSetDetails
+												WHERE Unique_Row_ID > @UniqueRowID
+												ORDER BY Unique_Row_ID
 												--
-												If @JobsTablePopulated = 0 OR 
-												   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
-												   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
-												Begin
-													DELETE FROM #JobsInBatch
-													
-													Set @S = ''
-													Set @S = @S + ' INSERT INTO #JobsInBatch (Job)'
-													Set @S = @S + ' SELECT Job'
-													Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
-													Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
-													
-													If Len(@FilterSetExperimentFilter) > 0
-														Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+												SELECT @myError = @@error, @myRowCount = @@RowCount
 
-													If Len(@FilterSetInstrumentClassFilter) > 0
-														Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+												If @myRowCount = 0
+													Set @ContinuePMTQS = 0
+												Else
+												Begin -- <k>
 													
-													Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
-													
-													Exec @myError = sp_executesql @S
-
-													Set @SavedExperimentFilter = @FilterSetExperimentFilter
-													Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
-													
-													Set @JobsTablePopulated = 1
-												End
-												
-												-- Only continue if #JobsInBatch contains 1 or more jobs
-												Set @MatchCount = 0
-												SELECT @MatchCount = COUNT(*)
-												FROM #JobsInBatch
-												
-												If @MatchCount > 0
-												Begin  -- <l>
-													DELETE FROM #PeptideFilterResults
-													
-													Set @S = 'exec ' + @PeptideDBPath + '.dbo.CheckFilterForAnalysesWork ' + Convert(varchar(12), @FilterSetID) + ', @message = @message output'
-													Set @SParams = '@message varchar(512) output'
+													-----------------------------------------------------------
+													-- Populate #JobsInBatch if @FilterSetExperimentFilter or 
+													--  @FilterSetInstrumentClassFilter are changed or if @SavedExperimentFilter Is Null
+													-----------------------------------------------------------
 													--
-													Exec @myError = sp_executesql @S, @SParams, @message = @message output
-
-													If @myError <> 0
+													If @JobsTablePopulated = 0 OR 
+													   (@SavedExperimentFilter <> @FilterSetExperimentFilter) OR
+													   (@SavedInstrumentClassFilter <> @FilterSetInstrumentClassFilter)
 													Begin
-														If Len(@message) = 0
-															Set @message = 'Error calling CheckFilterForAnalysesWork in ' + @PeptideDBPath
-															
-														execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
-														Set @message = ''
-														Set @myError = 0
-													End
-													Else
-													Begin -- <m>
-														-- Update #TmpQRFilterPassingMTs using #PeptideFilterResults
-														-- The trick here is that #PeptideFilterResults contains Peptide_ID but not Mass_Tag_ID
+														DELETE FROM #JobsInBatch
 														
 														Set @S = ''
-														Set @S = @S + ' UPDATE #TmpQRFilterPassingMTs'
-														Set @S = @S + ' SET Pass_FilterSet = 1'
-														Set @S = @S + ' FROM #TmpQRFilterPassingMTs QRMTs INNER JOIN '
-														Set @S = @S +        @PeptideDBPath + '.dbo.T_Peptides P ON P.Seq_ID = QRMTs.Mass_Tag_ID INNER JOIN '
-														Set @S = @S +      ' #PeptideFilterResults PFR ON P.Peptide_ID = PFR.Peptide_ID '
-														Set @S = @S + ' WHERE PFR.Pass_FilterSet <> 0'
-														--
-														Exec @myError = sp_executesql @S
-														--
-														SELECT @myError = @@error, @myRowCount = @@RowCount
+														Set @S = @S + ' INSERT INTO #JobsInBatch (Job)'
+														Set @S = @S + ' SELECT Job'
+														Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
+														Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
 														
-														Set @FilterSetsEvaluated = @FilterSetsEvaluated + 1
-													End -- </m>
+														If Len(@FilterSetExperimentFilter) > 0
+															Set @S = @S +    ' AND Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
+
+														If Len(@FilterSetInstrumentClassFilter) > 0
+															Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
+														
+														Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
+														
+														Exec @myError = sp_executesql @S
+
+														Set @SavedExperimentFilter = @FilterSetExperimentFilter
+														Set @SavedInstrumentClassFilter = @FilterSetInstrumentClassFilter
+														
+														Set @JobsTablePopulated = 1
+													End
 													
-												End -- </l>												
-											End -- </k>
-										End  -- </j1>
-										
-										If @FilterSetsEvaluated > 0
-										Begin -- <j2>
-											-- Un-flag any flagged entries in #UMCMatchResultsByJob
-											--  that do not have Pass_FilterSet = 1 in #TmpQRFilterPassingMTs
+													-- Only continue if #JobsInBatch contains 1 or more jobs
+													Set @MatchCount = 0
+													SELECT @MatchCount = COUNT(*)
+													FROM #JobsInBatch
+													
+													If @MatchCount > 0
+													Begin  -- <l>
+														DELETE FROM #PeptideFilterResults
+														
+														Set @S = 'exec ' + @PeptideDBPath + '.dbo.CheckFilterForAnalysesWork ' + Convert(varchar(12), @FilterSetID) + ', @message = @message output'
+														Set @SParams = '@message varchar(512) output'
+														--
+														Exec @myError = sp_executesql @S, @SParams, @message = @message output
+
+														If @myError <> 0
+														Begin
+															If Len(@message) = 0
+																Set @message = 'Error calling CheckFilterForAnalysesWork in ' + @PeptideDBPath
+																
+															execute PostLogEntry 'Error', @message, 'QuantitationProcessCheckForMSMSPeptideIDs'
+															Set @message = ''
+															Set @myError = 0
+														End
+														Else
+														Begin -- <m>
+															-- Update #TmpQRFilterPassingMTs using #PeptideFilterResults
+															-- The trick here is that #PeptideFilterResults contains Peptide_ID but not Mass_Tag_ID
+															
+															-- The SQL commented out here should complete successfully
+															-- However, it started hanging once PT_Shewanella_ProdTest_A123 surpassed 53 GB in October 2008 (with T_Peptides containing 12,400 jobs and 81 million rows)
+															--
+															--   UPDATE #TmpQRFilterPassingMTs
+															--   SET Pass_FilterSet = 1
+															--   FROM #TmpQRFilterPassingMTs QRMTs INNER JOIN 
+															--        @PeptideDBPath + '.dbo.T_Peptides P ON P.Seq_ID = QRMTs.Mass_Tag_ID INNER JOIN 
+															--        #PeptideFilterResults PFR ON P.Peptide_ID = PFR.Peptide_ID 
+															--   WHERE PFR.Pass_FilterSet <> 0
+															--
+															-- Consequently, we're now performing this update in a 2-step process
+															-- First we populate #TmpPepIDToSeqIDMap with the Peptide_ID to Mass_Tag_ID mapping
+															-- Then we update #TmpQRFilterPassingMTs
+
+															DELETE FROM #TmpPepIDToSeqIDMap
+															
+															Set @S = ''
+															Set @S = @S + ' INSERT INTO #TmpPepIDToSeqIDMap (Peptide_ID, Mass_Tag_ID)'
+															Set @S = @S + ' SELECT P.Peptide_ID, P.Seq_ID'
+															Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Peptides P'
+															Set @S = @S +        ' INNER JOIN #PeptideFilterResults PFR'
+															Set @S = @S +          ' ON P.Peptide_ID = PFR.Peptide_ID'
+															--
+															Exec @myError = sp_executesql @S
+															--
+															SELECT @myError = @@error, @myRowCount = @@RowCount
+															
+															UPDATE #TmpQRFilterPassingMTs
+															SET Pass_FilterSet = 1
+															FROM #PeptideFilterResults PFR
+															     INNER JOIN #TmpPepIDToSeqIDMap MapQ
+															       ON MapQ.Peptide_ID = PFR.Peptide_ID
+															     INNER JOIN #TmpQRFilterPassingMTs QRMTs
+															       ON MapQ.Mass_Tag_ID = QRMTs.Mass_Tag_ID
+															WHERE PFR.Pass_FilterSet <> 0
+															--
+															SELECT @myError = @@error, @myRowCount = @@RowCount
+															
+															Set @FilterSetsEvaluated = @FilterSetsEvaluated + 1
+														End -- </m>
+														
+													End -- </l>												
+												End -- </k>
+											End  -- </j1>
 											
-											UPDATE #UMCMatchResultsByJob
-											SET Observed_By_MSMS_in_This_Dataset = 0
-											FROM #UMCMatchResultsByJob UMR INNER JOIN
-												 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
-											WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
-												  UMR.Job = @CurrentJob AND
-												  QRMTs.Pass_FilterSet = 0
-											--
-											SELECT @myError = @@error, @myRowCount = @@RowCount
+											If @FilterSetsEvaluated > 0
+											Begin -- <j2>
+												-- Un-flag any flagged entries in #UMCMatchResultsByJob
+												--  that do not have Pass_FilterSet = 1 in #TmpQRFilterPassingMTs
+												
+												UPDATE #UMCMatchResultsByJob
+												SET Observed_By_MSMS_in_This_Dataset = 0
+												FROM #UMCMatchResultsByJob UMR INNER JOIN
+													 #TmpQRFilterPassingMTs QRMTs ON UMR.Mass_Tag_ID = QRMTs.Mass_Tag_ID
+												WHERE UMR.Observed_By_MSMS_in_This_Dataset = 1 AND
+													  UMR.Job = @CurrentJob AND
+													  QRMTs.Pass_FilterSet = 0
+												--
+												SELECT @myError = @@error, @myRowCount = @@RowCount
+												
+											End -- </j2>
 											
-										End -- </j2>
-										
-									End -- </i>
-								End -- </h>
-							End -- </g>
-						End -- </f>
-					End -- </e>
-				End -- </d2>
-			End -- </c>
-		End -- </b>
-	End -- </a>
+										End -- </i>
+									End -- </h>
+								End -- </g>
+							End -- </f>
+						End -- </e>
+					End -- </d2>
+				End -- </c>
+			End -- </b>
+		End -- </a>
+
+	End Try
+	Begin Catch
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QuantitationProcessCheckForMSMSPeptideIDs')
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList = '',
+								@ErrorNum = @myError output, @message = @message output
+	End Catch	
 	
 Done:
 	Return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessCheckForMSMSPeptideIDs] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessCheckForMSMSPeptideIDs] TO [MTS_DB_Lite]
 GO

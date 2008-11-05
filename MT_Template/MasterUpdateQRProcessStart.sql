@@ -65,3 +65,7 @@ As
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateQRProcessStart] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateQRProcessStart] TO [MTS_DB_Lite]
+GO

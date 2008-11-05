@@ -114,3 +114,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[MassTagAccumulationTrend] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[MassTagAccumulationTrend] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MassTagAccumulationTrend] TO [MTS_DB_Lite]
+GO

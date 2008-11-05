@@ -479,3 +479,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[DeleteHistogramCacheData] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[DeleteHistogramCacheData] TO [MTS_DB_Lite]
+GO

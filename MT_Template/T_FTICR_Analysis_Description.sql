@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
 	[Dataset_Scan_Count] [int] NULL,
 	[Experiment] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Campaign] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Organism] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Experiment_Organism] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Instrument_Class] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Instrument] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Analysis_Tool] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,

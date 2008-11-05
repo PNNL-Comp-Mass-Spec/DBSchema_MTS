@@ -121,3 +121,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[LookupPeptideDBLocations] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[LookupPeptideDBLocations] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LookupPeptideDBLocations] TO [MTS_DB_Lite]
+GO

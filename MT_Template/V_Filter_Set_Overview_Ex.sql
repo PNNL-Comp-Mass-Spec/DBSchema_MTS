@@ -10,24 +10,24 @@ SELECT TOP 100 PERCENT *
 FROM (SELECT DISTINCT 'Observation Count Filter' AS Filter_Type,
                       LookupQ.Filter_Set_ID,
                       '' AS Extra_Info,
-                      FSI.Filter_Set_Name,
-                      FSI.Filter_Set_Description
+                      FSO.Filter_Set_Name,
+                      FSO.Filter_Set_Description
       FROM ( SELECT CONVERT(int, Value) AS Filter_Set_ID
              FROM T_Process_Config
              WHERE (Name = 'Peptide_Obs_Count_Filter_ID') ) LookupQ
-           INNER JOIN MT_Main.dbo.V_DMS_Filter_Sets_Import FSI
-             ON LookupQ.Filter_Set_ID = FSI.Filter_Set_ID
+           INNER JOIN MT_Main.dbo.V_DMS_Filter_Set_Overview FSO
+             ON LookupQ.Filter_Set_ID = FSO.Filter_Set_ID
       UNION
       SELECT DISTINCT 'Peptide Import Filter' AS Filter_Type,
                       LookupQ.Filter_Set_ID,
                       '' AS Extra_Info,
-                      FSI.Filter_Set_Name,
-                      FSI.Filter_Set_Description
+                      FSO.Filter_Set_Name,
+                      FSO.Filter_Set_Description
       FROM ( SELECT CONVERT(int, Value) AS Filter_Set_ID
              FROM T_Process_Config
              WHERE (Name = 'Peptide_Import_Filter_ID') ) LookupQ
-           INNER JOIN MT_Main.dbo.V_DMS_Filter_Sets_Import FSI
-             ON LookupQ.Filter_Set_ID = FSI.Filter_Set_ID
+           INNER JOIN MT_Main.dbo.V_DMS_Filter_Set_Overview FSO
+             ON LookupQ.Filter_Set_ID = FSO.Filter_Set_ID
       UNION
       SELECT 'PMT Quality Score Filter' AS Filter_Type,
              Filter_Set_ID,

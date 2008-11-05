@@ -22,7 +22,7 @@ CREATE TABLE [dbo].[T_Mass_Tags](
 	[Mod_Description] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PMT_Quality_Score] [numeric](9, 5) NULL CONSTRAINT [DF_T_Mass_Tags_PMT_Quality_Score]  DEFAULT (0),
 	[Internal_Standard_Only] [tinyint] NOT NULL CONSTRAINT [DF_T_Mass_Tags_Is_Internal_Standard]  DEFAULT (0),
-	[Min_Log_EValue] [real] NULL,
+	[Min_Log_EValue] [real] NULL CONSTRAINT [DF_T_Mass_Tags_Min_Log_EValue]  DEFAULT ((0)),
 	[Cleavage_State_Max] [tinyint] NOT NULL CONSTRAINT [DF_T_Mass_Tags_Cleavage_State_Max]  DEFAULT ((0)),
  CONSTRAINT [PK_T_Mass_Tags] PRIMARY KEY CLUSTERED 
 (

@@ -46,6 +46,7 @@ CREATE Procedure dbo.QRRetrievePeptidesMultiQID
 **			06/05/2007 mem - Added parameters @message and @PreviewSql; changed @QRDsql and @Sql to varchar(max); switched to Try/Catch error handling
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
+**			08/12/2008 mem - Now including column Min_Log_EValue if X!Tandem-based peptides are present in T_Mass_Tags
 **
 ****************************************************/
 (
@@ -82,6 +83,7 @@ AS
 			@HighestTopLevelFractionCount int,
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
+			@XTandemDataPresent tinyint,
 			@DescriptionLong varchar(1024)
 
 	Declare @SourceColName varchar(128),
@@ -97,6 +99,7 @@ AS
 	Set @AverageAcrossColumnsEnabled = 0
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
+	Set @XTandemDataPresent = 0
 
 	Declare @continue int
 
@@ -133,7 +136,8 @@ AS
 									@SortMode,
 									@SkipCrossTabSqlGeneration = 1,
 									@ERValuesPresent = @ERValuesPresent Output, 
-									@ModsPresent = @ModsPresent Output
+									@ModsPresent = @ModsPresent Output,
+									@XTandemDataPresent = @XTandemDataPresent Output
 
 		If @myError <> 0
 		Begin
@@ -260,9 +264,12 @@ AS
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Normalized_Score,3) As [High_MS/MS_Score_(XCorr)], '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
+
+		If @XTandemDataPresent > 0
+			Set @QRDsql = @QRDsql + ' Round(IsNull(MT.Min_Log_EValue, 0), 3) AS XTandem_Min_Log_EValue,'
+
 		Set @QRDsql = @QRDsql + ' Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
 		Set @QRDsql = @QRDsql + ' QRD.JobCount_Observed_Both_MS_and_MSMS,'
-
 
 		If @ModsPresent > 0
 			Set @QRDsql = @QRDsql + ' MT.Mod_Description,'
@@ -367,4 +374,8 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[QRRetrievePeptidesMultiQID] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Lite]
 GO

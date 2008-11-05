@@ -43,6 +43,7 @@ CREATE Procedure ImportNewMSAnalyses
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import_Ex
 **			05/12/2007 mem - Added parameter @UseCachedDMSDataTables (Ticket:422)
 **						   - Switched to Try/Catch error handling
+**			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_FTICR_Analysis_Description
 **    
 *****************************************************/
 (
@@ -517,7 +518,7 @@ As
 		Begin
 			set @S = @S + 'INSERT INTO T_FTICR_Analysis_Description ('
 			set @S = @S + '	Job, Dataset, Dataset_ID, Dataset_Created_DMS,'
-			set @S = @S + ' Experiment, Campaign, Organism,'
+			set @S = @S + ' Experiment, Campaign, Experiment_Organism,'
 			set @S = @S + '	Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + '	Parameter_File_Name, Settings_File_Name,'
 			set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
@@ -699,4 +700,8 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Lite]
 GO

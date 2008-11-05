@@ -51,3 +51,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[AddFTICRUmcInternalStdMatch] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AddFTICRUmcInternalStdMatch] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AddFTICRUmcInternalStdMatch] TO [MTS_DB_Lite]
+GO

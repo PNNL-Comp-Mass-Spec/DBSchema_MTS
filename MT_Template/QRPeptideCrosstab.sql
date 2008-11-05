@@ -189,3 +189,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[QRPeptideCrosstab] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Lite]
+GO

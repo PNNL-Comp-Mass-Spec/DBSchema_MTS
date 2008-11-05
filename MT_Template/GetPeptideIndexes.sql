@@ -81,3 +81,7 @@ done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideIndexes] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideIndexes] TO [MTS_DB_Lite]
+GO

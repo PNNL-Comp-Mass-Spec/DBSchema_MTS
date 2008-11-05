@@ -493,3 +493,9 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [pnl\MTSProc]
+GO

@@ -1148,3 +1148,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GenerateHistogram] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GenerateHistogram] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GenerateHistogram] TO [MTS_DB_Lite]
+GO

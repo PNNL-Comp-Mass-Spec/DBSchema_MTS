@@ -331,3 +331,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetInternalStandards] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Lite]
+GO

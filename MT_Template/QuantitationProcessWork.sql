@@ -489,7 +489,7 @@ AS
 		--
 		-----------------------------------------------------------
 
-		Set @CurrentLocation = 'Call QuantitationProcessWorkStepc for ' + @QuantitationIDText
+		Set @CurrentLocation = 'Call QuantitationProcessWorkStepC for ' + @QuantitationIDText
 		--
 		exec @myError = QuantitationProcessWorkStepC
 							@QuantitationID,
@@ -645,4 +645,8 @@ DoneSkipLog:
 
 GO
 GRANT EXECUTE ON [dbo].[QuantitationProcessWork] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWork] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWork] TO [MTS_DB_Lite]
 GO

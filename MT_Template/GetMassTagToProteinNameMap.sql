@@ -93,3 +93,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetMassTagToProteinNameMap] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagToProteinNameMap] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagToProteinNameMap] TO [MTS_DB_Lite]
+GO

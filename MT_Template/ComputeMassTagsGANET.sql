@@ -818,3 +818,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Lite]
+GO

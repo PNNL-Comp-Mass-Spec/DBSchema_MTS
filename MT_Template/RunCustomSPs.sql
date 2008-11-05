@@ -123,3 +123,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[RunCustomSPs] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RunCustomSPs] TO [MTS_DB_Lite]
+GO

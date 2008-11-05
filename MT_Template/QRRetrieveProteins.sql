@@ -169,3 +169,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[QRRetrieveProteins] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteins] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteins] TO [MTS_DB_Lite]
+GO

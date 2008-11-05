@@ -150,3 +150,9 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskToRestart] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskToRestart] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskToRestart] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskToRestart] TO [pnl\MTSProc]
+GO

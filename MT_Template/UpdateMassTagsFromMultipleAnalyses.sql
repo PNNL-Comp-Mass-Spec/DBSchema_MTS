@@ -1341,3 +1341,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Lite]
+GO

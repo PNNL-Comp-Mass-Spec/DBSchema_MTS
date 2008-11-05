@@ -34,6 +34,7 @@ CREATE PROCEDURE dbo.CheckFilterForAnalysesWork
 **	Auth:	mem
 **	Date:	06/09/2007
 **			10/17/2007 mem - Added support for RankScore (aka RankXc for Sequest)
+**			10/20/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -297,6 +298,50 @@ AS
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 			End
 			
+			If @ResultType = 'IN_Peptide_Hit'
+			Begin
+				INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+											XCorr, RankScore, Hyperscore, Log_EValue, Cleavage_State, Terminus_State, Mass,
+											DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
+											NET_Difference_Absolute, Pass_FilterSet_Group)
+				SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+						0 AS XCorr, RankFScore AS RankScore, MQScore AS Hyperscore, FScore AS Log_EValue, Max(Cleavage_State), Max(Terminus_State), MH, 
+						0 AS DeltaCN, DeltaScore AS DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
+						NET_Difference_Absolute, 0 as Pass_FilterSet_Group
+				FROM (	SELECT	P.Analysis_ID, P.Peptide_ID, 
+								Len(MT.Peptide) AS PeptideLength, 
+								IsNull(P.Charge_State, 0) AS Charge_State,
+								IsNull(I.RankFScore, 0) AS RankFScore,
+								IsNull(I.MQScore, 0) AS MQScore,
+								IsNull(I.FScore, 0) AS FScore,
+								IsNull(MTPM.Cleavage_State, 0) AS Cleavage_State, 
+								IsNull(MTPM.Terminus_State, 0) AS Terminus_State, 
+								IsNull(P.MH, 0) AS MH,
+								IsNull(I.DeltaScore, 0) AS DeltaScore, 
+								IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
+								IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+								CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(MTN.PNET, 0) = 0
+								THEN 0
+								ELSE Abs(IsNull(P.GANET_Obs - MTN.PNET, 0))
+								END AS NET_Difference_Absolute
+						FROM #JobsInBatch INNER JOIN
+								T_Analysis_Description TAD ON #JobsInBatch.Job = TAD.Job AND TAD.ResultType = @ResultType INNER JOIN
+								T_Peptides P ON #JobsInBatch.Job = P.Analysis_ID INNER JOIN 
+								T_Score_Inspect I ON P.Peptide_ID = I.Peptide_ID INNER JOIN 
+								T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN 
+								T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN
+								T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID INNER JOIN
+								T_Mass_Tag_to_Protein_Map MTPM ON MT.Mass_Tag_ID= MTPM.Mass_Tag_ID
+					) LookupQ
+				GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+							RankFScore, MQScore, FScore, MH, DeltaScore, 
+							DiscriminantScoreNorm, Peptide_Prophet_Probability,
+							NET_Difference_Absolute
+				ORDER BY Peptide_ID
+				--
+				SELECT @myError = @@error, @myRowCount = @@RowCount
+			End
+	
 			--
 			If @myError <> 0 
 			Begin
@@ -429,4 +474,9 @@ AS
 Done:
 	Return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Lite]
 GO

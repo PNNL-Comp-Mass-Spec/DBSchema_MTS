@@ -43,6 +43,15 @@ CREATE NONCLUSTERED INDEX [IX_T_Peptides_Mass_Tag_ID] ON [dbo].[T_Peptides]
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
 
+/****** Object:  Index [IX_T_Peptides_MassTagID_PeptideID_Include_ChargeState] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Peptides_MassTagID_PeptideID_Include_ChargeState] ON [dbo].[T_Peptides] 
+(
+	[Mass_Tag_ID] ASC,
+	[Peptide_ID] ASC
+)
+INCLUDE ( [Charge_State]) WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
 /****** Object:  Index [IX_T_Peptides_Peptide] ******/
 CREATE NONCLUSTERED INDEX [IX_T_Peptides_Peptide] ON [dbo].[T_Peptides] 
 (

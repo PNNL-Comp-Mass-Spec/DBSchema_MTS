@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 39 ******/
+/****** RowCount: 38 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -39,4 +39,3 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Protein_Collection_Filter','M
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Protein_DB_Name','Protein Import',1,99,'Import protein definitions from this database; databases that only use protein collections can have "(na)" in this field')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Separation_Type','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with datasets that use this separation method')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Seq_Direction_Filter','MS/MS analysis job import',0,99,'Sequence direction values to allow; only used for jobs with a Protein_Collection_List defined')
-INSERT INTO [T_Process_Config_Parameters] VALUES ('Settings_File_Name','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that were performed with this settings file')

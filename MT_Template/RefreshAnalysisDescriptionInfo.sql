@@ -27,6 +27,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			05/09/2007 mem - Now using T_DMS_Analysis_Job_Info_Cached and T_DMS_Dataset_Info_Cached in MT_Main (Ticket:422)
 **			02/28/2008 mem - Now checking for key attributes getting changed that might affect results stored in this database
 **						   - Now storing old and new values in T_Analysis_Description_Updates when updates are applied
+**			08/14/2008 mem - Now updating Experiment_Organism
 **    
 *****************************************************/
 (
@@ -95,6 +96,7 @@ As
 			Dataset_ID int NULL,
 			Experiment varchar(255) NULL,
 			Campaign varchar(128) NULL,
+			Experiment_Organism varchar(128) NULL,
 			Vol_Client varchar(128) NOT NULL,
 			Vol_Server varchar(128) NULL,
 			Storage_Path varchar(255) NOT NULL,
@@ -122,7 +124,7 @@ As
 		TRUNCATE TABLE #TmpJobsToUpdate
 		
 		INSERT INTO #TmpJobsToUpdate (
-			Job, Dataset, Dataset_ID, Experiment, Campaign, 
+			Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,
 			Vol_Client, Vol_Server,
 			Storage_Path, Dataset_Folder, Results_Folder,
 			Completed, Parameter_File_Name, Settings_File_Name,
@@ -130,7 +132,7 @@ As
 			Separation_Sys_Type, PreDigest_Internal_Std, 
 			PostDigest_Internal_Std, Dataset_Internal_Std,
 			Enzyme_ID, Labelling )
-		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, 
+		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism,
 		    P.StoragePathClient, P.StoragePathServer,
 			'' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,
 			P.Completed, P.ParameterFileName, P.SettingsFileName,
@@ -139,7 +141,7 @@ As
 			P.[PostDigest Int Std], P.[Dataset Int Std],
 			P.EnzymeID, P.Labelling
 		FROM T_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, 
+			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism,
 			    R.StoragePathClient, R.StoragePathServer,
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
@@ -153,6 +155,7 @@ As
 					IsNull(L.Dataset, '') <> R.Dataset OR
 					IsNull(L.Experiment, '') <> R.Experiment OR
 					IsNull(L.Campaign, '') <> R.Campaign OR
+					IsNull(L.Experiment_Organism, '') <> R.Organism OR
 					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
 					IsNull(L.Vol_Server, '') <> R.StoragePathServer OR 
 					IsNull(L.Dataset_Folder, '') <> R.DatasetFolder OR 
@@ -277,6 +280,7 @@ As
 					Dataset_ID = U.Dataset_ID,
 					Experiment = U.Experiment,
 					Campaign = U.Campaign,
+					Experiment_Organism = U.Experiment_Organism,
 					Vol_Client = U.Vol_Client, 
 					Vol_Server = U.Vol_Server, 
 					Storage_Path = U.Storage_Path,
@@ -381,14 +385,14 @@ As
 		TRUNCATE TABLE #TmpJobsToUpdate
 		
 		INSERT INTO #TmpJobsToUpdate (
-			Job, Dataset, Dataset_ID, Experiment, Campaign, 
+			Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,
 			Vol_Client, Vol_Server,
 			Storage_Path, Dataset_Folder, Results_Folder,
 			Completed, Parameter_File_Name, Settings_File_Name,
 			Separation_Sys_Type, PreDigest_Internal_Std, 
 			PostDigest_Internal_Std, Dataset_Internal_Std,
 			Labelling )
-		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, 
+		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism,
 		    P.StoragePathClient, P.StoragePathServer,
 			'' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,
 			P.Completed, P.ParameterFileName, P.SettingsFileName,
@@ -396,7 +400,7 @@ As
 			P.[PostDigest Int Std], P.[Dataset Int Std],
 			P.Labelling
 		FROM T_FTICR_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, 
+			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism,
 			    R.StoragePathClient, R.StoragePathServer,
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
@@ -409,6 +413,7 @@ As
 					IsNull(L.Dataset, '') <> R.Dataset OR
 					IsNull(L.Experiment, '') <> R.Experiment OR
 					IsNull(L.Campaign, '') <> R.Campaign OR
+					IsNull(L.Experiment_Organism, '') <> R.Organism OR
 					IsNull(L.Vol_Client, '') <> R.StoragePathClient OR 
 					IsNull(L.Vol_Server, '') <> R.StoragePathServer OR 
 					IsNull(L.Dataset_Folder, '') <> R.DatasetFolder OR 
@@ -519,6 +524,7 @@ As
 					Dataset_ID = U.Dataset_ID,
 					Experiment = U.Experiment,
 					Campaign = U.Campaign,
+					Experiment_Organism = U.Experiment_Organism,
 					Vol_Client = U.Vol_Client, 
 					Vol_Server = U.Vol_Server, 
 					Storage_Path = U.Storage_Path,
@@ -637,4 +643,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite]
 GO

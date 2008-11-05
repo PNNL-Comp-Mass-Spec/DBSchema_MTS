@@ -245,3 +245,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[LookupQuantitationDefaults] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[LookupQuantitationDefaults] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LookupQuantitationDefaults] TO [MTS_DB_Lite]
+GO

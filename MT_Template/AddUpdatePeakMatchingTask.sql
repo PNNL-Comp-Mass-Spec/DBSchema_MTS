@@ -211,3 +211,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[AddUpdatePeakMatchingTask] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AddUpdatePeakMatchingTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AddUpdatePeakMatchingTask] TO [MTS_DB_Lite]
+GO

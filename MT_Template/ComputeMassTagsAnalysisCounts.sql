@@ -604,3 +604,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsAnalysisCounts] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsAnalysisCounts] TO [MTS_DB_Lite]
+GO

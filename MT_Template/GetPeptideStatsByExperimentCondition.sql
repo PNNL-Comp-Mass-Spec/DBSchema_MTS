@@ -853,3 +853,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetPeptideStatsByExperimentCondition] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Lite]
+GO

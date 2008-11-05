@@ -119,3 +119,9 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[SetMultiAlignTaskComplete] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[SetMultiAlignTaskComplete] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetMultiAlignTaskComplete] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[SetMultiAlignTaskComplete] TO [pnl\MTSProc]
+GO

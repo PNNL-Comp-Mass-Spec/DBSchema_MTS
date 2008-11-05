@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config] ******/
-/****** RowCount: 41 ******/
+/****** RowCount: 39 ******/
 SET IDENTITY_INSERT [T_Process_Config] ON
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (100,'Campaign','<Fill In>','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (119,'Dataset_DMS_Creation_Date_Minimum','','9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -40,6 +40,4 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (104,'Separation_Type','LC-ISCO-Standard','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (143,'Seq_Direction_Filter','decoy','2/2/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (142,'Seq_Direction_Filter','forward','9/1/2006 12:00:00 AM','PNL\mtsadmin')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (109,'Settings_File_Name','AgilentDefSettings.xml','9/1/2006 12:00:00 AM','PNL\mtsadmin')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (108,'Settings_File_Name','FinniganDefSettings.xml','4/17/2007 12:00:00 AM','PNL\mtsadmin')
 SET IDENTITY_INSERT [T_Process_Config] OFF

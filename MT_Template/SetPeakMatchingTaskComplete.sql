@@ -123,3 +123,9 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskComplete] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskComplete] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskComplete] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskComplete] TO [pnl\MTSProc]
+GO

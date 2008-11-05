@@ -24,10 +24,12 @@ CREATE Procedure dbo.QuantitationProcessStart
 **			02/16/2004 mem - Changed code that looks for available tasks to use a temporary table to avoid deadlock issues
 **			02/21/2004 mem - Due to updates in QuantitationProcessWork, removed logic that aborts processing if other tasks have a state of 2
 **			05/28/2007 mem - Added call to VerifyUpdateEnabled
+**			10/20/2008 mem - Added parameter @MaxEntriesToProcess
 **
 ****************************************************/
 (
-	@EntriesProcessed int=0 output	--number of entries in T_Quantitation_Description that were processed
+	@EntriesProcessed int=0 output,		-- Number of entries in T_Quantitation_Description that were processed
+	@MaxEntriesToProcess int = 0		-- Set to a positive number to limit the number of entries to process
 )
 As
 	Set NoCount On
@@ -58,7 +60,14 @@ As
 	exec VerifyUpdateEnabled @StepName = 'MS_Peak_Matching', @CallingFunctionDescription = 'QuantitationProcessStart', @AllowPausing = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
-		
+
+	-----------------------------------------------------------
+	-- Validate the inputs
+	-----------------------------------------------------------
+	--
+	Set @EntriesProcessed = 0
+	Set @MaxEntriesToProcess = IsNull(@MaxEntriesToProcess, 0)
+	
 	-----------------------------------------------------------
 	-- Step 1
 	--
@@ -182,6 +191,9 @@ As
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		SET @AvailableCount = @myRowCount
 
+		If @MaxEntriesToProcess > 0 And @EntriesProcessed >= @MaxEntriesToProcess
+			Set @AvailableCount =0
+
 		If @AvailableCount > 0
 		Begin
 			-- Validate that updating is enabled, abort if not enabled
@@ -224,4 +236,8 @@ Done:
 
 GO
 GRANT EXECUTE ON [dbo].[QuantitationProcessStart] TO [DMS_SP_User]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Lite]
 GO

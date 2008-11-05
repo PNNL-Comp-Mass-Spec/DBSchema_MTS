@@ -173,3 +173,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetMassTagMatchCount] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagMatchCount] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagMatchCount] TO [MTS_DB_Lite]
+GO

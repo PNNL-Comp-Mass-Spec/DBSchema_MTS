@@ -200,3 +200,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Lite]
+GO

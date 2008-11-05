@@ -24,10 +24,11 @@ CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDList
 **	Auth:	mem
 **	Date:	06/18/2006 mem - Matt's 31st Birthday
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @MDIDList
+**			09/29/2008 mem - Increased size of @MDIDList to varchar(max)
 **
 *****************************************************/
 (
-	@MDIDList varchar(2048),
+	@MDIDList varchar(max),
 	@ResetIdentityFieldSeed tinyint = 0,		-- Set to 1 to call SP ResetIdentityFieldSeed if no errors occur
 	@InfoOnly tinyint = 0,
 	@Message varchar(512) = '' output
@@ -180,4 +181,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDList] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDList] TO [MTS_DB_Lite]
 GO

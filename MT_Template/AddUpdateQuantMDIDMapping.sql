@@ -172,3 +172,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[AddUpdateQuantMDIDMapping] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Lite]
+GO

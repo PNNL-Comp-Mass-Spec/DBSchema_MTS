@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
+CREATE PROCEDURE [dbo].[UpdateMassTagPeptideProphetStats]
 /****************************************************
 **
 **	Desc:	Populates T_Mass_Tag_Peptide_Prophet_Stats
@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
 **			11/15/2006 mem - Replaced use of Truncate Table with Delete From
 **			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
+**			06/16/2008 mem - Now populating column Cleavage_State_Max
 **    
 *****************************************************/
 (
@@ -58,8 +59,8 @@ AS
 	-- Populate the table using T_Mass_Tags
 	---------------------------------------------------
 	--	
-	INSERT INTO T_Mass_Tag_Peptide_Prophet_Stats (Mass_Tag_ID)
-	SELECT Mass_Tag_ID
+	INSERT INTO T_Mass_Tag_Peptide_Prophet_Stats (Mass_Tag_ID, Cleavage_State_Max)
+	SELECT Mass_Tag_ID, Cleavage_State_Max
 	FROM T_Mass_Tags
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -170,4 +171,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagPeptideProphetStats] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagPeptideProphetStats] TO [MTS_DB_Lite]
 GO

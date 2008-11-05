@@ -255,3 +255,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[QRRetrievePeptides] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptides] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptides] TO [MTS_DB_Lite]
+GO

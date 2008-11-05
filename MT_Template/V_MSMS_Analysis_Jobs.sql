@@ -13,7 +13,7 @@ SELECT TAD.Job,
        TAD.Dataset_Created_DMS,
        TAD.Experiment,
        TAD.Campaign,
-       TAD.Organism,
+       TAD.Experiment_Organism,
        TAD.Instrument,
        TAD.Instrument_Class,
        TAD.Analysis_Tool,
@@ -32,12 +32,20 @@ SELECT TAD.Job,
        TAD.Labelling,
        ASN.AD_State_Name AS State_Name,
        PDL.Peptide_DB_Name,
-  dbo.udfCombinePaths(
-    dbo.udfCombinePaths(dbo.udfCombinePaths(TAD.Vol_Client, TAD.Storage_Path), TAD.Dataset_Folder),
-    TAD.Results_Folder) + '\' AS Results_Folder_Path,
-  dbo.udfCombinePaths(
-    dbo.udfCombinePaths(dbo.udfCombinePaths(TAD.Vol_Server, TAD.Storage_Path), TAD.Dataset_Folder),
-    TAD.Results_Folder) + '\' AS Results_Folder_Path_Local
+       dbo.udfCombinePaths(
+         dbo.udfCombinePaths(
+           dbo.udfCombinePaths(
+             TAD.Vol_Client, 
+             TAD.Storage_Path), 
+             TAD.Dataset_Folder),
+             TAD.Results_Folder) + '\' AS Results_Folder_Path,
+       dbo.udfCombinePaths(
+         dbo.udfCombinePaths(
+           dbo.udfCombinePaths(
+             TAD.Vol_Server, 
+             TAD.Storage_Path), 
+             TAD.Dataset_Folder),
+             TAD.Results_Folder) + '\' AS Results_Folder_Path_Local
 FROM dbo.T_Analysis_Description TAD
      INNER JOIN dbo.T_Analysis_State_Name ASN
        ON TAD.State = ASN.AD_State_ID

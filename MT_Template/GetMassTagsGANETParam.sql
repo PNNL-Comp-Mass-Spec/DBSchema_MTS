@@ -160,3 +160,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetMassTagsGANETParam] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsGANETParam] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsGANETParam] TO [MTS_DB_Lite]
+GO

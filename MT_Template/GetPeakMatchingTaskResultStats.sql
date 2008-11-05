@@ -128,3 +128,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetPeakMatchingTaskResultStats] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeakMatchingTaskResultStats] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetPeakMatchingTaskResultStats] TO [MTS_DB_Lite]
+GO

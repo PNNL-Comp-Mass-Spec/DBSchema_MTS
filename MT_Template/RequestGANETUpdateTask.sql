@@ -16,17 +16,18 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **      If not found or error, then @message will contain
 **      explanatory text.
 **
-**		Auth: grk
-**		Date: 08/26/2003
-**			  04/08/2004 mem - Removed references to T_GANET_Update_Parameters
-**			  04/09/2004 mem - Removed @maxIterations and @maxHours parameters
-**			  09/23/2004 mem - Now checking for tasks stuck in states 2 or 7
-**			  04/11/2005 mem - Removed checking for stuck tasks since this is now accomplished with CheckStaleTasks, which is called during Master Update
+**	Auth:	grk
+**	Date:	08/26/2003
+**			04/08/2004 mem - Removed references to T_GANET_Update_Parameters
+**			04/09/2004 mem - Removed @maxIterations and @maxHours parameters
+**			09/23/2004 mem - Now checking for tasks stuck in states 2 or 7
+**			04/11/2005 mem - Removed checking for stuck tasks since this is now accomplished with CheckStaleTasks, which is called during Master Update
+**			11/04/2008 mem - Updated to allow TaskID to be 0
 **
 *****************************************************/
 	@processorName varchar(128),
-	@taskID int output,
-	@taskAvailable tinyint output,
+	@taskID int output,					-- Will be -1 if not task is available
+	@taskAvailable tinyint output,		-- Set to 1 if a task is available
 	@message varchar(512) output
 As
 	set nocount on
@@ -42,7 +43,7 @@ As
 	---------------------------------------------------
 	-- clear the output arguments
 	---------------------------------------------------
-	set @taskID = 0
+	set @taskID = -1
 	set @TaskAvailable = 0
 	set @message = ''
 	
@@ -78,7 +79,7 @@ As
 	-- bail if no task found
 	---------------------------------------------------
 
-	if @taskID = 0
+	if @taskID < 0
 	begin
 		rollback transaction @transName
 		set @message = 'Could not find viable record'
@@ -125,4 +126,10 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc]
 GO

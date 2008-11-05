@@ -531,3 +531,9 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [pnl\MTSProc]
+GO

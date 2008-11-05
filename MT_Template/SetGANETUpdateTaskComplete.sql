@@ -127,3 +127,9 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskComplete] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskComplete] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[SetGANETUpdateTaskComplete] TO [pnl\MTSProc]
+GO
