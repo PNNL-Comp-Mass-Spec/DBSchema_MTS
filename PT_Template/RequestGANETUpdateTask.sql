@@ -32,6 +32,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **						   - Added parameters @ResultsFolderPath and @BatchSize
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/03/2006 mem - Updated to use T_Analysis_Description.RowCount_Loaded to quickly determine the number of peptides loaded for each job
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **
 *****************************************************/
 (
@@ -82,6 +83,7 @@ As
 	
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
 	
 		
 	---------------------------------------------------
@@ -408,4 +410,10 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc]
 GO

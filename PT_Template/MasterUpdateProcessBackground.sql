@@ -39,6 +39,7 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			08/02/2006 mem - Added call to SetReversedAndScrambledJobsToHolding
 **			08/25/2006 mem - Now posting log entry before calling UpdatePeptideSICStats if any jobs are in state 20
 **			12/02/2006 mem - Added a second call to CheckStaleJobs
+**			10/29/2008 mem - Added call to ComputeInspectMassValuesForAvailableAnalyses
 **    
 *****************************************************/
 (
@@ -304,19 +305,7 @@ As
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 33
-	Set @NextProcessState = 40
-
-	-- See if GANET regression is disabled
-	-- If it is, set @NextProcessState to 50
-	--
-	set @ganetEnabled = 0
-	SELECT @ganetEnabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'GANETJobRegression')
-	If @ganetEnabled = 0
-	begin
-		If @logLevel >= 2
-			execute PostLogEntry 'Normal', 'Skipped GANETJobRegression', 'MasterUpdateProcessBackground'
-		Set @NextProcessState = 50
-	end
+	Set @NextProcessState = 37
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -353,7 +342,7 @@ As
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 35
-	Set @NextProcessState = 40
+	Set @NextProcessState = 37
 
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'UpdatePeptideSICStats')
@@ -379,6 +368,49 @@ As
 		Goto Done
 
 	-- < J >
+	--------------------------------------------------------------
+	-- Compute MH and DelM for Inspect Jobs
+	--------------------------------------------------------------
+	--
+	Set @ProcessStateMatch = 37
+	Set @NextProcessState = 40
+
+	-- See if GANET regression is disabled
+	-- If it is, set @NextProcessState to 50 instead of 40
+	--
+	set @ganetEnabled = 0
+	SELECT @ganetEnabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'GANETJobRegression')
+	If @ganetEnabled = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped GANETJobRegression', 'MasterUpdateProcessBackground'
+		Set @NextProcessState = 50
+	end
+
+	-- Note that @result defaults to 1, so that this step is enabled if no entry is present in T_Process_Step_Control
+	set @result = 1
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ComputeInspectMassValues')
+	If @result = 0
+	begin
+		-- Note that if we skip computing the mass values, then MH and DelM will be null, which can affect downstream processing
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped ComputeInspectMassValues for jobs in State 37', 'MasterUpdateProcessBackground'
+	end
+	else
+	begin
+		EXEC @result = ComputeInspectMassValuesForAvailableAnalyses @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT
+
+		set @message = 'Completed computing Inspect mass values in T_Peptides for available analyses in State ' + Convert(varchar(9), @ProcessStateMatch) + ': ' + convert(varchar(11), @count) + ' jobs processed'
+		If @logLevel >= 1 and @count > 0
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end	
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+		
+	-- < K >
 	--------------------------------------------------------------
 	-- Call MasterUpdateNET (provided GANET processing is enabled)
 	--------------------------------------------------------------
@@ -409,7 +441,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < K >
+	-- < L >
 	--------------------------------------------------------------
 	-- Calculate confidence scores for each peptide in each new job
 	--------------------------------------------------------------
@@ -445,7 +477,7 @@ As
 		Goto Done
 
 
-	-- < L >
+	-- < M >
 	--------------------------------------------------------------
 	-- Peptide Prophet processing
 	--------------------------------------------------------------
@@ -482,7 +514,7 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 	
-	-- < M >
+	-- < N >
 	--------------------------------------------------------------
 	-- Calculate filter results for each peptide in each new job
 	--------------------------------------------------------------
@@ -524,7 +556,7 @@ As
 
 CalculateStatistics:
 	
-	-- < N >
+	-- < O >
 	--------------------------------------------------------------
 	-- Update general statistics
 	--------------------------------------------------------------
@@ -585,7 +617,7 @@ CalculateStatistics:
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < O >
+	-- < P >
 	-------------------------------------------------------------
 	-- Synchronize the analysis description information with DMS
 	-------------------------------------------------------------
@@ -623,7 +655,7 @@ CalculateStatistics:
 	If @UpdateEnabled = 0
 		Goto Done
 
-	-- < P >
+	-- < Q >
 	-------------------------------------------------------------
 	-- Look for stale jobs
 	-------------------------------------------------------------
@@ -674,4 +706,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Lite]
 GO

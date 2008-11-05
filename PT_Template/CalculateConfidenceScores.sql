@@ -21,6 +21,7 @@ CREATE Procedure dbo.CalculateConfidenceScores
 **			01/28/2005 mem - Added SkipConfidenceScoreRecalculation option
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -66,6 +67,7 @@ AS
 
 		UPDATE T_Analysis_Description
 		SET Process_State = CASE WHEN TAD.ResultType = 'XT_Peptide_Hit' THEN @NextProcessStateSkipPeptideProphet
+							WHEN TAD.ResultType = 'IN_Peptide_Hit' THEN @NextProcessStateSkipPeptideProphet
 							ELSE @NextProcessState 
 							END, 
 			Last_Affected = GetDate()
@@ -158,4 +160,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScores] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScores] TO [MTS_DB_Lite]
 GO

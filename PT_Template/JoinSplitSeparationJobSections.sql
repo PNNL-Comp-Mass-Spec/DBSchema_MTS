@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.JoinSplitSeparationJobSections
 **	Date:	11/03/2006
 **			11/06/2006 mem - Added fields Protein_Collection_List and Protein_Options_List to the Insert Queries that add joined jobs to T_Analysis_Description
 **			11/02/2007 mem - Added field @UseExistingDatasetAndMASICJob
+**			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **    
 *****************************************************/
 (
@@ -428,7 +429,7 @@ As
 	If @UseExistingDatasetAndMASICJob = 0
 	Begin
 		INSERT INTO T_Analysis_Description
-			(Job, Dataset, Dataset_ID, Experiment, Campaign, Organism, 
+			(Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism, 
 			Instrument_Class, Instrument, Analysis_Tool, 
 			Parameter_File_Name, Settings_File_Name, 
 			Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
@@ -439,7 +440,7 @@ As
 			Labelling, Created, Last_Affected, Process_State)
 		SELECT  @JoinedMASICJobNum AS Job, 
 				@JoinedDataset AS Dataset, 
-				@JoinedDatasetID AS DatasetID, TAD.Experiment, TAD.Campaign, TAD.Organism, 
+				@JoinedDatasetID AS DatasetID, TAD.Experiment, TAD.Campaign, TAD.Experiment_Organism, 
 				TAD.Instrument_Class, TAD.Instrument, TAD.Analysis_Tool, 
 				TAD.Parameter_File_Name, TAD.Settings_File_Name, 
 				TAD.Organism_DB_Name, TAD.Protein_Collection_List, TAD.Protein_Options_List, 
@@ -453,7 +454,7 @@ As
 		FROM T_Analysis_Description TAD INNER JOIN 
 			 #TmpSourceJobs ON TAD.Job = #TmpSourceJobs.Job
 		WHERE TAD.ResultType = 'SIC'
-		GROUP BY TAD.Experiment, TAD.Campaign, TAD.Organism, TAD.Instrument_Class, 
+		GROUP BY TAD.Experiment, TAD.Campaign, TAD.Experiment_Organism, TAD.Instrument_Class, 
 			TAD.Instrument, TAD.Analysis_Tool, TAD.Parameter_File_Name, 
 			TAD.Settings_File_Name, TAD.Organism_DB_Name, TAD.Protein_Collection_List, TAD.Protein_Options_List, 
 			TAD.ResultType, TAD.Separation_Sys_Type, TAD.PreDigest_Internal_Std, 
@@ -476,7 +477,7 @@ As
 	End
 	
 	INSERT INTO T_Analysis_Description
-		(Job, Dataset, Dataset_ID, Experiment, Campaign, Organism, 
+		(Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism, 
 		Instrument_Class, Instrument, Analysis_Tool, 
 		Parameter_File_Name, Settings_File_Name, 
 		Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
@@ -487,7 +488,7 @@ As
 		Labelling, Created, Last_Affected, Process_State)
 	SELECT  @JoinedSequestJobNum AS Job, 
 			@JoinedDataset AS Dataset, 
-			@JoinedDatasetID AS DatasetID, TAD.Experiment, TAD.Campaign, TAD.Organism, 
+			@JoinedDatasetID AS DatasetID, TAD.Experiment, TAD.Campaign, TAD.Experiment_Organism, 
 			TAD.Instrument_Class, TAD.Instrument, TAD.Analysis_Tool, 
 			TAD.Parameter_File_Name, TAD.Settings_File_Name, 
 			TAD.Organism_DB_Name, TAD.Protein_Collection_List, TAD.Protein_Options_List, 
@@ -501,7 +502,7 @@ As
 	FROM T_Analysis_Description TAD INNER JOIN 
 		 #TmpSourceJobs ON TAD.Job = #TmpSourceJobs.Job
 	WHERE (TAD.ResultType = 'Peptide_Hit')
-	GROUP BY TAD.Experiment, TAD.Campaign, TAD.Organism, TAD.Instrument_Class, 
+	GROUP BY TAD.Experiment, TAD.Campaign, TAD.Experiment_Organism, TAD.Instrument_Class, 
 			TAD.Instrument, TAD.Analysis_Tool, TAD.Parameter_File_Name, 
 			TAD.Settings_File_Name, TAD.Organism_DB_Name, TAD.Protein_Collection_List, TAD.Protein_Options_List, 
 			TAD.ResultType, TAD.Separation_Sys_Type, TAD.PreDigest_Internal_Std, 
@@ -1150,4 +1151,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[JoinSplitSeparationJobSections] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[JoinSplitSeparationJobSections] TO [MTS_DB_Lite]
 GO

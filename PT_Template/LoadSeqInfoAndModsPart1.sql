@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[LoadSeqInfoAndModsPart1] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.LoadSeqInfoAndModsPart1
+CREATE Procedure LoadSeqInfoAndModsPart1
 /****************************************************
 **
 **	Desc: 
@@ -33,6 +33,7 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart1
 **	Date:	01/25/2006
 **			02/14/2006 mem - Added parameterse @PeptideResultToSeqMapFilePath and @PeptideSeqToProteinMapFilePath
 **						   - Additionally, now populating tables #Tmp_Peptide_ResultToSeqMap and #Tmp_Peptide_SeqToProteinMap
+**			08/26/2008 mem - Added additional logging when LogLevel >= 2
 **
 *****************************************************/
 (
@@ -74,10 +75,29 @@ As
 	Declare @lineCountToSkip smallint
 	Set @lineCountToSkip = 1
 
+	declare @LogLevel int
+	declare @LogMessage varchar(512)
+
+	-----------------------------------------------
+	-- Lookup the logging level from T_Process_Step_Control
+	-----------------------------------------------
+	
+	Set @LogLevel = 1
+	SELECT @LogLevel = enabled
+	FROM T_Process_Step_Control
+	WHERE (Processing_Step_Name = 'LogLevel')
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	
+	
 	-----------------------------------------------
 	-- Verify that the input files exist and count the number of columns
 	-- First check the ResultToSeqMap file, which should have 2 columns
 	-----------------------------------------------
+	Set @LogMessage = 'Verify the input files and count the number of columns in each'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+
 	Set @ColumnCountExpected = 2
 	Exec @myError = ValidateDelimitedFile @PeptideResultToSeqMapFilePath, @lineCountToSkip, @ResultToSeqMapFileExists OUTPUT, @ResultToSeqMapColumnCount OUTPUT, @message OUTPUT
 	
@@ -255,6 +275,10 @@ As
 	--
 	declare @c nvarchar(2048)
 
+	Set @LogMessage = 'Bulk load contents of the SeqInfo files into temporary tables'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+
 	Set @c = 'BULK INSERT #Tmp_Peptide_ResultToSeqMap FROM ' + '''' + @PeptideResultToSeqMapFilePath + ''' WITH (FIRSTROW = 2)'
 	exec @myError = sp_executesql @c
 	--
@@ -274,6 +298,10 @@ As
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 
+	Set @LogMessage = 'Load complete; loaded ' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' entries'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+
 
 	-----------------------------------------------
 	-- Bulk load contents of SeqInfo file into temporary table
@@ -290,6 +318,10 @@ As
 		Set @myError = 51006
 		goto Done
 	end
+
+	Set @LogMessage = 'Populated #Tmp_Peptide_SeqInfo using ' + @PeptideSeqInfoFilePath
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
 
 	
 	-----------------------------------------------
@@ -308,6 +340,10 @@ As
 			Set @myError = 51007
 			goto Done
 		end
+
+		Set @LogMessage = 'Populated #Tmp_Peptide_ModDetails using ' + @PeptideSeqModDetailsFilePath
+		if @LogLevel >= 2
+			execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
 	end
 
 
@@ -327,7 +363,11 @@ As
 		goto Done
 	end
 
-	
+	Set @LogMessage = 'Populated #Tmp_Peptide_SeqToProteinMap using ' + @PeptideSeqToProteinMapFilePath
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+
+
 	-----------------------------------------------
 	-- Make sure none of the Mod_Descriptions are Null
 	-----------------------------------------------
@@ -338,8 +378,16 @@ As
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
+
+	Set @LogMessage = 'SeqInfo loading complete'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+	
 Done:
 	Return @myError
 
-
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart1] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart1] TO [MTS_DB_Lite]
 GO

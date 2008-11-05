@@ -34,6 +34,7 @@ CREATE PROCEDURE dbo.CheckFilterForAvailableAnalysesBulk
 **			12/12/2005 mem - Updated to support XTandem results
 **			07/04/2006 mem - Added parameter @ProcessStateAllStepsComplete
 **			06/08/2007 mem - Now calling CheckFilterForAnalysesWork for each batch of jobs to process
+**			10/10/2008 mem - Added support for result type IN_Peptide_Hit
 **    
 *****************************************************/
 (
@@ -126,6 +127,7 @@ AS
 	
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
 
 
 	-----------------------------------------------------------
@@ -551,4 +553,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAvailableAnalysesBulk] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAvailableAnalysesBulk] TO [MTS_DB_Lite]
 GO

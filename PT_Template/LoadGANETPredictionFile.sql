@@ -30,6 +30,7 @@ CREATE Procedure dbo.LoadGANETPredictionFile
 **			06/04/2006 mem - Increased size of the @filePath variable and the @c variable (used for Bulk Insert)
 **			07/04/2006 mem - Now checking for a header row in the input file; also, updated to use udfCombinePaths and to correct some comments
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
+**			07/23/2008 mem - Switched Master_Sequences location to Porky
 **    
 *****************************************************/
 (
@@ -50,7 +51,7 @@ AS
 	set @completionCode = 3
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'ProteinSeqs'
+	set @MasterSequencesServerName = 'Porky'
 
 	set @message = ''
 	set @numLoaded = 0
@@ -204,7 +205,7 @@ AS
 	-- If the Master Sequences DB is on the same server as this DB, then we can use this query
 	--  UPDATE MST
 	--  SET GANET_Predicted = #Tmp_TGA.PNET, Last_Affected = GetDate()
-	--  FROM ProteinSeqs.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
+	--  FROM Porky.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
 	--  	 #Tmp_TGA ON #Tmp_TGA.Seq_ID = MST.Seq_ID
 	--  WHERE MST.GANET_Predicted <> #Tmp_TGA.PNET OR MST.GANET_Predicted Is Null
 	
@@ -218,8 +219,8 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
-	exec ProteinSeqs.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
+	-- Warning: Update @MasterSequencesServerName above if changing from Porky to another computer
+	exec Porky.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
 	--
 	SELECT @myRowcount = @@rowcount, @myError = @@error
 	--
@@ -263,7 +264,7 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	exec @myError = ProteinSeqs.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
+	exec @myError = Porky.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
 	--
 	if @myError <> 0
 	begin
@@ -287,7 +288,7 @@ AS
 	-----------------------------------------------------------
 	--
 	If @DeleteTempTables = 1
-		exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
+		exec Porky.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
 
 
 	-----------------------------------------------
@@ -297,4 +298,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Lite]
 GO

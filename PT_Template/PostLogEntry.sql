@@ -52,3 +52,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[PostLogEntry] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Lite]
+GO

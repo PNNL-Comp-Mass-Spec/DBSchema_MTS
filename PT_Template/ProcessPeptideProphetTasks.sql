@@ -167,3 +167,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ProcessPeptideProphetTasks] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ProcessPeptideProphetTasks] TO [MTS_DB_Lite]
+GO

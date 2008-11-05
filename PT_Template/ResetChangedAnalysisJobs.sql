@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.ResetChangedAnalysisJobs
 **			03/17/2007 mem - Now obtaining StoragePathClient and StoragePathServer from V_DMS_Analysis_Job_Import
 **			03/21/2008 mem - Updated to use T_DMS_Analysis_Job_Info_Cached in MT_Main rather than directly polling DMS via the V_DMS view
 **			04/26/2008 mem - Now calling RefreshAnalysisDescriptionInfo to perform the updates.  This has the advantage of storing old and new values in T_Analysis_Description_Updates
+**			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **    
 *****************************************************/
 (
@@ -42,7 +43,7 @@ As
 	declare @MatchCount int
 	
 	declare @message varchar(255)
-	declare @organism varchar(128)
+	declare @ExperimentOrganism varchar(128)
 	
 	Declare @sql varchar(2048)
 	Declare @ProcessState varchar(9)
@@ -61,13 +62,13 @@ As
 	-- get organism name for this peptide database
 	---------------------------------------------------
 	--
-	SELECT @organism = PDB_Organism
+	SELECT @ExperimentOrganism = PDB_Organism
 	FROM MT_Main.dbo.T_Peptide_Database_List
 	WHERE (PDB_Name = DB_Name())
 	--	
-	if @organism = ''
+	if @ExperimentOrganism = ''
 	begin
-		set @message = 'Could not get organism name from MT_Main'
+		set @message = 'ould not get experiment (and thus dataset) organism name from MT_Main'
 		execute PostLogEntry 'Error', @message, 'ResetChangedAnalysisJobs'
 		return 33
 	end
@@ -98,7 +99,7 @@ As
 	
 	Set @sql = @sql + ' FROM T_Analysis_Description TAD INNER JOIN'
 	Set @sql = @sql +      ' MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON TAD.Job = DAJI.Job'
-	Set @sql = @sql + ' WHERE TAD.Results_Folder <> DAJI.ResultsFolder AND DAJI.Organism = ''' + @organism + ''''
+	Set @sql = @sql + ' WHERE TAD.Results_Folder <> DAJI.ResultsFolder AND DAJI.Organism = ''' + @ExperimentOrganism + ''''
 	Set @sql = @sql +       ' AND (TAD.Process_State >= ' + @ProcessState + ' OR TAD.Process_State = 3)'
 	Set @sql = @sql + ' ORDER BY TAD.Job'
 	
@@ -151,4 +152,8 @@ As
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Lite]
 GO

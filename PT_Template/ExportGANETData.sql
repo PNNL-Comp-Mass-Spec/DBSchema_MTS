@@ -215,3 +215,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite]
+GO

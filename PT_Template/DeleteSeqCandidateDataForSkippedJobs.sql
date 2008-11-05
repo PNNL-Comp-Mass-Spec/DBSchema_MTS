@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.DeleteSeqCandidateDataForSkippedJobs
 **
 **	Auth:	mem
 **	Date:	02/07/2007
+**			08/20/2008 mem - Removed bug that was displaying error "no valid jobs were found" when @JobListOverride is blank and @ProcessStateMatch doesn't match any jobs
 **    
 *****************************************************/
 (
@@ -116,13 +117,16 @@ AS
 		SELECT @JobListProcessed = @JobListProcessed + Convert(varchar(12), Job) + ', '
 		FROM #JobListToDelete
 		ORDER BY Job	
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
 
 		If Len(IsNull(@JobListProcessed, '')) = 0
 		Begin
-			Set @Message = 'Error: no valid jobs were found'
-
-			SELECT @Message AS Message
-			Print @Message
+			If Len(@JobListOverride) > 0
+			Begin
+				Set @Message = 'Error: no valid jobs were found'
+				SELECT @Message AS ErrorMessage
+			End
 
 			Goto Done
 		End
@@ -201,4 +205,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[DeleteSeqCandidateDataForSkippedJobs] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[DeleteSeqCandidateDataForSkippedJobs] TO [MTS_DB_Lite]
 GO

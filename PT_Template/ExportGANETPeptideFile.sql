@@ -35,6 +35,7 @@ CREATE Procedure dbo.ExportGANETPeptideFile
 **			12/12/2005 mem - Updated to support XTandem results
 **			01/13/2006 mem - Added an explicit order by list within the BCP call itself
 **			07/03/2006 mem - Now using dbo.udfCombinePaths() to combine paths
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -149,12 +150,25 @@ As
 	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, X.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
 	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex'
 	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
-	Set @S = @S +   ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
-	Set @S = @S +   ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
-	Set @S = @S +   ' T_Score_XTandem X ON Pep.Peptide_ID = X.Peptide_ID INNER JOIN'
-	Set @S = @S +   ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
+	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Score_XTandem X ON Pep.Peptide_ID = X.Peptide_ID INNER JOIN'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
 	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
 	Set @S = @S +   ' TAD.ResultType = ''XT_Peptide_Hit'''
+	Set @S = @S + ' UNION'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Analysis_ID, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
+	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
+	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, I.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
+	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex'
+	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
+	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Score_Inspect I ON Pep.Peptide_ID = I.Peptide_ID INNER JOIN'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
+	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
+	Set @S = @S +   ' TAD.ResultType = ''IN_Peptide_Hit'''
 	Set @S = @S + @OrderBySql
 	--
 	Exec (@S)
@@ -229,4 +243,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Lite]
 GO

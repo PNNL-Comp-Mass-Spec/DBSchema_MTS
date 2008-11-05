@@ -54,6 +54,8 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			05/10/2007 mem - Added parameter @UseCachedDMSDataTables and parameter @message (Ticket:422)
 **						   - Switched to Try/Catch error handling
 **			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
+**			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -109,8 +111,10 @@ As
 
 	set @DatasetsAdded = 0
 	
-	declare @organism varchar(64)
-	set @organism = ''
+	-- Note: Analysis jobs are auto-imported based on the organism name of the Experiment (and thus the Dataset), not the organism name associated with an analysis job
+	-- The organism name associated with an analysis job might be different than the Experiment organism name
+	declare @ExperimentOrganism varchar(64)
+	set @ExperimentOrganism = ''
 	
 	Declare @Lf char(1)
 	Set @Lf = char(10)
@@ -151,13 +155,13 @@ As
 		--
 		Set @CurrentLocation = 'Get Organism Name'
 
-		SELECT @organism = PDB_Organism
+		SELECT @ExperimentOrganism = PDB_Organism
 		FROM MT_Main.dbo.T_Peptide_Database_List
 		WHERE (PDB_Name = DB_Name())
 		--	
-		if @organism = ''
+		if @ExperimentOrganism = ''
 		begin
-			set @message = 'Could not get organism name from MT_Main'
+			set @message = 'Could not get experiment (and thus dataset) organism name from MT_Main'
 			execute PostLogEntry 'Error', @message, 'ImportNewPeptideAnalyses'
 			return 33
 		end
@@ -168,7 +172,7 @@ As
 		--
 		Set @CurrentLocation = 'Create temporary tables'
 
-		set @filterLookupAdditionalWhereClause = 'Organism = ''' + @organism + ''''
+		set @filterLookupAdditionalWhereClause = 'Organism = ''' + @ExperimentOrganism + ''''
 
 		CREATE TABLE #TmpFilterList (
 			Value varchar(128)
@@ -484,6 +488,7 @@ As
 		
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
+		INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 
@@ -493,7 +498,7 @@ As
 		--
 		-- Get entries from the analysis job table 
 		-- in the linked DMS database that are associated
-		-- with the given organism, that match the ResultTypes in
+		-- with the given experiment organism, that match the ResultTypes in
 		-- T_Process_Config, and that have not already been imported
 
 		-- Create a temporary table to hold the new jobs and Dataset IDs
@@ -507,7 +512,7 @@ As
 			[Dataset_ID] [int] NOT NULL ,
 			[Experiment] [varchar] (64) NULL ,
 			[Campaign] [varchar] (64) NULL ,
-			[Organism] [varchar] (50) NOT NULL ,
+			[Experiment_Organism] [varchar] (50) NOT NULL ,
 			[Instrument_Class] [varchar] (32) NOT NULL ,
 			[Instrument] [varchar] (64) NULL ,
 			[Analysis_Tool] [varchar] (64) NOT NULL ,
@@ -594,7 +599,7 @@ As
 			--
 			Set @S = ''
 			Set @S = @S + ' INSERT INTO #TmpNewAnalysisJobs'
-			Set @S = @S +  ' (Job, Dataset, Dataset_ID, Experiment, Campaign, Organism,'
+			Set @S = @S +  ' (Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,'
 			Set @S = @S +  ' Instrument_Class, Instrument, Analysis_Tool, Parameter_File_Name,'
 			Set @S = @S +  ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List, Vol_Client, Vol_Server, Storage_Path,'
 			Set @S = @S +  ' Dataset_Folder, Results_Folder, Settings_File_Name, Completed,'
@@ -620,7 +625,7 @@ As
 			Begin
 				Set @S = @S + ' AND ( ' + @Lf
 				Set @S = @S +   ' ' + @ResultTypeFilter + @Lf
-				Set @S = @S +   '  AND Organism = ''' + @organism + '''' + @Lf
+				Set @S = @S +   '  AND Organism = ''' + @ExperimentOrganism + '''' + @Lf
 
 				If Len(@OrganismDBNameFilter) > 0
 					Set @S = @S + ' ' + @OrganismDBNameFilter + @Lf
@@ -813,7 +818,7 @@ As
 		if @infoOnly = 0
 		begin	
 			Set @S = @S + ' INSERT INTO T_Analysis_Description'
-			Set @S = @S + ' (Job, Dataset, Dataset_ID, Experiment, Campaign, Organism,'
+			Set @S = @S + ' (Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,'
 			Set @S = @S + ' Instrument_Class, Instrument, Analysis_Tool, Parameter_File_Name,'
 			Set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
 			Set @S = @S + ' Vol_Client, Vol_Server, Storage_Path,'
@@ -823,7 +828,7 @@ As
 			Set @S = @S + ' Created, Process_State, Last_Affected)'
 		end
   		Set @S = @S + ' SELECT'
-		Set @S = @S + '  Job, AJ.Dataset, AJ.Dataset_ID, Experiment, Campaign, Organism,' + @Lf
+		Set @S = @S + '  Job, AJ.Dataset, AJ.Dataset_ID, Experiment, Campaign, Experiment_Organism,' + @Lf
 		Set @S = @S + '  Instrument_Class, AJ.Instrument, Analysis_Tool, Parameter_File_Name,'  + @Lf
 		Set @S = @S + '  Organism_DB_Name, Protein_Collection_List, Protein_Options_List,' + @Lf
 		Set @S = @S + '  Vol_Client, Vol_Server, Storage_Path,' + @Lf
@@ -874,7 +879,7 @@ As
 				UPDATE	T_Analysis_Description
 				SET		Process_State = 4, Last_Affected = GetDate()
 				WHERE	Process_State = @NextProcessState AND
-						ResultType = 'Peptide_Hit' AND
+						ResultType LIKE '%Peptide_Hit' AND
 						Parameter_File_Name NOT IN (SELECT DISTINCT Param_File_Name FROM MT_Main.dbo.V_DMS_Param_Files)
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -914,4 +919,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Lite]
 GO

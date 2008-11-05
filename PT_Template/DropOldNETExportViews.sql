@@ -1,24 +1,27 @@
 /****** Object:  StoredProcedure [dbo].[DropOldNETExportViews] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.DropOldNETExportViews
 /****************************************************
 ** 
-**		Desc:  
-**        Drops any views containing @matchString that were created more than @MaxAgeHours ago
+**	Desc:	Drops any views containing @matchString that were created more than @MaxAgeHours ago
 **
-**		Auth:	mem
-**		Date:	05/30/2005
+**	Auth:	mem
+**	Date:	05/30/2005
+**			08/20/2008 mem - No longer displaying the contents of @message, unless an error occurs
+**						   - Switched to use sys.objects for finding views or tables
 **    
 *****************************************************/
+(
 	@matchString varchar(256)= 'V_NET_Export_Peptides_Task_%',
 	@DropViews tinyint = 1,										-- Set to 1 to drop views, 0 to drop tables
 	@MaxAgeHours int = 48,
 	@ObjectDropCount int = 0,
 	@message varchar(256) = '' output
+)
 As
 	set nocount on
 	
@@ -48,6 +51,7 @@ As
 	End
 	Else
 	Begin
+		-- Note: U stands for User_Table
 		Set @ObjectType = 'U'
 		Set @ObjectTypeName = 'Table'
 	End
@@ -66,7 +70,7 @@ As
 		Set @matchString = '%' + @matchString + '%'
 
 	-----------------------------------------------------------
-	-- Look for matching objects in sysobjects
+	-- Look for matching objects in sys.objects
 	-----------------------------------------------------------
 	--
 	set @continue = 1
@@ -74,10 +78,11 @@ As
 	--
 	While @continue > 0
 	Begin
-	
-		SELECT TOP 1 @ObjectName = [name], @ObjectID = id, @CreationDate = crdate
-		FROM sysobjects
-		WHERE xtype = @ObjectType AND [name] Like @matchString AND id > @ObjectID
+		SELECT TOP 1 @ObjectName = [name], @ObjectID = [object_ID], @CreationDate = create_date
+		FROM sys.objects
+		WHERE type = @ObjectType AND 
+			  [name] Like @matchString AND 
+			  [object_ID] > @ObjectID
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
@@ -120,8 +125,15 @@ As
 	else
 		set @message = 'Dropped ' + convert(varchar(9), @ObjectDropCount) + ' old objects matching ''' + @matchstring + ''''
 
-	Select @message as Message
+	If @myError <> 0
+		SELECT @message AS ErrorMessage
+		
 Done:
 	return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[DropOldNETExportViews] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[DropOldNETExportViews] TO [MTS_DB_Lite]
 GO

@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 18 ******/
+/****** RowCount: 19 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_Exclusion','MS/MS analysis job import',0,99,'Exclude MS/MS analysis jobs that are associated with this campaign name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character.')
@@ -15,7 +15,8 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('MTDB_Export_Filter_ID','MS/MS
 INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Update_Batch_Size','NET Regression',1,1,'Number of jobs to export at a time for NET regression')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Update_Max_Peptide_Count','NET Regression',1,1,'Maximum number of peptide results to include in the peptideGANET file; limits the number of jobs included to achieve this value')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism_DB_File_Name','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA); matches the OrganismDBName field in V_DMS_Analysis_Job_Import_Ex')
-INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID','MS/MS analysis job import',1,1,'Filter to apply when importing peptides from MS/MS synopsis ifles')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID','MS/MS analysis job import',1,1,'Filter to apply when importing peptides from MS/MS synopsis files')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID_by_Campaign','MS/MS analysis job import',0,99,'Filter to apply when importing peptides from MS/MS synopsis files for a given campaign.  Separate the filter ID and the Campaign name with a comma')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Protein_Collection_and_Protein_Options_Combo','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that were searched against this precise protein collection list and protein options list; separate the two items using a semicolon; the items can contain wildcards; will compare against the full ProteinCollectionList and ProteinOptionsList fields in V_DMS_Analysis_Job_Import_Ex')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Protein_Collection_Filter','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that were searched against this protein collection; matches the ProteinCollectionList field in V_DMS_Analysis_Job_Import_Ex (either an exact match or a match to one of the items in the list)')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Seq_Direction_Filter','MS/MS analysis job import',0,99,'Sequence direction values to allow; only used for jobs with a Protein_Collection_List defined')

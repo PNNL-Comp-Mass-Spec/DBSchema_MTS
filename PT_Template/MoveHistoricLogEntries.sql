@@ -94,3 +94,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[MoveHistoricLogEntries] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[MoveHistoricLogEntries] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MoveHistoricLogEntries] TO [MTS_DB_Lite]
+GO

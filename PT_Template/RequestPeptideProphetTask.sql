@@ -428,3 +428,9 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[RequestPeptideProphetTask] TO [pnl\MTSProc]
+GO

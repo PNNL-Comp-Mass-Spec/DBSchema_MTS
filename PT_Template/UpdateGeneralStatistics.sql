@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE Procedure dbo.UpdateGeneralStatistics
 /****************************************************
 **
@@ -17,13 +16,14 @@ CREATE Procedure dbo.UpdateGeneralStatistics
 **	Parameters:
 **	
 **
-**		Auth: grk
-**		Date: 08/5/2003
-**			  07/22/2004 mem - Removed reference to T_Master_TIC
-**			  09/06/2004 mem - Added statistics on number of analyses with each Process_State value
-**			  10/23/2004 mem - Now storing T_Process_Config data as Category 'Configuration Settings'
-**			  02/04/2005 mem - Switched to using V_Table_Row_Counts for row count stats
-**			  03/07/2005 mem - Updated to reflect changes to T_Process_Config that now use just one column to identify a configuration setting type
+**	Auth:	grk
+**	Date:	08/5/2003
+**			07/22/2004 mem - Removed reference to T_Master_TIC
+**			09/06/2004 mem - Added statistics on number of analyses with each Process_State value
+**			10/23/2004 mem - Now storing T_Process_Config data as Category 'Configuration Settings'
+**			02/04/2005 mem - Switched to using V_Table_Row_Counts for row count stats
+**			03/07/2005 mem - Updated to reflect changes to T_Process_Config that now use just one column to identify a configuration setting type
+**			08/14/2008 mem - Now reporting Organism as Experiment Organism
 **    
 *****************************************************/
 As
@@ -42,7 +42,7 @@ As
 	-- Organism
 	--
 	INSERT INTO T_General_Statistics
-	SELECT	'Organism' AS category, 
+	SELECT	'Experiment Organism' AS category, 
 			'Name' AS label, PDB_Organism as value
 	FROM	MT_Main.dbo.T_Peptide_Database_List
 	WHERE	PDB_Name = DB_Name()
@@ -141,5 +141,8 @@ As
 	Return 0
 
 
-
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateGeneralStatistics] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateGeneralStatistics] TO [MTS_DB_Lite]
 GO

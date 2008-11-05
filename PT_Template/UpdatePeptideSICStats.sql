@@ -25,6 +25,7 @@ CREATE Procedure dbo.UpdatePeptideSICStats
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			03/18/2006 mem - No longer calling ComputeMaxObsAreaByJob for each job processed since Seq_ID is required to call that SP
 **			10/12/2007 mem - Now calling ReindexDatabase if InitialDBReindexComplete = 0 or UpdatePeptideSICStatsHadDBReindexed = 0 in T_Process_Step_Control
+**			10/29/2008 mem - Formatting changes
 **    
 *****************************************************/
 (
@@ -70,6 +71,8 @@ As
 	Set @DBReindexComplete = 0
 	Set @UpdateSICStatsMarkDBReindexed = 0
 	
+	Declare @JobStr varchar(18)
+	
 	----------------------------------------------
 	-- Loop through T_Analysis_Description, processing jobs with Process_State = @ProcessStatematch
 	-- If @UpdateAdditionalJobsWithNullSICStats = 1 then we'll also look 
@@ -87,9 +90,11 @@ As
 		-- Look up the next available job
 		Set @jobAvailable = 0
 
-		SELECT	TOP 1 @Job = Job, @JobCreated = Created
-		FROM	T_Analysis_Description
-		WHERE	Process_State = @ProcessStateMatch AND Job > @Job
+		SELECT TOP 1 @Job = Job,
+		             @JobCreated = Created
+		FROM T_Analysis_Description
+		WHERE Process_State = @ProcessStateMatch AND
+		      Job > @Job
 		ORDER BY Job
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -106,8 +111,11 @@ As
 			Set @AdvanceStateForJob = 1
 		End
 		Else
+		Begin -- <b1>
+			-- No more jobs were found with Process_State = @ProcessStateMatch
+			
 			if @UpdateAdditionalJobsWithNullSICStats = 1
-			Begin
+			Begin -- <c1>
 				-- Look for jobs with Null SIC stats values in T_Peptides and a Process State > @NextProcessState
 				-- And a SIC_Job defined in T_Datasets
 				SELECT TOP 1 @Job = TAD.Job, @JobCreated = TAD.Created
@@ -129,7 +137,7 @@ As
 					Set @LastJobNullSICStats = @Job
 				End
 				Else
-				Begin
+				Begin -- <d1>
 					-- See if any jobs have Null SIC stats values in T_Peptides
 					-- If @LastJobNullSICStats is > 0 then limit by @LastJobNullSICStats; otherwise, check all jobs
 					-- If any jobs are found, post an entry to the log
@@ -154,11 +162,15 @@ As
 						execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
 						Set @message = ''
 					End
-				End
-			End
+				End -- </d1>
+			End -- </c1>
+		End -- </b1>
+		
 		
 		If @jobAvailable = 1
-		Begin -- <b>
+		Begin -- <b2>
+			
+			Set @JobStr = convert(varchar(18), @job)
 			
 			If @numJobsProcessed = 0
 			Begin
@@ -225,7 +237,7 @@ As
 
 			If @myRowCount = 0
 			Begin
-				Set @message = 'Update SIC stats in T_Peptides failed for job ' + convert(varchar(11), @job) + '; a corresponding SIC job could not be found'
+				Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; a corresponding SIC job could not be found'
 				-- Only post an entry to the log if Job was created in this DB more than 24 hours ago
 				-- Additionally, only post one entry every 24 hours
 				If DateDiff(hour, @JobCreated, GetDate()) >= 24
@@ -238,7 +250,7 @@ As
 					Set @SICJobExists = 1
 				Else
 				Begin
-					Set @message = 'Update SIC stats in T_Peptides failed for job ' + convert(varchar(11), @job) + '; although a SIC job exists, its state is not 75'
+					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; although a SIC job exists, its state is not 75'
 					-- Only post an entry to the log if Job was created in this DB more than 24 hours ago
 					-- Additionally, only post one entry every 24 hours
 					If DateDiff(hour, @JobCreated, GetDate()) >= 24
@@ -248,7 +260,7 @@ As
 			End
 
 			If @SICJobExists = 1
-			Begin -- <c>
+			Begin -- <c2>
 				-- Update the SIC Stats
 				UPDATE T_Peptides
 				Set Scan_Time_Peak_Apex = DS_Scans.Scan_Time, 
@@ -275,22 +287,24 @@ As
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
-				-- Make a log entry if the numbers don't match
+				-- Make a log entry if the number of updated rows doesn't match @RowCountDefined
 				If @RowCountUpdated < @RowCountDefined
 				Begin
-					Set @message = 'Update SIC stats in T_Peptides failed for job ' + convert(varchar(11), @job) + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
+					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
 					execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
 					Set @message = ''
 				End
 				Else
+				Begin
 					If @RowCountUpdated = 0
 					Begin
 						-- Make a log entry if @RowCountUpdated = 0
-						Set @message = 'Update SIC stats in T_Peptides failed for job ' + convert(varchar(11), @job) + '; 0 rows were updated'
+						Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; 0 rows were updated'
 						execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
 						Set @message = ''
 						Set @AdvanceStateForJob = 0
 					End
+				End
 				
 				-----------------------------------------------------------
 				-- Update state of analysis job provided @AdvanceStateForJob = 1
@@ -304,13 +318,13 @@ As
 					Exec SetProcessState @job, @NextProcessState
 					Set @numJobsAdvanced = @numJobsAdvanced + 1
 				End
-			end  -- </c>
+			end  -- </c2>
 
 			-- check number of jobs processed
 			--
 			Set @numJobsProcessed = @numJobsProcessed + 1
 			
-		end -- </b>
+		end -- </b2>
 
 		-- Validate that updating is enabled, abort if not enabled
 		exec VerifyUpdateEnabled @CallingFunctionDescription = 'UpdatePeptideSICStats', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -326,4 +340,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Lite]
 GO

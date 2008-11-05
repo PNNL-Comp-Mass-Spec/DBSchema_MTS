@@ -34,6 +34,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			02/28/2008 mem - Now checking for key attributes getting changed that might affect results stored in this database
 **						   - Now storing old and new values in T_Analysis_Description_Updates when updates are applied
 **			04/26/2008 mem - Added parameter @JobListForceUpdate
+**			08/14/2008 mem - Now updating Experiment_Organism
 **    
 *****************************************************/
 (
@@ -107,6 +108,7 @@ As
 			Dataset_ID int NULL,
 			Experiment varchar(255) NULL,
 			Campaign varchar(128) NULL,
+			Experiment_Organism varchar(128) NULL,
 			Vol_Client varchar(128) NOT NULL,
 			Vol_Server varchar(128) NULL,
 			Storage_Path varchar(255) NOT NULL,
@@ -136,7 +138,7 @@ As
 		
 		Set @S = ''
 		Set @S = @S + ' INSERT INTO #TmpJobsToUpdate ('
-		Set @S = @S +   ' Job, Dataset, Dataset_ID, Experiment, Campaign, '
+		Set @S = @S +   ' Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism, '
 		Set @S = @S +   ' Vol_Client, Vol_Server,'
 		Set @S = @S +   ' Storage_Path, Dataset_Folder, Results_Folder,'
 		Set @S = @S +   ' Completed, Parameter_File_Name, Settings_File_Name,'
@@ -144,7 +146,7 @@ As
 		Set @S = @S +   ' Separation_Sys_Type, PreDigest_Internal_Std, '
 		Set @S = @S +   ' PostDigest_Internal_Std, Dataset_Internal_Std,'
 		Set @S = @S +   ' Enzyme_ID, Labelling )'
-		Set @S = @S + ' SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, '
+		Set @S = @S + ' SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism, '
 		Set @S = @S +   ' P.StoragePathClient, P.StoragePathServer,'
 		Set @S = @S +   ' '''' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,'
 		Set @S = @S +   ' P.Completed, P.ParameterFileName, P.SettingsFileName,'
@@ -153,7 +155,7 @@ As
 		Set @S = @S +   ' P.[PostDigest Int Std], P.[Dataset Int Std],'
 		Set @S = @S +   ' P.EnzymeID, P.Labelling'
 		Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN ('
-		Set @S = @S +   ' SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, '
+		Set @S = @S +   ' SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism, '
 		Set @S = @S +          ' R.StoragePathClient, R.StoragePathServer,'
 		Set @S = @S +          ' R.DatasetFolder, R.ResultsFolder, R.Completed,'
 		Set @S = @S +          ' R.ParameterFileName, R.SettingsFileName,'
@@ -171,12 +173,13 @@ As
 			Set @S = @S +           ' IsNull(L.Dataset, '''') <> R.Dataset OR'
 			Set @S = @S +           ' IsNull(L.Experiment, '''') <> R.Experiment OR'
 			Set @S = @S +           ' IsNull(L.Campaign, '''') <> R.Campaign OR'
+			Set @S = @S +           ' IsNull(L.Experiment_Organism, '''') <> R.Organism OR'			
 			Set @S = @S +           ' IsNull(L.Vol_Client, '''') <> R.StoragePathClient OR'
 			Set @S = @S +           ' IsNull(L.Vol_Server, '''') <> R.StoragePathServer OR'
 			Set @S = @S +           ' IsNull(L.Dataset_Folder, '''') <> R.DatasetFolder OR'
 			Set @S = @S +           ' IsNull(L.Results_Folder, '''') <> R.ResultsFolder OR'
 			Set @S = @S +           ' IsNull(L.Completed, ''1/1/1980'') <> R.Completed OR'
-			Set @S = @S +           ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
+			Set @S = @S +        ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Settings_File_Name,'''') <> IsNull(R.SettingsFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Organism_DB_Name,'''') <> IsNull(R.OrganismDBName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Protein_Collection_List,'''') <> IsNull(R.ProteinCollectionList,'''') OR'
@@ -221,7 +224,7 @@ As
 				Set @S = @S +     ' Storage_Path, Storage_Path_New, Dataset_Folder, Dataset_Folder_New, '
 				Set @S = @S +     ' Results_Folder, Results_Folder_New, Completed, Completed_New, '
 				Set @S = @S +     ' Parameter_File_Name, Parameter_File_Name_New, '
-				Set @S = @S + ' Settings_File_Name, Settings_File_Name_New, '
+				Set @S = @S +     ' Settings_File_Name, Settings_File_Name_New, '
 				Set @S = @S +     ' Organism_DB_Name, Organism_DB_Name_New, '
 				Set @S = @S +     ' Protein_Collection_List, Protein_Collection_List_New, '
 				Set @S = @S +     ' Protein_Options_List, Protein_Options_List_New, '
@@ -312,6 +315,7 @@ As
 					Dataset_ID = U.Dataset_ID,
 					Experiment = U.Experiment,
 					Campaign = U.Campaign,
+					Experiment_Organism = U.Experiment_Organism,
 					Vol_Client = U.Vol_Client, 
 					Vol_Server = U.Vol_Server, 
 					Storage_Path = U.Storage_Path,
@@ -436,4 +440,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite]
 GO

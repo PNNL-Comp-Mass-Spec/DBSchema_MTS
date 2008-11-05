@@ -509,3 +509,7 @@ done:
 	RETURN @PeptidesProcessedCount
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateMonoisotopicMass] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateMonoisotopicMass] TO [MTS_DB_Lite]
+GO

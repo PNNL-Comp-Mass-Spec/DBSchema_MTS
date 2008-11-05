@@ -42,6 +42,8 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			08/10/2006 mem - Now updating the status message if using the Seq_Candidate tables and/or if Peptide Prophet data was loaded
 **			03/20/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
 **			04/16/2007 mem - Now using LookupCurrentResultsFolderPathsByJob to determine the results folder path (Ticket #423)
+**			08/19/2008 mem - Added support for Peptide_Import_Filter_ID_by_Campaign in T_Process_Config
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **
 *****************************************************/
 (
@@ -49,7 +51,8 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 	@job int,
 	@message varchar(255)='' OUTPUT,
 	@numLoaded int=0 out,
-	@clientStoragePerspective tinyint = 1
+	@clientStoragePerspective tinyint = 1,
+	@infoOnly tinyint = 0
 )
 AS
 	Set NoCount On
@@ -64,6 +67,7 @@ AS
 
 	set @message = ''
 	set @numLoaded = 0
+	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -102,18 +106,54 @@ AS
 	end
 	
 	-----------------------------------------------
-	-- Get result type and dataset name
+	-- Check for the existence of Peptide_Import_Filter_ID_by_Campaign
+	-- If present, then parse out the campaign name and see if this job's campaign matches
+	-- If it does, then use the Peptide_Import_Filter_ID_by_Campaign value instead of @FilterSetID
 	-----------------------------------------------
-	declare @ResultType varchar(64)
-	declare @Dataset  varchar(128)
+
+	Declare @ValueText varchar(256)
+	Declare @CampaignFilter varchar(128)
+	Declare @FilterSetIDByCampaign int
+	Declare @CommaLoc int
+	
+	Set @ValueText = ''
+	Set @CampaignFilter = ''
+	Set @FilterSetIDByCampaign = 0
+	
+	Set @ValueText = ''
+	SELECT @ValueText = Value
+	FROM T_Process_Config 
+	WHERE [Name] = 'Peptide_Import_Filter_ID_by_Campaign'
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myRowCount > 0 And Len(IsNull(@ValueText,'')) > 0
+	Begin
+		Set @CommaLoc = CharIndex(',', @ValueText)
+		
+		If @CommaLoc > 1
+		Begin
+			Set @CampaignFilter = LTRIM(RTRIM(Substring(@ValueText, @CommaLoc + 1, 256)))
+			Set @FilterSetIDByCampaign = CONVERT(int, LTRIM(RTRIM(Substring(@ValueText, 1, @CommaLoc - 1))))			
+		End
+	End
+	
+	-----------------------------------------------
+	-- Get result type, dataset name, and campaign for this job
+	-----------------------------------------------
+	Declare @ResultType varchar(64)
+	Declare @Dataset  varchar(128)
+	Declare @Campaign varchar(128)
 
 	declare @StoragePathResults varchar(512)
 	declare @SourceServer varchar(255)
 		
-	set @Dataset = ''
+	Set @Dataset = ''
+	Set @Campaign = ''
 
 	SELECT	@ResultType = ResultType,
-			@Dataset = Dataset
+			@Dataset = Dataset,
+			@Campaign = Campaign
 	FROM T_Analysis_Description
 	WHERE (Job = @job)
 	--
@@ -126,6 +166,13 @@ AS
 		goto Done
 	End
 	
+	-- See if @Campaign matches @CampaignFilter
+	-- If they do, update @FilterSetID; otherwise, set @FilterSetIDByCampaign to 0 so that we don't update the LogEntry below
+	If @Campaign = @CampaignFilter
+		Set @FilterSetID = @FilterSetIDByCampaign
+	Else
+		Set @FilterSetIDByCampaign = 0
+		
 	-- Validate ResultType and define the file extensions
 	set @ColumnCountExpected = 0
 	If @ResultType = 'Peptide_Hit'
@@ -151,13 +198,32 @@ AS
 		set @SeqToProteinMapFileExtension = '_xt_SeqToProteinMap.txt'
 		set @PeptideProphetFileExtension = '_xt_PepProphet.txt'
 	End
+
+	If @ResultType = 'IN_Peptide_Hit'
+	Begin
+	    set @SynFileExtension = '_inspect_syn.txt'
+	    set @ColumnCountExpected = 16
+
+		set @ResultToSeqMapFileExtension = '_inspect_syn_ResultToSeqMap.txt'
+		set @SeqInfoFileExtension = '_inspect_syn_SeqInfo.txt'
+		set @SeqModDetailsFileExtension = '_inspect_syn_ModDetails.txt'
+		set @SeqToProteinMapFileExtension = '_inspect_syn_SeqToProteinMap.txt'
+		set @PeptideProphetFileExtension = ''
+	End
 	
 	If @ColumnCountExpected = 0
 	Begin
-		set @message = 'Invalid result type ' + @ResultType + ' for job ' + @jobStr + '; should be Peptide_Hit or XT_Peptide_Hit'
+		set @message = 'Invalid result type ' + @ResultType + ' for job ' + @jobStr + '; should be Peptide_Hit, XT_Peptide_Hit, or IN_Peptide_Hit'
 		set @myError = 60005
 		goto Done
 	End
+
+	If @infoOnly <> 0
+		SELECT  @Campaign AS Campaign,
+				@Dataset AS Dataset,
+				@job AS Job, 
+				@FilterSetID AS Filter_Set_ID
+
 
 	---------------------------------------------------
 	-- Use LookupCurrentResultsFolderPathsByJob to get 
@@ -273,47 +339,82 @@ AS
 	set @SeqCandidateFilesFound = 0
 	set @PepProphetFileFound = 0
 
-	If @ResultType = 'Peptide_Hit'
+	If @infoOnly <> 0
 	Begin
-		exec @result = LoadSequestPeptidesBulk
-						@PeptideSynFilePath,
-						@PeptideResultToSeqMapFilePath,
-						@PeptideSeqInfoFilePath,
-						@PeptideSeqModDetailsFilePath,
-						@PeptideSeqToProteinMapFilePath,
-						@PeptideProphetResultsFilePath,
-						@job, 
-						@FilterSetID,
-						@LineCountToSkip,
-						@loaded output,
-						@peptideCountSkipped output,
-						@SeqCandidateFilesFound output,
-						@PepProphetFileFound output,
-						@message output
+		SELECT  @LineCountToSkip AS LineCountToSkip,
+				@PeptideResultToSeqMapFilePath AS PeptideResultToSeqMapFilePath,
+				@PeptideSeqInfoFilePath AS PeptideSeqInfoFilePath,
+				@PeptideSeqModDetailsFilePath AS PeptideSeqModDetailsFilePath,
+				@PeptideSeqToProteinMapFilePath AS PeptideSeqToProteinMapFilePath,
+				@PeptideProphetResultsFilePath AS PeptideProphetResultsFilePath
+
+				
+		Goto Done
 	End
 	Else
-	Begin	
+	Begin
 
-	 If @ResultType = 'XT_Peptide_Hit'
-	 Begin
-		exec @result = LoadXTandemPeptidesBulk
-						@PeptideSynFilePath,
-						@PeptideResultToSeqMapFilePath,
-						@PeptideSeqInfoFilePath,
-						@PeptideSeqModDetailsFilePath,
-						@PeptideSeqToProteinMapFilePath,
-						@PeptideProphetResultsFilePath,
-						@job, 
-						@FilterSetID,
-						@LineCountToSkip,
-						@loaded output,
-						@peptideCountSkipped output,
-						@SeqCandidateFilesFound output,
-						@PepProphetFileFound output,
-						@message output
-	 End
-	 Else
-	  Set @result = 60005
+		-- Set @result to an error code of 60005 (in case @ResultType is unknown)
+		Set @result = 60005
+
+		If @ResultType = 'Peptide_Hit'
+		Begin
+			exec @result = LoadSequestPeptidesBulk
+							@PeptideSynFilePath,
+							@PeptideResultToSeqMapFilePath,
+							@PeptideSeqInfoFilePath,
+							@PeptideSeqModDetailsFilePath,
+							@PeptideSeqToProteinMapFilePath,
+							@PeptideProphetResultsFilePath,
+							@job, 
+							@FilterSetID,
+							@LineCountToSkip,
+							@loaded output,
+							@peptideCountSkipped output,
+							@SeqCandidateFilesFound output,
+							@PepProphetFileFound output,
+							@message output
+		End
+
+		If @ResultType = 'XT_Peptide_Hit'
+		Begin
+			exec @result = LoadXTandemPeptidesBulk
+							@PeptideSynFilePath,
+							@PeptideResultToSeqMapFilePath,
+							@PeptideSeqInfoFilePath,
+							@PeptideSeqModDetailsFilePath,
+							@PeptideSeqToProteinMapFilePath,
+							@PeptideProphetResultsFilePath,
+							@job, 
+							@FilterSetID,
+							@LineCountToSkip,
+							@loaded output,
+							@peptideCountSkipped output,
+							@SeqCandidateFilesFound output,
+							@PepProphetFileFound output,
+							@message output
+		End
+
+
+		If @ResultType = 'IN_Peptide_Hit'
+		Begin
+			exec @result = LoadInspectPeptidesBulk
+							@PeptideSynFilePath,
+							@PeptideResultToSeqMapFilePath,
+							@PeptideSeqInfoFilePath,
+							@PeptideSeqModDetailsFilePath,
+							@PeptideSeqToProteinMapFilePath,
+							@job, 
+							@FilterSetID,
+							@LineCountToSkip,
+							@loaded output,
+							@peptideCountSkipped output,
+							@SeqCandidateFilesFound output,
+							@message output
+
+			Set @PepProphetFileFound = 0
+		End
+
 	End
 	
 	--
@@ -322,7 +423,12 @@ AS
 	BEGIN
 		-- set up success message
 		--
-		set @message = Convert(varchar(12), @loaded) + ' peptides were loaded for job ' + @jobStr + ' (Filtered out ' + Convert(varchar(12), @peptideCountSkipped) + ' peptides; Filter_Set_ID = ' + Convert(varchar(12), @FilterSetID) + ')'
+		set @message = Convert(varchar(12), @loaded) + ' peptides were loaded for job ' + @jobStr + ' (Filtered out ' + Convert(varchar(12), @peptideCountSkipped) + ' peptides'
+		
+		If @FilterSetIDByCampaign <> 0 And @FilterSetID = @FilterSetIDByCampaign
+			Set @message = @message + '; Filter_Set_ID = ' + Convert(varchar(12), @FilterSetID) + ', specific for campaign "' + @CampaignFilter + '")'
+		Else
+			Set @message = @message + '; Filter_Set_ID = ' + Convert(varchar(12), @FilterSetID) + ')'
 
 		if @SeqCandidateFilesFound <> 0
 			set @message = @message + '; using the T_Seq_Candidate tables'
@@ -359,4 +465,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadPeptidesForOneAnalysis] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadPeptidesForOneAnalysis] TO [MTS_DB_Lite]
 GO

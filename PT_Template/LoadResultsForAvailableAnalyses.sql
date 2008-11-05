@@ -10,7 +10,7 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **	Desc: 
 **      Calls LoadPeptidesForOneAnalysis for all jobs in 
 **		  T_Analysis_Description with Process_State = @ProcessStateMatch and 
-**		  ResultType = 'Peptide_Hit' or ResultType = 'XT_Peptide_Hit'
+**		  ResultType: 'Peptide_Hit', 'XT_Peptide_Hit', or 'IN_Peptide_Hit'
 **
 **		Calls LoadMASICResultsForOneAnalysis for all jobs with ResultType = 'SIC'
 **
@@ -36,6 +36,8 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			09/12/2006 mem - Added support for Import_Priority column in T_Analysis_Description
 **			10/11/2007 mem - Now calling ReindexDatabase after varying amounts of data have been loaded
 **			10/30/2007 mem - Fixed bug that examined the wrong table to determine the number of jobs that have reached state @NextProcessStateToUse
+**			08/26/2008 mem - Switched to finding the next available job using T_Analysis_Description instead of a temporary table
+**			10/16/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -62,9 +64,6 @@ AS
 	Declare @jobAvailable int
 	Set @jobAvailable = 0
 	
-	Declare @UniqueID int
-	Set @UniqueID = 0
-
 	declare @Job int
 	declare @AnalysisTool varchar(64)
 	declare @ResultType varchar(64)
@@ -91,43 +90,28 @@ AS
 	Set @clientStoragePerspective  = 1
 
 	-----------------------------------------------------------
-	-- Create a temporary table to track the available jobs,
-	--  ordered by Import_Priority and then by Job
+	-- See if any jobs are available to process
 	-----------------------------------------------------------
 	
-	CREATE TABLE #Tmp_Available_Jobs (
-		UniqueID int Identity(1,1) NOT NULL,
-		Job int NOT NULL
-	)
-
-	-----------------------------------------------------------
-	-- Populate #Tmp_Available_Jobs
-	-----------------------------------------------------------
-	
-	INSERT INTO #Tmp_Available_Jobs (Job)
-	SELECT Job
-	FROM T_Analysis_Description
-	WHERE Process_State = @ProcessStateMatch
-	ORDER BY Import_Priority, Job
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0
-	Begin
-		Set @message = 'Error populating #Tmp_Available_Jobs'
-		Goto Done
-	End
-
-	If @myRowCount > 0
+	If Exists (SELECT * FROM T_Analysis_Description WHERE Process_State = @ProcessStateMatch)
 		Set @jobAvailable = 1
 	Else
-		Set @jobAvailable = 0
-
-	If @jobAvailable = 0
 	Begin
+		Set @jobAvailable = 0
 		Set @message = 'No analyses were available'
 		Goto Done
 	End
+
+	-----------------------------------------------------------
+	-- Create a temporary table to track the jobs that have been processed
+	-- We use this table to avoid trying to re-process the same job repeatedly (if the processing fails, but Process_State doesn't get updated)
+	-----------------------------------------------------------
+	
+	CREATE TABLE #Tmp_Processed_Jobs (
+		Job int NOT NULL
+	)
+
+	CREATE CLUSTERED INDEX #IX_Tmp_Processed_Jobs ON #Tmp_Processed_Jobs (Job)
 	
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types
@@ -138,6 +122,7 @@ AS
 	
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 	-----------------------------------------------
@@ -159,7 +144,6 @@ AS
 	Set @job = 0
 	Set @AnalysisTool = ''
 	Set @ResultType = ''
-	Set @UniqueID = 0
 
 	while @jobAvailable <> 0 AND @myError = 0
 	Begin -- <a>
@@ -174,13 +158,12 @@ AS
 		--
 		SELECT TOP 1 @job = TAD.Job, 
 					 @AnalysisTool = TAD.Analysis_Tool, 
-					 @ResultType = TAD.ResultType,
-					 @UniqueID = AJ.UniqueID
-		FROM #Tmp_Available_Jobs AJ INNER JOIN 
-			 T_Analysis_Description TAD on AJ.Job = TAD.Job INNER JOIN
+					 @ResultType = TAD.ResultType
+		FROM T_Analysis_Description TAD INNER JOIN
 			 #T_ResultTypeList ON TAD.ResultType = #T_ResultTypeList.ResultType
-		WHERE TAD.Process_State = @ProcessStateMatch AND AJ.UniqueID > @UniqueID
-		ORDER BY AJ.UniqueID
+		WHERE TAD.Process_State = @ProcessStateMatch AND 
+			  NOT TAD.Job IN (SELECT Job FROM #Tmp_Processed_Jobs)
+		ORDER BY TAD.Import_Priority, TAD.Job
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -194,11 +177,17 @@ AS
 			Set @jobAvailable = 0
 		Else
 		Begin -- <b>
+		
+			-- Add this job to #Tmp_Processed_Jobs
+			INSERT INTO #Tmp_Processed_Jobs (Job)
+			VALUES (@Job)
+			
+			-- Process the job
 			Set @jobProcessed = 0
 			Set @ReindexDB = 0
 			Set @ReindexMessage = ''
 			
-			If (@AnalysisTool = 'Sequest' OR @AnalysisTool = 'AgilentSequest' OR @AnalysisTool = 'XTandem')
+			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect'))
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
 				exec @result = LoadPeptidesForOneAnalysis
@@ -350,4 +339,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Lite]
 GO

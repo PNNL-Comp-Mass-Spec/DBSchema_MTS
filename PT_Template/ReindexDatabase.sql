@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE PROCEDURE dbo.ReindexDatabase
 /****************************************************
 **
@@ -19,6 +18,7 @@ CREATE PROCEDURE dbo.ReindexDatabase
 **	Auth:	mem
 **	Date:	10/11/2007
 **			10/30/2007 mem - Now calling VerifyUpdateEnabled
+**			10/09/2008 mem - Added T_Score_Inspect
 **    
 *****************************************************/
 (
@@ -78,6 +78,14 @@ As
 		Goto Done
 	
 	DBCC DBREINDEX (T_Score_XTandem, '', 90)
+	Set @TableCount = @TableCount + 1
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+	DBCC DBREINDEX (T_Score_Inspect, '', 90)
 	Set @TableCount = @TableCount + 1
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -170,4 +178,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[ReindexDatabase] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ReindexDatabase] TO [MTS_DB_Lite]
 GO

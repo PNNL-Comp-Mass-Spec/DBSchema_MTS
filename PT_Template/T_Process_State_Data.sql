@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_State] ******/
-/****** RowCount: 29 ******/
+/****** RowCount: 30 ******/
 /****** Columns: ID, Name ******/
 INSERT INTO [T_Process_State] VALUES (0,'(na)')
 INSERT INTO [T_Process_State] VALUES (3,'Load Failed')
@@ -13,6 +13,7 @@ INSERT INTO [T_Process_State] VALUES (25,'SIC Stats Defined')
 INSERT INTO [T_Process_State] VALUES (30,'Mass Tags Identified')
 INSERT INTO [T_Process_State] VALUES (33,'Local sequences table updated')
 INSERT INTO [T_Process_State] VALUES (35,'SIC Stat Update Required')
+INSERT INTO [T_Process_State] VALUES (37,'SIC Stats Updated')
 INSERT INTO [T_Process_State] VALUES (39,'Local sequences table updated, but holding since member of joined job')
 INSERT INTO [T_Process_State] VALUES (40,'Ready for GANET Processing')
 INSERT INTO [T_Process_State] VALUES (43,'GANET Save Error')

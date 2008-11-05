@@ -24,6 +24,8 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysis
 **			12/11/2005 mem - Updated to support XTandem results
 **			06/07/2006 mem - Now using GetOrganismDBFileInfo to lookup the ProteinCount and ResidueCount values for the given job
 **			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			10/29/2008 mem - Updated to use DeltaNormTotalPRMScore for DeltaCn2 for Inspect
 **    
 *****************************************************/
 (
@@ -138,15 +140,16 @@ AS
 	Begin
 		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
 					GANET_Predicted, RankSp, RankXc, XcRatio, Charge_State, 
-					PeptideLength, Cleavage_State_Max, PassFilt, MScore)
+					PeptideLength, Cleavage_State_Max, 
+					PassFilt, MScore)
 		SELECT	P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
 				Seq.GANET_Predicted, S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
 				LEN(Seq.Clean_Sequence) AS PeptideLength, Seq.Cleavage_State_Max, 
 				SD.PassFilt, SD.MScore
 		FROM T_Score_Discriminant AS SD INNER JOIN
-			T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
-			T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
-			T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
+			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			 T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
+			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
 		WHERE P.Analysis_ID = @JobToProcess
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -158,17 +161,41 @@ AS
 		-- PassFilt was set to 1
 		-- MScore was set to 10.75
 		
-		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, 
-					DeltaCn2, DelM, GANET_Obs, GANET_Predicted, RankSp, RankXc, XcRatio, 
-					Charge_State, PeptideLength, Cleavage_State_Max, PassFilt, MScore)
-		SELECT	P.Peptide_ID, X.Normalized_Score, 
-				X.DeltaCn2, X.DelM, P.GANET_Obs, Seq.GANET_Predicted, 1 AS RankSp, 1 AS RankXc, 
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr,	DeltaCn2, DelM, GANET_Obs, 
+					GANET_Predicted, RankSp, RankXc, 
+					XcRatio, Charge_State, PeptideLength, 
+					Cleavage_State_Max, PassFilt, MScore)
+		SELECT	P.Peptide_ID, X.Normalized_Score, X.DeltaCn2, X.DelM, P.GANET_Obs, 
+				Seq.GANET_Predicted, 1 AS RankSp, 1 AS RankXc, 
 				1 AS XcRatio, P.Charge_State, LEN(Seq.Clean_Sequence) AS PeptideLength, 
 				Seq.Cleavage_State_Max, SD.PassFilt, SD.MScore
 		FROM T_Score_Discriminant AS SD INNER JOIN
-			T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
-			T_Score_XTandem AS X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
-			T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
+			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			 T_Score_XTandem AS X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
+			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
+		WHERE P.Analysis_ID = @JobToProcess
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
+	
+	If @ResultType = 'IN_Peptide_Hit'
+	Begin
+		-- Note that PassFilt and MScore are estimated for Inspect data
+		-- PassFilt was set to 1
+		-- MScore was set to 10.75
+		
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
+					GANET_Predicted, RankSp, RankXc, XcRatio, 
+					Charge_State, PeptideLength, 
+					Cleavage_State_Max, PassFilt, MScore)
+		SELECT	P.Peptide_ID, I.Normalized_Score, I.DeltaNormTotalPRMScore, I.DelM, P.GANET_Obs, 
+				Seq.GANET_Predicted AS GANET_Predicted, 1 AS RankSp, RankFScore AS RankXc, 1 AS XcRatio, 
+				P.Charge_State, LEN(Seq.Clean_Sequence) AS PeptideLength, 
+				Seq.Cleavage_State_Max, SD.PassFilt, SD.MScore
+		FROM T_Score_Discriminant AS SD INNER JOIN
+			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			 T_Score_Inspect AS I ON SD.Peptide_ID = I.Peptide_ID INNER JOIN
+			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
 		WHERE P.Analysis_ID = @JobToProcess
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -276,4 +303,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Lite]
 GO

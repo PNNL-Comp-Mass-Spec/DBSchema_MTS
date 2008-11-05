@@ -8,7 +8,7 @@ AS
 SELECT dbo.T_Sequence.Seq_ID, MD.Mass_Correction_Tag, 
     MD.Position
 FROM dbo.T_Sequence INNER JOIN
-    ProteinSeqs.Master_Sequences.dbo.T_Mod_Descriptors AS MD
+    Porky.Master_Sequences.dbo.T_Mod_Descriptors AS MD
      ON dbo.T_Sequence.Seq_ID = MD.Seq_ID
 
 

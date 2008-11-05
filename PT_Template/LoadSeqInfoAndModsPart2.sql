@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[LoadSeqInfoAndModsPart2] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.LoadSeqInfoAndModsPart2
+CREATE Procedure LoadSeqInfoAndModsPart2
 /****************************************************
 **
 **	Desc: 
@@ -30,6 +30,7 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 **	Date:	01/25/2006
 **			02/14/2006 mem - Updated to use tables #Tmp_Peptide_ResultToSeqMap in addition to tables #Tmp_Peptide_SeqInfo and #Tmp_Peptide_ModDetails
 **			06/28/2006 mem - Now checking for negative Position values in #Tmp_Peptide_ModDetails
+**			08/26/2008 mem - Added additional logging when LogLevel >= 2
 **
 *****************************************************/
 (
@@ -49,7 +50,26 @@ As
 	
 	Declare @jobStr varchar(12)
 	Set @jobStr = cast(@Job as varchar(12))
+
+	declare @LogLevel int
+	declare @LogMessage varchar(512)
+
+	-----------------------------------------------
+	-- Lookup the logging level from T_Process_Step_Control
+	-----------------------------------------------
 	
+	Set @LogLevel = 1
+	SELECT @LogLevel = enabled
+	FROM T_Process_Step_Control
+	WHERE (Processing_Step_Name = 'LogLevel')
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+
+	Set @LogMessage = 'Populating T_Seq_Candidates using #Tmp_Peptide_Import, #Tmp_Unique_Records, and the SeqInfo tables'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
+	
+
 	-----------------------------------------------
 	-- Insert new data into T_Seq_Candidates
 	-- Link into #Tmp_Peptide_Import, #Tmp_Unique_Records,
@@ -79,6 +99,11 @@ As
 		goto Done
 	end
 
+	Set @LogMessage = 'Populated T_Seq_Candidates with ' + Convert(varchar(12), @myRowCount) + ' rows'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
+
+
 	-----------------------------------------------
 	-- Insert new data into T_Seq_Candidate_to_Peptide_Map
 	-----------------------------------------------
@@ -98,6 +123,11 @@ As
 		set @message = 'Error inserting into T_Seq_Candidate_to_Peptide_Map for job ' + @jobStr
 		goto Done
 	end
+
+	Set @LogMessage = 'Populated T_Seq_Candidate_to_Peptide_Map with ' + Convert(varchar(12), @myRowCount) + ' rows'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
+
 
 	-- Keep track of the number of entries added to T_Seq_Candidate_to_Peptide_Map
 	Declare @numAddedPeptides int
@@ -156,6 +186,10 @@ As
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
+
+	Set @LogMessage = 'Verified the data in #Tmp_Peptide_ModDetails'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
 	
 	-----------------------------------------------
 	-- Insert new data into T_Seq_Candidate_ModDetails
@@ -179,6 +213,10 @@ As
 		goto Done
 	end
 		
+	Set @LogMessage = 'Populated T_Seq_Candidate_ModDetails with ' + Convert(varchar(12), @myRowCount) + ' rows'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
+
 
 	-----------------------------------------------
 	-- Make sure the number of rows inserted equals the number of rows in T_Peptides for this job
@@ -210,5 +248,8 @@ As
 Done:
 	Return @myError
 
-
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart2] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart2] TO [MTS_DB_Lite]
 GO

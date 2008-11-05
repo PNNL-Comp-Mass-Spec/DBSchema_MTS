@@ -27,6 +27,7 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
 **						   - Now calling VerifyUpdateEnabled
 **			03/20/2006 mem - Now sorting on job when populating #T_Jobs_To_Update
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
+**			07/29/2008 mem - Added parameter @PreviewSql
 **    
 *****************************************************/
 (
@@ -36,7 +37,8 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
  	@infoOnly tinyint = 0,
  	@PostLogEntryOnSuccess tinyint = 0,
  	@JobBatchSize int = 1,
-	@MaxJobsToProcess int = 0				-- Set to a positive number to limit the total number of jobs processed
+	@MaxJobsToProcess int = 0,				-- Set to a positive number to limit the total number of jobs processed
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -48,6 +50,7 @@ As
 
 	set @infoOnly = IsNull(@infoOnly, 0)
 	set @JobFilterList = IsNull(@JobFilterList, '')
+	set @PreviewSql = IsNull(@PreviewSql, 0)
 	
 	set @JobsUpdated = 0
 	set @message = ''
@@ -119,6 +122,9 @@ As
 		set @S = @S + ' HAVING SUM(Max_Obs_Area_In_Job) = 0'
 	set @S = @S + ' ORDER BY Analysis_ID'
 
+	If @PreviewSql = 1
+		Print @S
+	
 	exec @result = sp_executesql @S
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -240,7 +246,7 @@ As
 			set @S = @S +                 ' MIN(Pep.Peptide_ID) AS Min_Peptide_ID'
 			set @S = @S +         ' FROM T_Peptides AS Pep INNER JOIN'
 			set @S = @S +           ' (  SELECT Pep.Analysis_ID, Pep.Seq_ID,'
-			set @S = @S +                        ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
+			set @S = @S +                  ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
 			set @S = @S +                 ' FROM T_Peptides AS Pep INNER JOIN'
 			set @S = @S +                      ' #T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job'
 			set @S = @S +                 ' WHERE NOT Pep.Seq_ID IS NULL AND '
@@ -262,7 +268,11 @@ As
 				set @S = @S + ' ORDER BY TP.Analysis_ID'
 			End
 
-			exec @result = sp_executesql @S
+			If @PreviewSql <> 0
+				Print @S
+			Else
+				exec @result = sp_executesql @S
+
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
@@ -295,6 +305,9 @@ As
 			If @MaxJobsToProcess > 0 AND @MinUniqueRowID > @MaxJobsToProcess
 				Set @Continue = 0
 
+			If @PreviewSql <> 0
+				Set @Continue = 0
+				
 			If @Continue > 0
 			Begin
 				-- Validate that updating is enabled, abort if not enabled
@@ -330,10 +343,14 @@ Done:
 			If Len(@JobFilterList) > 0
 				set @message = @message + ': ' + @JobFilterList
 			
-			If @infoOnly <> 0
+			If @infoOnly <> 0 Or @PreviewSql <> 0
 			Begin
 				set @message = 'InfoOnly: ' + @message
-				Select @message AS ComputeMaxObsAreaByJob_Message
+				
+				If @PreviewSql <> 0
+					Print @message
+				Else
+					SELECT @message AS ComputeMaxObsAreaByJob_Message
 			End
 			Else
 			Begin
@@ -351,4 +368,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Lite]
 GO

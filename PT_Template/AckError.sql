@@ -82,3 +82,7 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[AckError] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AckError] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AckError] TO [MTS_DB_Lite]
+GO

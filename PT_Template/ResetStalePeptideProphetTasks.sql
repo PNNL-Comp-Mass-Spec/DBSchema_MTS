@@ -102,3 +102,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ResetStalePeptideProphetTasks] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ResetStalePeptideProphetTasks] TO [MTS_DB_Lite]
+GO

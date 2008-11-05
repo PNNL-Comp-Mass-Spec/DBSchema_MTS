@@ -10,7 +10,7 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysisNoSeqID
 **	Desc: 
 **		Updates confidence scores for all the peptides
 **		from analysis Job @JobToProcess; does not require
-**		that Seq_ID or GANET_Obs values be defined in T_Peptides
+**		that Seq_ID be defined in T_Peptides (uses GANET_Obs for Seq.GANET_Predicted)
 **
 **	Return values: 0 if no error; otherwise error code
 **
@@ -19,6 +19,8 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysisNoSeqID
 **	Auth:	mem
 **	Date:	08/31/2006
 **			03/22/2007 mem - Added option @OnlyProcessPeptidesWithNullDiscriminant
+**			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			10/29/2008 mem - Updated to use DeltaNormTotalPRMScore for DeltaCn2 for Inspect
 **    
 *****************************************************/
 (
@@ -134,20 +136,18 @@ AS
 
 	If @ResultType = 'Peptide_Hit'
 	Begin
-
 		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
 					GANET_Predicted, RankSp, RankXc, XcRatio, Charge_State, 
-					PeptideLength, Cleavage_State_Max, PassFilt, MScore)
+					PeptideLength, Cleavage_State_Max, 
+					PassFilt, MScore)
 		SELECT	P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
-				P.GANET_Obs AS GANET_Predicted, S.RankSp, S.RankXc, 
-				S.XcRatio, P.Charge_State, 
-				LEN(dbo.udfCleanSequence(P.Peptide)) AS PeptideLength, 
-				MAX(PPM.Cleavage_State) AS Cleavage_State_Max, 
+				P.GANET_Obs AS GANET_Predicted, S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
+				LEN(dbo.udfCleanSequence(P.Peptide)) AS PeptideLength, MAX(PPM.Cleavage_State) AS Cleavage_State_Max, 
 				SD.PassFilt, SD.MScore
 		FROM T_Score_Discriminant SD INNER JOIN
-			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
-			 T_Score_Sequest S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
-			 T_Peptide_to_Protein_Map PPM ON P.Peptide_ID = PPM.Peptide_ID
+			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			 T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
+			 T_Peptide_to_Protein_Map AS PPM ON P.Peptide_ID = PPM.Peptide_ID
 		WHERE P.Analysis_ID = @JobToProcess AND 
 			  (@OnlyProcessPeptidesWithNullDiscriminant = 0 OR SD.DiscriminantScoreNorm Is Null)
 		GROUP BY P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
@@ -163,15 +163,14 @@ AS
 		-- PassFilt was set to 1
 		-- MScore was set to 10.75
 		
-		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, 
-					DeltaCn2, DelM, GANET_Obs, GANET_Predicted, RankSp, RankXc, XcRatio, 
-					Charge_State, PeptideLength, Cleavage_State_Max, PassFilt, MScore)
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
+					GANET_Predicted, RankSp, RankXc, 
+					XcRatio, Charge_State, PeptideLength, 
+					Cleavage_State_Max, PassFilt, MScore)
 		SELECT	P.Peptide_ID, X.Normalized_Score, X.DeltaCn2, X.DelM, P.GANET_Obs, 
 				P.GANET_Obs AS GANET_Predicted, 1 AS RankSp, 1 AS RankXc, 
-				1 AS XcRatio, P.Charge_State, 
-				LEN(dbo.udfCleanSequence(P.Peptide)) AS PeptideLength, 
-				MAX(PPM.Cleavage_State) AS Cleavage_State_Max, 
-				SD.PassFilt, SD.MScore
+				1 AS XcRatio, P.Charge_State, LEN(dbo.udfCleanSequence(P.Peptide)) AS PeptideLength, 
+				MAX(PPM.Cleavage_State) AS Cleavage_State_Max, SD.PassFilt, SD.MScore
 		FROM T_Score_Discriminant SD INNER JOIN
 			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_XTandem X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
@@ -183,7 +182,32 @@ AS
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
-	
+
+	If @ResultType = 'IN_Peptide_Hit'
+	Begin
+		-- Note that PassFilt and MScore are estimated for Inspect data
+		-- PassFilt was set to 1
+		-- MScore was set to 10.75
+		
+		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
+					GANET_Predicted, RankSp, RankXc, XcRatio, 
+					Charge_State, PeptideLength, 
+					Cleavage_State_Max, PassFilt, MScore)
+		SELECT	P.Peptide_ID, I.Normalized_Score, I.DeltaNormTotalPRMScore, I.DelM, P.GANET_Obs, 
+				P.GANET_Obs AS GANET_Predicted, 1 AS RankSp, RankFScore AS RankXc, 1 AS XcRatio, 
+				P.Charge_State, LEN(dbo.udfCleanSequence(P.Peptide)) AS PeptideLength, 
+				MAX(PPM.Cleavage_State) AS Cleavage_State_Max, SD.PassFilt, SD.MScore
+		FROM T_Score_Discriminant SD INNER JOIN
+			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
+			 T_Score_Inspect I ON SD.Peptide_ID = I.Peptide_ID INNER JOIN
+			 T_Peptide_to_Protein_Map PPM ON P.Peptide_ID = PPM.Peptide_ID
+		WHERE P.Analysis_ID = @JobToProcess AND 
+			  (@OnlyProcessPeptidesWithNullDiscriminant = 0 OR SD.DiscriminantScoreNorm Is Null)
+		GROUP BY P.Peptide_ID, I.Normalized_Score, I.DeltaNormTotalPRMScore, I.DelM, P.GANET_Obs, I.RankFScore,
+				 P.Charge_State, LEN(dbo.udfCleanSequence(P.Peptide)), SD.PassFilt, SD.MScore
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End	
 	--
 	if @myError <> 0 
 	begin
@@ -286,4 +310,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysisNoSeqID] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysisNoSeqID] TO [MTS_DB_Lite]
 GO

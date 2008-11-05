@@ -406,3 +406,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[LoadMASICResultsForOneAnalysis] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[LoadMASICResultsForOneAnalysis] TO [MTS_DB_Lite]
+GO

@@ -34,6 +34,7 @@ CREATE Procedure dbo.VerifySequenceInfo
 **						   - No longer checking for jobs in T_Joined_Job_Details; moved that logic to MasterUpdateProcessBackground
 **			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
+**			07/23/2008 mem - Switched Master_Sequences location to Porky
 **    
 *****************************************************/
 (
@@ -95,7 +96,7 @@ AS
 				) AS SequenceQ ON 
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
 				(	SELECT Monoisotopic_Mass, Seq_ID
-					FROM ProteinSeqs.Master_Sequences.dbo.T_Sequence
+					FROM Porky.Master_Sequences.dbo.T_Sequence
 				) M ON S.Seq_ID = M.Seq_ID
 		WHERE S.Monoisotopic_Mass IS NULL AND 
 			  NOT (M.Monoisotopic_Mass IS NULL)
@@ -110,7 +111,7 @@ AS
 		FROM T_Sequence INNER JOIN
 		(
 			SELECT Monoisotopic_Mass, Seq_ID
-			FROM ProteinSeqs.Master_Sequences.dbo.T_Sequence
+			FROM Porky.Master_Sequences.dbo.T_Sequence
 		) AS M ON T_Sequence.Seq_ID = M.Seq_ID
 		WHERE T_Sequence.Monoisotopic_Mass IS NULL AND
 			NOT M.Monoisotopic_Mass IS NULL
@@ -222,4 +223,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Lite]
 GO

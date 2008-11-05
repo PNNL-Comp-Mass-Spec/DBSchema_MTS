@@ -24,6 +24,7 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **			07/10/2006 mem - Added @PeptideProphetComparison and @PeptideProphetThreshold
 **			08/26/2006 mem - Added @RankScoreComparison and @RankScoreThreshold
 **						   - Updated to cache the criteria for the given filter set group locally to remove the need to repeatedly query MT_Main.dbo.V_DMS_Filter_Sets_Import
+**			10/30/2008 mem - Added @InspectMQScore, @InspectTotalPRMScore, and @InspectFScore criteria
 **    
 *****************************************************/
 (
@@ -82,7 +83,16 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@PeptideProphetThreshold float=0 output,
 	
 	@RankScoreComparison varchar(2)='>=' output,
-	@RankScoreThreshold smallint=0 output
+	@RankScoreThreshold smallint=0 output,
+
+	@InspectMQScoreComparison varchar(2)='>=' output,
+	@InspectMQScoreThreshold real=-10000 output,				
+	
+	@InspectTotalPRMScoreComparison varchar(2)='>=' output,
+	@InspectTotalPRMScoreThreshold real=-10000 output,
+
+	@InspectFScoreComparison varchar(2)='>=' output,
+	@InspectFScoreThreshold real=-10000 output
 )
 As
 	Set nocount on
@@ -103,75 +113,84 @@ As
 	Set @message = ''
 
 	Set @SpectrumCountComparison = '>='
-	Set @SpectrumCountThreshold = 0
+	Set @SpectrumCountThreshold  = 0
 
 	Set @ChargeStateComparison = '>='
-	Set @ChargeStateThreshold = 0
+	Set @ChargeStateThreshold  = 0
 
 	Set @HighNormalizedScoreComparison = '>='
-	Set @HighNormalizedScoreThreshold = 0
+	Set @HighNormalizedScoreThreshold  = 0
 
 	Set @CleavageStateComparison = '>='
-	Set @CleavageStateThreshold = 0
+	Set @CleavageStateThreshold  = 0
 
 	Set @PeptideLengthComparison = '>='
 	Set @PeptideLengthThreshold = 0
 
 	Set @MassComparison = '>='
-	Set @MassThreshold = 0
+	Set @MassThreshold  = 0
 
 	Set @DeltaCnComparison = '<='
-	Set @DeltaCnThreshold = 1
+	Set @DeltaCnThreshold  = 1
 
 	Set @DeltaCn2Comparison = '>='
-	Set @DeltaCn2Threshold = 0
+	Set @DeltaCn2Threshold  = 0
 
 	Set @DiscriminantScoreComparison = '>='
-	Set @DiscriminantScoreThreshold = 0
+	Set @DiscriminantScoreThreshold  = 0
 
 	Set @NETDifferenceAbsoluteComparison = '<='
-	Set @NETDifferenceAbsoluteThreshold = 100
+	Set @NETDifferenceAbsoluteThreshold  = 100
 
 	Set @DiscriminantInitialFilterComparison = '>='
-	Set @DiscriminantInitialFilterThreshold = 0
+	Set @DiscriminantInitialFilterThreshold  = 0
 	
 	Set @ProteinCountComparison = '>='
-	Set @ProteinCountThreshold = 0
+	Set @ProteinCountThreshold  = 0
 
 	Set @TerminusStateComparison = '>='
-	Set @TerminusStateThreshold = 0
+	Set @TerminusStateThreshold  = 0
 
 	Set @XTandemHyperscoreComparison = '>='
-	Set @XTandemHyperscoreThreshold = 0
+	Set @XTandemHyperscoreThreshold  = 0
 
 	Set @XTandemLogEValueComparison = '<='
-	Set @XTandemLogEValueThreshold = 0
+	Set @XTandemLogEValueThreshold  = 0
 	
 	Set @PeptideProphetComparison = '>='
-	Set @PeptideProphetThreshold = 0
+	Set @PeptideProphetThreshold  = 0
 
 	Set @RankScoreComparison = '>='
-	Set @RankScoreThreshold = 0
+	Set @RankScoreThreshold  = 0
+
+	Set @InspectMQScoreComparison = '>='
+	Set @InspectMQScoreThreshold  = -10000			-- MQScore can be negative, so defaulting to >= -10000
 	
+	Set @InspectTotalPRMScoreComparison = '>='
+	Set @InspectTotalPRMScoreThreshold  = -10000	-- TotalPRMScore can be negative, so defaulting to >= -10000
+
+	Set @InspectFScoreComparison = '>='
+	Set @InspectFScoreThreshold  = -10000			-- FScore can be negative, so defaulting to >= -10000
+
 	-------------------------------------------------
 	-- Validate @FilterSetID
 	-------------------------------------------------
 	--
 	SELECT @MatchCount = COUNT(*)
-	FROM MT_Main.dbo.V_DMS_Filter_Sets_Import
+	FROM MT_Main.dbo.V_DMS_Filter_Set_Overview
 	WHERE Filter_Set_ID = @FilterSetID
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 	--
 	If @myError <> 0
 	Begin
-		Set @message = 'Could not validate filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' in MT_Main.dbo.V_DMS_Filter_Sets_Import'		
+		Set @message = 'Could not validate filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' in MT_Main.dbo.V_DMS_Filter_Set_Overview'		
 		Goto Done
 	End
 	
 	If @MatchCount = 0
 	Begin
-		Set @message = 'Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' not found in MT_Main.dbo.V_DMS_Filter_Sets_Import'
+		Set @message = 'Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' not found in MT_Main.dbo.V_DMS_Filter_Set_Overview'
 		Set @myError = 201
 		Goto Done
 	End
@@ -317,6 +336,21 @@ As
 					 @RankScoreThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 17	-- RankScore
+
+		SELECT TOP 1 @InspectMQScoreComparison = Criterion_Comparison,
+					 @InspectMQScoreThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 18	-- Inspect MQScore
+
+		SELECT TOP 1 @InspectTotalPRMScoreComparison = Criterion_Comparison,
+					 @InspectTotalPRMScoreThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 19	-- Inspect TotalPRMScore
+		
+		SELECT TOP 1 @InspectFScoreComparison = Criterion_Comparison,
+					 @InspectFScoreThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 20	-- Inspect FScore
 	
 	End
 
@@ -327,4 +361,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Lite]
 GO

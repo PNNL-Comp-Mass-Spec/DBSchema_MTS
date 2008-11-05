@@ -40,6 +40,8 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **			11/30/2006 mem - Implemented Try...Catch error handling
+**			07/23/2008 mem - Switched Master_Sequences location to Porky
+**			08/20/2008 mem - Now checking for jobs where all of the loaded peptides have State_ID = 2
 **    
 *****************************************************/
 (
@@ -64,7 +66,7 @@ As
 	set @message = ''
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'ProteinSeqs'
+	set @MasterSequencesServerName = 'Porky'
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -169,8 +171,8 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 		--
-		-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs to another computer
-		exec ProteinSeqs.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
+		-- Warning: Update @MasterSequencesServerName above if changing from Porky to another computer
+		exec Porky.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
 		--
 		SELECT @myRowcount = @@rowcount, @myError = @@error
 		--
@@ -208,7 +210,25 @@ As
 			set @message = 'Problem populating ' + @PeptideSequencesTableName + ' with the peptides to process for job ' + @jobStr
 			goto Done
 		end
+		
+		if @myRowCount = 0
+		begin
+			If @SkipPeptidesFromReversedProteins <> 0 And Exists (SELECT * FROM T_Peptides WHERE Analysis_ID = @job)
+				set @message = 'Warning: all peptides in job ' + @jobStr + ' have State_ID = 2, meaning they only map to Reversed Proteins'
+			Else
+				set @message = 'Unable to populate ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' with candidate sequences for job ' + @jobStr + '; it is likely this job does not have any peptides in T_Peptides'
+			
+			set @message = @message + '; Process_state for this job will be set to 5'
+			Set @NextProcessState = 5
 
+			Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
+			Exec SetProcessState @job, @NextProcessState
+
+			Set @myError = 51113
+			Goto Done
+		end
+		
+		
 		-----------------------------------------------------------
 		-- Call GetIDsForRawSequences to process the data in the temporary sequence tables
 		-----------------------------------------------------------
@@ -218,7 +238,7 @@ As
 		If @logLevel >= 1
 			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 		--
-		exec @myError = ProteinSeqs.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
+		exec @myError = Porky.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
 																@PeptideSequencesTableName, @UniqueSequencesTableName, @processCount output, @message output
 		--
 		if @myError <> 0
@@ -330,7 +350,7 @@ Done:
 	Begin
 		Begin Try
 			Set @CurrentLocation = 'Delete temporary tables ' + @PeptideSequencesTableName + ' and ' + @UniqueSequencesTableName
-			exec ProteinSeqs.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
+			exec Porky.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
 		End Try
 		Begin Catch
 			-- Error caught
@@ -343,4 +363,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Lite]
 GO

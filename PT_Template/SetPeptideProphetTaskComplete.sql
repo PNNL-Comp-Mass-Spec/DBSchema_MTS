@@ -59,3 +59,9 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeptideProphetTaskComplete] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetPeptideProphetTaskComplete] TO [MTS_DB_Lite]
+GO
+GRANT EXECUTE ON [dbo].[SetPeptideProphetTaskComplete] TO [pnl\MTSProc]
+GO

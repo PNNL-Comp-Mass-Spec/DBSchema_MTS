@@ -70,3 +70,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[NextField] TO [DMS_SP_User]
 GO
+GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Lite]
+GO

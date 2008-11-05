@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.CheckStaleJobs
 **	Auth: 	mem
 **	Date: 	10/31/2005
 **			06/28/2006 mem - Updated call to PostLogEntry to include single quotes around CheckStaleJobs
+**			08/27/2008 mem - Added a job count to the stale jobs message
 **    
 *****************************************************/
 (
@@ -86,7 +87,7 @@ As
 		If @JobCount <= 1
 			Set @message = 'Stale job found: Job ' + Convert(varchar(12), @JobMin) + ' has a state between ' + @StateRange + ' and was'
 		Else
-			Set @message = 'Stale jobs found: Jobs ' + Convert(varchar(12), @JobMin) + ' to ' + Convert(varchar(12), @JobMax) + ' have states between ' + @StateRange + ' and were'
+			Set @message = 'Stale jobs found: ' + Convert(varchar(12), @JobCount) + ' jobs (' + Convert(varchar(12), @JobMin) + ' to ' + Convert(varchar(12), @JobMax) + ') have states between ' + @StateRange + ' and were'
 	
 		Set @message = @message + ' last updated over ' + Convert(varchar(9), @maxHoursProcessing) + ' hours ago (' + Convert(varchar(30), @DateMax) + ')'
 	
@@ -99,4 +100,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckStaleJobs] TO [MTS_DB_Dev]
+GO
+GRANT VIEW DEFINITION ON [dbo].[CheckStaleJobs] TO [MTS_DB_Lite]
 GO
