@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.GetMassTags
 /****************************************************
 **
@@ -54,6 +55,7 @@ CREATE PROCEDURE dbo.GetMassTags
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **			02/15/2007 mem - Clarified use of MSMS_Dataset_Count, MS_Dataset_Count,MSMS MS_Dataset_Count, and MS_Dataset_Count in @criteriaSql
 **						   - Fixed bug that failed to put MSMS_DeltaCn2_Maximum criteria in the Having clause of the query
+**			10/09/2009 mem - Removed Sequest-specific table references
 **
 *****************************************************/
 (
@@ -151,7 +153,6 @@ As
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Peptide_Monoisotopic_Mass', 'MT.Monoisotopic_Mass')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Observation_Count', 'MT.Number_Of_Peptides')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_High_Normalized_Score', 'MT.High_Normalized_Score')
-	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_DeltaCn2_Maximum', 'Max(SS.DeltaCn2)')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_High_Discriminant_Score', 'MT.High_Discriminant_Score')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Mod_Count', 'MT.Mod_Count')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Mod_Description', 'MT.Mod_Description')
@@ -265,16 +266,6 @@ As
 		Set @sqlSelect = @sqlSelect + ', Round(MT.High_Normalized_Score, 3) AS MSMS_High_Normalized_Score'
 		Set @sqlGroupBy = @sqlGroupBy + ', Round(MT.High_Normalized_Score, 3)'
 	End
-
-
-	-- Note: Do not display DeltaCn2 if DB Schema Version is < 2, since the DeltaCn value in that version is not the same as DeltaCn2
-	If @DB_Schema_Version >= 2 AND @internalMatchCode <> 'UMC'
-	Begin
-		If CharIndex('MSMS_DeltaCn2_Maximum', @outputColumnNameList) > 0
-			Begin
-				Set @sqlSelect = @sqlSelect + ', Max(SS.DeltaCn2) AS MSMS_DeltaCn2_Maximum'
-			End
-	End
 	
 	
 	If @DB_Schema_Version < 2
@@ -375,10 +366,6 @@ As
 	Begin
 		Set @sqlFrom = @sqlFrom + ' SOURCEJOBTABLE AS JobTable INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Peptides AS PT ON JobTable.Job = PT.Analysis_ID INNER JOIN'
-		
-		If @DB_Schema_Version >= 2 AND @internalMatchCode <> 'UMC'
-			Set @sqlFrom = @sqlFrom + ' DATABASE..T_Score_Sequest AS SS ON PT.Peptide_ID = SS.Peptide_ID INNER JOIN'
-		
 		Set @sqlFrom = @sqlFrom + ' DATABASE..V_IFC_Mass_Tag_To_Protein_Map AS MTO INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Mass_Tags AS MT ON MTO.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..V_IFC_Proteins AS RefTable ON MTO.Ref_ID = RefTable.Ref_ID LEFT OUTER JOIN'
@@ -496,8 +483,11 @@ As
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[GetMassTags] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetMassTags] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetMassTags] TO [dmswebuser]
+GRANT VIEW DEFINITION ON [dbo].[GetMassTags] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetMassTags] TO [MTS_DB_Lite] AS [dbo]
 GO

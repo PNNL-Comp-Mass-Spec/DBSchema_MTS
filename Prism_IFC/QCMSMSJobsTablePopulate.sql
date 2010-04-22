@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
+create PROCEDURE QCMSMSJobsTablePopulate
 /****************************************************
 **
 **	Desc: 
@@ -295,5 +295,9 @@ Done:
 	return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[QCMSMSJobsTablePopulate] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QCMSMSJobsTablePopulate] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSJobsTablePopulate] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSJobsTablePopulate] TO [MTS_DB_Lite] AS [dbo]
 GO

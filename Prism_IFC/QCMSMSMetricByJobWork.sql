@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
 /****************************************************
 **
@@ -18,10 +19,11 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
 **	  @returnRowCount		-- Set to True to return a row count; False to return the results
 **	  @message				-- Status/error message output
 **
-**		Auth:	mem
-**		Date:	08/29/2005
-**				11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
-**			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	08/29/2005
+**			11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
+**		    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
 **
 *****************************************************/
 (
@@ -45,7 +47,8 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
 	@MetricID tinyint = 0,							-- 0 means area, 1 means S/N
 	@UseNaturalLog tinyint = 1,
 	@SeqIDList varchar(7000),						-- Required: Comma separated list of Seq_ID values to match
-	@MeanSquareError float = 0 output
+	@MeanSquareError float = 0 output,
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -102,6 +105,7 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @previewSql = IsNull(@previewSql, 0)
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
 	If @returnRowCount = 'true'
@@ -119,6 +123,18 @@ As
 	)
 
 	CREATE UNIQUE CLUSTERED INDEX [#IX_TmpQCJobList] ON #TmpQCJobList(Job)
+
+	CREATE TABLE #TmpQueryResults (
+		Dataset_Date datetime NULL,
+		Dataset_ID int NOT NULL,
+		Job int NOT NULL,
+		Instrument varchar(64) NULL,
+		Dataset_Name varchar(128) NOT NULL,
+		Job_Date datetime NULL,
+		Value int NULL
+	)
+
+	CREATE UNIQUE CLUSTERED INDEX [#IX_TmpQueryResults] ON #TmpQueryResults(Job)
 	
 	---------------------------------------------------
 	-- Populate the temporary table with the jobs matching the filters
@@ -219,163 +235,211 @@ As
 	---------------------------------------------------
 	-- Run the query to populate #TmpQCMetricData
 	---------------------------------------------------
-	Exec (@Sql + ' ' + @sqlWhere + ' ' + @sqlGroupBy)
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-
-
-	If @myRowCount = 0
-	Begin
-		Set @message = 'No data was matched using the query; unable to continue'
-		Set @myError = 50000
-		Goto Done
-	End
-
-
-	---------------------------------------------------
-	-- Process the data
-	-- This procedure was developed by Don Daly with the
-	--  assistance of Kevin Anderson and Jason Gilmore
-	--  in July 2005
-	---------------------------------------------------
-
-	Declare @GlobalMean float,
-			@GlobalSumA4Squared float,
-			@GlobalCount int,
-			@SampleCount int,
-			@SeqIDCount int,
-			@DegOfFreedom int,
-			@Divisor float
-			
-	-- Delete any rows where Metric is <= 0
-	-- Necessary since we don't want to process values <= 0 (and, we can't take the logarithm of 0 or negative values when @UseNaturalLog = 1)
-	DELETE FROM #TmpQCMetricData
-	WHERE Metric <= 0
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	
-	-- Take the natural log of the data if @UseNaturalLog = 1
-	If @UseNaturalLog <> 0
-		UPDATE #TmpQCMetricData
-		SET Metric = Log(Metric)
-
-	-- Compute the global mean of the data
-	Set @GlobalMean = 0
-	SELECT @GlobalMean = Avg(Metric)
-	FROM #TmpQCMetricData
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-
-	If @myError <> 0
-	Begin
-		Set @message = 'Error computing the global mean of the data; Error Code = ' + Convert(varchar(9), @myError)
-		Goto Done
-	End
-	
-	If IsNull(@GlobalMean, 0) = 0
-	Begin
-		Set @message = 'Global mean is 0; cannot continue with the data processing'
-		Set @myError = 50001
-		Goto Done
-	End
-
-	-- Compute A2
-	UPDATE #TmpQCMetricData
-	SET A2 = Metric - @GlobalMean
-	
-	-- Compute the mean of A2 for each peptide (across jobs) and store in #TmpQCMetricPeptideMeans
-	INSERT INTO #TmpQCMetricPeptideMeans (Seq_ID, Mean)
-	SELECT Seq_ID, Avg(A2)
-	FROM #TmpQCMetricData
-	GROUP BY Seq_ID
-
-	-- Compute A3
-	UPDATE #TmpQCMetricData
-	SET A3 = MD.Metric - PM.Mean
-	FROM #TmpQCMetricData MD INNER JOIN #TmpQCMetricPeptideMeans PM ON MD.Seq_ID = PM.Seq_ID
-
-	-- Compute the mean of A3 for each job (across peptides) and store in #TmpQCMetricSampleMeans
-	INSERT INTO #TmpQCMetricSampleMeans (Job, Mean)
-	SELECT Job, Avg(A3)
-	FROM #TmpQCMetricData
-	GROUP BY Job
-
-	-- Compute A4Squared
-	UPDATE #TmpQCMetricData
-	SET A4Squared = Square((MD.A3 - SM.Mean))
-	FROM #TmpQCMetricData MD INNER JOIN #TmpQCMetricSampleMeans SM ON MD.Job = SM.Job
-
-	
-	-- Compute the Global Stats using A4Squared
-	SELECT	@GlobalSumA4Squared = SUM(A4Squared), 
-			@GlobalCount = COUNT(A4Squared),
-			@SampleCount = COUNT(DISTINCT Job),
-			@SeqIDCount = COUNT(DISTINCT Seq_ID)
-	FROM #TmpQCMetricData
-
-	Set @DegOfFreedom = 1
-	Set @Divisor = @GlobalCount-@SeqIDCount-@SampleCount-@DegOfFreedom
-	
-	If IsNull(@Divisor, 0) <> 0
-		Set @MeanSquareError = @GlobalSumA4Squared / @Divisor
+	if @previewSql <> 0
+		Print (@Sql + ' ' + @sqlWhere + ' ' + @sqlGroupBy)
 	Else
-		Set @MeanSquareError = 0
-	
+		Exec (@Sql + ' ' + @sqlWhere + ' ' + @sqlGroupBy)
+	--	
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+	If @previewSql = 0
+	Begin -- <a>
+		If @myRowCount = 0
+		Begin
+			Set @message = 'No data was matched using the query; unable to continue'
+			Set @myError = 50000
+			Goto Done
+		End
+
+
+		---------------------------------------------------
+		-- Process the data
+		-- This procedure was developed by Don Daly with the
+		--  assistance of Kevin Anderson and Jason Gilmore
+		--  in July 2005
+		---------------------------------------------------
+
+		Declare @GlobalMean float,
+				@GlobalSumA4Squared float,
+				@GlobalCount int,
+				@SampleCount int,
+				@SeqIDCount int,
+				@DegOfFreedom int,
+				@Divisor float
+				
+		-- Delete any rows where Metric is <= 0
+		-- Necessary since we don't want to process values <= 0 (and, we can't take the logarithm of 0 or negative values when @UseNaturalLog = 1)
+		DELETE FROM #TmpQCMetricData
+		WHERE Metric <= 0
+		--	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		-- Take the natural log of the data if @UseNaturalLog = 1
+		If @UseNaturalLog <> 0
+			UPDATE #TmpQCMetricData
+			SET Metric = Log(Metric)
+
+		-- Compute the global mean of the data
+		Set @GlobalMean = 0
+		SELECT @GlobalMean = Avg(Metric)
+		FROM #TmpQCMetricData
+		--	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		If @myError <> 0
+		Begin
+			Set @message = 'Error computing the global mean of the data; Error Code = ' + Convert(varchar(9), @myError)
+			Goto Done
+		End
+		
+		If IsNull(@GlobalMean, 0) = 0
+		Begin
+			Set @message = 'Global mean is 0; cannot continue with the data processing'
+			Set @myError = 50001
+			Goto Done
+		End
+
+		-- Compute A2
+		UPDATE #TmpQCMetricData
+		SET A2 = Metric - @GlobalMean
+		
+		-- Compute the mean of A2 for each peptide (across jobs) and store in #TmpQCMetricPeptideMeans
+		INSERT INTO #TmpQCMetricPeptideMeans (Seq_ID, Mean)
+		SELECT Seq_ID, Avg(A2)
+		FROM #TmpQCMetricData
+		GROUP BY Seq_ID
+
+		-- Compute A3
+		UPDATE #TmpQCMetricData
+		SET A3 = MD.Metric - PM.Mean
+		FROM #TmpQCMetricData MD INNER JOIN #TmpQCMetricPeptideMeans PM ON MD.Seq_ID = PM.Seq_ID
+
+		-- Compute the mean of A3 for each job (across peptides) and store in #TmpQCMetricSampleMeans
+		INSERT INTO #TmpQCMetricSampleMeans (Job, Mean)
+		SELECT Job, Avg(A3)
+		FROM #TmpQCMetricData
+		GROUP BY Job
+
+		-- Compute A4Squared
+		UPDATE #TmpQCMetricData
+		SET A4Squared = Square((MD.A3 - SM.Mean))
+		FROM #TmpQCMetricData MD INNER JOIN #TmpQCMetricSampleMeans SM ON MD.Job = SM.Job
+
+		
+		-- Compute the Global Stats using A4Squared
+		SELECT	@GlobalSumA4Squared = SUM(A4Squared), 
+				@GlobalCount = COUNT(A4Squared),
+				@SampleCount = COUNT(DISTINCT Job),
+				@SeqIDCount = COUNT(DISTINCT Seq_ID)
+		FROM #TmpQCMetricData
+
+		Set @DegOfFreedom = 1
+		Set @Divisor = @GlobalCount-@SeqIDCount-@SampleCount-@DegOfFreedom
+		
+		If IsNull(@Divisor, 0) <> 0
+			Set @MeanSquareError = @GlobalSumA4Squared / @Divisor
+		Else
+			Set @MeanSquareError = 0
+	End -- </a>
 	
 	---------------------------------------------------
 	-- Build the query to return the results, linking into the job table to obtain the associated job info
 	---------------------------------------------------
 
+	declare @SqlInsert varchar(255)
+	declare @JobQuery varchar(2048)
 	declare @sqlOrderBy varchar(2048)
+
+	declare @sqlAddMissingJobs varchar(2048)
 	
-	Set @Sql = 'SELECT'
-	Set @Sql = @Sql + '  IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date'
-	Set @Sql = @Sql + ', JobTable.Dataset_ID'
-	Set @Sql = @Sql + ', JobTable.Job'
-	Set @Sql = @Sql + ', JobTable.Instrument'
-	Set @Sql = @Sql + ', JobTable.Dataset AS Dataset_Name'
-	Set @Sql = @Sql + ', JobTable.Completed AS Job_Date'
-	Set @Sql = @Sql + ', SM.Mean AS Value'
+	Set @JobQuery = ''
+	Set @JobQuery = @JobQuery + ' SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
+	Set @JobQuery = @JobQuery +		  ' JobTable.Dataset_ID, JobTable.Job,JobTable.Instrument,'
+	Set @JobQuery = @JobQuery +		  ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, 0 as Value'
+	Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
+	Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+	Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
+		
+	Set @Sql = ''
+	Set @Sql = @Sql + ' SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
+	Set @Sql = @Sql +		  ' JobTable.Dataset_ID,JobTable.Job,JobTable.Instrument,'
+	Set @Sql = @Sql +		  ' JobTable.Dataset AS Dataset_Name,JobTable.Completed AS Job_Date,'
+	Set @Sql = @Sql +		  ' SM.Mean AS Value'
 	Set @Sql = @Sql +  ' FROM DATABASE..T_Analysis_Description JobTable'
 	Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
 	Set @Sql = @Sql +       ' INNER JOIN #TmpQCMetricSampleMeans SM ON JobTable.Job = SM.Job'
 		
-	Set @sqlOrderBy = 'ORDER BY DatasetTable.Created_DMS, JobTable.Dataset_ID'
+	Set @sqlOrderBy = 'ORDER BY IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS), JobTable.Dataset_ID'
 
 
 	---------------------------------------------------
 	-- Customize the columns for the given database
 	---------------------------------------------------
-
+	set @JobQuery = replace(@JobQuery, 'DATABASE..', '[' + @DBName + ']..')
 	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
 	
+	
+	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value) '
+
+	Set @sqlAddMissingJobs = @SqlInsert
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' ' + @JobQuery
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' WHERE NOT JobTable.Job IN ( SELECT Job FROM #TmpQueryResults )'
 
 	---------------------------------------------------
 	-- Return the results
 	---------------------------------------------------
-	
-	If @returnRowCount = 'true'
-	begin
-		-- In order to return the row count, we wrap the sql text with Count (*) 
-		-- and exclude the @sqlOrderBy text from the sql statement
-		Exec ('SELECT Count (*) As ResultSet_Row_Count FROM (' + @Sql + ') As CountQ')
-	end
+		
+	If @PreviewSql <> 0
+	Begin
+		print 	@SqlInsert + ' ' + @Sql
+		print	@sqlAddMissingJobs
+	End
 	Else
-	begin
-		--print  @Sql + ' ' + @sqlOrderBy
-		Exec (	 @Sql + ' ' + @sqlOrderBy)
-	end
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	Declare @UsageMessage varchar(512)
-	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
-	Exec PostUsageLogEntry 'QCMSMSMetricByJobWork', @DBName, @UsageMessage	
+	Begin
+		-- Populate #TmpQueryResults
+		Exec (@SqlInsert + ' ' + @Sql)
+		
+		-- Append any missing jobs to #TmpQueryResults
+		Exec (@sqlAddMissingJobs)
 
+		If @returnRowCount = 'true'
+		begin
+			-- Old method:
+			-- In order to return the row count, we wrap the sql text with Count (*) 
+			-- and exclude the @sqlOrderBy text from the sql statement
+			--Exec ('SELECT Count (*) As ResultSet_Row_Count FROM (' + @Sql + ') As CountQ')
+
+			SELECT COUNT(*) As ResultSet_Row_Count
+			FROM #TmpQueryResults
+		end
+		Else
+		begin
+			-- Old method:
+			--Exec (	 @Sql + ' ' + @sqlOrderBy)
+
+			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value 
+			FROM #TmpQueryResults
+			ORDER BY Dataset_Date, Dataset_ID
+		end
+		--	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		Declare @UsageMessage varchar(512)
+		Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
+		Exec PostUsageLogEntry 'QCMSMSMetricByJobWork', @DBName, @UsageMessage	
+
+	End
+	
 
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobWork] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobWork] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSMetricByJobWork] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSMetricByJobWork] TO [MTS_DB_Lite] AS [dbo]
 GO

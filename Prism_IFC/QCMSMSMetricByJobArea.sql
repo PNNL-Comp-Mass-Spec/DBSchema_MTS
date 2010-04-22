@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.QCMSMSMetricByJobArea
 /****************************************************
 **
@@ -18,8 +19,9 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobArea
 **	  @returnRowCount		-- Set to True to return a row count; False to return the results
 **	  @message				-- Status/error message output
 **
-**		Auth: mem
-**		Date: 08/29/2005
+**	Auth:	mem
+**	Date:	08/29/2005
+**			10/07/2008 mem - Added parameter @PreviewSql
 **
 *****************************************************/
 (
@@ -42,7 +44,8 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobArea
 	
 	@UseNaturalLog tinyint = 1,
 	@SeqIDList varchar(7000),						-- Required: Comma separated list of Seq_ID values to match
-	@MeanSquareError float = 0 output
+	@MeanSquareError float = 0 output,
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -62,7 +65,8 @@ As
 											@InstrumentFilter, @CampaignFilter, @ExperimentFilter, @DatasetFilter, @OrganismDBFilter,
 											@DatasetDateMinimum, @DatasetDateMaximum, @JobMinimum, @JobMaximum,
 											@maximumRowCount, @MetricID = 0, @UseNaturalLog = @UseNaturalLog,
-											@SeqIDList = @SeqIDList, @MeanSquareError = @MeanSquareError output
+											@SeqIDList = @SeqIDList, @MeanSquareError = @MeanSquareError output,
+											@PreviewSql = @PreviewSql
 	--
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
@@ -72,6 +76,11 @@ As
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobArea] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobArea] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSMetricByJobArea] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSMetricByJobArea] TO [MTS_DB_Lite] AS [dbo]
 GO

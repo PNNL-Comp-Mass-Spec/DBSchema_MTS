@@ -438,5 +438,9 @@ Done:
 	return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetProteinJobPeptideCrosstab_Ex] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -44,5 +44,9 @@ AS
 	RETURN @result
 
 GO
-GRANT EXECUTE ON [dbo].[WebGetQuantitationDescription] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[WebGetQuantitationDescription] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[WebGetQuantitationDescription] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[WebGetQuantitationDescription] TO [MTS_DB_Lite] AS [dbo]
 GO

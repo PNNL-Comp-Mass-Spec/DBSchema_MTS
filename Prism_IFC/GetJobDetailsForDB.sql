@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.GetJobDetailsForDB
 /****************************************************
 **
@@ -24,9 +25,10 @@ CREATE PROCEDURE dbo.GetJobDetailsForDB
 **							--   Names do not need single quotes around them; see @Proteins parameter for examples
 
 **
-**		Auth: mem
-**		Date: 08/16/2005
-**			  11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	08/16/2005
+**			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**			09/21/2009 mem - Now using GetDBLocation to determine the DB location (including server name if not on this server)
 **
 *****************************************************/
 	@DBName varchar(128) = '',
@@ -45,38 +47,35 @@ As
 	set @myRowCount = 0
 	
 	set @message = ''
-	
+
 	---------------------------------------------------
-	-- Validate that DB exists on this server, determine its type,
-	-- and look up its schema version
+	-- Lookup the path to the specified DB
 	---------------------------------------------------
 
-	Declare @DBType tinyint				-- 1 if PMT Tag DB, 2 if Peptide DB
-	Declare @DBSchemaVersion real
-	
-	Set @DBType = 0
-	Set @DBSchemaVersion = 1
-	
-	Exec @myError = GetDBTypeAndSchemaVersion @DBName, @DBType OUTPUT, @DBSchemaVersion OUTPUT, @message = @message OUTPUT
+	Declare @DBType tinyint				-- 1 if PMT Tag DB, 2 if Peptide DB, 3 if Protein DB (deprecated)
+	Declare @serverName varchar(64)
+	Declare @DBPath varchar(256)		-- Path to the DB, including the server name (if not on this server), e.g. ServerName.DBName
+	Declare @DBID int
 
-	-- Make sure the type is 1 or 2
-	If @DBType = 0 Or @myError <> 0
+	Exec GetDBLocation @DBName, @DBType OUTPUT, @serverName output, @DBPath output, @DBID output, @message output, @IncludeDeleted=0
+
+	If IsNull(@DBPath, '') = ''
 	Begin
 		If @myError = 0
 			Set @myError = 20000
 
 		If Len(@message) = 0
-			Set @message = 'Database not found on this server: ' + @DBName
+			Set @message = 'Database not found in MTS: ' + @DBName
 		Goto Done
 	End
-	Else
+
 	If @DBType <> 1 AND @DBType <> 2
 	Begin
 		Set @myError = 20001
 		Set @message = 'Database ' + @DBName + ' is not a Peptide DB or a PMT Tag DB and is therefore not appropriate for this procedure'
 		Goto Done
 	End
-
+	
 	
 	---------------------------------------------------
 	-- resolve match method name to internal code
@@ -96,11 +95,15 @@ As
 		--
 		if @myError <> 0
 		begin
-			set @message = 'Could not resolve match methods'
+			set @message = 'Error looking up match method in T_Match_Methods'
 			goto Done
 		end
 		if @myRowCount = 0
+		begin
+			set @message = 'Could not resolve match methods (should be "DBSearch(MS/MS-LCQ)" or "UMCPeakMatch(MS-FTICR)"; assuming "UMCPeakMatch(MS-FTICR)"'
+
 			set @internalMatchCode = 'PMT'
+		end 
 	End
 
 	---------------------------------------------------
@@ -121,17 +124,17 @@ As
 	If @DBType = 2
 	Begin
 		-- Peptide DB
-		Set @sqlFrom = @sqlFrom + '[' + @DBName + ']..V_MSMS_Analysis_Jobs AS JobTable'
+		Set @sqlFrom = @sqlFrom + @DBPath + '.dbo.V_MSMS_Analysis_Jobs AS JobTable'
 	End
 	Else
 	Begin
 		-- PMT Tag DB
 		if @internalMatchCode = 'PMT'
-			Set @sqlFrom = @sqlFrom + '[' + @DBName + ']..V_MSMS_Analysis_Jobs AS JobTable'
+			Set @sqlFrom = @sqlFrom + @DBPath + '.dbo.V_MSMS_Analysis_Jobs AS JobTable'
 		else
 		Begin
 			-- Assume @internalMatchCode = 'UMC'
-			Set @sqlFrom = @sqlFrom + '[' + @DBName + ']..V_MS_Analysis_Jobs AS JobTable'
+			Set @sqlFrom = @sqlFrom + @DBPath + '.dbo.V_MS_Analysis_Jobs AS JobTable'
 		End
 	End
 
@@ -196,10 +199,15 @@ As
 		Set @UsageMessage = @UsageMessage + '; ' + @pepIdentMethod
 	
 	Exec PostUsageLogEntry 'GetJobDetailsForDB', @DBName, @UsageMessage
-	
+
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[GetJobDetailsForDB] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetJobDetailsForDB] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetJobDetailsForDB] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetJobDetailsForDB] TO [MTS_DB_Lite] AS [dbo]
 GO

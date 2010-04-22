@@ -29,5 +29,9 @@ As
 
 
 GO
-GRANT EXECUTE ON [dbo].[WebGetQRollupsSummary] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[WebGetQRollupsSummary] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[WebGetQRollupsSummary] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[WebGetQRollupsSummary] TO [MTS_DB_Lite] AS [dbo]
 GO

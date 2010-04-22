@@ -30,6 +30,8 @@ CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 **			02/06/2006 mem - Added brackets around the experiment name when building @crossTabCols to allow for experiments with spaces in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
 **			06/05/2007 mem - Changed @sql and @crossTabCols to varchar(max) and added parameter @PreviewSql
+**			03/07/2009 mem - Changed the column names in the temporary tables to make them more readable
+**						   - Updated the 'Preview_Data_Analysis_Jobs' mode to show jobs that are in the database but are excluded because all proteins in the job were excluded by the filter thresholds
 **    
 *****************************************************/
 (
@@ -105,9 +107,9 @@ AS
 		Experiment varchar(128),
 		Dataset varchar(128),
 		Job int,
-		NP int,
-		SX float,
-		PA float,
+		Peptide_Count int,
+		XCorr_Sum float,
+		PeakArea_Sum float,
 	)
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -119,10 +121,10 @@ AS
 	end
 
 	set @sql = ''
-	set @sql = @sql + 'INSERT INTO #XPD '+ CHAR(10)
-	set @sql = @sql + 'SELECT Ref_ID, Experiment, Dataset, Job, Count(Ref_ID) as NP, Sum(XCorr) as SX, Sum(Peak_Area) as PA '+ CHAR(10)
-	set @sql = @sql + 'FROM '+ CHAR(10)
-	set @sql = @sql + '( '+ CHAR(10)
+	set @sql = @sql + ' INSERT INTO #XPD '+ CHAR(10)
+	set @sql = @sql + ' SELECT Ref_ID, Experiment, Dataset, Job, Count(MT) as Peptide_Count, Sum(XCorr) as XCorr_Sum, Sum(Peak_Area) as PeakArea_Sum '+ CHAR(10)
+	set @sql = @sql + ' FROM '+ CHAR(10)
+	set @sql = @sql + ' ( '+ CHAR(10)
 	if @dbVer > 1
 		begin
 			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID as Job, P.Mass_Tag_ID as MT, S.XCorr, P.Peak_Area '+ CHAR(10)
@@ -133,15 +135,6 @@ AS
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins O ON M.Ref_ID = O.Ref_ID INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Score_Sequest S ON P.Peptide_ID = S.Peptide_ID'+ CHAR(10)
 			set @sql = @sql + 'WHERE ' + @experimentWhereClause
-		
---			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID AS Job, P.Mass_Tag_ID as MT, S.XCorr '+ CHAR(10)
---			set @sql = @sql + 'FROM '+ CHAR(10)
---			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Peptides P INNER JOIN'+ CHAR(10)
---			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Mass_Tag_to_Protein_Map M ON P.Mass_Tag_ID = M.Mass_Tag_ID INNER JOIN' + CHAR(10)
---			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins O ON M.Ref_ID = O.Ref_ID INNER JOIN'+ CHAR(10)
---			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A ON P.Analysis_ID = A.Job INNER JOIN'+ CHAR(10)
---			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Score_Sequest S ON P.Peptide_ID = S.Peptide_ID'+ CHAR(10)
---			set @sql = @sql + 'WHERE ' + @experimentWhereClause
 		end
 	else
 		begin
@@ -153,9 +146,9 @@ AS
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A ON P.Analysis_ID = A.Job'+ CHAR(10)
 			set @sql = @sql + 'WHERE ' + @experimentWhereClause
 		end
-	set @sql = @sql + ') Z '+ CHAR(10)
-	set @sql = @sql + 'GROUP  BY Ref_ID, Experiment, Dataset, Job '+ CHAR(10)
-	set @sql = @sql + 'HAVING  (COUNT(Ref_ID) > 1) '+ CHAR(10)
+	set @sql = @sql + ' ) Z '+ CHAR(10)
+	set @sql = @sql + ' GROUP BY Ref_ID, Experiment, Dataset, Job '+ CHAR(10)
+	set @sql = @sql + ' HAVING Count(MT) > 1'
 	--
 	If @PreviewSql <> 0
 		Print @Sql + CHAR(10)
@@ -174,16 +167,70 @@ AS
 
 	if @mode = 'Preview_Data_Analysis_Jobs'
 	begin
-		select distinct Job, Dataset, Experiment from #XPD
+		CREATE TABLE #TmpAnalysisJobPreview (
+			Job int,
+			Dataset varchar(255),
+			Experiment varchar(255),
+			Protein_Count int,
+			Max_Peptides_per_Protein int,
+			Unfiltered_Peptide_Count int Null,
+			Filtered_Peptide_Count int,
+			Comment varchar(255) Null
+		)
+		
+		-- Populate #TmpAnalysisJobPreview using the jobs in #XPD
+		--
+		INSERT INTO #TmpAnalysisJobPreview (Job, Dataset, Experiment, Protein_Count, Max_Peptides_per_Protein, Filtered_Peptide_Count, Comment)
+		SELECT Job, Dataset, Experiment, Protein_Count, Max_Peptides_per_Protein, Filtered_Peptide_Count, 
+		       CASE WHEN Max_Peptides_per_Protein = 1 THEN 'Warning: Job will be excluded; no proteins with 2 or more peptides' ELSE '' END AS Comment
+		FROM (
+			SELECT Job, Dataset, Experiment, Count(Distinct Ref_ID) as Protein_Count, Max(Peptide_Count) as Max_Peptides_per_Protein, COUNT(*) AS Filtered_Peptide_Count
+			FROM #XPD
+			GROUP BY Job, Dataset, Experiment) StatsQ
+		
+		-- Append excluded jobs to #TmpAnalysisJobPreview
+		--
+		set @sql = ''
+		set @sql = @sql + ' INSERT INTO #TmpAnalysisJobPreview (Job, Dataset, Experiment, Protein_Count, Max_Peptides_per_Protein, Filtered_Peptide_Count, Comment)'
+		set @sql = @sql + ' SELECT A.Job, A.Dataset, A.Experiment, 0 AS Protein_Count, 0 AS Max_Peptides_per_Protein, 0 AS Filtered_Peptide_Count, '
+		set @sql = @sql +         '''Warning: Job is excluded since no proteins have 2 or more peptides passing the XCorr thresholds'''
+		set @sql = @sql + ' FROM [' + @MTDBName + '].dbo.T_Analysis_Description A LEFT OUTER JOIN'
+		set @sql = @sql +      ' #TmpAnalysisJobPreview ON A.Job = #TmpAnalysisJobPreview.Job'
+		set @sql = @sql + ' WHERE #TmpAnalysisJobPreview.Job Is Null AND (' + @experimentWhereClause + ')'
+
+		If @PreviewSql <> 0
+			Print @Sql + CHAR(10)
+				
+		exec (@sql)
+
+		-- Populate the Unfiltered_Peptide_Count column in #TmpAnalysisJobPreview
+		--
+		set @sql = ''
+		set @sql = @sql + ' UPDATE #TmpAnalysisJobPreview'
+		set @sql = @sql + ' SET Unfiltered_Peptide_Count = A.RowCount_Loaded'
+		set @sql = @sql + ' FROM #TmpAnalysisJobPreview AJP INNER JOIN'
+		set @sql = @sql + ' [' + @MTDBName + '].dbo.T_Analysis_Description A ON A.Job = AJP.Job'
+
+		If @PreviewSql <> 0
+			Print @Sql + CHAR(10)
+				
+		exec (@sql)
+
+		-- Return the contents of #TmpAnalysisJobPreview
+		--
+		SELECT *
+		FROM #TmpAnalysisJobPreview
+		ORDER BY Dataset
+		
 		goto Done
 	end
 
 	if @mode = 'Preview_Experiments'
 	begin
-		select Experiment, count(Job) as [Data Analysis Jobs] 
-		from 
+		SELECT Experiment, COUNT(Job) as [Data Analysis Jobs] 
+		FROM 
 		(
-			Select distinct Job, Experiment from #XPD
+			SELECT DISTINCT Job, Experiment from #XPD
 		) M
 		group by Experiment
 		goto Done
@@ -275,7 +322,7 @@ AS
 	---------------------------------------------------
 	-- Output list of bait protein to sample protein interactions
 	---------------------------------------------------
-	
+
 	if @mode = 'Interaction_Report'
 	begin
 		SELECT 
@@ -284,8 +331,8 @@ AS
 			#XPD.Job, 
 			CBM.Bait_Protein_Name AS Bait, 
 			#ORF.Reference as Interactor, 
-			#XPD.NP as Peptide_Count, 
-			CONVERT(decimal(8,2) , #XPD.SX ) as XCorr_Sum,
+			#XPD.Peptide_Count,
+			CONVERT(decimal(8,2) , #XPD.XCorr_Sum ) as XCorr_Sum,
 			#ORF.Description
 		FROM
 			#XPD INNER JOIN #ORF ON #XPD.Ref_ID = #ORF.Ref_ID INNER JOIN
@@ -300,16 +347,16 @@ AS
 			CBM.Bait_Protein_Name AS Bait,
 			#ORF.Reference as Interactor,
 			count(M.Job) as Num_Jobs,
-			sum(NP_Sum) as Aggregate_Total_Peptides,
-			CONVERT(decimal(8,2), sum(SX_Sum)) as Aggregate_Sum_XCorr,
+			sum(Peptide_Count_Sum) as Aggregate_Total_Peptides,
+			CONVERT(decimal(8,2), sum(XCorr_Sum)) as Aggregate_Sum_XCorr,
 			#ORF.Description
 		FROM
 		(
 			SELECT 
 				Ref_ID,
 				Job,
-				Sum(NP) as NP_Sum,
-				Sum(SX) as SX_Sum
+				Sum(Peptide_Count) as Peptide_Count_Sum,
+				Sum(XCorr_Sum) as XCorr_Sum
 			FROM #XPD
 			GROUP BY Ref_ID, Job
 		) M INNER JOIN #ORF ON M.Ref_ID = #ORF.Ref_ID INNER JOIN
@@ -354,18 +401,18 @@ AS
 	declare @funcName varchar(32)
 
 	-- Initially assume @aggregation is 'Sum_XCorr'
-	set @colname = 'SX'
+	set @colname = 'XCorr_Sum'
 	set @funcName = 'SUM'
 
 	If @aggregation = 'Count_Peptide_Hits'
 	begin
-		set @colname = 'NP'
+		set @colname = 'Peptide_Count'
 		set @funcName = 'SUM'
 	end
 	
 	If @aggregation = 'Sum_Peak_Areas'
 	begin
-		set @colname = 'PA'
+		set @colname = 'PeakArea_Sum'
 		set @funcName = 'SUM'
 	end
 	
@@ -435,5 +482,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetProteinJobPeptideCrosstab] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetProteinJobPeptideCrosstab] TO [MTS_DB_Lite] AS [dbo]
 GO

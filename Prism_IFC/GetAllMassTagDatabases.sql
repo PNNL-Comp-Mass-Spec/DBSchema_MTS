@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.GetAllMassTagDatabases
+
+CREATE PROCEDURE [dbo].[GetAllMassTagDatabases]
 /****************************************************
 **
 **	Desc: Return list of all mass tag databases in prism
@@ -49,6 +50,11 @@ As
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[GetAllMassTagDatabases] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabases] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetAllMassTagDatabases] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetAllMassTagDatabases] TO [MTS_DB_Lite] AS [dbo]
 GO

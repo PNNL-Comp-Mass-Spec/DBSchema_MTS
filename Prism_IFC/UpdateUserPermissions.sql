@@ -4,7 +4,8 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.UpdateUserPermissions
+
+CREATE PROCEDURE [dbo].[UpdateUserPermissions]
 /****************************************************
 **
 **	Desc: Updates user permissions in the current DB
@@ -19,6 +20,9 @@ CREATE PROCEDURE dbo.UpdateUserPermissions
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
 **			08/10/2006 mem - Added MTS_DB_Reader
 **			08/14/2006 mem - Updated to use dynamic sql to run the schema drops on Sql Server 2005; necessary to keep this SP compatible wiht Sql Server 2000
+**			11/14/2007 mem - Updated to grant ShowPlan permissions
+**			04/21/2008 mem - Added ShowPlan permissions for MTUser
+**			11/04/2008 mem - Now calling UpdateUserPermissionsViewDefinitions for MTS_DB_Dev and MTS_DB_Lite
 **    
 *****************************************************/
 AS
@@ -154,7 +158,18 @@ AS
 	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 
+	grant showplan to MTS_DB_Reader
+	grant showplan to MTUser
+
+	-- Call UpdateUserPermissionsViewDefinitions to grant view definition for each Stored Procedure and grant showplan
+	exec UpdateUserPermissionsViewDefinitions @UserList='MTS_DB_Dev, MTS_DB_Lite'
+
 	Return 0
 
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissions] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissions] TO [MTS_DB_Lite] AS [dbo]
 GO

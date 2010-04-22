@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 /****************************************************
 **
@@ -17,13 +18,16 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 **	  @returnRowCount		-- Set to True to return a row count; False to return the results
 **	  @message				-- Status/error message output
 **
-**		Auth:	mem
-**		Date:	08/02/2005
-**				08/26/2005 mem - Now using QCMSMSJobsTablePopulate to lookup the jobs matching the filters
-**				11/10/2005 mem - Updated to preferably use Dataset_Acq_Time_Start rather than Dataset_Created_DMS for the dataset date
-**			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**	Auth:	mem
+**	Date:	08/02/2005
+**			08/26/2005 mem - Now using QCMSMSJobsTablePopulate to lookup the jobs matching the filters
+**			11/10/2005 mem - Updated to preferably use Dataset_Acq_Time_Start rather than Dataset_Created_DMS for the dataset date
+**		    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**			07/29/2008 mem - Added parameters @PeptideProphetMinimum and @PreviewSql
+**			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
 **
 *****************************************************/
+(
 	@DBName varchar(128) = '',
 	@returnRowCount varchar(32) = 'False',
 	@message varchar(512) = '' output,
@@ -39,7 +43,7 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@DiscriminantScoreMinimum real = 0.75,			-- Ignored if 0
+	@DiscriminantScoreMinimum real = 0.95,			-- Ignored if 0
 	@CleavageStateMinimum tinyint = 0,				-- Ignored if 0
 	@XCorrMinimum real = 0,							-- Ignored if 0
 	@DeltaCn2Minimum real = 0,						-- Ignored if 0
@@ -48,8 +52,11 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 	@FilterIDFilter int = 117,						-- Ignored if 0; only appropriate for Peptide DBs
 	@PMTQualityScoreMinimum int = 1,				-- Ignored if 0; only appropriate for PMT Tag DBs
 	
-	@maximumRowCount int = 0						-- 0 means to return all rows
+	@maximumRowCount int = 0,						-- 0 means to return all rows
 
+	@PeptideProphetMinimum real = 0.9,				-- Ignored if 0
+	@PreviewSql tinyint = 0
+)
 As
 	set nocount on
 
@@ -105,6 +112,7 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @previewSql = IsNull(@previewSql, 0)
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
 	If @returnRowCount = 'true'
@@ -122,7 +130,19 @@ As
 	)
 
 	CREATE UNIQUE CLUSTERED INDEX [#IX_TmpQCJobList] ON #TmpQCJobList(Job)
-	
+
+	CREATE TABLE #TmpQueryResults (
+		Dataset_Date datetime NULL,
+		Dataset_ID int NOT NULL,
+		Job int NOT NULL,
+		Instrument varchar(64) NULL,
+		Dataset_Name varchar(128) NOT NULL,
+		Job_Date datetime NULL,
+		Value int NULL
+	)
+
+	CREATE UNIQUE CLUSTERED INDEX [#IX_TmpQueryResults] ON #TmpQueryResults(Job)
+
 	---------------------------------------------------
 	-- Populate the temporary table with the jobs matching the filters
 	---------------------------------------------------
@@ -141,11 +161,14 @@ As
 	---------------------------------------------------
 	-- build the sql query to get mass tag data
 	---------------------------------------------------
+	declare @SqlInsert varchar(255)
 	declare @sqlSelect varchar(2048)
+	declare @JobQuery varchar(2048)
 	declare @sqlFrom varchar(2048)
 	declare @sqlGroupBy varchar(2048)
-	declare @sqlOrderBy varchar(2048)
+	declare @sqlOrderBy varchar(255)
 
+	Declare @sqlAddMissingJobs varchar(2048)
 
 	-- Construct the SELECT clause
 	-- Note that QCMSMSJobsTablePopulate will have already limited the job count if @maximumRowCount is > 0
@@ -164,14 +187,25 @@ As
 
 	-- Construct the From clause
 	
+	SEt @JobQuery = ''
 	Set @sqlFrom = 'FROM'
 	
 	If @DBType = 1
 	Begin
 		-- PMT Tag DB
+
+		Set @JobQuery = @JobQuery + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
+		Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @JobQuery = @JobQuery + ') AS JobLookupQ'
+		
+		
 		Set @sqlFrom = @sqlFrom + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date,Pep. Mass_Tag_ID AS Seq_ID'
+		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, Pep.Mass_Tag_ID AS Seq_ID'
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
@@ -182,7 +216,7 @@ As
 		If @PMTQualityScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID'
 			
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 		
 		If @CleavageStateMinimum > 0
@@ -193,6 +227,11 @@ As
 		-- Add the optional score filters
 		If @DiscriminantScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum) + ')'
+
+		-- Note: X!Tandem jobs don't have peptide prophet values, so all X!Tandem data will get excluded if @PeptideProphetMinimum is used
+		If @PeptideProphetMinimum > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
+
 		If @CleavageStateMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (MTPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
@@ -211,13 +250,22 @@ As
 	Else
 	Begin
 		-- Peptide DB
+
+		Set @JobQuery = @JobQuery + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
+		Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		Set @JobQuery = @JobQuery + ') AS JobLookupQ'
+		
 		Set @sqlFrom = @sqlFrom + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, Pep.Seq_ID'
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
@@ -226,7 +274,7 @@ As
 		If @FilterIDFilter > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Peptide_Filter_Flags PFF ON Pep.Peptide_ID = PFF.Peptide_ID'
 			
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 		
 		If @CleavageStateMinimum > 0
@@ -237,6 +285,11 @@ As
 		-- Add the optional score filters
 		If @DiscriminantScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum) + ')'
+		
+		-- Note: X!Tandem jobs don't have peptide prophet values, so all X!Tandem data will get excluded if @PeptideProphetMinimum is used
+		If @PeptideProphetMinimum > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
+			
 		If @CleavageStateMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (PPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
@@ -259,7 +312,7 @@ As
 
 	-- Construct the Group By clause
     Set @sqlGroupBy = 'GROUP BY '
-	Set @sqlGroupBy = @sqlGroupBy + '  Dataset_Date'
+	Set @sqlGroupBy = @sqlGroupBy + ' Dataset_Date'
 	Set @sqlGroupBy = @sqlGroupBy + ', Dataset_ID'
 	Set @sqlGroupBy = @sqlGroupBy + ', Job'
 	Set @sqlGroupBy = @sqlGroupBy + ', Instrument'
@@ -274,35 +327,69 @@ As
 	-- Customize the columns for the given database
 	---------------------------------------------------
 
+	set @JobQuery = replace(@JobQuery, 'DATABASE..', '[' + @DBName + ']..')
 	set @sqlFrom = replace(@sqlFrom, 'DATABASE..', '[' + @DBName + ']..')
 	
+
+	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value) '
+
+	Set @sqlAddMissingJobs = @SqlInsert
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, 0 AS Value '
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' FROM ' + @JobQuery
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' WHERE NOT Job IN ( SELECT Job FROM #TmpQueryResults )'
 
 	---------------------------------------------------
 	-- Obtain the QC Trend data from the given database
 	---------------------------------------------------
 	
-	If @returnRowCount = 'true'
-	begin
-		-- In order to return the row count, we wrap the sql text with Count (*) 
-		-- and exclude the @sqlOrderBy text from the sql statement
-		Exec ('SELECT Count (*) As ResultSet_Row_Count FROM (' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ') As CountQ')
-	end
+	If @PreviewSql <> 0
+	Begin
+		print 		  @SqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy
+		print @sqlAddMissingJobs
+	End
 	Else
-	begin
-		--print													 @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy
-		Exec (													 @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
-	end
-	--	
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	Declare @UsageMessage varchar(512)
-	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
-	Exec PostUsageLogEntry 'QCMSMSIDCountsByJob', @DBName, @UsageMessage	
+	Begin
+		-- Populate #TmpQueryResults
+		Exec (		  @SqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy)
+		
+		-- Append any missing jobs to #TmpQueryResults
+		Exec (@sqlAddMissingJobs)
+		
+		If @returnRowCount = 'true'
+		begin
+			-- Old method:
+			-- In order to return the row count, we wrap the sql text with Count (*) 
+			-- and exclude the @sqlOrderBy text from the sql statement
+			--Exec ('SELECT Count (*) As ResultSet_Row_Count FROM (' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ') As CountQ')
 
+			SELECT COUNT(*) As ResultSet_Row_Count
+			FROM #TmpQueryResults
+		end
+		Else
+		begin
+			-- Old method:
+			--Exec (					 @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
+
+			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value 
+			FROM #TmpQueryResults
+			ORDER BY Dataset_Date, Dataset_ID
+		end
+		--	
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		Declare @UsageMessage varchar(512)
+		Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
+		Exec PostUsageLogEntry 'QCMSMSIDCountsByJob', @DBName, @UsageMessage	
+	End
 	
 Done:
 	return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[QCMSMSIDCountsByJob] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QCMSMSIDCountsByJob] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSIDCountsByJob] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QCMSMSIDCountsByJob] TO [MTS_DB_Lite] AS [dbo]
 GO
