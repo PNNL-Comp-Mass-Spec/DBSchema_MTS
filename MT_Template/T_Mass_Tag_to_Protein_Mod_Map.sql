@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Mass_Tag_to_Protein_Mod_Map](
 	[Mass_Tag_ID] [int] NOT NULL,
 	[Residue_Mod_ID] [int] NOT NULL,
-	[Entered] [smalldatetime] NOT NULL CONSTRAINT [DF_T_Mass_Tag_to_Protein_Mod_Map_Entered]  DEFAULT (getdate()),
+	[Entered] [smalldatetime] NOT NULL,
  CONSTRAINT [PK_T_Mass_Tag_to_Protein_Mod_Map] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC,
@@ -32,4 +32,6 @@ ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Mod_Map]  WITH CHECK ADD  CONSTRAINT [F
 REFERENCES [T_Protein_Residue_Mods] ([Residue_Mod_ID])
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Mod_Map] CHECK CONSTRAINT [FK_T_Mass_Tag_to_Protein_Mod_Map_T_Protein_Residue_Mods]
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_to_Protein_Mod_Map] ADD  CONSTRAINT [DF_T_Mass_Tag_to_Protein_Mod_Map_Entered]  DEFAULT (getdate()) FOR [Entered]
 GO

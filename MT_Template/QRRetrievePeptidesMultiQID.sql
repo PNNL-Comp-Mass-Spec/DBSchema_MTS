@@ -47,6 +47,8 @@ CREATE Procedure dbo.QRRetrievePeptidesMultiQID
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
 **			08/12/2008 mem - Now including column Min_Log_EValue if X!Tandem-based peptides are present in T_Mass_Tags
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
+**			12/19/2008 mem - Added @IncludeQID
 **
 ****************************************************/
 (
@@ -58,7 +60,10 @@ CREATE Procedure dbo.QRRetrievePeptidesMultiQID
 	@IncludePrefixAndSuffixResidues tinyint = 0,		-- The query is slower if this is enabled
 	@SortMode tinyint=2,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 	@message varchar(512)='' output,
-	@PreviewSql tinyint=0
+	@PreviewSql tinyint=0,
+	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
+	@IncludeQID tinyint = 0,								-- Set to 1 to include the Quantitation ID in column QID, just after the Sample Name
+	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: SampleName, Reference, Protein Description, and Mod_Description
 )
 AS 
 
@@ -109,6 +114,22 @@ AS
 
 	Begin Try
 
+		--------------------------------------------------------------
+		-- Validate the inputs
+		--------------------------------------------------------------
+		--
+		Set @SeparateReplicateDataIDs = IsNull(@SeparateReplicateDataIDs, 0)
+		Set @IncludeRefColumn = IsNull(@IncludeRefColumn, 1)
+		Set @Description = ''
+		Set @VerboseColumnOutput = IsNull(@VerboseColumnOutput, 1)
+		Set @IncludePrefixAndSuffixResidues = IsNull(@IncludePrefixAndSuffixResidues, 0)
+		Set @SortMode = IsNull(@SortMode, 2)
+		Set @message = ''
+		Set @PreviewSql = IsNull(@PreviewSql, 0)
+		Set @IncludeProteinDescription = IsNull(@IncludeProteinDescription, 1)
+		Set @IncludeQID = IsNull(@IncludeQID, 0)
+		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
+	
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
 		--------------------------------------------------------------
@@ -272,8 +293,13 @@ AS
 		Set @QRDsql = @QRDsql + ' QRD.JobCount_Observed_Both_MS_and_MSMS,'
 
 		If @ModsPresent > 0
-			Set @QRDsql = @QRDsql + ' MT.Mod_Description,'
-
+		Begin
+			If @ChangeCommasToSemicolons = 0
+				Set @QRDsql = @QRDsql + ' MT.Mod_Description,'
+			Else
+				Set @QRDsql = @QRDsql + ' Replace(MT.Mod_Description, '','', '';'') AS Mod_Description,'
+		End
+		
 		Set @QRDsql = @QRDsql + ' QRD.ORF_Count AS Protein_Count, IsNull(CSN.Cleavage_State_Name, ''Unknown'') AS Cleavage_State_Name,'
 
 		If @VerboseColumnOutput <> 0
@@ -327,7 +353,10 @@ AS
 		Begin	
 
 			-- Generate the sql for the ORF columns in T_Quantitation_Results
-			Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT
+			Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT,
+										@IncludeProteinDescription = @IncludeProteinDescription,
+                                        @IncludeQID=@IncludeQID,
+										@ChangeCommasToSemicolons = @ChangeCommasToSemicolons
 
 			Set @Sql = @OrfColumnSql 
 
@@ -345,7 +374,11 @@ AS
 			-- Note: We cannot order by #TmpQIDSortInfo.SortKey since we're using SELECT DISTINCT here
 			--  and Sql server cannot order by a column if the column is not included in the output
 			Set @Sql = @Sql + ' SELECT DISTINCT'
-			Set @Sql = @Sql + '  QD.SampleName,'
+			If @ChangeCommasToSemicolons = 0
+				Set @Sql = @Sql + '  QD.SampleName AS Sample_Name,'
+			Else
+				Set @Sql = @Sql + '  Replace(QD.SampleName, '','', '';'') AS Sample_Name,'
+			
 			Set @Sql = @Sql +    @QRDsql
 			Set @Sql = @Sql + ' ORDER BY QRD.Mass_Tag_ID'
 		End
@@ -373,9 +406,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[QRRetrievePeptidesMultiQID] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRRetrievePeptidesMultiQID] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRRetrievePeptidesMultiQID] TO [MTS_DB_Lite] AS [dbo]
 GO

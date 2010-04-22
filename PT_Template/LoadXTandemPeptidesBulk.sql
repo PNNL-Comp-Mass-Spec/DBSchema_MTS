@@ -34,6 +34,7 @@ CREATE Procedure dbo.LoadXTandemPeptidesBulk
 **			03/06/2007 mem - Now considering @PeptideProphet and @RankScore when filtering
 **			08/27/2008 mem - Added additional logging when LogLevel >= 2
 **			09/24/2008 mem - Now allowing for @FilterSetID to be 0 (which will disable any filtering)
+**			09/22/2009 mem - Now calling UpdatePeptideCleavageStateMax
 **
 *****************************************************/
 (
@@ -1398,6 +1399,23 @@ As
 		Set @PeptideProphetCountLoaded = 0
 		Set @numAddedPepProphetScores = 0
 	End
+
+	-----------------------------------------------
+	-- Update column Cleavage_State_Max in T_Peptides
+	-----------------------------------------------
+	exec @myError = UpdatePeptideCleavageStateMax @JobList = @job, @message = @message output
+	
+	if @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling UpdatePeptideCleavageStateMax for job ' + @jobStr
+		Goto Done
+	End
+
+	Set @LogMessage = 'Updated Cleavage_State_Max in T_Peptides'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadXTandemPeptidesBulk'
+	
 	
 	-----------------------------------------------
 	-- Update column State_ID in T_Peptides
@@ -1449,7 +1467,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadXTandemPeptidesBulk] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadXTandemPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadXTandemPeptidesBulk] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadXTandemPeptidesBulk] TO [MTS_DB_Lite] AS [dbo]
 GO

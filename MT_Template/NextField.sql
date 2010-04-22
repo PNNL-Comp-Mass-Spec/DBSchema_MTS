@@ -58,7 +58,7 @@ As
 	return @EOL
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[NextField] TO [MTS_DB_Lite] AS [dbo]
 GO

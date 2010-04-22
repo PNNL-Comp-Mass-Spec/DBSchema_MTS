@@ -5,12 +5,12 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_Analysis_Job_Processors](
 	[ID] [int] IDENTITY(100,1) NOT NULL,
-	[State] [char](1) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Analysis_Job_Processors_State]  DEFAULT ('E'),
+	[State] [char](1) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Processor_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Machine] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Notes] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_Analysis_Job_Processors_Last_Affected]  DEFAULT (getdate()),
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Analysis_Job_Processors_Entered_By]  DEFAULT (suser_sname()),
+	[Last_Affected] [datetime] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [T_Analysis_Job_Processors_PK] PRIMARY KEY NONCLUSTERED 
 (
 	[ID] ASC
@@ -22,14 +22,11 @@ CREATE TABLE [dbo].[T_Analysis_Job_Processors](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Analysis_Job_Processors] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 create TRIGGER trig_u_T_Analysis_Job_Processors ON T_Analysis_Job_Processors 
 FOR UPDATE
@@ -70,4 +67,10 @@ ALTER TABLE [dbo].[T_Analysis_Job_Processors]  WITH CHECK ADD  CONSTRAINT [FK_T_
 REFERENCES [T_Analysis_Job_Processor_State_Name] ([State])
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_Processors] CHECK CONSTRAINT [FK_T_Analysis_Job_Processors_T_Analysis_Job_Processor_State_Name]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_State]  DEFAULT ('E') FOR [State]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

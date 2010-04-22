@@ -24,14 +24,16 @@ CREATE PROCEDURE QRGenerateORFColumnSql
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			05/28/2007 mem - Added column MT_Count_Unique_Observed_Both_MS_and_MSMS
 **			06/13/2007 mem - Now truncating T_Proteins.Description at 900 characters, since Visual Studio's SqlDataAdapter tool has problems with text strings over 910 characters in length
-**			01/24/2008 mem - Added parameter @IncludeProteinDescription and @IncludeQID
+**			01/24/2008 mem - Added parameters @IncludeProteinDescription and @IncludeQID
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **
 ****************************************************/
 (
 	@ERValuesPresent float = 0,
 	@OrfColumnSql varchar(2048) = '' OUTPUT,
 	@IncludeProteinDescription tinyint = 1,
-	@IncludeQID tinyint = 0
+	@IncludeQID tinyint = 0,
+	@ChangeCommasToSemicolons tinyint = 0		 -- Replaces commas with semicolons in various text fields, including:  Sample_Name, Reference, Protein_Description
 )
 AS
 
@@ -39,15 +41,32 @@ AS
 	
 	Set @IncludeProteinDescription = IsNull(@IncludeProteinDescription, 1)
 	Set @IncludeQID = IsNull(@IncludeQID, 0)
+	Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
 	
-	Set @sql = ''
-	Set @sql = @sql + 'SELECT QD.SampleName AS Sample_Name,'
+	Set @sql = ' SELECT '
+	If @ChangeCommasToSemicolons = 0
+		Set @sql = @sql + ' QD.SampleName AS Sample_Name,'
+	Else
+		Set @sql = @sql + ' Replace(QD.SampleName, '','', '';'') AS Sample_Name,'
+
 	If @IncludeQID <> 0
 		Set @sql = @sql + 'QD.Quantitation_ID AS QID,'
+		
 	Set @sql = @sql + 'QR.Ref_ID,'
-	Set @sql = @sql + 'T_Proteins.Reference,'
+	
+	If @ChangeCommasToSemicolons = 0
+		Set @sql = @sql + 'T_Proteins.Reference,'
+	Else
+		Set @sql = @sql + ' Replace(T_Proteins.Reference, '','', '';'') AS Reference,'
+	
 	If @IncludeProteinDescription <> 0
-		Set @sql = @sql + 'Left(T_Proteins.Description, 900) AS Protein_Description,'		-- Truncating Protein Description at 900 characters
+	Begin
+		If @ChangeCommasToSemicolons = 0
+			Set @sql = @sql + 'Left(T_Proteins.Description, 900) AS Protein_Description,'		-- Truncating Protein Description at 900 characters
+		Else
+			Set @sql = @sql + 'Replace(Left(T_Proteins.Description, 900), '','', '';'') AS Protein_Description,'		-- Truncating Protein Description at 900 characters
+	End
+	
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
 	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) AS SLiC_Score_Avg,'
@@ -80,10 +99,11 @@ AS
 	
 	Return 0
 
+
 GO
-GRANT EXECUTE ON [dbo].[QRGenerateORFColumnSql] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRGenerateORFColumnSql] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRGenerateORFColumnSql] TO [MTS_DB_Lite] AS [dbo]
 GO

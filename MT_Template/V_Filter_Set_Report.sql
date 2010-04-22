@@ -4,9 +4,9 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW [dbo].[V_Filter_Set_Report]
+CREATE VIEW V_Filter_Set_Report
 AS
-SELECT TOP (100) PERCENT OuterQ.Filter_Set_ID, 
+SELECT OuterQ.Filter_Set_ID, 
     OuterQ.PMT_Quality_Score_Value, OuterQ.Experiment_Filter, 
     FSR.Filter_Set_Name, FSR.Filter_Set_Description, 
     FSR.Spectrum_Count, FSR.Charge, 
@@ -16,7 +16,7 @@ SELECT TOP (100) PERCENT OuterQ.Filter_Set_ID,
     FSR.NET_Difference_Absolute, FSR.Discriminant_Initial_Filter, 
     FSR.Protein_Count, FSR.XTandem_Hyperscore, 
     FSR.XTandem_LogEValue, FSR.Peptide_Prophet_Probability, 
-    FSR.RankScore
+    FSR.RankScore, FSR.Inspect_MQScore, FSR.Inspect_TotalPRMScore, FSR.Inspect_FScore, FSR.Inspect_PValue
 FROM (SELECT CONVERT(int, LTRIM(RTRIM(SUBSTRING(Value, 1, CommaLoc - 1)))) AS Filter_Set_ID, 
           CASE WHEN CommaLoc2 > 0 
           THEN LTRIM(RTRIM(SUBSTRING(Value, CommaLoc + 1, CommaLoc2 - CommaLoc - 1))) 
@@ -35,8 +35,6 @@ FROM (SELECT CONVERT(int, LTRIM(RTRIM(SUBSTRING(Value, 1, CommaLoc - 1)))) AS Fi
       WHERE (CommaLoc > 0)) AS OuterQ INNER JOIN
     MT_Main.dbo.V_DMS_Filter_Set_Report AS FSR ON 
     OuterQ.Filter_Set_ID = FSR.Filter_Set_ID
-ORDER BY OuterQ.PMT_Quality_Score_Value, 
-    OuterQ.Filter_Set_ID, FSR.Charge, FSR.Cleavage_State DESC
 
 
 GO

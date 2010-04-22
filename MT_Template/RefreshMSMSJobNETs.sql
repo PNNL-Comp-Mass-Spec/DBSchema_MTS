@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSJobNETs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure RefreshMSMSJobNETs
+CREATE Procedure dbo.RefreshMSMSJobNETs
 /****************************************************
 **
 **	Desc: 
@@ -33,6 +33,8 @@ CREATE Procedure RefreshMSMSJobNETs
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			12/14/2006 mem - Updated @PostLogEntryOnSuccess to 1 and switched from using exec sp_executesql @S to Exec (@S)
 **			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
+**			11/26/2008 mem - Fixed data type conversion when populating @InvalidDBList with a list of PeptideDBID values
+**			03/25/2010 mem - Added new NET Regression fields
 **    
 *****************************************************/
 (
@@ -130,7 +132,7 @@ As
 		--  and delete the invalid databases from #T_Peptide_Database_List
 		
 		Set @InvalidDBList = ''
-		SELECT @InvalidDBList = @InvalidDBList + PeptideDBID + ','
+		SELECT @InvalidDBList = @InvalidDBList + Convert(varchar(12), PeptideDBID) + ','
 		FROM #T_Peptide_Database_List
 		WHERE PeptideDBName Is Null
 		ORDER BY PeptideDBID
@@ -181,6 +183,9 @@ As
 			TRUNCATE TABLE #T_Tmp_JobsToUpdateNETs
 			Set @jobCountToUpdate = 0
 			
+			-- Note: we no longer use GANET_Fit, GANET_Slope, GANET_Intercept, or GANET_RSquared, 
+			--       so they are not included in the WHERE clause of this INSERT query
+
 			Set @S = ''
 			Set @S = @S + 'INSERT INTO #T_Tmp_JobsToUpdateNETs (Job)'
 			Set @S = @S + ' SELECT TAD.Job'
@@ -189,14 +194,14 @@ As
 			Set @S = @S + ' 	TAD.Job = PepTAD.Job'
 			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @PeptideDBID) + ' AND'
 			Set @S = @S + '    ('
-			Set @S = @S + '  (IsNull(TAD.GANET_Fit, 0) <> IsNull(PepTAD.GANET_Fit, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.GANET_Slope, 0) <> IsNull(PepTAD.GANET_Slope, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.GANET_Intercept, 0) <> IsNull(PepTAD.GANET_Intercept, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.GANET_RSquared, 0) <> IsNull(PepTAD.GANET_RSquared, 0)) OR'
 			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Slope, 0) <> IsNull(PepTAD.ScanTime_NET_Slope, 0)) OR'
 			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Intercept, 0) <> IsNull(PepTAD.ScanTime_NET_Intercept, 0)) OR'
 			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Fit, 0) <> IsNull(PepTAD.ScanTime_NET_Fit, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0))'
+			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0)) OR'
+			
+			Set @S = @S + '  (IsNull(TAD.Regression_Order, 0) <> IsNull(PepTAD.Regression_Order, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.Regression_Filtered_Data_Count, 0) <> IsNull(PepTAD.Regression_Filtered_Data_Count, 0)) OR'
+			Set @S = @S + '  (IsNull(TAD.Regression_Equation, 0) <> IsNull(PepTAD.Regression_Equation, 0))'
 			Set @S = @S + '    )'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
@@ -369,25 +374,32 @@ As
 					Set @S = @S + ' TAD.ScanTime_NET_Slope, PTAD.ScanTime_NET_Slope AS Slope_In_PeptideDB, '
 					Set @S = @S + ' TAD.ScanTime_NET_Intercept, PTAD.ScanTime_NET_Intercept AS Intercept_In_PeptideDB, '
 					Set @S = @S + ' TAD.ScanTime_NET_RSquared, PTAD.ScanTime_NET_RSquared AS RSquared_In_PeptideDB,'
-					Set @S = @S + ' TAD.ScanTime_NET_Fit, PTAD.ScanTime_NET_Fit AS Fit_In_PeptideDB'
+					Set @S = @S + ' TAD.ScanTime_NET_Fit, PTAD.ScanTime_NET_Fit AS Fit_In_PeptideDB,'
+					Set @S = @S + ' TAD.Regression_Order, Regression_Filtered_Data_Count,'
+					Set @S = @S + ' TAD.Regression_Equation, Regression_Equation_XML'
 				End
 				Else
 				Begin
 					Set @S = @S + 'UPDATE T_Analysis_Description'
 					Set @S = @S + ' Set GANET_Fit = PTAD.GANET_Fit,'
-					Set @S = @S + '	    GANET_Slope = PTAD.GANET_Slope,'
-					Set @S = @S + '	    GANET_Intercept = PTAD.GANET_Intercept,'
-					Set @S = @S + '	    GANET_RSquared = PTAD.GANET_RSquared,'
-					Set @S = @S + '     ScanTime_NET_Fit = PTAD.ScanTime_NET_Fit,'
-					Set @S = @S + '	    ScanTime_NET_Slope = PTAD.ScanTime_NET_Slope,'
-					Set @S = @S + '	    ScanTime_NET_Intercept = PTAD.ScanTime_NET_Intercept,'
-					Set @S = @S + '	    ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared'
+					Set @S = @S +     ' GANET_Slope = PTAD.GANET_Slope,'
+					Set @S = @S +     ' GANET_Intercept = PTAD.GANET_Intercept,'
+					Set @S = @S +     ' GANET_RSquared = PTAD.GANET_RSquared,'
+					Set @S = @S +     ' ScanTime_NET_Fit = PTAD.ScanTime_NET_Fit,'
+					Set @S = @S +     ' ScanTime_NET_Slope = PTAD.ScanTime_NET_Slope,'
+					Set @S = @S +     ' ScanTime_NET_Intercept = PTAD.ScanTime_NET_Intercept,'
+					Set @S = @S +     ' ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared,'
+					Set @S = @S +     ' Regression_Order = PTAD.Regression_Order, '
+					Set @S = @S +     ' Regression_Filtered_Data_Count = PTAD.Regression_Filtered_Data_Count,'
+					Set @S = @S +     ' Regression_Equation = PTAD.Regression_Equation, '
+					Set @S = @S +     ' Regression_Equation_XML = PTAD.Regression_Equation_XML'
+
 				End
 
 				Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
-				Set @S = @S + '	    #T_Tmp_JobsToUpdateNETs AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
-				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PTAD ON'
-				Set @S = @S + '	    TAD.Job = PTAD.Job'
+				Set @S = @S +     ' #T_Tmp_JobsToUpdateNETs AS JTU ON TAD.JOB = JTU.Job INNER JOIN '
+				Set @S = @S +       @PeptideDBPath + '.dbo.T_Analysis_Description AS PTAD ON'
+				Set @S = @S +     ' TAD.Job = PTAD.Job'
 
 				If @infoOnly <> 0
 				Begin
@@ -461,8 +473,9 @@ Done:
 			
 	return @myError
 
+
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSJobNETs] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSJobNETs] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSJobNETs] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSJobNETs] TO [MTS_DB_Lite] AS [dbo]
 GO

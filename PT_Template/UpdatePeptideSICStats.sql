@@ -26,6 +26,7 @@ CREATE Procedure dbo.UpdatePeptideSICStats
 **			03/18/2006 mem - No longer calling ComputeMaxObsAreaByJob for each job processed since Seq_ID is required to call that SP
 **			10/12/2007 mem - Now calling ReindexDatabase if InitialDBReindexComplete = 0 or UpdatePeptideSICStatsHadDBReindexed = 0 in T_Process_Step_Control
 **			10/29/2008 mem - Formatting changes
+**			05/21/2009 mem - Reworked the T_Peptides Update Query to use @SICJob and not join in T_Analysis_Description or T_Datasets
 **    
 *****************************************************/
 (
@@ -53,15 +54,18 @@ As
 	Set @message = ''
 	
 	Declare @Job int
+	Declare @SICJob int
+
 	Declare @JobCreated datetime
 	Declare @LastJobNullSICStats int
 	Declare @AdvanceStateForJob tinyint
-	Declare @SICJobExists tinyint
 	
 	Declare @count int
 	Set @count = 0
 
 	Declare @SICProcessState int
+	Declare @SICJobExists tinyint
+	
 	Declare @RowCountUpdated int
 	Declare @RowCountDefined int
 	Declare @JobFilterList varchar(128)
@@ -225,12 +229,15 @@ As
 			-- Make sure the Job has a SIC_Job associated with it
 			Set @SICJobExists = 0
 			Set @SICProcessState = 0
-			SELECT @SICProcessState = TAD_SIC.Process_State
-			FROM T_Analysis_Description TAD INNER JOIN
-				T_Datasets DS ON 
-				TAD.Dataset_ID = DS.Dataset_ID INNER JOIN
-				T_Analysis_Description TAD_SIC ON 
-				DS.SIC_Job = TAD_SIC.Job
+			Set @SICJob = 0
+			
+			SELECT @SICProcessState = TAD_SIC.Process_State,
+			       @SICJob = DS.SIC_Job
+			FROM T_Analysis_Description TAD
+			     INNER JOIN T_Datasets DS
+			       ON TAD.Dataset_ID = DS.Dataset_ID
+			     INNER JOIN T_Analysis_Description TAD_SIC
+			       ON DS.SIC_Job = TAD_SIC.Job
 			WHERE TAD.Job = @Job
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -250,7 +257,10 @@ As
 					Set @SICJobExists = 1
 				Else
 				Begin
-					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; although a SIC job exists, its state is not 75'
+					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr
+					Set @message = @message + '; although a SIC job exists its state is not 75'
+					Set @message = @message + '; SIC Job' + Convert(varchar(18), @SICJob) + ', State ' + Convert(varchar(12), @SICProcessState)
+					
 					-- Only post an entry to the log if Job was created in this DB more than 24 hours ago
 					-- Additionally, only post one entry every 24 hours
 					If DateDiff(hour, @JobCreated, GetDate()) >= 24
@@ -263,17 +273,16 @@ As
 			Begin -- <c2>
 				-- Update the SIC Stats
 				UPDATE T_Peptides
-				Set Scan_Time_Peak_Apex = DS_Scans.Scan_Time, 
-					Peak_Area = DS_SIC.Peak_Area, 
-					Peak_SN_Ratio = DS_SIC.Peak_SN_Ratio
-				FROM T_Peptides Pep INNER JOIN
-					T_Analysis_Description TAD ON 
-					Pep.Analysis_ID = TAD.Job INNER JOIN
-					T_Datasets DS ON TAD.Dataset_ID = DS.Dataset_ID INNER JOIN
-					T_Dataset_Stats_SIC DS_SIC ON 
-					DS.SIC_Job = DS_SIC.Job AND Pep.Scan_Number = DS_SIC.Frag_Scan_Number INNER JOIN
-					T_Dataset_Stats_Scans DS_Scans ON 
-					DS_SIC.Optimal_Peak_Apex_Scan_Number = DS_Scans.Scan_Number AND DS_SIC.Job = DS_Scans.Job
+				SET Scan_Time_Peak_Apex = DS_Scans.Scan_Time,
+				    Peak_Area = DS_SIC.Peak_Area,
+				    Peak_SN_Ratio = DS_SIC.Peak_SN_Ratio
+				FROM T_Peptides Pep
+				     INNER JOIN T_Dataset_Stats_SIC DS_SIC
+				       ON DS_SIC.Job = @SICJob AND
+				          Pep.Scan_Number = DS_SIC.Frag_Scan_Number
+				     INNER JOIN T_Dataset_Stats_Scans DS_Scans
+				       ON DS_SIC.Optimal_Peak_Apex_Scan_Number = DS_Scans.Scan_Number AND
+				          DS_SIC.Job = DS_Scans.Job
 				WHERE Pep.Analysis_ID = @Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -341,7 +350,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -8,9 +8,12 @@ CREATE TABLE [dbo].[T_MTS_Peptide_DBs](
 	[Peptide_DB_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Server_ID] [int] NOT NULL,
 	[State_ID] [int] NOT NULL,
-	[Last_Affected] [datetime] NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_Last_Affected]  DEFAULT (getdate()),
-	[DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_DB_Schema_Version]  DEFAULT (2),
-	[Comment] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MTS_Peptide_DBs_Comment]  DEFAULT (''),
+	[Last_Affected] [datetime] NOT NULL,
+	[Description] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Organism] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DB_Schema_Version] [real] NOT NULL,
+	[Comment] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Created] [datetime] NULL,
  CONSTRAINT [PK_T_MTS_Peptide_DBs] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_DB_ID] ASC
@@ -29,4 +32,12 @@ ALTER TABLE [dbo].[T_MTS_Peptide_DBs]  WITH NOCHECK ADD  CONSTRAINT [FK_T_MTS_Pe
 REFERENCES [T_MTS_Servers] ([Server_ID])
 GO
 ALTER TABLE [dbo].[T_MTS_Peptide_DBs] CHECK CONSTRAINT [FK_T_MTS_Peptide_DBs_T_MTS_Servers]
+GO
+ALTER TABLE [dbo].[T_MTS_Peptide_DBs] ADD  CONSTRAINT [DF_T_MTS_Peptide_DBs_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_MTS_Peptide_DBs] ADD  CONSTRAINT [DF_T_MTS_Peptide_DBs_DB_Schema_Version]  DEFAULT ((2)) FOR [DB_Schema_Version]
+GO
+ALTER TABLE [dbo].[T_MTS_Peptide_DBs] ADD  CONSTRAINT [DF_T_MTS_Peptide_DBs_Comment]  DEFAULT ('') FOR [Comment]
+GO
+ALTER TABLE [dbo].[T_MTS_Peptide_DBs] ADD  CONSTRAINT [DF_T_MTS_Peptide_DBs_Created]  DEFAULT (getdate()) FOR [Created]
 GO

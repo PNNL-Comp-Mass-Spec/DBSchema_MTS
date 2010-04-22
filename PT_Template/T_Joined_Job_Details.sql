@@ -13,9 +13,9 @@ CREATE TABLE [dbo].[T_Joined_Job_Details](
 	[Scan_Number_End] [int] NULL,
 	[Scan_Time_Start] [real] NULL,
 	[Scan_Time_End] [real] NULL,
-	[Gap_to_Next_Section_Minutes] [real] NULL CONSTRAINT [DF_T_Joined_Job_Details_Gap_to_Next_Section_Minutes]  DEFAULT (0),
-	[Scan_Number_Added] [int] NULL CONSTRAINT [DF_T_Joined_Job_Details_Scan_Number_Added]  DEFAULT (0),
-	[Scan_Time_Added] [real] NULL CONSTRAINT [DF_T_Joined_Job_Details_Scan_Time_Added]  DEFAULT (0),
+	[Gap_to_Next_Section_Minutes] [real] NULL,
+	[Scan_Number_Added] [int] NULL,
+	[Scan_Time_Added] [real] NULL,
  CONSTRAINT [PK_T_Joined_Job_Details] PRIMARY KEY CLUSTERED 
 (
 	[Joined_Job_ID] ASC,
@@ -38,4 +38,10 @@ ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Joi
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job]
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Gap_to_Next_Section_Minutes]  DEFAULT (0) FOR [Gap_to_Next_Section_Minutes]
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Scan_Number_Added]  DEFAULT (0) FOR [Scan_Number_Added]
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Scan_Time_Added]  DEFAULT (0) FOR [Scan_Time_Added]
 GO

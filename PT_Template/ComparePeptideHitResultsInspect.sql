@@ -1,18 +1,21 @@
-/****** Object:  StoredProcedure [dbo].[ComparePeptideHitResults] ******/
+/****** Object:  StoredProcedure [dbo].[ComparePeptideHitResultsInspect] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ComparePeptideHitResults
+CREATE Procedure dbo.ComparePeptideHitResultsInspect
 /****************************************************
 **
 **	Desc:	Compares the peptide hit results for one or more datasets (specified by @Datasets and/or @DatasetIDs and/or @Jobs)
+**			This procedure compares Sequest and Inspect results
+**			If @Jobs is specified, then will assure the results pertain only to the given jobs
 **
 **	Return values: 0 if no error; otherwise error code
 **
 **	Auth:	mem
 **	Date:	10/31/2008
+**			01/13/2010 mem - Updated to limit results by job
 **    
 *****************************************************/
 (
@@ -66,8 +69,13 @@ AS
 		Dataset_ID int
 	)
 	
+	CREATE TABLE #TmpJobs (
+		Job int
+	)
+	
 	CREATE TABLE #TmpInspect (
 		Dataset_ID int,
+		Job int,
 		Scan_Number int,
 		Charge_State smallint,
 		Seq_ID int NULL,
@@ -80,6 +88,7 @@ AS
 	
 	CREATE TABLE #TmpSequest (
 		Dataset_ID int,
+		Job int,
 		Scan_Number int,
 		Charge_State smallint,
 		Seq_ID int NULL,
@@ -124,25 +133,49 @@ AS
 		SELECT @myRowcount = @@rowcount, @myError = @@error
 	End
 	
-	If @Jobs <> ''
+	If @Jobs = ''
 	Begin
+		INSERT INTO #TmpJobs( Job )
+		SELECT DISTINCT Job
+		FROM T_Analysis_Description TAD
+		     INNER JOIN #TmpDatasets
+		       ON #TmpDatasets.Dataset_ID = TAD.Dataset_ID
+		WHERE TAD.ResultType LIKE '%Peptide_Hit'
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+
+	End
+	Else
+	Begin
+		INSERT INTO #TmpJobs( Job )
+		SELECT DISTINCT DataQ.VALUE
+		FROM T_Analysis_Description TAD
+		     INNER JOIN ( SELECT DISTINCT VALUE
+		                  FROM dbo.udfParseDelimitedIntegerList ( @Jobs, ',' ) ) DataQ
+		       ON TAD.Job = DataQ.VALUE
+		WHERE TAD.ResultType LIKE '%Peptide_Hit'
+		--
+		SELECT @myRowcount = @@rowcount, @myError = @@error
+
+		
 		INSERT INTO #TmpDatasets( Dataset_ID )
 		SELECT DISTINCT TAD.Dataset_ID
 		FROM T_Analysis_Description TAD
-		     INNER JOIN ( SELECT DISTINCT Value
-		                  FROM dbo.udfParseDelimitedIntegerList ( @Jobs, ',' ) ) DataQ
-		       ON TAD.Job = DataQ.Value
+		     INNER JOIN #TmpJobs
+		       ON TAD.Job = #TmpJobs.Job
 		WHERE NOT TAD.Dataset_ID IN (SELECT Dataset_ID FROM #TmpDatasets)
 		--
 		SELECT @myRowcount = @@rowcount, @myError = @@error
 	End
 			
 	If @InfoOnly <> 0
-		SELECT DISTINCT TAD.Dataset_ID, TAD.Dataset
+		SELECT DISTINCT TAD.Dataset_ID, TAD.Dataset, #TmpJobs.Job, TAD.ResultType, TAD.Analysis_Tool
 		FROM #TmpDatasets DS
 		     INNER JOIN T_Analysis_Description TAD
 		       ON DS.Dataset_ID = TAD.Dataset_ID
+		     INNER JOIN #TmpJobs ON TAD.Job = #TmpJobs.Job
 		ORDER BY TAD.Dataset_ID
+
 		
 	-- Initialize @DatasetID
 	SELECT @DatasetID = MIN(Dataset_ID)-1
@@ -173,6 +206,7 @@ AS
 			-------------------------------------------
 			--
 			INSERT INTO #TmpInspect( Dataset_ID,
+			                         Job,
 			                         Scan_Number,
 			                         Charge_State,
 			                         Seq_ID,
@@ -180,6 +214,7 @@ AS
 			                         TotalPRMScore,
 			                         FScore )
 			SELECT TAD.Dataset_ID,
+			       TAD.Job,
 			       P.Scan_Number,
 			       P.Charge_State,
 			       P.Seq_ID,
@@ -191,9 +226,23 @@ AS
 			       ON I.Peptide_ID = P.Peptide_ID
 			     INNER JOIN T_Analysis_Description TAD
 			       ON P.Analysis_ID = TAD.Job
-			WHERE (TAD.Dataset = @Dataset)
+			     INNER JOIN #TmpJobs 
+			       ON TAD.Job = #TmpJobs.Job
+			WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null
 			--
-			Select @InspectRecordCount = @@RowCount
+			Set @InspectRecordCount = @@RowCount
+			
+			-- Update@InspectRecordCount to report the unique number of records 
+			-- (necessary in case this dataset had multiple Inspect jobs)
+			--
+			SELECT @InspectRecordCount = COUNT(*)
+			FROM (
+				SELECT DISTINCT Scan_Number,
+								Charge_State,
+								Seq_ID
+				FROM #TmpInspect
+				WHERE Dataset_ID = @DatasetID
+			) DistinctQ
 
 
 			-------------------------------------------
@@ -201,11 +250,13 @@ AS
 			-------------------------------------------
 			--
 			INSERT INTO #TmpSequest( Dataset_ID,
+			                         Job,
 			                         Scan_Number,
 			                         Charge_State,
 			                         Seq_ID,
 			                         XCorr )
 			SELECT TAD.Dataset_ID,
+			       TAD.Job,
 			       P.Scan_Number,
 			       P.Charge_State,
 			       P.Seq_ID,
@@ -215,21 +266,41 @@ AS
 			       ON P.Analysis_ID = TAD.Job
 			     INNER JOIN T_Score_Sequest
 			       ON P.Peptide_ID = T_Score_Sequest.Peptide_ID
-			WHERE (TAD.Dataset = @Dataset)
+			     INNER JOIN #TmpJobs 
+			       ON TAD.Job = #TmpJobs.Job
+			WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null
 			--
-			Select @SequestRecordCount = @@RowCount
+			Set @SequestRecordCount = @@RowCount
+			
+			-- Update @SequestRecordCount to report the unique number of records 
+			-- (necessary in case this dataset had multiple Sequest jobs)
+			--
+			SELECT @SequestRecordCount = COUNT(*)
+			FROM (
+				SELECT DISTINCT Scan_Number,
+								Charge_State,
+								Seq_ID
+				FROM #TmpSequest
+				WHERE Dataset_ID = @DatasetID
+			) DistinctQ
+
 
 			-------------------------------------------
-			-- Count the number of overlapping peptides
+			-- Count the number of overlapping peptides for this Dataset
 			-------------------------------------------
 			--	
 			SELECT @OverlapCount = COUNT(*)
-			FROM #TmpInspect I
-			     INNER JOIN #TmpSequest S
-			       ON I.Dataset_ID = S.Dataset_ID AND
-			          I.Scan_Number = S.Scan_Number AND
-			          I.Charge_State = S.Charge_State AND
-			          I.Seq_ID = S.Seq_ID
+			FROM ( SELECT DISTINCT I.Scan_Number,
+			                       I.Charge_State,
+			                       I.Seq_ID
+			       FROM #TmpInspect I
+			            INNER JOIN #TmpSequest S
+			              ON I.Dataset_ID = S.Dataset_ID AND
+			                 I.Scan_Number = S.Scan_Number AND
+			                 I.Charge_State = S.Charge_State AND
+			                 I.Seq_ID = S.Seq_ID
+			       WHERE X.Dataset_ID = @DatasetID  
+			     ) OverlapQ
 
 			-------------------------------------------
 			-- Store the overlap stats
@@ -327,7 +398,5 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComparePeptideHitResults] TO [MTS_DB_Dev]
-GO
-GRANT VIEW DEFINITION ON [dbo].[ComparePeptideHitResults] TO [MTS_DB_Lite]
+GRANT EXECUTE ON [dbo].[ComparePeptideHitResultsInspect] TO [DMS_SP_User] AS [dbo]
 GO

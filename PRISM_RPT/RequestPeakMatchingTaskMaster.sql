@@ -47,6 +47,8 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 **			01/04/2008 mem - Switched to using T_Analysis_Job to track assigned tasks instead of T_Peak_Matching_History
 **						   - Added parameter @infoOnly
 **			01/08/2008 mem - Updated to store the settings in T_Peak_Matching_Params_Cached if @CacheSettingsForAnalysisManager = 1
+**			02/02/2010 mem - Now updating Results_URL in T_Analysis_Job
+**						   - Now populating T_Analysis_Job_Target_Jobs
 **
 *****************************************************/
 (
@@ -57,7 +59,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 	@restrictToMtdbName tinyint = 0,				-- If 1, will only check the DB named mtdbName on serverName (ignored if @mtdbName or @serverName is blank)
 	@taskID int = 0 output,
 	@taskPriority tinyint = 0 output,				-- the actual priority of the task
-	@analysisJob int = 0 output,
+	@analysisJob int = 0 output,					-- DMS Analysis Job
 	@analysisResultsFolderPath varchar(256) = '' output,
 	@serverName varchar(128) = '' output,			-- Note: if @serverName and @mtdbName are provided, then will preferentially query that mass tag database first
 	@mtdbName varchar(128)= ''  output,
@@ -75,7 +77,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 	@InternalStdExplicit varchar(255) = '' output,		-- Not used by MTDB schema version 1
 	@NETValueType tinyint=0 output,
 	@iniFilePath varchar(255) = '' output,
-	@outputFolderPath varchar(255) = '' output,
+	@outputFolderPath varchar(512) = '' output,
 	@logFilePath varchar(255) = '' output,
 	@taskAvailable tinyint = 0 output,
 	@message varchar(512) = '' output,
@@ -133,7 +135,8 @@ As
 			@SPToExec varchar(512),
 			@PreferredServerName varchar(255),
 			@PreferredDBName varchar(255),
-			@WorkingServerPrefix varchar(255)
+			@WorkingServerPrefix varchar(255),
+			@ResultsURL varchar(512)
 
 	set @S = ''
 	set @CurrentServer = ''
@@ -173,6 +176,7 @@ As
 	set @NETValueType = 0
 	set @iniFilePath = ''
 	set @outputFolderPath = ''
+	set @ResultsURL = ''
 	set @logFilePath = ''
 	set @taskAvailable = 0
 	set @AssignedJobID = 0
@@ -296,7 +300,16 @@ As
 			set @Continue = 0
 		End
 		Else
-			set @Continue = 1
+		Begin
+			If Not (@toolVersion LIKE '%3.46.42%')
+			Begin
+				Set @message = 'This version of Viper is not presently allowed to perform peak matching'
+				Set @toolVersion = @toolVersion + ' - Version not new enough'
+				set @Continue = 0
+			End
+			Else
+				set @Continue = 1
+		End
 
 		---------------------------------------------------
 		-- Step through the mass tag database list and call
@@ -499,6 +512,15 @@ As
 							
 								Set @Continue = 0
 								
+								-- Parse @outputFolderPath to populate @ResultsURL
+								-- For example, change
+								--  from: \\porky\MTD_Peak_Matching\results\MT_Shewanella_ProdTest_Formic_P460\LTQ_Orb\Job566121_auto_pm_2253
+								--    to: http://porky/pm/results/MT_Shewanella_ProdTest_Formic_P460/LTQ_Orb/Job566121_auto_pm_2253/Index.html
+								
+								Set @ResultsURL = REPLACE(@outputFolderPath, '\\', 'http://')
+								Set @ResultsURL = REPLACE(@ResultsURL, '\MTD_Peak_Matching\', '/pm/')
+								Set @ResultsURL = REPLACE(@ResultsURL, '\', '/') + '/Index.html'
+								
 								Set @serverName = @CurrentServer
 								Set @mtdbName = @CurrentMTDB
 								Set @TimeStarted = GETDATE()
@@ -522,16 +544,27 @@ As
 												Task_ID, Task_Server, Task_Database,
 												Assigned_Processor_Name, Tool_Version,
 												DMS_Job_Count, DMS_Job_Min, DMS_Job_Max,
-												Output_Folder_Path)
+												Output_Folder_Path,
+												Results_URL)
 								VALUES (@TimeStarted, @ToolID, '', 2,
 										@TaskID, @serverName, @mtdbName,
 										@ProcessorName, @toolVersion, 
 										1, @analysisJob, @analysisJob,
-										@outputFolderPath)
+										@outputFolderPath,
+										@ResultsURL)
 								--
 								SELECT @myError = @@error, @myRowCount = @@rowcount, @AssignedJobID = SCOPE_IDENTITY()
 
 
+								Set @CurrentLocation = 'Add a new entry to T_Analysis_Job_Target_Jobs'
+								
+								INSERT INTO T_Analysis_Job_Target_Jobs (Job_ID, DMS_Job)
+								VALUES (@AssignedJobID, @analysisJob)
+								--
+								SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+								Set @CurrentLocation = 'Add a new entry to T_Peak_Matching_Activity'
 
 								-- Update status of Processor in T_Peak_Matching_Activity
 								-- First make sure an entry exists for @ProcessorName
@@ -731,5 +764,9 @@ Done:
 	Return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[RequestPeakMatchingTaskMaster] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestPeakMatchingTaskMaster] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTaskMaster] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTaskMaster] TO [MTS_DB_Lite] AS [dbo]
 GO

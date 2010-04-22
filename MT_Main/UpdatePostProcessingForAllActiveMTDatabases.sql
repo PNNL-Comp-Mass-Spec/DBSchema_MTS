@@ -25,8 +25,12 @@ CREATE PROCEDURE UpdatePostProcessingForAllActiveMTDatabases
 **			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
 **			03/13/2006 mem - Now calling VerifyUpdateEnabled
 **			08/03/2006 mem - Fixed bug when verifying that each database exists on the server
+**			11/03/2009 mem - Added parameter @DebugMode
 **    
 *****************************************************/
+(
+	@DebugMode tinyint = 0		-- When non-zero, then will use Select statements to show the each DB name and stored procedure called
+)
 As
 	set nocount on
 	
@@ -68,6 +72,8 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
+	Set @DebugMode = IsNull(@DebugMode, 0)
+	
 	---------------------------------------------------
 	-- temporary table to hold list of databases to process
 	---------------------------------------------------
@@ -174,23 +180,12 @@ As
 
 			-- Check if @CurrentMTDB exists
 			--
-			SELECT	[name]
-			FROM master.dbo.sysdatabases
-			WHERE [name] = @CurrentMTDB
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-			--
-			if @myError <> 0 
-			begin
-				set @message = 'Could not check existence of database'
-				set @myError = 53
-				goto Done
-			end
-			--
-			-- skip further processing if database does not exist
-			--
-			if @myRowCount = 0
+			if Not Exists (SELECT * FROM master.dbo.sysdatabases WHERE [name] = @CurrentMTDB)
 			Begin
+				--
+				-- skip further processing if database does not exist
+				--
+
 				If @logVerbosity > 1
 				Begin
 					set @message = 'Database "' + @CurrentMTDB + '" does not exist'
@@ -226,7 +221,8 @@ As
 					--
 					Set @SPToExec = '[' + @CurrentMTDB + ']..' + @targetSPName
 					
-					Select @SPToExec
+					If @DebugMode <> 0
+						Select @SPToExec
 					
 					Exec @myError = @SPToExec	
 				end --<c>
@@ -268,4 +264,8 @@ Done:
 	return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdatePostProcessingForAllActiveMTDatabases] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdatePostProcessingForAllActiveMTDatabases] TO [MTS_DB_Lite] AS [dbo]
 GO

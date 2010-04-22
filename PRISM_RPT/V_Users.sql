@@ -3,9 +3,11 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create VIEW [dbo].[V_Users]
+
+CREATE VIEW [dbo].[V_Users]
 AS
-SELECT     t1.*
-FROM         OPENROWSET('SQLOLEDB', 'gigasax'; 'DMSWebUser'; 'icr4fun', 'SELECT * FROM dms5.dbo.T_Users') t1
+SELECT U_PRN, U_Name, U_HID, ID, U_Status, U_Access_Lists, U_email, U_domain, U_netid, U_active, U_Update
+FROM Gigasax.DMS5.dbo.T_Users
+
 
 GO

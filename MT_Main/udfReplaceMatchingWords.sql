@@ -89,5 +89,5 @@ END
 
 
 GO
-GRANT EXECUTE ON [dbo].[udfReplaceMatchingWords] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[udfReplaceMatchingWords] TO [DMS_SP_User] AS [dbo]
 GO

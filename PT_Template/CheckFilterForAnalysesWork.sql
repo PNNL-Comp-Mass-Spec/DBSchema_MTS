@@ -35,6 +35,7 @@ CREATE PROCEDURE dbo.CheckFilterForAnalysesWork
 **	Date:	06/08/2007
 **			10/12/2007 mem - Added support for Peptide Prophet scores and for RankScore (aka RankXc for Sequest)
 **			10/29/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			07/21/2009 mem - Added support for Inspect_PValue filtering
 **    
 *****************************************************/
 (
@@ -111,7 +112,9 @@ AS
 				@InspectTotalPRMScoreComparison varchar(2),		-- Only used for Inspect results
 				@InspectTotalPRMScoreThreshold real,
 				@InspectFScoreComparison varchar(2),			-- Only used for Inspect results
-				@InspectFScoreThreshold real
+				@InspectFScoreThreshold real,
+				@InspectPValueComparison varchar(2),			-- Only used for Inspect results
+				@InspectPValueThreshold real
 
 		-----------------------------------------------------------
 		-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -150,9 +153,10 @@ AS
 			RankScore int NOT NULL,							-- Used for Sequest and X!Tandem
 			Hyperscore real NOT NULL,						-- Only used for X!Tandem data
 			Log_EValue real NOT NULL,						-- Only used for X!Tandem data
-			MQScore real NOT NULL ,							-- Only used for Inspect data
-			TotalPRMScore real NOT NULL ,					-- Only used for Inspect data
-			FScore real NOT NULL ,							-- Only used for Inspect data
+			Inspect_MQScore real NOT NULL ,					-- Only used for Inspect data
+			Inspect_TotalPRMScore real NOT NULL , 			-- Only used for Inspect data
+			Inspect_FScore real NOT NULL ,					-- Only used for Inspect data
+			Inspect_PValue real NOT NULL ,					-- Only used for Inspect data
 			Cleavage_State tinyint NOT NULL,
 			Terminus_State tinyint NOT NULL,
 			Mass float NOT NULL,
@@ -190,7 +194,7 @@ AS
 		
 		Set @ResultTypeID = 0
 		Set @Continue = 1
-		
+
 		While @Continue = 1
 		Begin -- <a>
 			SELECT TOP 1 
@@ -227,13 +231,13 @@ AS
 				Begin
 					INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 												XCorr, RankScore, Hyperscore, Log_EValue, 
-												MQScore, TotalPRMScore, FScore,
+												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							XCorr, RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
-							0 AS MQScore, 0 AS TotalPRMScore, 0 AS FScore,
+							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							MAX(Cleavage_State), MAX(Terminus_State), MH, 
 							DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability, 
 							NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
@@ -276,13 +280,13 @@ AS
 				Begin
 					INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 												XCorr, RankScore, Hyperscore, Log_EValue, 
-												MQScore, TotalPRMScore, FScore,
+												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, 1 AS RankScore, Hyperscore, Log_EValue, 
-							0 AS MQScore, 0 AS TotalPRMScore, 0 AS FScore,
+							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
@@ -323,13 +327,13 @@ AS
 				Begin
 					INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 												XCorr, RankScore, Hyperscore, Log_EValue, 
-												MQScore, TotalPRMScore, FScore,
+												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, RankFScore AS RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
-							MQScore, TotalPRMScore, FScore,
+							Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaNormTotalPRMScore AS DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
@@ -338,9 +342,10 @@ AS
 									Len(TS.Clean_Sequence) AS PeptideLength, 
 									IsNull(P.Charge_State, 0) AS Charge_State,
 									IsNull(I.RankFScore, 0) AS RankFScore,
-									IsNull(I.MQScore, 0) AS MQScore,
-									IsNull(I.TotalPRMScore, 0) AS TotalPRMScore,
-									IsNull(I.FScore, 0) AS FScore,
+									IsNull(I.MQScore, 0) AS Inspect_MQScore,
+									IsNull(I.TotalPRMScore, 0) AS Inspect_TotalPRMScore,
+									IsNull(I.FScore, 0) AS Inspect_FScore,
+									IsNull(I.PValue, 1) AS Inspect_PValue,
 									IsNull(PP.Cleavage_State, 0) AS Cleavage_State, 
 									IsNull(PP.Terminus_State, 0) AS Terminus_State, 
 									IsNull(P.MH, 0) AS MH,
@@ -360,8 +365,8 @@ AS
 								 T_Sequence TS ON P.Seq_ID = TS.Seq_ID
 						) LookupQ
 					GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
-							 RankFScore, MQScore, TotalPRMScore, FScore, MH, DeltaNormTotalPRMScore, 
-							 DiscriminantScoreNorm, Peptide_Prophet_Probability,
+							 RankFScore, Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue, 
+							 MH, DeltaNormTotalPRMScore, DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							 NET_Difference_Absolute
 					ORDER BY Peptide_ID
 					--
@@ -411,7 +416,8 @@ AS
 										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
 										@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
 										@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
-										@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT
+										@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
+										@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT
 
 					If @myError <> 0
 					Begin
@@ -444,9 +450,10 @@ AS
 
 						If @ResultType = 'IN_Peptide_Hit'
 						Begin
-							Set @S = @S +        ' MQScore ' +        @InspectMQScoreComparison +        Convert(varchar(11), @InspectMQScoreThreshold) + ' AND '
-							Set @S = @S +        ' TotalPRMScore ' +  @InspectTotalPRMScoreComparison +  Convert(varchar(11), @InspectTotalPRMScoreThreshold) + ' AND '
-							Set @S = @S +        ' FScore ' +         @InspectFScoreComparison +         Convert(varchar(11), @InspectFScoreThreshold) + ' AND '
+							Set @S = @S +        ' Inspect_MQScore ' +        @InspectMQScoreComparison +        Convert(varchar(11), @InspectMQScoreThreshold) + ' AND '
+							Set @S = @S +        ' Inspect_TotalPRMScore ' +  @InspectTotalPRMScoreComparison +  Convert(varchar(11), @InspectTotalPRMScoreThreshold) + ' AND '
+							Set @S = @S +        ' Inspect_FScore ' +         @InspectFScoreComparison +         Convert(varchar(11), @InspectFScoreThreshold) + ' AND '
+							Set @S = @S +        ' Inspect_PValue ' +         @InspectPValueComparison +         Convert(varchar(11), @InspectPValueThreshold) + ' AND '
 						End
 						
 						Set @S = @S +        ' Cleavage_State ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
@@ -495,7 +502,7 @@ AS
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 			
 			End -- </b>
-			
+
 		End -- </a>
 
 
@@ -512,9 +519,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[CheckFilterForAnalysesWork] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[CheckFilterForAnalysesWork] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAnalysesWork] TO [MTS_DB_Lite] AS [dbo]
 GO

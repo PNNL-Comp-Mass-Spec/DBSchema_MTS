@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRProteinCrosstab] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure QRProteinCrosstab
+CREATE Procedure dbo.QRProteinCrosstab
 /****************************************************	
 **  Desc: Generates a cross tab query of the proteins observed
 **		  in 1 or more QuantitationID tasks
@@ -30,6 +30,7 @@ CREATE Procedure QRProteinCrosstab
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			01/24/2008 mem - Added column @DateStampHeaderColumn
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **
 ****************************************************/
 (
@@ -43,7 +44,8 @@ CREATE Procedure QRProteinCrosstab
 	@PreviewSql tinyint=0,
 	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
 	@DateStampHeaderColumn tinyint = 0,
-	@MinimumPeptidesPerProtein tinyint = 0				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
+	@MinimumPeptidesPerProtein tinyint = 0,				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
+	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: Reference and Protein Description
 )
 AS
 
@@ -85,9 +87,10 @@ AS
 		Set @SortMode  = IsNull(@SortMode, 0)
 		set @message = ''
 		Set @PreviewSql  = IsNull(@PreviewSql, 0)
-		Set @IncludeProteinDescription  = IsNull(@IncludeProteinDescription, 1)
+		Set @IncludeProteinDescription = IsNull(@IncludeProteinDescription, 1)
 		Set @DateStampHeaderColumn = IsNull(@DateStampHeaderColumn, 0)
 		Set @MinimumPeptidesPerProtein  = IsNull(@MinimumPeptidesPerProtein, 0)
+		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -128,9 +131,21 @@ AS
 		Set @CurrentLocation = 'Populate @Sql'
 		
 		Set @sql = ''
-		Set @sql = @sql + ' SELECT PivotResults.Ref_ID, Prot.Reference,'
+		Set @sql = @sql + ' SELECT PivotResults.Ref_ID,'
+		
+		If @ChangeCommasToSemicolons = 0
+			Set @sql = @sql + 'Prot.Reference,'
+		Else
+			Set @sql = @sql + 'Replace(Prot.Reference, '','', '';'') AS Reference,'
+		
 		If @IncludeProteinDescription <> 0
-			Set @sql = @sql +        ' Prot.Description As Protein_Description,'
+		Begin
+			If @ChangeCommasToSemicolons = 0
+				Set @sql = @sql +         ' Prot.Description As Protein_Description,'
+			Else
+				Set @sql = @sql + ' Replace(Prot.Description, '','', '';'')  As Protein_Description,'
+		End
+			
 			
 		Set @sql = @sql +        @PivotColumnsSql
 		Set @sql = @sql + ' FROM (SELECT QR.Quantitation_ID, QR.Ref_ID,'
@@ -170,7 +185,7 @@ AS
 	End Try
 	Begin Catch
 		-- Error caught; log the error then abort processing
-		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QRProteinCrosstabPivot')
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'QRProteinCrosstab')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done
@@ -179,10 +194,11 @@ AS
 Done:
 	Return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[QRProteinCrosstab] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRProteinCrosstab] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRProteinCrosstab] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRProteinCrosstab] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRProteinCrosstab] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRProteinCrosstab] TO [MTS_DB_Lite] AS [dbo]
 GO

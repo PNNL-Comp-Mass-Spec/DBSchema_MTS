@@ -9,8 +9,8 @@ CREATE TABLE [dbo].[T_Event_Log](
 	[Target_ID] [int] NULL,
 	[Target_State] [smallint] NULL,
 	[Prev_Target_State] [smallint] NULL,
-	[Entered] [datetime] NULL CONSTRAINT [DF_T_Event_Log_Entered]  DEFAULT (getdate()),
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Event_Log_Entered_By]  DEFAULT (suser_sname()),
+	[Entered] [datetime] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Event_Log] PRIMARY KEY CLUSTERED 
 (
 	[Event_ID] ASC
@@ -29,4 +29,8 @@ ALTER TABLE [dbo].[T_Event_Log]  WITH CHECK ADD  CONSTRAINT [FK_T_Event_Log_T_Ev
 REFERENCES [T_Event_Target] ([ID])
 GO
 ALTER TABLE [dbo].[T_Event_Log] CHECK CONSTRAINT [FK_T_Event_Log_T_Event_Target1]
+GO
+ALTER TABLE [dbo].[T_Event_Log] ADD  CONSTRAINT [DF_T_Event_Log_Entered]  DEFAULT (getdate()) FOR [Entered]
+GO
+ALTER TABLE [dbo].[T_Event_Log] ADD  CONSTRAINT [DF_T_Event_Log_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

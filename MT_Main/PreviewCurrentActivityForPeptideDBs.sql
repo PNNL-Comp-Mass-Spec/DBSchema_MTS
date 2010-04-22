@@ -17,6 +17,7 @@ CREATE Procedure PreviewCurrentActivityForPeptideDBs
 **	Date:	03/10/2006
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
 **			07/15/2006 mem - Updated list of database states to process to include state 7
+**			10/21/2008 mem - Updated to check for and correct database ID conflicts
 **    
 *****************************************************/
 (
@@ -93,15 +94,26 @@ As
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 
 				If @matchCount = 0
+				Begin
+					-- Database not present; need to add it
+					-- However, first check that no PT DBs exist with the same ID but different name
+					DELETE FROM T_Current_Activity
+					WHERE Database_ID = @PDB_ID AND Type = 'PT'
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+					
 					INSERT INTO T_Current_Activity (Database_ID, Database_Name, Type, Update_Began, Update_Completed, 
 													Pause_Length_Minutes, State, Update_State)
 					VALUES (@PDB_ID, @PDB_Name, 'PT', GetDate(), 
 							Null, 0, @PDB_State, 1)
+				End
 				Else
+				Begin
 					UPDATE T_Current_Activity
 					SET	Database_Name = @PDB_Name, Update_Began = Null, Update_Completed = Null, 
 						Pause_Length_Minutes = 0, State = @PDB_State, Comment = '', Update_State = 1
 					WHERE Database_ID = @PDB_ID AND Database_Name = @PDB_Name
+				End
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
@@ -118,4 +130,8 @@ As
 Done:
 	return @myError
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[PreviewCurrentActivityForPeptideDBs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[PreviewCurrentActivityForPeptideDBs] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ExportGANETData
+CREATE Procedure ExportGANETData
 /****************************************************
 **
 **	Desc: 
@@ -23,15 +23,17 @@ CREATE Procedure dbo.ExportGANETData
 **			11/23/2005 mem - Added brackets around @dbName as needed to allow for DBs with dashes in the name
 **			07/03/2006 mem - Now using dbo.udfCombinePaths() to combine paths
 **			07/05/2006 mem - Now calling ValidateFolderExists to validate that the output and results folders exist
+**			03/13/2010 mem - Added parameter @ObsNETsFileName and made @SourceFolderPath and @ResultsFolderPath output parameters
 **    
 *****************************************************/
 (
 	@TaskID int,											-- Corresponds to task in T_NET_Update_Task
-	@outFileFolderPath varchar(256) = '',					-- Path to folder containing source data; if blank, then will look up path in MT_Main
-	@ResultsFolderPath varchar(256) = '',					-- Path to folder containing the results; if blank, then will look up path in MT_Main
-	@outFileName varchar(256) = '' output,					-- Source file name
-	@inFileName varchar(256) = '' output,					-- Results file name
-	@predFileName varchar(256) = '' output,					-- Predict NETs results file name
+	@SourceFolderPath varchar(256) = '',					-- Path to folder containing source data; if blank, then will look up path in MT_Main (e.g. I:\GA_Net_Xfer\Out\PT_Shewanella_ProdTest_A123\)
+	@ResultsFolderPath varchar(256) = '',					-- Path to folder containing the results; if blank, then will look up path in MT_Main (e.g. I:\GA_Net_Xfer\In\PT_Shewanella_ProdTest_A123\)
+	@SourceFileName varchar(256) = '' output,				-- Source file name
+	@ResultsFileName varchar(256) = '' output,				-- Results file name
+	@PredNETsFileName varchar(256) = '' output,				-- Predict NETs results file name
+	@ObsNETsFileName varchar(256) = '' output,				-- Observed NETs results file name
 	@jobStatsFileName varchar(256) = 'jobStats.txt',
 	@exportJobStatsFileOnly tinyint = 0,					-- When 1, then only creates the Job Stats file(s) and does not call ExportGANETPeptideFile
 	@message varchar(256)='' OUTPUT
@@ -50,8 +52,8 @@ As
 	declare @LastJob int
 	declare @JobFileSuffix varchar(1024)
 
-	declare @outFileFolderPathBase varchar(256)
-	declare @inFileFolderPathBase varchar(256)
+	declare @SourceFolderPathBase varchar(256)
+	declare @ResultsFolderPathBase varchar(256)
 	declare @DBName varchar(128)
 
 	declare @JobStatsFilePath varchar(512)
@@ -62,28 +64,28 @@ As
 
 	Set @DBName = DB_Name()
 
-	If Len(IsNull(@outFileFolderPath, '')) = 0 OR Len(IsNull(@ResultsFolderPath, '')) = 0
+	If Len(IsNull(@SourceFolderPath, '')) = 0 OR Len(IsNull(@ResultsFolderPath, '')) = 0
 	Begin
 		--------------------------------------------------------------
 		-- Get the file and folder paths
 		--------------------------------------------------------------
 		--
-		set @outFileFolderPathBase = ''
-		set @inFileFolderPathBase = ''
+		set @SourceFolderPathBase = ''
+		set @ResultsFolderPathBase = ''
 		
 		exec @myError = MT_Main..GetGANETFolderPaths
 											0,	-- @clientPerspective = false
-											'', -- @outFileName
-											@outFileFolderPathBase output,
-											'', -- @inFileName
-											@inFileFolderPathBase output,
-											'', -- @predFileName
+											'', -- @SourceFileName
+											@SourceFolderPathBase output,
+											'', -- @ResultsFileName
+											@ResultsFolderPathBase output,
+											'', -- @PredNETsFileName
 											@message  output
 		if @myError <> 0
 			Goto Done
 
-		Set @outFileFolderPath = dbo.udfCombinePaths(@outFileFolderPathBase, @DBName + '\')
-		Set @ResultsFolderPath = dbo.udfCombinePaths(@inFileFolderPathBase,  @DBName + '\')
+		Set @SourceFolderPath = dbo.udfCombinePaths(@SourceFolderPathBase, @DBName + '\')
+		Set @ResultsFolderPath = dbo.udfCombinePaths(@ResultsFolderPathBase,  @DBName + '\')
 	End
 
 	---------------------------------------------------
@@ -108,12 +110,12 @@ As
 	-- Assure that the output folder exists
 	-- Try to create it if it does not exist
 	---------------------------------------------------
-	exec @myError = ValidateFolderExists @outFileFolderPath, @CreateIfMissing = 1, @message = @message output
+	exec @myError = ValidateFolderExists @SourceFolderPath, @CreateIfMissing = 1, @message = @message output
 	
 	If @myError <> 0
 	Begin
 		if Len(IsNull(@message, '')) = 0
-			Set @message = 'Error verifying that the NET Processing output folder exists: ' + IsNull(@outFileFolderPath, '??')
+			Set @message = 'Error verifying that the NET Processing output folder exists: ' + IsNull(@SourceFolderPath, '??')
 		else
 			Set @message = @message + ' (NET Processing folder)'
 			
@@ -140,7 +142,7 @@ As
 		
 	---------------------------------------------------
 	-- Write the output files
-	-- Need to define @outFileName, @inFileName, and @predFileName based on @FirstJob and @Last Job
+	-- Define @SourceFileName, @ResultsFileName, @PredNETsFileName, and @ObsNETsFileName based on @FirstJob and @Last Job
 	---------------------------------------------------
 
 	If @LastJob = @FirstJob
@@ -148,20 +150,22 @@ As
 	Else
 		Set @JobFileSuffix = '_Jobs' + Convert(varchar(12), @FirstJob) + '-' + Convert(varchar(12), @LastJob) + '.txt'
 		
-	Set @outFileName = 'peptideGANET' + @JobFileSuffix
-	Set @inFileName = 'JobGANETs' + @JobFileSuffix
-	Set @predFileName = 'PredictGANETs' + @JobFileSuffix
+	Set @SourceFileName = 'peptideGANET' + @JobFileSuffix
+	Set @ResultsFileName = 'JobGANETs' + @JobFileSuffix
+	Set @PredNETsFileName = 'PredictGANETs' + @JobFileSuffix
+	Set @ObsNETsFileName = 'ObservedNETsAfterRegression' + @JobFileSuffix
 	Set @jobStatsFileName = 'jobStats' + @JobFileSuffix
 
 	--------------------------------------------------------------
 	-- Record the folder path and file names in T_NET_Update_Task
 	--------------------------------------------------------------
 	UPDATE T_NET_Update_Task
-	SET Output_Folder_Path = @outFileFolderPath,
-		Out_File_Name = @outFileName,
+	SET Output_Folder_Path = @SourceFolderPath,
+		Out_File_Name = @SourceFileName,
 		Results_Folder_Path = @ResultsFolderPath, 
-		Results_File_Name = @inFileName,
-		PredictNETs_File_Name = @predFileName
+		Results_File_Name = @ResultsFileName,
+		PredictNETs_File_Name = @PredNETsFileName,
+		ObservedNETs_File_Name = @ObsNETsFileName
 	WHERE Task_ID = @TaskID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -179,7 +183,7 @@ As
 	--
 	If IsNull(@exportJobStatsFileOnly, 0) = 0
 	Begin
-		Exec @myError = ExportGANETPeptideFile @outFileFolderPath, @outFileName, @TaskID, @UsePeakApex, @message Output
+		Exec @myError = ExportGANETPeptideFile @SourceFolderPath, @SourceFileName, @TaskID, @UsePeakApex, @message Output
 		--
 		if @myError <> 0
 			Goto Done
@@ -188,8 +192,23 @@ As
 	--------------------------------------------------------------
 	-- Write out the job stats file
 	--------------------------------------------------------------
+
+	/**************************************************************************
+	** xp_cmdshell note 
+	**
+	** When user MTSProc calls this SP, xp_cmdshell will run under the
+	** xp_cmdshell Proxy Account.  This account must be created
+	** by a system admin using:
+	**
+	** EXEC sp_xp_cmdshell_proxy_account 'PNL\MTSProc', 'TypePasswordHere';
+	**
+	** Additionally, when the password for MTSProc changes, this
+	** command must be run to update the password
+	** 
+	**************************************************************************/
+
 	--
-	Set @JobStatsFilePath = '"' + dbo.udfCombinePaths(@outFileFolderPath, @jobStatsFileName) + '"'
+	Set @JobStatsFilePath = '"' + dbo.udfCombinePaths(@SourceFolderPath, @jobStatsFileName) + '"'
 
 	-- Use a SQL query against a view linked to T_NET_Update_Task_Job_Map, along with a Where clause
 	Set @BcpSql = ''
@@ -204,7 +223,7 @@ As
 	if @myError <> 0
 	begin
 		-- Error writing file
-		Set @message = 'Error exporting data from V_MSMS_Analysis_Jobs to ' + @outFileFolderPath
+		Set @message = 'Error exporting data from V_MSMS_Analysis_Jobs to ' + @SourceFolderPath
 		goto done
 	end
 	
@@ -213,9 +232,8 @@ As
 Done:
 	return @myError
 
-
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite] AS [dbo]
 GO

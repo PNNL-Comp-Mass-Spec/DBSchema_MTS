@@ -27,6 +27,7 @@ CREATE Procedure dbo.UpdateMassTagsFromAvailableAnalyses
 **			09/06/2007 mem - Now looking up the value for 'Peptide_Load_Stats_Detail_Update_Interval' in T_Process_Config
 **			09/07/2007 mem - Now calling AddPeptideLoadStatEntries to add the detailed stat values to T_Peptide_Load_Stats
 **			02/26/2008 mem - Updated to call UpdateMassTagsFromMultipleAnalyses rather than importing data for one job at a time
+**			05/19/2009 mem - Now calling CreateAMTCollection if 'SaveAMTDetailsDuringJobLoad' is enabled
 **
 *****************************************************/
 (
@@ -79,6 +80,17 @@ As
 	Declare @MassTagUpdatedState int
 	Set @MassTagUpdatedState = 7
 	
+	Declare @SaveAMTDetails tinyint
+	Set @SaveAMTDetails = 0
+	
+	Declare @SaveAMTDetailsUsePMTQS tinyint
+	Set @SaveAMTDetailsUsePMTQS = 0
+
+	Declare @AMTDetailsUpdatePMTQS tinyint
+	Declare @AMTDetailsDiscriminantMinimum real
+	Declare @AMTDetailsPepProphetMinimum real
+	Declare @AMTDetailsPMTQSMinimum real
+								
 	-----------------------------------------------------------
 	-- Validate the inputs
 	-----------------------------------------------------------
@@ -108,7 +120,25 @@ As
 
 	If @MaxPeptidesPerBatch < 100
 		Set @MaxPeptidesPerBatch = 100
+	
+	-----------------------------------------------------------
+	-- Check whether or not AMT details should be saved after each batch of jobs is loaded
+	-----------------------------------------------------------
+	
+	SELECT @SaveAMTDetails = enabled
+	FROM T_Process_Step_Control
+	WHERE (Processing_Step_Name = 'SaveAMTDetailsDuringJobLoad')
+	
+	Set @SaveAMTDetails = IsNull(@SaveAMTDetails, 0)
+	
+
+	SELECT @SaveAMTDetailsUsePMTQS = enabled
+	FROM T_Process_Step_Control
+	WHERE (Processing_Step_Name = 'SaveAMTDetailsUsePMTQS')
+	
+	Set @SaveAMTDetailsUsePMTQS = IsNull(@SaveAMTDetailsUsePMTQS, 0)
 		
+	
 	-----------------------------------------------------------
 	-- Create a temporary table to track the available jobs,
 	--  ordered by Import_Priority and then by Job
@@ -373,10 +403,17 @@ As
 			-- Otherwise, only call AddPeptideLoadStatEntry once, using a Peptide Prophet threshold of 0.99
 
 			If @UpdatePeptideLoadStats <> 0
-			Begin
+			Begin -- <c1>
+
+				-- After each batch of jobs is loaded, we compute the peptide load stats and save them in T_Peptide_Load_Stats
+				-- We always save stats for Discriminant Score >= 0 and Peptide Prophet >= 0.99
+				-- If the number of jobs processed is >= @DetailedStatsInterval, then detailed stats are also saved
+					
 				If @JobCountCurrentBatch - @numProcessedLastDetailedStatsUpdate >= @DetailedStatsInterval
 				Begin
-					-- Call AddPeptideLoadStatEntries, it looks for 'Peptide_Load_Stats_Detail_Thresholds' entries
+					-- Need to save detailed stats information
+					
+					-- Call AddPeptideLoadStatEntries; it looks for 'Peptide_Load_Stats_Detail_Thresholds' entries
 					--  in T_Process_Config and calls AddPeptideLoadStatEntry for each entry
 					If @infoOnly = 0
 						exec AddPeptideLoadStatEntries @AnalysisStateMatch=@MassTagUpdatedState
@@ -387,10 +424,51 @@ As
 				End
 
 				If @infoOnly = 0
-					exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0, @PeptideProphetMinimum=0.99, @AnalysisStateMatch=@MassTagUpdatedState
+					exec AddPeptideLoadStatEntry @DiscriminantScoreMinimum=0, 
+												 @PeptideProphetMinimum=0.99, 
+												 @AnalysisStateMatch=@MassTagUpdatedState
 				Else
-					Print 'Call AddPeptideLoadStatEntries to add new stats to T_Peptide_Load_Stats using PeptideProphet >= 0.99'
-			End
+					Print 'Call AddPeptideLoadStatEntry to add new stats to T_Peptide_Load_Stats using PeptideProphet >= 0.99'
+			End -- </c1>
+			
+			
+			If @SaveAMTDetails <> 0
+			Begin -- <c2>
+				-----------------------------------------------------
+				-- Save the AMT details in T_MT_Collection 
+				-- and the associated tables
+				-----------------------------------------------------
+
+				If @InfoOnly = 0
+				Begin -- <d>
+					If @SaveAMTDetailsUsePMTQS = 0
+					Begin
+						Set @AMTDetailsDiscriminantMinimum = 0
+						Set @AMTDetailsPepProphetMinimum = 0.5
+						Set @AMTDetailsPMTQSMinimum = 0
+						Set @AMTDetailsUpdatePMTQS = 0
+					End
+					Else
+					Begin
+						Set @AMTDetailsDiscriminantMinimum = 0
+						Set @AMTDetailsPepProphetMinimum = 0
+						Set @AMTDetailsPMTQSMinimum = 1
+						Set @AMTDetailsUpdatePMTQS = 1
+					End
+					
+					exec @myError = CreateAMTCollection 
+										@DiscriminantScoreMinimum = @AMTDetailsDiscriminantMinimum, 
+										@PeptideProphetMinimum =    @AMTDetailsPepProphetMinimum,
+										@PMTQualityScoreMinimum =   @AMTDetailsPMTQSMinimum,
+										@RecomputeNET = 1,
+										@UpdateMTStats = 1,
+										@UpdatePMTQS = @AMTDetailsUpdatePMTQS,
+										@InfoOnly = @infoOnly
+				End -- </d>
+				Else
+					Print 'Call CreateAMTCollection'
+
+			End -- </c2>
 			
 			If @JobCountCurrentBatch = 0
 				Set @jobAvailable = 0
@@ -423,7 +501,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromAvailableAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromAvailableAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromAvailableAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromAvailableAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

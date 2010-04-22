@@ -9,10 +9,10 @@ CREATE TABLE [dbo].[T_Current_Activity](
 	[Type] [char](4) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Update_Began] [datetime] NULL,
 	[Update_Completed] [datetime] NULL,
-	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_Pause_Length_Minutes]  DEFAULT (0),
+	[Pause_Length_Minutes] [real] NOT NULL,
 	[State] [int] NULL,
 	[Comment] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Update_State] [int] NOT NULL CONSTRAINT [DF_T_Current_Activity_Update_State]  DEFAULT (0),
+	[Update_State] [int] NOT NULL,
 	[ET_Minutes_Last24Hours] [decimal](9, 2) NULL,
 	[ET_Minutes_Last7Days] [decimal](9, 2) NULL,
  CONSTRAINT [PK_T_Current_Activity] PRIMARY KEY NONCLUSTERED 
@@ -34,4 +34,8 @@ ALTER TABLE [dbo].[T_Current_Activity]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Curre
 REFERENCES [T_Update_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_Current_Activity] CHECK CONSTRAINT [FK_T_Current_Activity_T_Update_State_Name]
+GO
+ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Pause_Length_Minutes]  DEFAULT (0) FOR [Pause_Length_Minutes]
+GO
+ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Update_State]  DEFAULT (0) FOR [Update_State]
 GO

@@ -85,6 +85,21 @@ As
 	--------------------------------------------------------------
 	-- dump the peptides into a temporary file
 	--------------------------------------------------------------
+
+	/**************************************************************************
+	** xp_cmdshell note 
+	**
+	** When user MTSProc calls this SP, xp_cmdshell will run under the
+	** xp_cmdshell Proxy Account.  This account must be created
+	** by a system admin using:
+	**
+	** EXEC sp_xp_cmdshell_proxy_account 'PNL\MTSProc', 'TypePasswordHere';
+	**
+	** Additionally, when the password for MTSProc changes, this
+	** command must be run to update the password
+	** 
+	**************************************************************************/
+
 	-- 
 	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + '].dbo.V_MSMS_Analysis_Jobs ORDER BY Job" queryout ' + @JobStatsFilePath + ' -c -T'
 	--
@@ -105,9 +120,9 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[ExportGANETData] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[ExportGANETData] TO [pnl\MTSProc] AS [dbo]
 GO

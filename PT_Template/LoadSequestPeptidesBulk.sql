@@ -49,6 +49,8 @@ CREATE Procedure LoadSequestPeptidesBulk
 **			10/10/2007 mem - Now excluding reversed or scrambled proteins when looking for long protein names
 **			08/27/2008 mem - Added additional logging when LogLevel >= 2
 **			09/24/2008 mem - Now allowing for @FilterSetID to be 0 (which will disable any filtering)
+**			09/22/2009 mem - Now calling UpdatePeptideCleavageStateMax
+**			12/14/2009 mem - Now treating a mismatch between _ResultToSeqMap and _syn.txt as a non-fatal error, provided _ResultToSeqMap has 1 or more entries
 **
 *****************************************************/
 (
@@ -374,8 +376,8 @@ As
 	--	 Cleavage_State
 	--	 Terminus_State
 	--	 Protein_Name
-	--	 Protein_Expectation_Value_Log(e)	Base-10 log of the protein E-value
-	--	 Protein Intensity_Log(I)			Base-10 log of the protein intensity; simply the sum of the intensity values of all peptide's found for this protein in this job
+	--	 Protein_Expectation_Value_Log(e)	Base-10 log of the protein E-value (only used by XTandem)
+	--	 Protein Intensity_Log(I)			Base-10 log of the protein intensity; simply the sum of the intensity values of all peptide's found for this protein in this job (only used by XTandem)
 
 	CREATE TABLE #Tmp_Peptide_SeqToProteinMap (
 		Seq_ID_Local int NOT NULL ,
@@ -487,9 +489,20 @@ As
 		
 		If @ResultToSeqMapCountLoaded <> @ExpectedResultToSeqMapCount
 		Begin
-			Set @myError = 50002
 			Set @message = 'Row count in the _ResultToSeqMap.txt file does not match the expected unique row count determined for the Sequest _syn.txt file for job ' + @jobStr + ' (' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' vs. ' + Convert(varchar(12), @ExpectedResultToSeqMapCount) + ')'
-			Goto Done
+			
+			if @ResultToSeqMapCountLoaded = 0
+			Begin
+				Set @myError = 50002
+				Goto Done
+			End
+			Else
+			Begin
+				-- @ResultToSeqMapCountLoaded is non-zero; record this as a warning, but flag it as type 'Error' so it shows up in the daily e-mail
+				Set @message = 'Warning: ' + @message
+				execute PostLogEntry 'Error', @message, 'LoadSequestPeptidesBulk'
+				Set @message = ''
+			End
 		End
 
 		Set @SeqCandidateFilesFound = 1
@@ -1732,6 +1745,24 @@ As
 		Set @PeptideProphetCountLoaded = 0
 		Set @numAddedPepProphetScores = 0
 	End
+
+
+	-----------------------------------------------
+	-- Update column Cleavage_State_Max in T_Peptides
+	-----------------------------------------------
+	exec @myError = UpdatePeptideCleavageStateMax @JobList = @job, @message = @message output
+	
+	if @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling UpdatePeptideCleavageStateMax for job ' + @jobStr
+		Goto Done
+	End
+
+	Set @LogMessage = 'Updated Cleavage_State_Max in T_Peptides'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSequestPeptidesBulk'
+	
 	
 	-----------------------------------------------
 	-- Update column State_ID in T_Peptides
@@ -1783,7 +1814,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadSequestPeptidesBulk] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadSequestPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadSequestPeptidesBulk] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadSequestPeptidesBulk] TO [MTS_DB_Lite] AS [dbo]
 GO

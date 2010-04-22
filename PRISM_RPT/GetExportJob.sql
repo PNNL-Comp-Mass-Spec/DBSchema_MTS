@@ -144,3 +144,7 @@ AS
 		return 52001		-- Note that this return code is used by the QR Export Manager to indicate that no jobs are available
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[GetExportJob] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetExportJob] TO [MTS_DB_Lite] AS [dbo]
+GO

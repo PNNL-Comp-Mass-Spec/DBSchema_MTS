@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[QRRetrieveProteinsMultiQID] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure QRRetrieveProteinsMultiQID
@@ -45,6 +45,7 @@ CREATE Procedure QRRetrieveProteinsMultiQID
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
 **			01/24/2008 mem - Added @IncludeProteinDescription and @MinimumPeptidesPerProtein
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **
 ****************************************************/
 (
@@ -58,7 +59,8 @@ CREATE Procedure QRRetrieveProteinsMultiQID
 	@PreviewSql tinyint=0,
 	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
 	@IncludeQID tinyint = 0,							-- Set to 1 to include the Quantitation ID in column QID, just after the Sample Name
-	@MinimumPeptidesPerProtein tinyint = 0				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
+	@MinimumPeptidesPerProtein tinyint = 0,				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
+	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: SampleName, Reference, Protein Description, and Mod_Description
 )
 AS 
 
@@ -111,6 +113,7 @@ AS
 		--------------------------------------------------------------
 		-- Validate the inputs
 		--------------------------------------------------------------
+		--
 		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
 		Set @ReplicateCountAvgMinimum  = IsNull(@ReplicateCountAvgMinimum, 1)
 		Set @Description  = IsNull(@Description, '')
@@ -121,6 +124,7 @@ AS
 		Set @IncludeProteinDescription  = IsNull(@IncludeProteinDescription, 1)
 		Set @IncludeQID = IsNull(@IncludeQID, 0)
 		Set @MinimumPeptidesPerProtein  = IsNull(@MinimumPeptidesPerProtein, 0)
+		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -260,7 +264,12 @@ AS
 		Set @CurrentLocation = 'Populate @Sql'
 		
 		-- Generate the sql for the ORF columns in T_Quantitation_Results
-		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT, @IncludeProteinDescription=@IncludeProteinDescription, @IncludeQID=@IncludeQID
+		Exec QRGenerateORFColumnSql @ERValuesPresent, 
+									@ORFColumnSql = @OrfColumnSql OUTPUT, 
+									@IncludeProteinDescription=@IncludeProteinDescription, 
+									@IncludeQID=@IncludeQID,
+									@ChangeCommasToSemicolons = @ChangeCommasToSemicolons
+									
 		Set @Sql = @ORFColumnSql
 		
 		Set @Sql = @Sql + ' ' + @ReplicateAndFractionSql								-- Note, if this variable has text, it will end in a comma
@@ -298,10 +307,11 @@ Done:
 	--
 	Return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[QRRetrieveProteinsMultiQID] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRRetrieveProteinsMultiQID] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteinsMultiQID] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteinsMultiQID] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteinsMultiQID] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRRetrieveProteinsMultiQID] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -42,13 +42,19 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			11/30/2006 mem - Implemented Try...Catch error handling
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
 **			08/20/2008 mem - Now checking for jobs where all of the loaded peptides have State_ID = 2
+**			01/30/2010 mem - Added parameters @infoOnly, @MaxRowsToProcess, @OnlyProcessNullSeqIDRows, and @SkipDeleteTempTables
+**			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **    
 *****************************************************/
 (
 	@NextProcessState int = 30,
 	@job int,
 	@count int=0 output,
-	@message varchar(512)='' output
+	@message varchar(512)='' output,
+	@infoOnly tinyint = 0,
+	@MaxRowsToProcess int = 0,
+	@OnlyProcessNullSeqIDRows tinyint = 0,
+	@SkipDeleteTempTables tinyint = 0
 )
 As
 	Set NoCount On
@@ -64,9 +70,12 @@ As
 	
 	set @count = 0	
 	set @message = ''
+	set @MaxRowsToProcess = IsNull(@MaxRowsToProcess, 0)
+	Set @OnlyProcessNullSeqIDRows = IsNull(@OnlyProcessNullSeqIDRows, 0)
+	Set @SkipDeleteTempTables = IsNull(@SkipDeleteTempTables, 0)
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'Porky'
+	set @MasterSequencesServerName = 'ProteinSeqs2'
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -91,7 +100,7 @@ As
 	
 	declare @logLevel int
 	set @logLevel = 1		-- Default to normal logging
-
+	
 	Begin Try
 		Set @CurrentLocation = 'Lookup settings in T_Process_Step_Control and T_Analysis_Description'
 		
@@ -171,8 +180,8 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 		--
-		-- Warning: Update @MasterSequencesServerName above if changing from Porky to another computer
-		exec Porky.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
+		-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs2 to another computer
+		exec ProteinSeqs2.Master_Sequences.dbo.CreateTempSequenceTables @PeptideSequencesTableName output, @UniqueSequencesTableName output
 		--
 		SELECT @myRowcount = @@rowcount, @myError = @@error
 		--
@@ -183,6 +192,10 @@ As
 		end
 		else
 			set @DeleteTempTables = 1
+
+		If @SkipDeleteTempTables <> 0
+			Set @DeleteTempTables = 0
+			
 
 		-----------------------------------------------------------
 		-- Populate @PeptideSequencesTableName with the data to parse
@@ -195,12 +208,20 @@ As
 		--
 		Set @Sql = ''
 		Set @Sql = @Sql + ' INSERT INTO ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' (Peptide_ID, Peptide)'
-		Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
+		If @MaxRowsToProcess > 0
+			Set @Sql = @Sql + ' SELECT TOP ' + Convert(varchar(12), @MaxRowsToProcess) + ' Peptide_ID, Peptide'
+		Else
+			Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
 		Set @Sql = @Sql + ' FROM T_Peptides'
 		Set @Sql = @Sql + ' WHERE Analysis_ID = ' + @jobStr
 		If @SkipPeptidesFromReversedProteins <> 0
 			Set @Sql = @Sql + ' AND State_ID <> 2'
+		If @OnlyProcessNullSeqIDRows <> 0
+			Set @Sql = @Sql + ' AND Seq_ID Is Null'
 		--
+		If @infoOnly <> 0
+			Print @sql
+			
 		Exec (@Sql)
 		--
 		SELECT @myRowcount = @@rowcount, @myError = @@error
@@ -221,13 +242,17 @@ As
 			set @message = @message + '; Process_state for this job will be set to 5'
 			Set @NextProcessState = 5
 
-			Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
-			Exec SetProcessState @job, @NextProcessState
+			If @infoOnly <> 0
+				Print @Message
+			Else
+			Begin
+				Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
+				Exec SetProcessState @job, @NextProcessState
+			End
 
 			Set @myError = 51113
 			Goto Done
 		end
-		
 		
 		-----------------------------------------------------------
 		-- Call GetIDsForRawSequences to process the data in the temporary sequence tables
@@ -238,7 +263,8 @@ As
 		If @logLevel >= 1
 			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 		--
-		exec @myError = Porky.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
+		If @infoOnly = 0
+			exec @myError = ProteinSeqs2.Master_Sequences.dbo.GetIDsForRawSequences @parameterFileName, @OrganismDBFileID, @ProteinCollectionFileID,
 																@PeptideSequencesTableName, @UniqueSequencesTableName, @processCount output, @message output
 		--
 		if @myError <> 0
@@ -267,7 +293,10 @@ As
 		Set @Sql = @Sql + '    LEFT OUTER JOIN T_Sequence ON S.Seq_ID = T_Sequence.Seq_ID'
 		Set @Sql = @Sql + ' WHERE T_Sequence.Seq_ID IS NULL'
 		--
-		Exec (@Sql)
+		If @infoOnly <> 0
+			Print @Sql
+		Else
+			Exec (@Sql)
 		--
 		SELECT @myError = @@error, @myRowcount = @@rowcount
 		--
@@ -289,7 +318,10 @@ As
 		Set @Sql = @Sql + ' FROM ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' AS P' 
 		Set @Sql = @Sql + '    INNER JOIN T_Peptides ON T_Peptides.Peptide_ID = P.Peptide_ID'
 		--
-		Exec (@Sql)
+		If @infoOnly <> 0
+			Print @Sql
+		Else
+			Exec (@Sql)
 		--
 		SELECT @myError = @@error, @myRowcount = @@rowcount
 
@@ -305,32 +337,67 @@ As
 		If @logLevel >= 1
 			execute PostLogEntry 'Progress', @message, 'UpdateSequenceModsForOneAnalysisBulk'
 		--	
-		UPDATE T_Sequence
-		SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
-		FROM T_Sequence Seq INNER JOIN (
-			SELECT Pep.Seq_ID, MAX(ISNULL(PPM.Cleavage_State, 0)) AS Cleavage_State_Max
-			FROM T_Peptides Pep INNER JOIN
-				T_Peptide_to_Protein_Map PPM ON 
-				Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
-				T_Sequence ON Pep.Seq_ID = T_Sequence.Seq_ID
-			WHERE Pep.Analysis_ID = @job
-			GROUP BY Pep.Seq_ID
-			) LookupQ ON Seq.Seq_ID = LookupQ.Seq_ID
-		WHERE LookupQ.Cleavage_State_Max > Seq.Cleavage_State_Max OR
-			Seq.Cleavage_State_Max IS NULL
-		--
-		SELECT @myRowcount = @@rowcount, @myError = @@error
+		If @infoOnly = 0
+		Begin
+			UPDATE T_Sequence
+			SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
+			FROM T_Sequence Seq INNER JOIN (
+				SELECT Pep.Seq_ID, MAX(ISNULL(PPM.Cleavage_State, 0)) AS Cleavage_State_Max
+				FROM T_Peptides Pep INNER JOIN
+					T_Peptide_to_Protein_Map PPM ON 
+					Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
+					T_Sequence ON Pep.Seq_ID = T_Sequence.Seq_ID
+				WHERE Pep.Analysis_ID = @job
+				GROUP BY Pep.Seq_ID
+				) LookupQ ON Seq.Seq_ID = LookupQ.Seq_ID
+			WHERE LookupQ.Cleavage_State_Max > Seq.Cleavage_State_Max OR
+				Seq.Cleavage_State_Max IS NULL
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
 
+			-----------------------------------------------------------
+			-- Update state of analysis job
+			-----------------------------------------------------------
+			--
+			
+	--		If @MaxRowsToProcess = 0
+	--		Begin
+	--			Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
+	--			Exec SetProcessState @job, @NextProcessState
+	--		End
+	--		Else
+	--		Begin
 
-		-----------------------------------------------------------
-		-- Update state of analysis job
-		-----------------------------------------------------------
-		--
-		Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
-		Exec SetProcessState @job, @NextProcessState
+			-- Only advance the state if all of the peptides now have Seq_ID values defined
+			Set @myRowCount = 0
+			
+			SELECT @myRowCount = COUNT(*)
+			FROM T_Peptides
+			WHERE Analysis_ID = @Job AND
+				Seq_ID IS NULL AND
+				(@SkipPeptidesFromReversedProteins = 0 OR
+				@SkipPeptidesFromReversedProteins <> 0 AND
+				State_ID <> 2)
+			
+			If @myRowCount > 0
+			Begin
+				Set @message = 'Job ' + @jobStr + ' has ' + Convert(varchar(12), @myRowCount) + ' rows in T_Peptides with null Seq_ID values; will not advance the state to ' + Convert(varchar(12), @NextProcessState)
+				
+				If @MaxRowsToProcess = 0
+					Exec PostLogEntry 'Error', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+				Else
+					Exec PostLogEntry 'Warning', @message, 'UpdateSequenceModsForOneAnalysisBulk'
+			End
+			Else
+			Begin
+				Set @CurrentLocation = 'Update state for job ' + @jobStr + ' to ' + Convert(varchar(12), @NextProcessState)
+				Exec SetProcessState @job, @NextProcessState
+			End
 
-		set @count = @processCount
-		set @message = 'Peptide sequence mods updated for job ' + @jobStr + '; Sequences processed: ' + convert(varchar(11), @processCount) + '; New sequences added: ' + convert(varchar(11), @sequencesAdded)
+			set @count = @processCount
+			set @message = 'Peptide sequence mods updated for job ' + @jobStr + '; Sequences processed: ' + convert(varchar(11), @processCount) + '; New sequences added: ' + convert(varchar(11), @sequencesAdded)
+		End
+		
 	End Try
 	Begin Catch
 		-- Error caught; log the error then abort processing
@@ -341,6 +408,7 @@ As
 	End Catch		
 	
 Done:
+
 	
 	-----------------------------------------------------------
 	-- Delete the temporary sequence tables, since no longer needed
@@ -350,7 +418,7 @@ Done:
 	Begin
 		Begin Try
 			Set @CurrentLocation = 'Delete temporary tables ' + @PeptideSequencesTableName + ' and ' + @UniqueSequencesTableName
-			exec Porky.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
+			exec ProteinSeqs2.Master_Sequences.dbo.DropTempSequenceTables @PeptideSequencesTableName, @UniqueSequencesTableName
 		End Try
 		Begin Catch
 			-- Error caught
@@ -364,7 +432,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Lite] AS [dbo]
 GO

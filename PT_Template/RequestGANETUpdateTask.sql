@@ -33,21 +33,34 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			12/11/2005 mem - Updated to support XTandem results
 **			07/03/2006 mem - Updated to use T_Analysis_Description.RowCount_Loaded to quickly determine the number of peptides loaded for each job
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			03/13/2010 mem - Reordered the parameters and added several new parameters (@obsNETsFile, @unmodifiedPeptidesOnly, @noCleavageRuleFilters, and @RegressionOrder)
+**			03/19/2010 mem - Added parameter @ParamFileName
+**			04/21/2010 mem - Now examining field Regression_Param_File when looking for available jobs
 **
 *****************************************************/
 (
 	@processorName varchar(128),
-	@outFileFolderPath varchar(256) = '',			-- Path to folder containing source data; if blank, then will look up path in MT_Main
 	@TaskID int output,								-- The job to process; if processing several jobs at once, then the first job number in the batch
 	@taskAvailable tinyint output,
-	@outFileName varchar(256) output,				-- Source file name
-	@inFileName varchar(256) output,				-- Results file name
-	@predFileName varchar(256) output,				-- Predict NETs results file name
+
+	@SourceFolderPath varchar(256) = '',			-- Path to folder containing source data; if blank, then will look up path in MT_Main (e.g. I:\GA_Net_Xfer\Out\PT_Shewanella_ProdTest_A123\)
+	@SourceFileName varchar(256) = '' output,		-- Source file name
+
+	@ResultsFolderPath varchar(256) = '',			-- Path to folder containing the results; if blank, then will look up path in MT_Main (e.g. I:\GA_Net_Xfer\In\PT_Shewanella_ProdTest_A123\)
+	@ResultsFileName varchar(256) = '' output,		-- Results file name
+	@PredNETsFileName varchar(256) = '' output,		-- Predict NETs results file name
+	@ObsNETsFileName varchar(256) = '' output,		-- Observed NETs results file name
+
+	@ParamFileName varchar(256) = '' output,		-- If this is defined, then settings in the parameter file will superseded the following 5 parameters
+	
+	@unmodifiedPeptidesOnly tinyint = 0 output,		-- 1 if we should only consider unmodified peptides
+	@noCleavageRuleFilters tinyint = 0 output,		-- 1 if we should use the looser filters that do not consider cleavage rules
+	@RegressionOrder tinyint = 3 output,			-- 1 for linear regression, >=2 for non-linear regression
+	
 	@message varchar(512) output,
 	@ProcessStateMatch int = 40,
 	@NextProcessState int = 45,
 	@GANETProcessingTimeoutState int = 44,
-	@ResultsFolderPath varchar(256) = '',			-- Path to folder containing the results; if blank, then will look up path in MT_Main
 	@BatchSize int = 0,								-- If non-zero, then this value overrides the one present in T_Process_Config, entry NET_Update_Batch_Size
 	@MaxPeptideCount int = 0						-- If non-zero, then this value overrides the one present in T_Process_Config, entry NET_Update_Max_Peptide_Count
 )
@@ -58,6 +71,9 @@ As
 	declare @myRowCount int
 	set @myError = 0
 	set @myRowCount = 0
+
+	declare @MatchCount int
+	declare @ParamFileMatch varchar(256)
 	
 	set @message = ''
 		
@@ -66,14 +82,25 @@ As
 	---------------------------------------------------
 	set @TaskID = 0
 	set @TaskAvailable = 0
-	set @outFileName = ''
-	set @inFileName = ''
-	set @predFileName = ''
+
 	set @message = ''
 
-	declare @MatchCount int
-	declare @S varchar(1024)
+	set @SourceFolderPath = ''
+	set @SourceFileName = ''
+	
+	set @ResultsFolderPath = ''
+	set @ResultsFileName = ''
+	set @PredNETsFileName = ''	
+	set @ObsNETsFileName = ''
+	
+	Set @ParamFileName = ''
+	
+	set @UnmodifiedPeptidesOnly = 0		-- 1 if we should only consider unmodified peptides and peptides with alkylated cysteine
+	set @NoCleavageRuleFilters = 0		-- 1 if we should use the looser filters that do not consider cleavage rules
+	Set @RegressionOrder = 3			-- 1 for first order, 3 for non-linear
 
+	set @taskAvailable = 0
+	
 	-----------------------------------------------
 	-- Populate a temporary table with the list of known Result Types appropriate for NET alignment
 	-----------------------------------------------
@@ -179,6 +206,54 @@ As
 	
 	
 	---------------------------------------------------
+	-- Lookup the value for @BatchSize
+	---------------------------------------------------
+	
+	If IsNull(@BatchSize, 0) <= 0
+	Begin
+		Set @BatchSize = 0
+		SELECT TOP 1 @BatchSize = Value
+		FROM T_Process_Config
+		WHERE [Name] = 'NET_Update_Batch_Size'
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		-- Default to a batch size of 100 if an error occurs
+		If @MyRowCount = 0 Or @myError <> 0
+			Set @Batchsize = 100
+		Else
+			If IsNull(@BatchSize, 0) <= 0
+				Set @BatchSize = 100
+	End
+	
+	---------------------------------------------------
+	-- Lookup the value for @MaxPeptideCount
+	---------------------------------------------------
+	
+	If IsNull(@MaxPeptideCount, 0) <= 0
+	Begin
+		Set @MaxPeptideCount = 0
+		SELECT TOP 1 @MaxPeptideCount = Value
+		FROM T_Process_Config
+		WHERE [Name] = 'NET_Update_Max_Peptide_Count'
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		-- Default to a max peptide count of 200000 if an error occurs
+		If @MyRowCount = 0 Or @myError <> 0
+			Set @MaxPeptideCount = 200000
+		Else
+			If IsNull(@MaxPeptideCount, 0) <= 0
+				Set @MaxPeptideCount = 200000
+	End
+	
+	If @BatchSize < 1
+		Set @BatchSize = 1
+	If @MaxPeptideCount < 1
+		Set @MaxPeptideCount = 1
+
+	
+	---------------------------------------------------
 	-- Start transaction
 	---------------------------------------------------
 	--
@@ -231,80 +306,55 @@ As
 		goto done
 	end
 	
-	---------------------------------------------------
-	-- Lookup the value for @BatchSize
-	---------------------------------------------------
-	
-	If IsNull(@BatchSize, 0) <= 0
-	Begin
-		Set @BatchSize = 0
-		SELECT TOP 1 @BatchSize = Value
-		FROM T_Process_Config
-		WHERE [Name] = 'NET_Update_Batch_Size'
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
-		-- Default to a batch size of 100 if an error occurs
-		If @MyRowCount = 0 Or @myError <> 0
-			Set @Batchsize = 100
-		Else
-			If IsNull(@BatchSize, 0) <= 0
-				Set @BatchSize = 100
-	End
-	
-	---------------------------------------------------
-	-- Lookup the value for @MaxPeptideCount
-	---------------------------------------------------
-	
-	If IsNull(@MaxPeptideCount, 0) <= 0
-	Begin
-		Set @MaxPeptideCount = 0
-		SELECT TOP 1 @MaxPeptideCount = Value
-		FROM T_Process_Config
-		WHERE [Name] = 'NET_Update_Max_Peptide_Count'
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
-		-- Default to a max peptide count of 200000 if an error occurs
-		If @MyRowCount = 0 Or @myError <> 0
-			Set @MaxPeptideCount = 200000
-		Else
-			If IsNull(@MaxPeptideCount, 0) <= 0
-				Set @MaxPeptideCount = 200000
-	End
-	
-	If @BatchSize < 1
-		Set @BatchSize = 1
-	If @MaxPeptideCount < 1
-		Set @MaxPeptideCount = 1
 	
 	---------------------------------------------------
 	-- Find up to @BatchSize jobs in state @ProcessStateMatch
 	-- Limit the number of entries to @MaxPeptideCount peptides (though, require a minimum of one job)
 	-- Only grab the Job numbers at this time
+	--
+	-- If any of the available jobs has a NET regression param file defined in T_Analysis_Description
+	--  then we preferentially choose those jobs (being sure to only choose jobs with the same param file name)
 	---------------------------------------------------
 
-	Set @S = ''
-	Set @S = @S + ' INSERT INTO T_NET_Update_Task_Job_Map (Task_ID, Job)'
-	Set @S = @S + ' SELECT ' + Convert(varchar(9), @TaskID) + ' AS Task_ID, A.Job'
-	Set @S = @S + ' FROM ('
-	Set @S = @S +   ' SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, IsNull(TAD.RowCount_Loaded,0) AS PeptideCount'
-	Set @S = @S +   ' FROM T_Analysis_Description TAD WITH (HoldLock) INNER JOIN'
- 	Set @S = @S +        ' #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType'
-	Set @S = @S +   ' WHERE TAD.Process_State = ' + Convert(varchar(9), @ProcessStateMatch)
-	Set @S = @S +   ' ORDER BY TAD.Job'
-	Set @S = @S +   ' ) A INNER JOIN ('
-	Set @S = @S +   ' SELECT TOP ' + Convert(varchar(9), @BatchSize) + ' TAD.Job, IsNull(TAD.RowCount_Loaded,0) AS PeptideCount'
-	Set @S = @S +   ' FROM T_Analysis_Description TAD INNER JOIN'
- 	Set @S = @S +        ' #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType'
-	Set @S = @S +   ' WHERE TAD.Process_State =  ' + Convert(varchar(9), @ProcessStateMatch)
-	Set @S = @S +   ' ORDER BY TAD.Job'
-	Set @S = @S +   ' ) B ON B.Job <= A.Job'
-	Set @S = @S + ' GROUP BY A.Job'
-	Set @S = @S + ' HAVING SUM(B.PeptideCount) < ' + Convert(varchar(12), @MaxPeptideCount)
-	Set @S = @S + ' ORDER BY A.Job ASC'
-	--	
-	Exec (@S)
+	Set @ParamFileMatch = ''
+	
+	-- See if any of the available jobs have a customized Regression Parameter File defined
+	--			
+	SELECT TOP 1 @ParamFileMatch = Regression_Param_File
+	FROM T_Analysis_Description TAD
+	     INNER JOIN #T_ResultTypeList RTL
+	       ON TAD.ResultType = RTL.ResultType
+	WHERE TAD.Process_State = @ProcessStateMatch AND
+	      IsNull(TAD.Regression_Param_File, '') <> ''
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	-- Now find jobs that are in state @ProcessStateMatch and use @ParamFileMatch (which could be blank)
+	--
+	INSERT INTO T_NET_Update_Task_Job_Map ( Task_ID, Job )
+	SELECT @TaskID AS Task_ID, A.Job
+	FROM ( SELECT TOP ( @BatchSize ) TAD.Job,
+	                                 IsNull(TAD.RowCount_Loaded, 0) AS PeptideCount
+	       FROM T_Analysis_Description TAD WITH ( HoldLock )
+	            INNER JOIN #T_ResultTypeList RTL
+	              ON TAD.ResultType = RTL.ResultType
+	       WHERE TAD.Process_State = @ProcessStateMatch AND
+	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
+	       ORDER BY TAD.Job 
+	     ) A
+	     INNER JOIN
+	     ( SELECT TOP ( @BatchSize ) TAD.Job,
+	                                 IsNull(TAD.RowCount_Loaded, 0) AS PeptideCount
+	       FROM T_Analysis_Description TAD WITH ( HoldLock )
+	            INNER JOIN #T_ResultTypeList RTL
+	              ON TAD.ResultType = RTL.ResultType
+	       WHERE TAD.Process_State = @ProcessStateMatch AND
+	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
+	       ORDER BY TAD.Job 
+	     ) B ON B.Job <= A.Job
+	GROUP BY A.Job
+	HAVING SUM(B.PeptideCount) < @MaxPeptideCount
+	ORDER BY A.Job ASC
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -313,21 +363,21 @@ As
 		rollback transaction @transName
 		set @message = 'Error trying to find viable record(s)'
 		goto done
-	end
+	end		
+
 
 	If @myRowCount = 0
 	Begin
 		-- The @MaxPeptideCount filter filtered out all of the jobs
-		-- Repeat the insert and only insert one job into the task
-
-		Set @S = ''
-		Set @S = @S + ' INSERT INTO T_NET_Update_Task_Job_Map (Task_ID, Job)'
-		Set @S = @S + ' SELECT TOP 1 ' +  Convert(varchar(9), @TaskID) + ' AS Task_ID, Job'
-		Set @S = @S + ' FROM T_Analysis_Description WITH (HoldLock)'
-		Set @S = @S + ' WHERE Process_State = ' + Convert(varchar(9), @ProcessStateMatch)
-		Set @S = @S + ' ORDER BY Job ASC'
+		-- Repeat the insert but only grab the first available job
 		
-		Exec (@S)
+		INSERT INTO T_NET_Update_Task_Job_Map ( Task_ID, Job )
+		SELECT TOP 1 @TaskID AS Task_ID, Job
+		FROM T_Analysis_Description TAD WITH ( HoldLock )
+		     INNER JOIN #T_ResultTypeList RTL
+		       ON TAD.ResultType = RTL.ResultType
+		WHERE TAD.Process_State = @ProcessStateMatch
+		ORDER BY Job ASC
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -338,6 +388,21 @@ As
 			goto done
 		end
 
+		if @myRowCount = 0
+		begin
+			rollback transaction @transName
+			set @message = 'There are no longer any jobs with state ' + Convert(varchar(12), @ProcessStateMatch) + '; unable to continue'
+			goto done
+		end
+		
+		-- Update ParamFileMatch if this job has a Regression parameter file defined
+		--
+		SELECT @ParamFileMatch = IsNull(TAD.Regression_Param_File, '')
+		FROM T_NET_Update_Task_Job_Map TJM
+		     INNER JOIN T_Analysis_Description TAD
+		       ON TJM.Job = TAD.Job
+		WHERE Task_ID = @TaskID
+		
 	End
 	
 	---------------------------------------------------
@@ -366,16 +431,37 @@ As
 
 
 	---------------------------------------------------
+	-- Set the default values for these parameters
+	-- If a parameter file is defined via @ParamFileMatch or 
+	--  is defined in in T_Process_Config, then these defaults will get superseded
+	---------------------------------------------------
+	--
+	set @unmodifiedPeptidesOnly = 0		-- 1 if we should only consider unmodified peptides and peptides with alkylated cysteine
+	set @noCleavageRuleFilters = 0		-- 1 if we should use the looser filters that do not consider cleavage rules
+	Set @RegressionOrder = 3			-- 1 for first order, 3 for non-linear
+
+	If IsNull(@ParamFileMatch, '') = ''
+	Begin
+		Set @ParamFileName = ''
+		SELECT @ParamFileName = Value
+		FROM T_Process_Config 
+		WHERE [Name] = 'NET_Regression_Param_File_Name'
+	End
+	Else
+		Set @ParamFileName = @ParamFileMatch
+
+	---------------------------------------------------
 	-- Write the output files
 	---------------------------------------------------
 
 	Exec @myError = ExportGANETData @TaskID,
-									@outFileFolderPath, 
-									@ResultsFolderPath,
-									@outFileName = @outFileName OUTPUT, 
-									@inFileName = @inFileName OUTPUT, 
-									@predFileName = @predFileName OUTPUT, 
-									@message = @message OUTPUT
+									@SourceFolderPath = @SourceFolderPath, 
+									@ResultsFolderPath = @ResultsFolderPath,
+									@SourceFileName = @SourceFileName output, 
+									@ResultsFileName = @ResultsFileName output, 
+									@PredNETsFileName = @PredNETsFileName output, 
+									@ObsNETsFileName = @ObsNETsFileName output,
+									@message = @message output
 	--
 	if @myError = 0
 	begin
@@ -411,9 +497,9 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc] AS [dbo]
 GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadGANETJobFile
+CREATE Procedure LoadGANETJobFile
 /****************************************************
 **
 **	Desc: 
@@ -22,12 +22,13 @@ CREATE Procedure dbo.LoadGANETJobFile
 **			05/28/2005 mem - Switched from @InFolder to @ResultsFolderPath, which is the full path to the results folder)
 **			06/04/2006 mem - Increased size of the @filePath variable and the @c variable (used for Bulk Insert)
 **			07/04/2006 mem - Now checking for a header row in the input file; also, updated to use udfCombinePaths and to correct some comments
+**			03/17/2010 mem - Now populating Regression_Order, Regression_Filtered_Data_Count, Regression_Equation, and Regression_Equation_XML to T_Analysis_Description
 **
 *****************************************************/
 (
 	@file varchar(255) = 'JobGANETs.txt',
 	@ResultsFolderPath varchar(255) = 'F:\GA_Net_Xfer\In\',
-	@message varchar(255) = '' out,
+	@message varchar(255) = '' output,
 	@numLoaded int = 0 out
 )
 AS
@@ -43,7 +44,8 @@ AS
 
 	set @message = ''
 	set @numLoaded = 0
-	
+
+	declare @S varchar(1024)	
 	declare @result int
 	declare @filePath varchar(512)
 	
@@ -79,9 +81,9 @@ AS
 		End
 		Else
 		Begin
-			If @columnCount <> 5
+			If @columnCount <> 5 And @columnCount <> 9
 			Begin
-				Set @message = 'GANET job file contains ' + convert(varchar(11), @columnCount) + ' columns (Expecting 5 columns)'
+				Set @message = 'GANET job file contains ' + convert(varchar(11), @columnCount) + ' columns (Expecting 5 columns or 9 columns)'
 				set @myError = 50003
 			End
 		End
@@ -116,6 +118,17 @@ AS
 		goto Done
 	end
 	
+	If @columnCount > 5
+	Begin
+		-- Add the additional columns now so they 
+		--  will be populated during the Bulk Insert operation
+		ALTER TABLE #T_GAImport ADD
+			Regression_Order tinyint NULL,
+			Regression_Filtered_Data_Count int NULL,
+			Regression_Equation varchar(512),
+			Regression_Equation_XML varchar(max) NULL
+	End
+	
 	-----------------------------------------------
 	-- bulk load contents of results file into temporary table
 	-- using bulk insert function
@@ -138,13 +151,34 @@ AS
 	-- table from contents of temporary table
 	-----------------------------------------------
 	--
-	UPDATE TAD
-	SET	TAD.ScanTime_NET_Slope = GA.Slope,
-		TAD.ScanTime_NET_Intercept = GA.Intercept, 
-		TAD.ScanTime_NET_Fit = GA.Fit,
-		TAD.ScanTime_NET_RSquared = GA.RSquared
-	FROM T_Analysis_Description AS TAD
-	INNER JOIN #T_GAImport AS GA ON TAD.Job = GA.Job
+	Set @S = ''
+	
+	If @columnCount = 5
+	Begin
+		Set @S = @S + ' UPDATE TAD '
+		Set @S = @S +   ' SET TAD.ScanTime_NET_Slope = GA.Slope, '
+		Set @S = @S +   ' TAD.ScanTime_NET_Intercept = GA.Intercept, '
+		Set @S = @S +   ' TAD.ScanTime_NET_Fit = GA.Fit,'
+		Set @S = @S +   ' TAD.ScanTime_NET_RSquared = GA.RSquared'
+		Set @S = @S + ' FROM T_Analysis_Description AS TAD'
+		Set @S = @S +   ' INNER JOIN #T_GAImport AS GA ON TAD.Job = GA.Job'
+	End
+	Else
+	Begin	
+		Set @S = @S + ' UPDATE TAD '
+		Set @S = @S +   ' SET TAD.ScanTime_NET_Slope = GA.Slope, '
+		Set @S = @S +   ' TAD.ScanTime_NET_Intercept = GA.Intercept, '
+		Set @S = @S +   ' TAD.ScanTime_NET_Fit = GA.Fit,'
+		Set @S = @S +   ' TAD.ScanTime_NET_RSquared = GA.RSquared,'
+		Set @S = @S +   ' TAD.Regression_Order = GA.Regression_Order,'
+		Set @S = @S +   ' TAD.Regression_Filtered_Data_Count = GA.Regression_Filtered_Data_Count,'
+		Set @S = @S +   ' TAD.Regression_Equation = GA.Regression_Equation, '
+		Set @S = @S +   ' TAD.Regression_Equation_XML = GA.Regression_Equation_XML'
+		Set @S = @S + ' FROM T_Analysis_Description AS TAD'
+		Set @S = @S +   ' INNER JOIN #T_GAImport AS GA ON TAD.Job = GA.Job'
+	End
+	
+	EXEC (@S)
 	--
 	SELECT @myError = @@error, @myRowCount = @myRowCount + @@rowcount
 	--
@@ -162,9 +196,8 @@ AS
 Done:	
 	return @myError
 
-
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadGANETJobFile] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETJobFile] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadGANETJobFile] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETJobFile] TO [MTS_DB_Lite] AS [dbo]
 GO

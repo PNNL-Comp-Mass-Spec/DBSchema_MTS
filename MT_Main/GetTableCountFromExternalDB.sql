@@ -51,5 +51,9 @@ AS
 			
 
 GO
-GRANT EXECUTE ON [dbo].[GetTableCountFromExternalDB] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetTableCountFromExternalDB] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetTableCountFromExternalDB] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetTableCountFromExternalDB] TO [MTS_DB_Lite] AS [dbo]
 GO

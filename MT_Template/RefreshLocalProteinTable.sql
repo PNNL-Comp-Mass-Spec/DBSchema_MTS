@@ -10,7 +10,7 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **	Desc:	Updates local copy of the Protein table from 
 **			associated Protein database.
 **
-**	Return values: 0: End of line not yet encountered
+**	Return values: 0 if no error, non-zero if an error
 **
 **	Auth:	grk
 **	Date:	12/18/2001
@@ -28,6 +28,9 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **			08/16/2006 mem - Added option @SwitchFromLegacyDBToProteinCollection
 **			09/29/2006 mem - Now verifying that each protein database actually exists on this server.  If it doesn't, then posts an error message if the name is not 'na', '(na)', 'none', or blank
 **			10/07/2007 mem - Increased size of @ProteinCollectionList to varchar(max)
+**			03/10/2009 mem - Added output parameters @ProteinCountAdded and @ProteinCountUpdated
+**						   - Now logging the number of proteins added and/or updated
+**			10/30/2009 mem - Now properly updating @ProteinCountUpdated when using the Protein Sequences DB
 **    
 *****************************************************/
 (
@@ -35,7 +38,10 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 	@infoOnly int = 0,
 	@importAllProteins int = 1,
 	@ForceLegacyDBProcessing tinyint = 0,						-- Set to 1 to force processing of legacy protein DBs defined in T_Process_Config even If 'UseProteinSequencesDB' is enabled in T_Process_Step_Control
-	@SwitchFromLegacyDBToProteinCollection tinyint = 0			-- Set to 1 to update the entries in T_Proteins to use a protein collection (defined in T_Process_Config or T_Analysis_Description) if possible
+	@SwitchFromLegacyDBToProteinCollection tinyint = 0,			-- Set to 1 to update the entries in T_Proteins to use a protein collection (defined in T_Process_Config or T_Analysis_Description) if possible
+	@ProteinCountAdded int = 0 output,							-- The number of new proteins added
+	@ProteinCountUpdated int = 0 output							-- The number of proteins updated
+
 )
 As
 	Set nocount on 
@@ -44,11 +50,6 @@ As
 	declare @myRowCount int
 	Set @myError = 0
 	Set @myRowCount = 0
-	
-	Set @message = ''
-	Set @importAllProteins = IsNull(@importAllProteins, 1)
-	Set @ForceLegacyDBProcessing = IsNull(@ForceLegacyDBProcessing, 0)
-	Set @SwitchFromLegacyDBToProteinCollection = IsNull(@SwitchFromLegacyDBToProteinCollection, 0)
 
 	declare @S nvarchar(2048)
 	declare @DBIDString nvarchar(30)
@@ -65,10 +66,7 @@ As
 	declare @MatchCount int
 	
 	declare @result int
-	declare @numAdded int
-
 	Set @result = 0
-	Set @numAdded = 0
 
 	Declare @UseProteinSequencesDB tinyint
 	Declare @ProteinSequenceUpdateRequired tinyint
@@ -79,6 +77,19 @@ As
 	Declare @ProteinDBIDListCount int
 	Declare @ProteinDBIDList varchar(256)
 
+
+	---------------------------------------------------
+	-- Validate the input parameters
+	---------------------------------------------------
+	--
+	Set @message = ''
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	Set @importAllProteins = IsNull(@importAllProteins, 1)
+	Set @ForceLegacyDBProcessing = IsNull(@ForceLegacyDBProcessing, 0)
+	Set @SwitchFromLegacyDBToProteinCollection = IsNull(@SwitchFromLegacyDBToProteinCollection, 0)
+
+	Set @ProteinCountAdded = 0
+	Set @ProteinCountUpdated = 0
 
 	If @SwitchFromLegacyDBToProteinCollection <> 0
 	Begin
@@ -301,7 +312,7 @@ As
     						 @AllowImportAllProteins = Import_All_Proteins
     			FROM #T_Tmp_Protein_Collection_List
     			WHERE Protein_Collection_ID > @CurrentID
-			ORDER BY Protein_Collection_ID
+				ORDER BY Protein_Collection_ID
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
@@ -311,6 +322,9 @@ As
 				Begin -- <d>
 					Set @ProteinCollectionDescription = 'Protein Collection ' + @ProteinCollectionName + ' (ID ' + Convert(varchar(12), @CurrentID) + ')'
 					
+					if @infoOnly <> 0
+						Print 'Adding entries for ' + @ProteinCollectionDescription
+						
 					---------------------------------------------------
 					-- Add new entries to T_Proteins
 					---------------------------------------------------
@@ -352,7 +366,7 @@ As
 							goto Done
 						End
 						
-						Set @numAdded = @numAdded + @myRowCount
+						Set @ProteinCountAdded = @ProteinCountAdded + @myRowCount
 					End -- </e1>
 
 
@@ -505,6 +519,7 @@ As
 							goto Done
 						End
 
+						Set @ProteinCountUpdated = @ProteinCountUpdated + @myRowCount
 
 						If @ProteinSequenceUpdateRequired > 0
 						Begin -- <f2>
@@ -660,7 +675,7 @@ As
 							goto Done
 						End
 						
-						Set @numAdded = @numAdded + @myRowCount
+						Set @ProteinCountAdded = @ProteinCountAdded + @myRowCount
 					End -- </e1>
 
 
@@ -681,7 +696,7 @@ As
 						Set @S = @S + ' FROM '
 						Set @S = @S + '  T_Proteins INNER JOIN '
 						Set @S = @S +    '[' + @ProteinDBName + '].dbo.T_ORF AS P ON '
-						Set @S = @S + ' T_Proteins.Reference = P.Reference AND'
+						Set @S = @S +  ' T_Proteins.Reference = P.Reference AND'
 						Set @S = @S + '  IsNull(Protein_DB_ID, ' + @DBIDString + ') = ' + @DBIDString
 						Set @S = @S + ' WHERE T_Proteins.Protein_Residue_Count <> P.Amino_Acid_Count OR'
 						Set @S = @S +       ' T_Proteins.Monoisotopic_Mass <> P.Monoisotopic_Mass OR'
@@ -697,6 +712,7 @@ As
 							goto Done
 						End
 
+						Set @ProteinCountUpdated = @ProteinCountUpdated + @myRowCount
 						
 						If @myRowCount > 0 and @infoOnly = 0 And @UndefinedProteinDBID = 1
 						Begin
@@ -746,14 +762,17 @@ Done:
 			WHERE (Processing_Step_Name = 'UseProteinSequencesDB')
 		End
 		
-		Set @message = 'Refresh local Protein reference table: ' +  convert(varchar(12), @numAdded)
+		Set @message = 'Refresh local Protein reference table: ' + convert(varchar(12), @ProteinCountAdded) + ' proteins added; ' + convert(varchar(12), @ProteinCountUpdated) + ' proteins updated'
+		
+		If @infoOnly = 0 And (@ProteinCountAdded > 0 Or @ProteinCountUpdated > 0)
+			exec PostLogEntry 'Normal', @message, 'RefreshLocalProteinTable'
 	End
 	
 	return @myError
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshLocalProteinTable] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RefreshLocalProteinTable] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshLocalProteinTable] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RefreshLocalProteinTable] TO [MTS_DB_Lite] AS [dbo]
 GO

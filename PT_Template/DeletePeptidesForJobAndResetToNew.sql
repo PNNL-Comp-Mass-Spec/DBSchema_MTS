@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
+CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
 **	Desc: 
@@ -37,6 +37,7 @@ CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 **			11/27/2006 mem - Now dropping the foreign key to T_Peptide_State_Name
 **			09/24/2008 mem - Updated to check for the existence of certain tables before attempting to access them
 **			10/10/2008 mem - Added support for Inspect tables
+**			03/17/2010 mem - Now clearing the NET Regression fields in T_Analysis_Description
 **    
 *****************************************************/
 (
@@ -380,8 +381,12 @@ AS
 	Begin
 		UPDATE T_Analysis_Description
 		SET Process_State = 10, Last_Affected = GetDate(),
-			GANET_Fit = NULL, GANET_Slope = NULL, GANET_Intercept = NULL, GANET_RSquared = NULL,
-			RowCount_Loaded = NULL
+			-- GANET_Fit = NULL, GANET_Slope = NULL, GANET_Intercept = NULL, GANET_RSquared = NULL,
+			RowCount_Loaded = NULL,
+			ScanTime_NET_Slope = NULL, ScanTime_NET_Intercept = NULL, 
+            ScanTime_NET_RSquared = NULL, ScanTime_NET_Fit = NULL,
+            Regression_Order = NULL, Regression_Filtered_Data_Count = NULL,
+            Regression_Equation = NULL, Regression_Equation_XML = NULL
 		FROM T_Analysis_Description TAD INNER JOIN 
 			 #JobListToDelete JobList ON TAD.Job = JobList.Job
 		--
@@ -443,7 +448,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -11,11 +11,11 @@ CREATE Procedure dbo.AddUpdateInternalStandardEntry
 **		Looks for @SeqID in T_Mass_Tags
 **
 **		If not present, then adds as a new entry, obtaining the
-**		 mass and peptide sequence from MT_Main..T_Internal_Std_Components
+**		 mass and peptide sequence from MT_Main.dbo.T_Internal_Std_Components
 **		 and setting Internal_Standard_Only to 1.  Also adds a mapping to
 **		 T_Proteins and T_Mass_Tag_to_Protein_Map using the
-**		 information in MT_Main..T_Internal_Std_Proteins and 
-**		 MT_Main..T_Internal_Std_to_Protein_Map.
+**		 information in MT_Main.dbo.T_Internal_Std_Proteins and 
+**		 MT_Main.dbo.T_Internal_Std_to_Protein_Map.
 **
 **		If already present, then will update the mass and
 **		 Peptide Sequence if Internal_Standard_Only = 1.  
@@ -27,6 +27,7 @@ CREATE Procedure dbo.AddUpdateInternalStandardEntry
 **	Auth:	mem
 **	Date:	12/15/2005
 **			07/25/2006 mem - Updated field names in T_Proteins
+**			07/16/2009 mem - Now populating PeptideEx in T_Mass_Tags
 **      
 *****************************************************/
 (
@@ -44,10 +45,11 @@ As
 	
 	set @message = ''
 	
-	Declare @LogMessage varchar(255)
+	Declare @LogMessage varchar(512)
 	Set @LogMessage = ''
 	
 	Declare @PeptideSequence varchar(850)
+	Declare @PeptideEx varchar(512)
 	Declare @MonoisotopicMass float
 	Declare @InternalStandardOnly tinyint
 	Declare @UpdateTable tinyint
@@ -61,19 +63,20 @@ As
 	Begin Transaction @myTrans
 	
 	---------------------------------------------------
-	-- Validate that @SeqID is present in MT_Main..T_Internal_Std_Components
+	-- Validate that @SeqID is present in MT_Main.dbo.T_Internal_Std_Components
 	---------------------------------------------------
 	--	
 	SELECT	@PeptideSequence = Peptide, 
-			@MonoisotopicMass = Monoisotopic_Mass
-	FROM MT_Main..T_Internal_Std_Components
+			@MonoisotopicMass = Monoisotopic_Mass,
+			@PeptideEx = PeptideEx
+	FROM MT_Main.dbo.T_Internal_Std_Components
 	WHERE Seq_ID = @SeqID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
 	If @myRowCount < 1
 	Begin
-		Set @message = 'Seq_ID ' + @SeqIdStr + ' is not present in MT_Main..T_Internal_Std_Components; unable to continue'
+		Set @message = 'Seq_ID ' + @SeqIdStr + ' is not present in MT_Main.dbo.T_Internal_Std_Components; unable to continue'
 		Set @myError = 51000
 		Rollback Transaction @myTrans
 		Goto Done
@@ -102,7 +105,8 @@ As
 									Multiple_Proteins, Created, Last_Affected, 
 									Number_Of_Peptides, High_Normalized_Score, 
 									High_Discriminant_Score, Mod_Count, 
-									Mod_Description, PMT_Quality_Score, Internal_Standard_Only)
+									Mod_Description, PMT_Quality_Score, 
+									Internal_Standard_Only, PeptideEx)
 		VALUES (@SeqID, @PeptideSequence, @MonoisotopicMass, 
 				0,	-- Multiple_Proteins
 				GetDate(),	-- Created
@@ -113,7 +117,8 @@ As
 				0,	-- Mod_Count
 				'', -- Mod_Description
 				0,	-- PMT_Quality_Score
-				@InternalStandardOnly
+				@InternalStandardOnly,
+				@PeptideEx
 				)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -139,9 +144,8 @@ As
 			UPDATE T_Mass_Tags
 			SET Peptide = @PeptideSequence,
 				Monoisotopic_Mass = @MonoisotopicMass
-			WHERE Mass_Tag_ID = @SeqID AND (
-				  Peptide <> @PeptideSequence OR
-				  Monoisotopic_Mass <> @MonoisotopicMass)
+			WHERE Mass_Tag_ID = @SeqID AND
+				  (Peptide <> @PeptideSequence OR Monoisotopic_Mass <> @MonoisotopicMass)
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -154,6 +158,20 @@ As
 
 			If @myRowCount > 0
 				Set @LogMessage = 'Updated peptide sequence and/or mass for internal standard Seq_ID ' + Convert(varchar(19), @SeqID) + ' in T_Mass_Tags'
+
+			---------------------------------------------------
+			-- Populate PeptideEx if it is currently blank
+			---------------------------------------------------
+			--
+			If IsNull(@PeptideEx, '') <> ''
+			Begin
+				UPDATE T_Mass_Tags
+				SET PeptideEx = @PeptideEx
+				WHERE Mass_Tag_ID = @SeqID AND
+					IsNull(PeptideEx, '') = ''
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+			End
 		End
 	 End
 	
@@ -274,7 +292,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddUpdateInternalStandardEntry] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateInternalStandardEntry] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddUpdateInternalStandardEntry] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateInternalStandardEntry] TO [MTS_DB_Lite] AS [dbo]
 GO

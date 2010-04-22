@@ -19,6 +19,8 @@ CREATE Procedure dbo.UpdateDatabaseStatesSingleTable
 **			12/15/2004 mem - Now updating Server_ID
 **			08/02/2005 mem - Now updating DB_Schema_Version (added parameters @LocalSchemaVersionField and @RemoteSchemaVersionField)
 **			08/03/2006 mem - Added parameter @PreviewSql
+**			06/25/2008 mem - Updated to allow @RemoteStateIgnoreList to be blank
+**			02/05/2010 mem - Added parameters @RemoteDescriptionField, @RemoteOrganismField, and @RemoteCampaignField
 **    
 *****************************************************/
 (
@@ -36,6 +38,10 @@ CREATE Procedure dbo.UpdateDatabaseStatesSingleTable
 	@RemoteNameField varchar(128) = 'MTL_Name',
 	@RemoteStateField varchar(128) = 'MTL_State',
 	@RemoteSchemaVersionField  varchar(128) = 'MTL_DB_Schema_Version',
+
+	@RemoteDescriptionField varchar(128) = '',			-- If blank, then this field is not updated
+	@RemoteOrganismField varchar(128) = '',				-- If blank, then this field is not updated
+	@RemoteCampaignField varchar(128) = '',				-- If blank, then this field is not updated
 	
 	@RemoteStateIgnoreList varchar(128) = '15,100',			-- Do not update MTS_Master entries if the DB State in the remote table is in this list
 
@@ -55,10 +61,13 @@ As
 	set @DBCountUpdated = 0
 	set @message = ''
 	
-	declare @SQL nvarchar(1024)
+	declare @SQL nvarchar(2048)
 	declare @result int
 
 	set @result = 0
+	set @RemoteDescriptionField = IsNull(@RemoteDescriptionField, '')
+	set @RemoteOrganismField = IsNull(@RemoteOrganismField, '')
+	set @RemoteCampaignField = IsNull(@RemoteCampaignField, '')
 
 	declare @Server varchar(128)
 	declare @MTMain varchar(164)
@@ -99,7 +108,8 @@ As
 		Set @sql = @sql + '   LocalTable.' + @LocalIDField + ' = RemoteTable.' + @RemoteIDField
 		Set @sql = @sql + ' WHERE (LocalTable.' + @LocalNameField + ' <> RemoteTable.' + @RemoteNameField
 		Set @sql = @sql + '        OR LocalTable.Server_ID <> ' +  Convert(varchar(9), @ServerID) + ')'
-		Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
+		If @RemoteStateIgnoreList <> ''
+			Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
 		If @PreviewSql <> 0
 			Print @Sql
@@ -131,7 +141,8 @@ As
 		Set @sql = @sql + ' FROM ' + @MTMain + @RemoteTableName + ' AS RemoteTable '
 		Set @sql = @sql + ' WHERE RemoteTable.' + @RemoteNameField + ' NOT IN ('
 		Set @sql = @sql +     ' SELECT ' + @LocalNameField + ' FROM ' + @LocalTableName + ')'
-		Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
+		If @RemoteStateIgnoreList <> ''
+			Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
 		If @PreviewSql <> 0
 			Print @Sql
@@ -156,14 +167,39 @@ As
 	-- Now update mis-matched states or DB Schema Versions
 	Set @sql = ''
 	Set @sql = @sql + ' UPDATE LocalTable'
-	Set @sql = @sql + ' SET ' + @LocalStateField + ' = RemoteTable.' + @RemoteStateField + ','
-	Set @sql = @sql + '   Last_Affected = GetDate(), ' + @LocalSchemaVersionField + ' = RemoteTable.' + @RemoteSchemaVersionField
+	Set @sql = @sql + ' SET '
+	Set @sql = @sql +      @LocalStateField + ' = RemoteTable.' + @RemoteStateField + ','
+	Set @sql = @sql +      @LocalSchemaVersionField + ' = RemoteTable.' + @RemoteSchemaVersionField
+
+	If @RemoteDescriptionField <> ''
+		Set @sql = @sql +      ', Description = RemoteTable.' + @RemoteDescriptionField
+	
+	If @RemoteOrganismField <> ''
+		Set @sql = @sql +      ', Organism = RemoteTable.' + @RemoteOrganismField
+	
+	If @RemoteCampaignField <> ''
+		Set @sql = @sql +      ', Campaign = RemoteTable.' + @RemoteCampaignField
+
+	Set @sql = @sql + '    , Last_Affected = GetDate()'
 	Set @sql = @sql + ' FROM ' + @LocalTableName + ' AS LocalTable INNER JOIN'
 	Set @sql = @sql + ' ' + @MTMain + @RemoteTableName + ' AS RemoteTable ON'
 	Set @sql = @sql + '   LocalTable.' + @LocalIDField + ' = RemoteTable.' + @RemoteIDField
 	Set @sql = @sql + ' WHERE (LocalTable.' + @LocalStateField + ' <> RemoteTable.' + @RemoteStateField + ' OR '
-	Set @sql = @sql +        ' LocalTable.' + @LocalSchemaVersionField + ' <> RemoteTable.' + @RemoteSchemaVersionField + ')'
-	Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
+	Set @sql = @sql +        ' LocalTable.' + @LocalSchemaVersionField + ' <> RemoteTable.' + @RemoteSchemaVersionField
+
+	If @RemoteDescriptionField <> ''
+		Set @sql = @sql +      ' OR IsNull(Description,'''') <> IsNull(RemoteTable.' + @RemoteDescriptionField + ','''') '
+	
+	If @RemoteOrganismField <> ''
+		Set @sql = @sql +      ' OR IsNull(Organism,'''') <> IsNull(RemoteTable.' + @RemoteOrganismField + ','''') '
+	
+	If @RemoteCampaignField <> ''
+		Set @sql = @sql +      ' OR IsNull(Campaign,'''') <> IsNull(RemoteTable.' + @RemoteCampaignField + ','''') '
+
+	Set @sql = @sql +          ')'
+	
+	If @RemoteStateIgnoreList <> ''
+		Set @sql = @sql + '   AND RemoteTable.' + @RemoteStateField + ' NOT IN (' + @RemoteStateIgnoreList + ')'
 
 	If @PreviewSql <> 0
 		Print @Sql
@@ -194,5 +230,9 @@ Done:
 	return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTUser]
+GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTS_DB_Lite] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTUser] AS [dbo]
 GO

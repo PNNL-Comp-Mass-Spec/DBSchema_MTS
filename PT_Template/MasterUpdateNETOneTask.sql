@@ -22,6 +22,8 @@ CREATE Procedure dbo.MasterUpdateNETOneTask
 **						   - Removed the filename and filepath parameters, since now obtaining that information from T_NET_Update_Task
 **						   - Removed the @MinNETFit parameter
 **			07/04/2006 mem - Switched to using DeleteFiles and changed error code from 8 to 7 call to SetGANETUpdateTaskState if ComputePeptideNETBulk fails
+**			03/17/2010 mem - Now calling LoadGANETObservedNETsFile
+**			04/07/2010 mem - Now deleting the _ObsNET_vs_PNET_Filtered.txt file if @DeleteNETFiles = 1
 **    
 *****************************************************/
 (
@@ -45,12 +47,15 @@ As
 
 	declare @result int
 
-	declare @outFolderPath varchar(256)
-	declare @outFileName varchar(256)
-	declare @jobStatsFileName varchar(256)
+	declare @SourceFolderPath varchar(256)
+	declare @SourceFileName varchar(256)	
+	declare @JobStatsFileName varchar(256)
+	declare @ObsNETvsPNETFileName varchar(256)
+	
 	declare @ResultsFolderPath varchar(256)
 	declare @ResultsFileName varchar(256)
-	declare @predFileName varchar(256)
+	declare @PredNETsFileName varchar(256)
+	declare @ObsNETsFileName varchar(256)
 
 	declare @GANETProcessingTimeoutState int
 	set @GANETProcessingTimeoutState = 44
@@ -73,11 +78,12 @@ As
 	-- Lookup the results folder path and file names from T_NET_Update_Task
 	---------------------------------------------------
 	
-	SELECT 	@outFolderPath = Output_Folder_Path,
-			@outFileName = Out_File_Name,
+	SELECT 	@SourceFolderPath = Output_Folder_Path,
+			@SourceFileName = Out_File_Name,
 			@ResultsFolderPath = Results_Folder_Path, 
 			@ResultsFileName = Results_File_Name,
-			@predFileName = PredictNETs_File_Name
+			@PredNETsFileName = PredictNETs_File_Name,
+			@ObsNETsFileName = ObservedNETs_File_Name
 	FROM T_NET_Update_Task
 	WHERE Task_ID = @TaskID
 	--
@@ -121,14 +127,14 @@ As
 
 	--------------------------------------------------------------
 	-- Load contents of NET prediction file into
-	-- T_Predicted_NET and T_Mass_Tags_NET
+	-- T_Predicted_NET and T_Sequest
 	--------------------------------------------------------------
 
 	If @logLevel >= 2
 		execute PostLogEntry 'Normal', 'Begin LoadGANETPredictionFile', 'MasterUpdateNETOneTask'
 		
 	EXEC @result = LoadGANETPredictionFile
-										@predFileName,
+										@PredNETsFileName,
 										@ResultsFolderPath,
 										@message  output,
 										@numLoaded output
@@ -146,14 +152,54 @@ As
 			EXEC PostLogEntry 'Error', @message, 'MasterUpdateNETOneTask'
 	end
 
+
+
+	--------------------------------------------------------------
+	-- Load contents of Observed NETs file into T_Peptides
+	--------------------------------------------------------------
+
+	If @logLevel >= 2
+		execute PostLogEntry 'Normal', 'Begin LoadGANETObservedNETsFile', 'MasterUpdateNETOneTask'
+		
+	EXEC @result = LoadGANETObservedNETsFile
+										@ObsNETsFileName,
+										@ResultsFolderPath,
+										@message  output,
+										@numLoaded output
+
+	if @result = 0
+	begin
+		set @message = 'Complete LoadGANETObservedNETsFile: ' + @message
+		If @logLevel >= 1
+			EXEC PostLogEntry 'Normal', @message, 'MasterUpdateNETOneTask'
+	end
+	else
+	begin
+		set @message = 'Complete LoadGANETObservedNETsFile: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
+		If @logLevel >= 1
+			EXEC PostLogEntry 'Error', @message, 'MasterUpdateNETOneTask'
+	end
+
 	--------------------------------------------------------------
 	-- Update NET values for Peptides in T_Peptides and T_Sequence
 	--------------------------------------------------------------
-	
-	If @logLevel >= 2
-		execute PostLogEntry 'Normal', 'Begin ComputePeptideNETBulk', 'MasterUpdateNETOneTask'
 
-	EXEC @result = ComputePeptideNETBulk @TaskID, @MinNETRSquared, @message OUTPUT
+	/*
+	***************************************************************
+	**
+	** NOTE:
+	**   Since we're now loading stuff from file ObservedNETsAfterRegression, 
+	**   we no longer need to call ComputePeptideNETBulk,
+	**   though we need to check for any additional steps that it performs
+	**
+	***************************************************************
+	*/
+		
+	-- If @logLevel >= 2
+	-- 	execute PostLogEntry 'Normal', 'Begin ComputePeptideNETBulk', 'MasterUpdateNETOneTask'
+	-- 
+	-- EXEC @result = ComputePeptideNETBulk @TaskID, @MinNETRSquared, @message OUTPUT
+
 
 	if @result = 0
 	begin
@@ -166,11 +212,13 @@ As
 		--
 		if @myError = 0 AND @DeleteNETFiles = 1
 		Begin
-			Set @jobStatsFileName = Replace(@outFileName , 'peptideGANET_', 'jobStats_')
+			Set @JobStatsFileName = Replace(@SourceFileName , 'peptideGANET_', 'jobStats_')
+			Set @ObsNETvsPNETFileName = Replace(@ResultsFileName , '.txt', '_ObsNET_vs_PNET_Filtered.txt')
 
-			Exec DeleteFiles @outFolderPath, @outFileName, @jobStatsFileName, @message = @message output
-			Exec DeleteFiles @ResultsFolderPath, @ResultsFileName, @predFileName, @message = @message output
-			
+			Exec DeleteFiles @SourceFolderPath, @SourceFileName, @JobStatsFileName, @message = @message output
+			Exec DeleteFiles @ResultsFolderPath, @ResultsFileName, @PredNETsFileName, @message = @message output
+			Exec DeleteFiles @ResultsFolderPath, @ObsNETsFileName, @message = @message output			
+			Exec DeleteFiles @ResultsFolderPath, @ObsNETvsPNETFileName, @message = @message output
 		End
 	end
 	else
@@ -181,12 +229,13 @@ As
 		exec SetGANETUpdateTaskState @TaskID, 7, @GANETProcessingTimeoutState, @message
 	end
 
+
 Done:
 	return @myError
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Lite] AS [dbo]
 GO

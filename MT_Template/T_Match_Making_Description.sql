@@ -10,21 +10,21 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[MD_Type] [int] NOT NULL,
 	[MD_Parameters] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[MD_Date] [datetime] NOT NULL,
-	[MD_State] [tinyint] NOT NULL CONSTRAINT [DF_T_MatchMaking_Description_mmState]  DEFAULT ((1)),
-	[MD_Peaks_Count] [int] NULL CONSTRAINT [DF_T_Match_Making_Description_MD_Peaks_Count]  DEFAULT ((0)),
+	[MD_State] [tinyint] NOT NULL,
+	[MD_Peaks_Count] [int] NULL,
 	[MD_Tool_Version] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[MD_Comparison_Mass_Tag_Count] [int] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_Comparison_Mass_Tag_Count]  DEFAULT ((0)),
-	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Normalized_Score]  DEFAULT ((0)),
-	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Discriminant_Score]  DEFAULT ((0)),
-	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)),
-	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Minimum_PMT_Quality_Score]  DEFAULT ((0)),
-	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Filter]  DEFAULT (''),
-	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Experiment_Exclusion_Filter]  DEFAULT (''),
-	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_Limit_To_PMTs_From_Dataset]  DEFAULT ((0)),
-	[MD_UMC_TolerancePPM] [numeric](9, 4) NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_TolerancePPM]  DEFAULT ((0)),
-	[MD_UMC_Count] [int] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_Count]  DEFAULT ((0)),
-	[MD_NetAdj_TolerancePPM] [numeric](9, 4) NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_TolerancePPM]  DEFAULT ((0)),
-	[MD_NetAdj_UMCs_HitCount] [int] NOT NULL CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_UMCs_HitCount]  DEFAULT ((0)),
+	[MD_Comparison_Mass_Tag_Count] [int] NOT NULL,
+	[Minimum_High_Normalized_Score] [real] NOT NULL,
+	[Minimum_High_Discriminant_Score] [real] NOT NULL,
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL,
+	[Minimum_PMT_Quality_Score] [real] NOT NULL,
+	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL,
+	[MD_UMC_TolerancePPM] [numeric](9, 4) NOT NULL,
+	[MD_UMC_Count] [int] NOT NULL,
+	[MD_NetAdj_TolerancePPM] [numeric](9, 4) NOT NULL,
+	[MD_NetAdj_UMCs_HitCount] [int] NOT NULL,
 	[MD_NetAdj_TopAbuPct] [tinyint] NULL,
 	[MD_NetAdj_IterationCount] [tinyint] NULL,
 	[MD_NetAdj_NET_Min] [numeric](9, 5) NULL,
@@ -65,4 +65,32 @@ ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK
 REFERENCES [T_MMD_Type_Name] ([MD_Type])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_MatchMaking_Description_mmState]  DEFAULT ((1)) FOR [MD_State]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_Peaks_Count]  DEFAULT ((0)) FOR [MD_Peaks_Count]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_Comparison_Mass_Tag_Count]  DEFAULT ((0)) FOR [MD_Comparison_Mass_Tag_Count]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Normalized_Score]  DEFAULT ((0)) FOR [Minimum_High_Normalized_Score]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Limit_To_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_TolerancePPM]  DEFAULT ((0)) FOR [MD_UMC_TolerancePPM]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_UMC_Count]  DEFAULT ((0)) FOR [MD_UMC_Count]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_TolerancePPM]  DEFAULT ((0)) FOR [MD_NetAdj_TolerancePPM]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_UMCs_HitCount]  DEFAULT ((0)) FOR [MD_NetAdj_UMCs_HitCount]
 GO

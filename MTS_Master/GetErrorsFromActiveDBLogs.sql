@@ -24,6 +24,8 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 **			11/21/2006 mem - Moved Master_Sequences from Daffy to ProteinSeqs
 **			07/13/2007 mem - Increased the field sizes in #LE
 **			02/19/2008 mem - Now populating T_MTS_DB_Errors with the errors found; use AckErrors to view these errors and optionally change them to ErrorIgnore
+**			07/23/2008 mem - Moved Master_Sequences to Porky
+**			02/27/2010 mem - Moved Master_Sequences to ProteinSeqs2
 **    
 *****************************************************/
 (
@@ -317,10 +319,10 @@ As
 	End -- </a>
 	
 	-----------------------------------------------------------
-	-- Get errors from ProteinSeqs.Master_Sequences
+	-- Get errors from ProteinSeqs2.Master_Sequences
 	-----------------------------------------------------------
 
-	Exec GetErrorsFromSingleDB 'ProteinSeqs', 'Master_Sequences', @errorsOnly, @MaxLogEntriesPerDB, @message output
+	Exec GetErrorsFromSingleDB 'ProteinSeqs2', 'Master_Sequences', @errorsOnly, @MaxLogEntriesPerDB, @message output
 
 	-----------------------------------------------------------
 	-- Get errors from this DB (MTS_Master)
@@ -417,5 +419,9 @@ Done:
 	return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[GetErrorsFromActiveDBLogs] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetErrorsFromActiveDBLogs] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetErrorsFromActiveDBLogs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetErrorsFromActiveDBLogs] TO [MTS_DB_Lite] AS [dbo]
 GO

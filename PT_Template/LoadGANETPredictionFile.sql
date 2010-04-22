@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadGANETPredictionFile
+CREATE Procedure LoadGANETPredictionFile
 /****************************************************
 **
 **	Desc: 
@@ -31,6 +31,7 @@ CREATE Procedure dbo.LoadGANETPredictionFile
 **			07/04/2006 mem - Now checking for a header row in the input file; also, updated to use udfCombinePaths and to correct some comments
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
+**			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **    
 *****************************************************/
 (
@@ -51,7 +52,7 @@ AS
 	set @completionCode = 3
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'Porky'
+	set @MasterSequencesServerName = 'ProteinSeqs2'
 
 	set @message = ''
 	set @numLoaded = 0
@@ -114,7 +115,7 @@ AS
 			Else
 			Begin
 				Set @message = 'Predicted NET file contains ' + convert(varchar(11), @columnCount) + ' columns; (Expecting exactly 4 columns): ' + @file
-				set @myError = 5002
+				set @myError = 50002
 			End
 		end
 	End
@@ -205,7 +206,7 @@ AS
 	-- If the Master Sequences DB is on the same server as this DB, then we can use this query
 	--  UPDATE MST
 	--  SET GANET_Predicted = #Tmp_TGA.PNET, Last_Affected = GetDate()
-	--  FROM Porky.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
+	--  FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
 	--  	 #Tmp_TGA ON #Tmp_TGA.Seq_ID = MST.Seq_ID
 	--  WHERE MST.GANET_Predicted <> #Tmp_TGA.PNET OR MST.GANET_Predicted Is Null
 	
@@ -219,8 +220,8 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	-- Warning: Update @MasterSequencesServerName above if changing from Porky to another computer
-	exec Porky.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
+	-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs2 to another computer
+	exec ProteinSeqs2.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
 	--
 	SELECT @myRowcount = @@rowcount, @myError = @@error
 	--
@@ -264,7 +265,7 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	exec @myError = Porky.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
+	exec @myError = ProteinSeqs2.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
 	--
 	if @myError <> 0
 	begin
@@ -288,7 +289,7 @@ AS
 	-----------------------------------------------------------
 	--
 	If @DeleteTempTables = 1
-		exec Porky.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
+		exec ProteinSeqs2.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
 
 
 	-----------------------------------------------
@@ -297,9 +298,8 @@ AS
 Done:	
 	return @myError
 
-
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Lite] AS [dbo]
 GO

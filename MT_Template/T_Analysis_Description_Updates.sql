@@ -48,7 +48,7 @@ CREATE TABLE [dbo].[T_Analysis_Description_Updates](
 	[Enzyme_ID_New] [int] NULL,
 	[Labelling] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Labelling_New] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Entered] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Description_Updates_Entered]  DEFAULT (getdate()),
+	[Entered] [datetime] NOT NULL,
  CONSTRAINT [PK_T_Analysis_Description_Updates] PRIMARY KEY CLUSTERED 
 (
 	[Update_ID] ASC
@@ -62,4 +62,6 @@ CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Updates_Job] ON [dbo].[T_An
 (
 	[Job] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description_Updates] ADD  CONSTRAINT [DF_T_Analysis_Description_Updates_Entered]  DEFAULT (getdate()) FOR [Entered]
 GO

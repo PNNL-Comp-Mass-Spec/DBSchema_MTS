@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 38 ******/
+/****** RowCount: 39 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -22,6 +22,7 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Job_Info_DMS_Update_Interval'
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Instrument_Class','FTICR analysis job import',1,99,'Allow FTICR analysis jobs that are associated with datasets that were produced on this type of MS instrument')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Result_Type','FTICR analysis job import',1,99,'Allow FTICR analysis jobs that produce this type of result')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Result_Type','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that produce this type of result')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Regression_Param_File_Name','NET Regression',0,1,'Name of the parameter file to use when performing NET regression (stored at \\gigasax\DMS_Parameter_Files\NET_Regression\)')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism','Info only',1,99,'Not used for filtering - information only')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism_DB_File_Name','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that were performed with this organism database file (FASTA); will match the Organism_DB_Name field or the Protein_Collection_List field in the source database')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Parameter_File_Name','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that were performed with this parameter file')

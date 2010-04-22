@@ -28,11 +28,12 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			02/28/2008 mem - Now checking for key attributes getting changed that might affect results stored in this database
 **						   - Now storing old and new values in T_Analysis_Description_Updates when updates are applied
 **			08/14/2008 mem - Now updating Experiment_Organism
+**			12/09/2008 mem - Increased size of @message to varchar(4000)
 **    
 *****************************************************/
 (
 	@UpdateInterval int = 30,			-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
- 	@message varchar(255) = '' output,
+ 	@message varchar(4000) = '' output,
  	@infoOnly tinyint = 0
 )
 As
@@ -50,7 +51,7 @@ As
 	set @JobCountUpdated = 0
 	set @DatasetCountUpdated = 0
 	
-	Declare @JobList varchar(256)
+	Declare @JobList varchar(3900)
 	Declare @S varchar(max)
 	
 	--------------------------------------------------------------
@@ -644,7 +645,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite] AS [dbo]
 GO

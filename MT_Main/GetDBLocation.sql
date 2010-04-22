@@ -60,5 +60,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetDBLocation] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetDBLocation] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetDBLocation] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetDBLocation] TO [MTS_DB_Lite] AS [dbo]
 GO

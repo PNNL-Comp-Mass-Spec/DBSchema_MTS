@@ -18,7 +18,8 @@ CREATE Procedure dbo.LoadMASICScanStatsBulk
 **			10/23/2005 mem - Increased size of @ScanStatsFilePath from varchar(255) to varchar(512)
 **			06/04/2006 mem - Added parameter @ScanStatsLineCountToSkip, which is used to skip the header line, if present in the input file
 **						   - Increased size of the @c variable (used for Bulk Insert)
-**			09/26/2006 mem - Added support for ScanStats files containing 10 columns
+**			09/26/2006 mem - Added support for ScanStats files containing 10 columns (new column are Ion_Count and Ion_Count_Raw)
+**			02/02/2010 mem - Added support for ScanStats files containing 11 columns (new column is ScanTypeName)
 **    
 *****************************************************/
 (
@@ -100,9 +101,9 @@ As
 		End
 		Else
 		Begin
-			If @ScanStatsColumnCount <> 8 and @ScanStatsColumnCount <> 10
+			If @ScanStatsColumnCount <> 8 And @ScanStatsColumnCount <> 10 And @ScanStatsColumnCount <> 11
 			Begin
-				Set @message = 'Scan Stats file contains ' + convert(varchar(11), @ScanStatsColumnCount) + ' columns (Expecting 8 or 10 columns)'
+				Set @message = 'Scan Stats file contains ' + convert(varchar(11), @ScanStatsColumnCount) + ' columns (Expecting 8, 10, or 11 columns)'
 				set @myError = 50003
 			End
 		End
@@ -112,13 +113,22 @@ As
 	--
 	if @myError <> 0 goto done
 
-	If @ScanStatsColumnCount = 10
+	If @ScanStatsColumnCount >= 10
 	Begin
 		-- Add the additional columns now so they 
 		--  will be populated during the Bulk Insert operation
 		ALTER TABLE #T_ScanStats_Import ADD
 			Ion_Count int NULL,				-- Not actually stored in the database
 			Ion_Count_Raw int NULL			-- Not actually stored in the database
+
+		If @ScanStatsColumnCount = 11
+		Begin
+			-- Add the additional columns now so they 
+			--  will be populated during the Bulk Insert operation
+			ALTER TABLE #T_ScanStats_Import ADD
+				ScanTypeName varchar(64)		-- Not actually stored in the database
+			
+		End
 	End
 		
 	-----------------------------------------------
@@ -137,15 +147,6 @@ As
 		goto Done
 	end
 
-	/*
-	**	If @ScanStatsColumnCount <> 10
-	**	Begin
-	**		-- Could add additional columns to #T_ScanStats_Import if needed
-	**		ALTER TABLE #T_ScanStats_Import ADD
-	**			Ion_Count int NULL,
-	**			Ion_Count_Raw int NULL
-	**	End
-	*/
 
 	-----------------------------------------------
 	-- Delete any existing results for @Job in T_Dataset_Stats_Scans
@@ -204,7 +205,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadMASICScanStatsBulk] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadMASICScanStatsBulk] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadMASICScanStatsBulk] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadMASICScanStatsBulk] TO [MTS_DB_Lite] AS [dbo]
 GO

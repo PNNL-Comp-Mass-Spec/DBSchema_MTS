@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[LoadInspectPeptidesBulk] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-create Procedure LoadInspectPeptidesBulk
+CREATE Procedure LoadInspectPeptidesBulk
 /****************************************************
 **
 **	Desc: 
@@ -23,6 +23,9 @@ create Procedure LoadInspectPeptidesBulk
 **	Date:	10/17/2008 mem
 **			10/21/2008 mem - Now using udfTotalPRMScoreToNormalizedScore to populate Normalized_Score in T_Score_Inspect
 **			10/24/2008 mem - Updated to new 25 column file format (adds columns DeltaNormMQScore, DeltaNormTotalPRMScore, and MH)
+**			01/08/2009 mem - Added parameter @SynFileColumnCount
+**						   - Added support for 27 column file format (adds columns PrecursorMZ and PrecursorError)
+**			09/22/2009 mem - Now calling UpdatePeptideCleavageStateMax
 **
 *****************************************************/
 (
@@ -33,6 +36,7 @@ create Procedure LoadInspectPeptidesBulk
 	@PeptideSeqToProteinMapFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_SeqToProteinMap.txt',
 	@Job int,
 	@FilterSetID int,
+	@SynFileColumnCount smallint=0,		-- If this is 0, then this SP will call ValidateDelimitedFile; if non-zero, then assumes the calling procedure called ValidateDelimitedFile to get this value
 	@LineCountToSkip int=1,
 	@numLoaded int=0 output,
 	@numSkipped int=0 output,
@@ -49,7 +53,7 @@ As
 
 	declare @UsingPhysicalTempTables tinyint
 	-- Set the following to 1 when using actual tables to hold the temporary data while debugging
-	set @UsingPhysicalTempTables = 1
+	set @UsingPhysicalTempTables = 0
 
 	set @numLoaded = 0
 	set @numSkipped = 0
@@ -77,6 +81,9 @@ As
 	
 	declare @LogLevel int
 	declare @LogMessage varchar(512)
+
+	Declare @fileExists tinyint
+	Declare @result int
 	
 	-----------------------------------------------
 	-- Lookup the logging level from T_Process_Step_Control
@@ -114,7 +121,9 @@ As
 			
 	-----------------------------------------------
 	-- Create temporary table to hold contents 
-	-- of Inspect synopsis file (_inspect_syn.txt)
+	--  of Inspect synopsis file (_inspect_syn.txt)
+	-- Additional columns will be added to this table
+	--  if the input file has over 25 columns
 	-----------------------------------------------
 	--
 	CREATE TABLE #Tmp_Peptide_Import (
@@ -167,6 +176,60 @@ As
 
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
 
+
+	-----------------------------------------------
+	-- Verify that input file exists and count the number of columns
+	-- This step is skipped if @SynFileColumnCount is non-zero
+	-----------------------------------------------
+
+	If IsNull(@SynFileColumnCount, 0) <= 0
+	Begin
+		-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
+		Set @LineCountToSkip = -1
+		Exec @result = ValidateDelimitedFile @PeptideSynFilePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @SynFileColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 1
+	End
+	Else
+		Set @result = 0
+	
+	Set @myError = 0
+	if @result <> 0
+	Begin
+		If Len(@message) = 0
+			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSynFilePath + ' (Code ' + Convert(varchar(11), @result) + ')'
+		
+		Set @myError = 60003
+	End
+	else
+	Begin
+		If @SynFileColumnCount = 0
+		Begin
+				Set @message = '0 peptides were loaded for job ' + @jobStr + ' (synopsis file is empty)'
+				set @myError = 60002	-- Note that this error code is used in SP LoadResultsForAvailableAnalyses; do not change
+		End
+		Else
+		Begin
+			If @SynFileColumnCount <> 25 and @SynFileColumnCount <> 27
+			Begin
+				Set @message = 'Synopsis file contains ' + convert(varchar(12), @SynFileColumnCount) + ' columns for job ' + @jobStr + ' (Expecting 25 or 27 columns)'
+				set @myError = 60003
+			End
+		End
+	End
+	
+	-- don't do any more if errors at this point
+	--
+	if @myError <> 0 goto done
+		
+
+	If @SynFileColumnCount = 27
+	Begin
+		-- Add the additional columns now so they 
+		--  will be populated during the Bulk Insert operation
+		ALTER TABLE #Tmp_Peptide_Import ADD
+			PrecursorMZ float NULL,			-- Not actually stored in the database
+			PrecursorError real NULL
+	End
+	
 	-----------------------------------------------
 	-- Bulk load contents of synopsis file into temporary table
 	-----------------------------------------------
@@ -187,6 +250,14 @@ As
 		goto Done
 	end
 
+	If @SynFileColumnCount < 27
+	Begin
+		-- Add the additional columns, since they will be referenced below
+		ALTER TABLE #Tmp_Peptide_Import ADD
+			PrecursorMZ float NULL,
+			PrecursorError real NULL
+	End
+	
 	-----------------------------------------------
 	-- Populate @UnfilteredCountLoaded; this will be compared against
 	-- the ResultToSeqMap count loaded to confirm that they match
@@ -975,14 +1046,15 @@ As
 
 
 	-----------------------------------------------
-	-- Copy selected contents of #Tmp_Peptide_Import
-	-- into T_Score_Inspect
+	-- Copy selected contents of #Tmp_Peptide_Import into T_Score_Inspect
+	-- Note that T_Score_Inspect.DelM is left as Null, since it will be populated by SP ComputeInspectMassValuesUsingSICStats
 	-----------------------------------------------
 	--
 	INSERT INTO T_Score_Inspect
 		(Peptide_ID, MQScore, TotalPRMScore, MedianPRMScore, FractionY, 
 		 FractionB, Intensity, PValue, FScore, DeltaScore, DeltaScoreOther, 
-		 DeltaNormMQScore, DeltaNormTotalPRMScore, RankTotalPRMScore, RankFScore, Normalized_Score)
+		 DeltaNormMQScore, DeltaNormTotalPRMScore, RankTotalPRMScore, RankFScore, Normalized_Score,
+		 PrecursorError)
 	SELECT
 		UR.Peptide_ID_New,
 		TPI.MQScore, 
@@ -999,7 +1071,8 @@ As
 		TPI.DeltaNormTotalPRMScore,
 		TPI.RankTotalPRMScore, 
 		TPI.RankFScore,
-		dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State)		-- Compute the Normalized Score using TotalPRMScore and Charge_State
+		dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State),		-- Compute the Normalized Score using TotalPRMScore and Charge_State
+		TPI.PrecursorError																-- Null if the file has less than 27 columns
 	FROM #Tmp_Peptide_Import TPI INNER JOIN 
 		 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
 	ORDER BY UR.Peptide_ID_New
@@ -1138,6 +1211,23 @@ As
 		execute PostLogEntry 'Error', @message, 'LoadInspectPeptidesBulk'
 	End
 
+
+	-----------------------------------------------
+	-- Update column Cleavage_State_Max in T_Peptides
+	-----------------------------------------------
+	exec @myError = UpdatePeptideCleavageStateMax @JobList = @job, @message = @message output
+	
+	if @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling UpdatePeptideCleavageStateMax for job ' + @jobStr
+		Goto Done
+	End
+
+	Set @LogMessage = 'Updated Cleavage_State_Max in T_Peptides'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+	
 	
 	-----------------------------------------------
 	-- Update column State_ID in T_Peptides
@@ -1183,13 +1273,13 @@ As
 			execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
 
 	End
-
 	
 Done:
 	Return @myError
 
+
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Lite] AS [dbo]
 GO

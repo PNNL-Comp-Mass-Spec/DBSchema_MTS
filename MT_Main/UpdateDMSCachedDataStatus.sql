@@ -12,7 +12,8 @@ CREATE PROCEDURE dbo.UpdateDMSCachedDataStatus
 **	Return values: 0: success, otherwise, error code
 **
 **	Auth:	mem
-**	Date:	05/09/2007 - See Ticket:422
+**	Date:	05/09/2007 mem - See Ticket:422
+**			09/18/2008 mem - Added parameters @FullRefreshPerformed and @LastRefreshMinimumID
 **
 *****************************************************/
 (
@@ -21,7 +22,9 @@ CREATE PROCEDURE dbo.UpdateDMSCachedDataStatus
 	@InsertCountNew int = 0,				-- Ignored if @IncrementRefreshCount = 0
 	@UpdateCountNew int = 0,				-- Ignored if @IncrementRefreshCount = 0
 	@DeleteCountNew int = 0,				-- Ignored if @IncrementRefreshCount = 0
-	@message varchar(255) = '' OUTPUT
+	@FullRefreshPerformed tinyint = 0,		-- When 1, then updates both Last_Refreshed and Last_Full_Refresh; otherwise, just updates Last_Refreshed
+	@LastRefreshMinimumID int = 0,
+	@message varchar(255) = '' output
 )
 AS
 
@@ -72,6 +75,8 @@ AS
 			Set @DeleteCountNew = IsNull(@DeleteCountNew, 0)
 		End				
 
+		Set @FullRefreshPerformed = IsNull(@FullRefreshPerformed, 0)
+		Set @LastRefreshMinimumID = IsNull(@LastRefreshMinimumID, 0)
 		Set @message = ''
 		
 		
@@ -88,7 +93,9 @@ AS
 			Insert_Count = Insert_Count + @InsertCountNew,
 			Update_Count = Update_Count + @UpdateCountNew,
 			Delete_Count = Delete_Count + @DeleteCountNew,
-			Last_Refreshed = GetDate()
+			Last_Refreshed = GetDate(),
+			Last_Refresh_Minimum_ID = @LastRefreshMinimumID,
+			Last_Full_Refresh = CASE WHEN @FullRefreshPerformed = 0 THEN Last_Full_Refresh ELSE GetDate() END
 		WHERE Table_Name = @CachedDataTableName
 		--
 		SELECT @myRowCount = @@RowCount, @myError = @@Error
@@ -106,4 +113,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateDMSCachedDataStatus] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateDMSCachedDataStatus] TO [MTS_DB_Lite] AS [dbo]
 GO

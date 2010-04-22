@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW dbo.V_Internal_Standards_Composition
+CREATE VIEW [dbo].[V_Internal_Std_Components]
 AS
 SELECT dbo.T_Internal_Standards.Internal_Std_Mix_ID, 
     dbo.T_Internal_Standards.Name AS Internal_Std_Name, 

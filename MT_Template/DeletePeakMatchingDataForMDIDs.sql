@@ -28,6 +28,7 @@ CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDs
 **			05/07/2005 mem - Switched to using Between statements
 **			12/20/2005 mem - Renamed T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
 **			01/19/2006 mem - Added parameter @ResetIdentityFieldSeed
+**			01/13/2010 mem - Added reference to T_FTICR_UMC_CS_Stats
 **
 *****************************************************/
 (
@@ -113,6 +114,14 @@ AS
 	--
 	SELECT @myError = @myError + @@Error
 
+	DELETE T_FTICR_UMC_CS_Stats
+	FROM T_FTICR_UMC_CS_Stats INNER JOIN T_FTICR_UMC_Results
+			ON T_FTICR_UMC_CS_Stats.UMC_Results_ID = T_FTICR_UMC_Results.UMC_Results_ID
+	WHERE T_FTICR_UMC_Results.MD_ID BETWEEN @MDIDStart AND @MDIDEnd
+	--
+	SELECT @myError = @myError + @@Error
+
+
 	DELETE FROM T_FTICR_UMC_Results
 	WHERE MD_ID BETWEEN @MDIDStart AND @MDIDEnd
 	--
@@ -141,7 +150,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDs] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDs] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDs] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeakMatchingDataForMDIDs] TO [MTS_DB_Lite] AS [dbo]
 GO

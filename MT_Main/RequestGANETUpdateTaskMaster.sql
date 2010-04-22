@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 /****************************************************
 **
@@ -19,31 +20,43 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 **			02/19/2004 mem - Added check to confirm that each database actually exists
 **			04/09/2004 mem - Removed @maxIterations and @maxHours parameters
 **			07/05/2004 mem - Extended SP to call RequestGANETUpdateTask in the peptide DB's, in addition to the MTDB's
-**			07/30/2004 mem - Added @unmodifiedPeptidesOnly, @noCleavageRuleFilters, and @skipRegression parameters
-**			01/28/2005 mem - Updated bug involving @outFile, @inFile, and @predFile population for MTDB's
+**			07/30/2004 mem - Added @UnmodifiedPeptidesOnly, @NoCleavageRuleFilters, and @skipRegression parameters
+**			01/28/2005 mem - Updated bug involving @SourceFileName, @ResultsFileName, and @PredNETsFileName population for MTDB's
 **			04/08/2005 mem - Updated call to GetGANETFolderPaths
-**			05/28/2005 mem - Now passing @inFilePath to RequestGANETUpdateTask in Peptide DBs
+**			05/28/2005 mem - Now passing @ResultsFolderPathBase to RequestGANETUpdateTask in Peptide DBs
 **			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			07/05/2006 mem - Now using dbo.udfCombinePaths() to combine paths
+**			03/13/2010 mem - Removed parameters @clientPerspective and @skipRegression
+**			03/13/2010 mem - Reordered the parameters and added several new parameters (@ObsNETsFile, @UnmodifiedPeptidesOnly, @NoCleavageRuleFilters, and @RegressionOrder)
+**			03/19/2010 mem - Added parameter @ParamFileName
+**			04/06/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 10 sections)
+**			04/20/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 30 sections)
 **
 *****************************************************/
 (
 	@processorName varchar(128),
-	@clientPerspective tinyint = 1,					-- 0 means running SP from local server; 1 means running SP from client
 	@restrictToDbName tinyint = 0,					-- If 1, will only check the DB named @dbName
 	@taskID int = 0 output,							-- Ganet Update Task if a Mass Tag DB, a Job if a Peptide DB
 	@dbName varchar(128) = '' output,				-- if provided, will preferentially query that database first
-	@outFile varchar(256) = '' output,				-- Source file name
-	@outFilePath varchar(256) = '' output,			-- Source file folder path
-	@inFile varchar(256) = '' output,				-- Results file name
-	@inFilePath varchar(256) = '' output,			-- Results file folder path
-	@predFile varchar(256) = '' output,				-- Predict NETs results file name
-	@unmodifiedPeptidesOnly tinyint = 0 output,		-- 1 if we should only consider unmodified peptides
-	@noCleavageRuleFilters tinyint = 0 output,		-- 1 if we should use the looser filters that do not consider cleavage rules
-	@skipRegression tinyint = 0 output,				-- 1 if we should skip the regression and only make the plots
-	@taskAvailable tinyint = 0 output,				-- 1 if a task is available; otherwise 0
-	@message varchar(512) = '' output
+
+	@SourceFolderPath varchar(256) = '' output,		-- Source file folder path (determined using MT_Main.dbo.T_Folder_Paths) e.g. \\porky\GA_Net_Xfer\Out\PT_Shewanella_ProdTest_A123\
+	@SourceFileName varchar(256) = '' output,		-- Source file name
+
+	@ResultsFolderPath varchar(256) = '' output,	-- Results folder path (determined using MT_Main.dbo.T_Folder_Paths) e.g. \\porky\GA_Net_Xfer\In\PT_Shewanella_ProdTest_A123\
+	@ResultsFileName varchar(256) = '' output,		-- Results file name
+	@PredNETsFileName varchar(256) = '' output,		-- Predict NETs results file name
+	@ObsNETsFileName varchar(256) = '' output,		-- Observed NETs results file name
+
+	@ParamFileName varchar(256) = '' output,		-- If this is defined, then settings in the parameter file will superseded the following 5 parameters
+	
+	@UnmodifiedPeptidesOnly tinyint = 0 output,		-- 1 if we should only consider unmodified peptides
+	@NoCleavageRuleFilters tinyint = 0 output,		-- 1 if we should use the looser filters that do not consider cleavage rules
+	@RegressionOrder tinyint = 3 output,			-- 1 for linear regression, >=2 for non-linear regression
+
+	@taskAvailable tinyint = 0 output,				-- 1 if a task is available; otherwise 0,	
+	@message varchar(512) = '' output,
+	@ShowDebugInfo tinyint = 0
 )
 As
 	set nocount on
@@ -63,13 +76,13 @@ As
 	set @SPRowCount = 0
 	
 	-- Note: @S needs to be unicode (nvarchar) for compatibility with sp_executesql
-	declare @S nvarchar(1024),
+	declare @S nvarchar(2048),
 			@CurrentDB varchar(255),
 			@UniqueRowIDCurrent int,
 			@SPToExec varchar(255),
 			@PreferredDBName varchar(255),
-			@outFileFolderPathBase varchar(255),
-			@inFileFolderPathBase varchar(255),
+			@SourceFolderPathBase varchar(255),
+			@ResultsFolderPathBase varchar(255),
 			@IsPeptideDB tinyint
 
 	set @S = ''
@@ -78,23 +91,33 @@ As
 	set @SPToExec = ''
 	set @PreferredDBName = IsNull(@dbName, '')
 	set @message = ''
+	Set @ShowDebugInfo = IsNull(@ShowDebugInfo, 0)
 		
+	
 	---------------------------------------------------
 	-- Clear the output arguments
 	---------------------------------------------------
 	set @taskID = 0
 	set @dbName = ''
-	set @outFile = ''
-	set @outFilePath = ''
-	set @outFileFolderPathBase = ''
-	set @inFile = ''
-	set @inFileFolderPathBase = ''
-	set @inFilePath = ''
-	set @predFile = ''
-	set @unmodifiedPeptidesOnly = 0		-- Future: Obtain this from the peptide or mass tag database with the GANET update task
-	set @noCleavageRuleFilters = 0		-- Future: Obtain this from the peptide or mass tag database
-	set @skipRegression = 0				-- Future: Obtain this from the peptide or mass tag database
+	
+	set @SourceFolderPath = ''
+	set @SourceFileName = ''
+	set @SourceFolderPathBase = ''
+	
+	set @ResultsFolderPath = ''
+	set @ResultsFileName = ''
+	set @ResultsFolderPathBase = ''
+	set @PredNETsFileName = ''	
+	set @ObsNETsFileName = ''
+	
+	Set @ParamFileName = ''
+	
+	set @UnmodifiedPeptidesOnly = 0		-- 1 if we should only consider unmodified peptides and peptides with alkylated cysteine
+	set @NoCleavageRuleFilters = 0		-- 1 if we should use the looser filters that do not consider cleavage rules
+	Set @RegressionOrder = 3			-- 1 for first order, 3 for non-linear
+
 	set @taskAvailable = 0
+
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled 'Peptide_DB_Update', 'RequestGANETUpdateTaskMaster', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -153,23 +176,37 @@ As
 	-- For Peptide DB's, the filenames will be overridden
 	---------------------------------------------------
 	--
-	Declare @outFileNameDefault varchar(256),
-			@inFileNameDefault varchar(256),
-			@predFileNameDefault varchar(256)
+	Declare @SourceFileNameDefault varchar(256),
+			@ResultsFileNameDefault varchar(256),
+			@PredNETsFileNameDefault varchar(256),
+			@ObsNETsFileNameDefault varchar(256)
 	
-	set @outFileNameDefault = ''
-	set @inFileNameDefault = ''
-	set @predFileNameDefault = ''
-
+	set @SourceFileNameDefault = ''
+	set @ResultsFileNameDefault = ''
+	set @PredNETsFileNameDefault = ''
+	set @ObsNETsFileNameDefault = ''
+	
+	If @ShowDebugInfo <> 0
+		Print 'Call GetGANETFolderPaths'
+		
 	exec @myError = GetGANETFolderPaths
-										@clientPerspective,
-										@outFileNameDefault output,
-										@outFileFolderPathBase  output,
-										@inFileNameDefault  output,
-										@inFileFolderPathBase  output,
-										@predFileNameDefault  output,
-										@message  output
+										@clientPerspective = 1,
+										@SourceFileName=@SourceFileNameDefault output,
+										@SourceFolderPath=@SourceFolderPathBase  output,
+										@ResultsFileName=@ResultsFileNameDefault  output,
+										@ResultsFolderPath=@ResultsFolderPathBase  output,
+										@PredNETsFileName=@PredNETsFileNameDefault  output,
+										@ObsNETsFileName=@ObsNETsFileNameDefault output,
+										@message=@message  output
 
+	If @ShowDebugInfo <> 0
+		SELECT @SourceFileNameDefault AS SourceFileNameDefault,
+		       @SourceFolderPathBase AS SourceFolderPathBase,
+		       @ResultsFileNameDefault AS ResultsFileNameDefault,
+		       @ResultsFolderPathBase AS ResultsFolderPathBase,
+		       @PredNETsFileNameDefault AS PredNETsFileNameDefault,
+		       @ObsNETsFileNameDefault AS ObsNETsFileNameDefault
+		
 	---------------------------------------------------
 	-- Step through the database list and call
 	-- RequestGANETUpdateTask in each one (if it exists)
@@ -225,10 +262,15 @@ As
 
 			-- Check if the database actually exists
 			SELECT @SPRowCount = Count(*) 
-			FROM master..sysdatabases AS SD
-			WHERE SD.NAME = @CurrentDB
+			FROM sys.databases
+			WHERE [NAME] = @CurrentDB
 
-			If (@SPRowCount > 0)
+			If (@SPRowCount = 0)
+			Begin
+				If @ShowDebugInfo <> 0
+					Print 'DB not found: ' + @CurrentDB
+			End
+			Else
 			Begin -- <c>
 
 				-- Check if the RequestGANETUpdateTask SP exists for @CurrentDB
@@ -240,29 +282,54 @@ As
 							
 				EXEC sp_executesql @S, N'@SPRowCount int OUTPUT', @SPRowCount OUTPUT
 
-				If (@SPRowCount > 0)
+				If (@SPRowCount = 0)
+				Begin
+					If @ShowDebugInfo <> 0
+						Print 'Stored procedure RequestGANETUpdateTask not found in DB ' + @CurrentDB
+				End
+				Else
 				Begin -- <d>
 					
 					-- Call RequestGANETUpdateTask in @CurrentDB
 					-- Peptide DB's require extra parameters
 
 					Set @SPToExec = '[' + @CurrentDB + ']..RequestGANETUpdateTask'
-					Set @outFilePath = dbo.udfCombinePaths(@outFileFolderPathBase, @CurrentDB + '\')
-					Set @inFilePath = dbo.udfCombinePaths (@inFileFolderPathBase, @CurrentDB + '\')
+					Set @SourceFolderPath = dbo.udfCombinePaths(@SourceFolderPathBase, @CurrentDB + '\')
+					Set @ResultsFolderPath = dbo.udfCombinePaths (@ResultsFolderPathBase, @CurrentDB + '\')
 					
+					If @ShowDebugInfo <> 0
+						Print 'Call ' + @SPToExec
+
 					If @IsPeptideDB = 1
 					Begin
 						-- Peptide DB
-						-- Note that @outFile, @inFile, and @predFile will get overridden with customized names
+						-- Note that @SourceFileName, @ResultsFileName, @PredNETsFileName, and @ObsNETsFileName will get overridden with customized names
+						-- We set @SourceFolderPath and @ResultsFolderPath to '' when calling becuase we want the procedure 
+						--  to determine the local paths to the folders (e.g. I:\GA_Net_Xfer\Out\PT_Shewanella_ProdTest_A123\)
+						
 						Exec @myError = @SPToExec	
 													@ProcessorName,
-													@outFilePath,				-- Note that this is a folder path
 													@taskID output, 
 													@TaskAvailable = @TaskAvailable output,
-													@outFileName = @outFile output,
-													@inFileName = @inFile output,
-													@predFileName = @predFile output,
+													
+													@SourceFolderPath = '',
+													@SourceFileName = @SourceFileName output,
+													
+													@ResultsFolderPath = '',
+													@ResultsFileName = @ResultsFileName output,
+													@PredNETsFileName = @PredNETsFileName output,
+													@ObsNETsFileName = @ObsNETsFileName output,
+													
+													@UnmodifiedPeptidesOnly = @UnmodifiedPeptidesOnly output,
+													@NoCleavageRuleFilters = @NoCleavageRuleFilters output,
+													@RegressionOrder = @RegressionOrder output,
+													@ParamFileName = @ParamFileName output,
+													
 													@message = @message output
+					
+						If IsNull(@ParamFileName, '') = ''
+							Set @ParamFileName = 'LCMSWarp_30Sections_Min20pct_Min20Peptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml'
+
 					End
 					Else
 					Begin
@@ -271,23 +338,33 @@ As
 													@ProcessorName,
 													@taskID = @taskID output, 
 													@TaskAvailable = @TaskAvailable output,
+													@ParamFileName = @ParamFileName output,
 													@message = @message output
 													
 						If @TaskAvailable = 1
 						Begin
-							Set @outfile = @outFileNameDefault
-							Set @inFile = @inFileNameDefault
-							Set @predFile = @predFileNameDefault
+							Set @SourceFileName = @SourceFileNameDefault
+							Set @ResultsFileName = @ResultsFileNameDefault
+							Set @PredNETsFileName = @PredNETsFileNameDefault
+							Set @ObsNETsFileName = @ObsNETsFileNameDefault
+
+							If IsNull(@ParamFileName, '') = ''
+								Set @ParamFileName = 'LCMSWarp_30Sections_Min20pct_Min20Peptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml'
 						End
 					End
-					
 
 					If @myError <> 0
 					Begin
 						Set @message = 'Error calling ' + @SPToExec
+						If @ShowDebugInfo <> 0
+							Print @message
 						Goto Done
 					End
 
+					If @ShowDebugInfo <> 0
+						Print 'Results for ' + @CurrentDB + ': @TaskAvailable=' + Convert(varchar(12), @TaskAvailable) + ', @taskID=' + Convert(varchar(12), IsNull(@taskID, 0))
+
+						
 					-- If a task was found, and no error occurred, then set @done = 1 so that
 					-- the while loop exits
 					If @TaskAvailable = 1 And @myError = 0
@@ -313,6 +390,13 @@ As
 Done:
 	Return @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[RequestGANETUpdateTaskMaster] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTaskMaster] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTaskMaster] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTaskMaster] TO [MTS_DB_Lite] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTaskMaster] TO [pnl\MTSProc] AS [dbo]
 GO

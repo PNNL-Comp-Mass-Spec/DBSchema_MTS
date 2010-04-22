@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Internal_Std_Composition](
 	[Internal_Std_Mix_ID] [int] NOT NULL,
 	[Seq_ID] [int] NOT NULL,
-	[Concentration] [varchar](24) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Internal_Std_Composition_Concentration]  DEFAULT (''),
+	[Concentration] [varchar](24) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Internal_Std_Composition] PRIMARY KEY CLUSTERED 
 (
 	[Internal_Std_Mix_ID] ASC,
@@ -24,4 +24,6 @@ ALTER TABLE [dbo].[T_Internal_Std_Composition]  WITH CHECK ADD  CONSTRAINT [FK_T
 REFERENCES [T_Internal_Std_Components] ([Seq_ID])
 GO
 ALTER TABLE [dbo].[T_Internal_Std_Composition] CHECK CONSTRAINT [FK_T_Internal_Std_Composition_T_Internal_Std_Components]
+GO
+ALTER TABLE [dbo].[T_Internal_Std_Composition] ADD  CONSTRAINT [DF_T_Internal_Std_Composition_Concentration]  DEFAULT ('') FOR [Concentration]
 GO

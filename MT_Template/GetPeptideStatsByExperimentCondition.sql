@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[GetPeptideStatsByExperimentCondition] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure dbo.GetPeptideStatsByExperimentCondition
+CREATE Procedure GetPeptideStatsByExperimentCondition
 /****************************************************
 **
 **	Desc: 
@@ -22,6 +22,7 @@ CREATE Procedure dbo.GetPeptideStatsByExperimentCondition
 **	Auth:	mem
 **	Date:	05/01/2008
 **			05/05/2008 mem - Updated to treat null Peptide_Prophet_Probability values as 0
+**			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -704,7 +705,7 @@ AS
 					Set @S = @S +        ' XTFilteredDataQ.Scan_Number'
 					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Analysis_ID,'
 					Set @S = @S +                ' Pep.Mass_Tag_ID,'
-					Set @S = @S +                        ' Pep.Scan_Number'
+					Set @S = @S +                ' Pep.Scan_Number'
 					Set @S = @S +        ' FROM MassTagsQ'
 					Set @S = @S +             ' INNER JOIN T_Peptides Pep'
 					Set @S = @S +               ' ON MassTagsQ.Mass_Tag_ID = Pep.Mass_Tag_ID'
@@ -721,7 +722,33 @@ AS
 					Set @S = @S +        ' ON XTFilteredDataQ.Analysis_ID = TAD.Job'
 					Set @S = @S +      ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
 					Set @S = @S +        ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
+
+					Set @S = @S +  ' UNION'
 					
+					Set @S = @S + ' SELECT DS_Conditions.Condition_Name,'
+					Set @S = @S +        ' TAD.Dataset_ID,'
+					Set @S = @S +        ' INFilteredDataQ.Mass_Tag_ID,'
+					Set @S = @S +        ' INFilteredDataQ.Scan_Number'
+					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Analysis_ID,'
+					Set @S = @S +                ' Pep.Mass_Tag_ID,'
+					Set @S = @S +                ' Pep.Scan_Number'
+					Set @S = @S +        ' FROM MassTagsQ'
+					Set @S = @S +             ' INNER JOIN T_Peptides Pep'
+					Set @S = @S +               ' ON MassTagsQ.Mass_Tag_ID = Pep.Mass_Tag_ID'
+					Set @S = @S +             ' INNER JOIN T_Score_Inspect I'
+					Set @S = @S +               ' ON Pep.Peptide_ID = I.Peptide_ID'
+					Set @S = @S +             ' INNER JOIN T_Score_Discriminant SD'
+					Set @S = @S +               ' ON Pep.Peptide_ID = SD.Peptide_ID'
+					Set @S = @S +       ' WHERE IsNull(SD.Peptide_Prophet_Probability, 0) >= 0 AND'
+					Set @S = @S +             ' ((Pep.Charge_State = 1  AND I.FScore >= 0) OR'
+					Set @S = @S +              ' (Pep.Charge_State = 2  AND I.FScore >= 0) OR'
+					Set @S = @S +              ' (Pep.Charge_State >= 3 AND I.FScore >= 0)) '
+					Set @S = @S +      ' ) INFilteredDataQ'
+					Set @S = @S +      ' INNER JOIN T_Analysis_Description TAD'
+					Set @S = @S +        ' ON INFilteredDataQ.Analysis_ID = TAD.Job'
+					Set @S = @S +      ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
+					Set @S = @S +        ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
+										
 		Set @S = @S +             ' ) ObsQ'
 		Set @S = @S +        ' GROUP BY Condition_Name, Dataset_ID, Mass_Tag_ID, Scan_Number'
 		Set @S = @S +      ' ) UniqueObsQ'
@@ -849,11 +876,10 @@ Done:
 	
 	Return @myError
 
-
 GO
-GRANT EXECUTE ON [dbo].[GetPeptideStatsByExperimentCondition] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetPeptideStatsByExperimentCondition] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetPeptideStatsByExperimentCondition] TO [MTS_DB_Lite] AS [dbo]
 GO

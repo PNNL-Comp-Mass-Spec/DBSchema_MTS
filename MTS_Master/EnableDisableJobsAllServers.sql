@@ -19,15 +19,16 @@ CREATE PROCEDURE dbo.EnableDisableJobsAllServers
 **			11/15/2007 mem - Updated @CategoryName to allow comma separated lists
 **						   - Added @EnableTProcessStepControlEvenIfZero
 **			03/13/2008 mem - Added parameter @ExecutionStateNewOverride
+**			11/12/2009 mem - Now setting Execution_State in T_Process_Control to 0 or 1 instead of to 3 or 1
 **    
 *****************************************************/
 (
 	@EnableJobs tinyint,										-- 0 to disable, 1 to enable
 	@CategoryName varchar(1024) = 'MTS Auto Update Continuous, DMS Continuous, Database Maintenance',		-- Can be comma-separated list
 	@Preview tinyint = 0,										-- 1 to preview jobs that would be affected, 0 to actually make changes
-	@AdditionalServers varchar(512) = 'ProteinSeqs',			-- Additional servers to poll besides those in T_MTS_Servers
+	@AdditionalServers varchar(512) = '',			-- Additional servers to poll besides those in T_MTS_Servers
 	@SPName varchar(128) = 'MT_Main.dbo.EnableDisableJobs',
-	@UpdateTProcessStepControl tinyint = 1,						-- If 1, then will change Execution_State in MT_Main.T_Process_Control from 3 to 1 or from 1 to 3, depending on @EnableJobs
+	@UpdateTProcessStepControl tinyint = 1,						-- If 1, then will change Execution_State in MT_Main.T_Process_Control from 1 to 0 or from 0 to 1, depending on @EnableJobs
 	@EnableTProcessStepControlEvenIfZero tinyint = 1,			-- Set to 1 to force MT_Main.T_Process_Control to set the values to 1, even if they are 0; only used when @EnableJobs = 1 and @UpdateTProcessStepControl = 1
 	@ExecutionStateNewOverride int = -1,						-- If 0 or higher, then this value is used for the new Execution_State for table T_Process_Step_Control; if negative, then the default value is used (1 if enabling, 3 if disabling)
 	@message varchar(255) = '' OUTPUT
@@ -50,6 +51,7 @@ AS
 	Declare @CommaLoc int
 
 	Declare @ExecutionStateMatch smallint
+	Declare @ExecutionStateMatchB smallint
 	Declare @ExecutionStateNew smallint
 
 	-------------------------------------------------
@@ -83,14 +85,16 @@ AS
 	If @EnableJobs = 0
 	Begin
 		Set @ExecutionStateMatch = 1
+		Set @ExecutionStateMatchB = 3
 		If @ExecutionStateNewOverride < 0
-			Set @ExecutionStateNew = 3
+			Set @ExecutionStateNew = 0
 		Else
 			Set @ExecutionStateNew = @ExecutionStateNewOverride
 	End
 	Else
 	Begin
-		Set @ExecutionStateMatch = 3
+		Set @ExecutionStateMatch = 0
+		Set @ExecutionStateMatchB = 3
 		If @ExecutionStateNewOverride < 0
 			Set @ExecutionStateNew = 1
 		Else
@@ -160,7 +164,7 @@ AS
 					   (@ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1)
 						Set @S = @S +      ' CASE WHEN Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
 					Else
-						Set @S = @S +      ' CASE WHEN Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
+						Set @S = @S +      ' CASE WHEN Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch) + ' OR Execution_State = ' + Convert(varchar(12), @ExecutionStateMatchB)
 
 					Set @S = @S +      ' THEN  Convert(varchar(12), ' + Convert(varchar(12), @ExecutionStateNew) + ')'
 					Set @S = @S +      ' ELSE ''No Change'''
@@ -183,7 +187,7 @@ AS
 					   (@ExecutionStateNew = 1 And @EnableTProcessStepControlEvenIfZero = 1)
 						Set @S = @S + ' WHERE Execution_State <> ' + Convert(varchar(12), @ExecutionStateNew)
 					Else
-						Set @S = @S + ' WHERE Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch)
+						Set @S = @S + ' WHERE Execution_State = ' + Convert(varchar(12), @ExecutionStateMatch) + ' OR Execution_State = ' + Convert(varchar(12), @ExecutionStateMatchB)
 										
 					Exec sp_executeSql @S
 				End
@@ -212,4 +216,8 @@ AS
 
 Done:
 	Select @Message as Message
+GO
+GRANT VIEW DEFINITION ON [dbo].[EnableDisableJobsAllServers] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[EnableDisableJobsAllServers] TO [MTS_DB_Lite] AS [dbo]
 GO

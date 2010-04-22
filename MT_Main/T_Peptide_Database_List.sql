@@ -14,11 +14,11 @@ CREATE TABLE [dbo].[T_Peptide_Database_List](
 	[PDB_State] [int] NULL,
 	[PDB_Last_Update] [datetime] NULL,
 	[PDB_Last_Import] [datetime] NULL,
-	[PDB_Import_Holdoff] [int] NULL CONSTRAINT [DF_T_Peptide_Database_List_PDB_Import_Holdoff]  DEFAULT (24),
-	[PDB_Created] [datetime] NOT NULL CONSTRAINT [DF_T_Peptide_Database_List_PDB_Created]  DEFAULT (getdate()),
-	[PDB_Demand_Import] [tinyint] NULL CONSTRAINT [DF_T_Peptide_Database_List_PDB_Demand_Import]  DEFAULT (0),
-	[PDB_Max_Jobs_To_Process] [int] NULL CONSTRAINT [DF_T_Peptide_Database_List_PDB_Max_Jobs_To_Process]  DEFAULT (50),
-	[PDB_DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_Peptide_Database_List_PDB_DB_Schema_Version]  DEFAULT (2),
+	[PDB_Import_Holdoff] [int] NULL,
+	[PDB_Created] [datetime] NOT NULL,
+	[PDB_Demand_Import] [tinyint] NULL,
+	[PDB_Max_Jobs_To_Process] [int] NULL,
+	[PDB_DB_Schema_Version] [real] NOT NULL,
  CONSTRAINT [PK_T_Peptide_Database_List] PRIMARY KEY CLUSTERED 
 (
 	[PDB_ID] ASC
@@ -33,16 +33,16 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Peptide_Database_List] ON [dbo].[T_Peptid
 	[PDB_Name] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-
 /****** Object:  Trigger [dbo].[trig_d_Peptide_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
 
-CREATE Trigger dbo.trig_d_Peptide_Database_List on [dbo].[T_Peptide_Database_List]
+
+
+CREATE Trigger [dbo].[trig_d_Peptide_Database_List] on [dbo].[T_Peptide_Database_List]
 For Delete
 /****************************************************
 **
@@ -67,12 +67,11 @@ AS
 	FROM deleted
 	ORDER BY PDB_ID
 
-GO
 
+GO
 /****** Object:  Trigger [dbo].[trig_i_Peptide_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
@@ -95,12 +94,11 @@ AS
 	SELECT 2, inserted.PDB_ID, inserted.PDB_State, 0, GetDate()
 	FROM inserted
 
-GO
 
+GO
 /****** Object:  Trigger [dbo].[trig_u_Peptide_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
@@ -124,9 +122,20 @@ AS
 		SELECT 2, inserted.PDB_ID, inserted.PDB_State, deleted.PDB_State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.PDB_ID = inserted.PDB_ID
 
+
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name] FOREIGN KEY([PDB_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List] CHECK CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name]
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Import_Holdoff]  DEFAULT (24) FOR [PDB_Import_Holdoff]
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Created]  DEFAULT (getdate()) FOR [PDB_Created]
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Demand_Import]  DEFAULT (0) FOR [PDB_Demand_Import]
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Max_Jobs_To_Process]  DEFAULT (50) FOR [PDB_Max_Jobs_To_Process]
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_DB_Schema_Version]  DEFAULT (2) FOR [PDB_DB_Schema_Version]
 GO

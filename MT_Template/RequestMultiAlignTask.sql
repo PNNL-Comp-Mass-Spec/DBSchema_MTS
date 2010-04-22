@@ -491,11 +491,11 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [pnl\MTSProc] AS [dbo]
 GO

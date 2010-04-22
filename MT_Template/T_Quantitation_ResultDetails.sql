@@ -6,12 +6,12 @@ GO
 CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[QRD_ID] [int] IDENTITY(1,1) NOT NULL,
 	[QR_ID] [int] NOT NULL,
-	[Internal_Standard_Match] [tinyint] NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Internal_Standard_Match]  DEFAULT ((0)),
+	[Internal_Standard_Match] [tinyint] NOT NULL,
 	[Mass_Tag_ID] [int] NOT NULL,
-	[Mass_Tag_Mods] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Mass_Tag_Mods]  DEFAULT (''),
+	[Mass_Tag_Mods] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[MT_Abundance] [float] NOT NULL,
 	[MT_Abundance_StDev] [float] NOT NULL,
-	[Member_Count_Used_For_Abundance] [decimal](9, 5) NOT NULL,
+	[Member_Count_Used_For_Abundance] [real] NOT NULL,
 	[ER] [float] NOT NULL,
 	[ER_StDev] [float] NOT NULL,
 	[ER_Charge_State_Basis_Count] [decimal](9, 5) NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[NET_Error_Pred_Avg] [decimal](9, 5) NULL,
 	[UMC_MatchCount_Avg] [decimal](9, 5) NOT NULL,
 	[UMC_MatchCount_StDev] [decimal](9, 5) NOT NULL,
-	[SingleMT_MassTagMatchingIonCount] [decimal](9, 5) NOT NULL,
+	[SingleMT_MassTagMatchingIonCount] [real] NOT NULL,
 	[SingleMT_FractionScansMatchingSingleMT] [decimal](9, 8) NOT NULL,
 	[UMC_MassTagHitCount_Avg] [decimal](9, 5) NOT NULL,
 	[UMC_MassTagHitCount_Min] [int] NOT NULL,
@@ -47,11 +47,11 @@ CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[TopLevelFractionMax] [smallint] NOT NULL,
 	[ORF_Count] [smallint] NOT NULL,
 	[PMT_Quality_Score] [decimal](9, 5) NOT NULL,
-	[JobCount_Observed_Both_MS_and_MSMS] [smallint] NOT NULL CONSTRAINT [DF_T_Quantitation_ResultDetails_Observed_Both_MS_and_MSMS]  DEFAULT ((0)),
+	[JobCount_Observed_Both_MS_and_MSMS] [smallint] NOT NULL,
  CONSTRAINT [PK_T_Quantitation_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[QRD_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -60,24 +60,30 @@ GO
 CREATE CLUSTERED INDEX [IX_T_Quantitation_ResultDetails] ON [dbo].[T_Quantitation_ResultDetails] 
 (
 	[QR_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-GRANT DELETE ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User]
+GRANT DELETE ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT INSERT ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User]
+GRANT INSERT ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT SELECT ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User]
+GRANT SELECT ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT UPDATE ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User]
+GRANT UPDATE ON [dbo].[T_Quantitation_ResultDetails] TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Quantitation_ResultDetails]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
+ALTER TABLE [dbo].[T_Quantitation_ResultDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
 GO
 ALTER TABLE [dbo].[T_Quantitation_ResultDetails] CHECK CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Mass_Tags]
 GO
-ALTER TABLE [dbo].[T_Quantitation_ResultDetails]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Quantitation_Results] FOREIGN KEY([QR_ID])
+ALTER TABLE [dbo].[T_Quantitation_ResultDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Quantitation_Results] FOREIGN KEY([QR_ID])
 REFERENCES [T_Quantitation_Results] ([QR_ID])
 ON DELETE CASCADE
 GO
 ALTER TABLE [dbo].[T_Quantitation_ResultDetails] CHECK CONSTRAINT [FK_T_Quantitation_ResultDetails_T_Quantitation_Results]
+GO
+ALTER TABLE [dbo].[T_Quantitation_ResultDetails] ADD  CONSTRAINT [DF_T_Quantitation_ResultDetails_Internal_Standard_Match]  DEFAULT ((0)) FOR [Internal_Standard_Match]
+GO
+ALTER TABLE [dbo].[T_Quantitation_ResultDetails] ADD  CONSTRAINT [DF_T_Quantitation_ResultDetails_Mass_Tag_Mods]  DEFAULT ('') FOR [Mass_Tag_Mods]
+GO
+ALTER TABLE [dbo].[T_Quantitation_ResultDetails] ADD  CONSTRAINT [DF_T_Quantitation_ResultDetails_Observed_Both_MS_and_MSMS]  DEFAULT ((0)) FOR [JobCount_Observed_Both_MS_and_MSMS]
 GO

@@ -6,29 +6,29 @@ GO
 CREATE TABLE [dbo].[T_Peak_Matching_Task](
 	[Task_ID] [int] IDENTITY(1,1) NOT NULL,
 	[Job] [int] NOT NULL,
-	[Confirmed_Only] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Confirmed_Only]  DEFAULT ((0)),
-	[Mod_List] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Mod_List]  DEFAULT (''),
-	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)),
-	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)),
-	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)),
-	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)),
-	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter]  DEFAULT (''),
-	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter]  DEFAULT (''),
-	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)),
-	[Internal_Std_Explicit] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Internal_Std_Explicit]  DEFAULT (''),
-	[NET_Value_Type] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_NET_Value_Type]  DEFAULT ((0)),
-	[Ini_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Ini_File_Name]  DEFAULT (''),
-	[Output_Folder_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Output_Folder_Name]  DEFAULT (''),
-	[Processing_State] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Processing_State]  DEFAULT ((1)),
-	[Priority] [tinyint] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Priority]  DEFAULT ((5)),
-	[Processing_Error_Code] [int] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Error_Code]  DEFAULT ((0)),
-	[Processing_Warning_Code] [int] NOT NULL CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Warning_Code]  DEFAULT ((0)),
-	[PM_Created] [datetime] NULL CONSTRAINT [DF_T_Peak_Matching_Task_Creation_Date]  DEFAULT (getdate()),
+	[Confirmed_Only] [tinyint] NOT NULL,
+	[Mod_List] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Minimum_High_Normalized_Score] [real] NOT NULL,
+	[Minimum_High_Discriminant_Score] [real] NOT NULL,
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL,
+	[Minimum_PMT_Quality_Score] [real] NOT NULL,
+	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL,
+	[Internal_Std_Explicit] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[NET_Value_Type] [tinyint] NOT NULL,
+	[Ini_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Output_Folder_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Processing_State] [tinyint] NOT NULL,
+	[Priority] [tinyint] NOT NULL,
+	[Processing_Error_Code] [int] NOT NULL,
+	[Processing_Warning_Code] [int] NOT NULL,
+	[PM_Created] [datetime] NULL,
 	[PM_Start] [datetime] NULL,
 	[PM_Finish] [datetime] NULL,
 	[PM_AssignedProcessorName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MD_ID] [int] NULL,
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Peak_Matching_Task_Entered_By]  DEFAULT (suser_sname()),
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Peak_Matching_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
@@ -36,15 +36,12 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_i_T_PeakMatchingTask] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE Trigger trig_i_PeakMatchingTask on dbo.T_Peak_Matching_Task
+CREATE Trigger [dbo].[trig_i_T_PeakMatchingTask] on [dbo].[T_Peak_Matching_Task]
 For Insert
 AS
 	If @@RowCount = 0
@@ -55,14 +52,11 @@ AS
 	FROM inserted
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Peak_Matching_Task] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE TRIGGER [trig_u_T_Peak_Matching_Task] ON dbo.T_Peak_Matching_Task 
 FOR UPDATE
 AS
@@ -149,13 +143,13 @@ AS
 	End
 
 GO
-GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT INSERT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT INSERT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User]
+GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_FTICR_Analysis_Description] ([Job])
@@ -181,4 +175,42 @@ GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Ini_File_Name],''))=(0) AND charindex(char((13)),isnull([Ini_File_Name],''))=(0)))
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Confirmed_Only]  DEFAULT ((0)) FOR [Confirmed_Only]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Mod_List]  DEFAULT ('') FOR [Mod_List]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Ini_File_Name]  DEFAULT ('') FOR [Ini_File_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Priority]  DEFAULT ((5)) FOR [Priority]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Creation_Date]  DEFAULT (getdate()) FOR [PM_Created]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

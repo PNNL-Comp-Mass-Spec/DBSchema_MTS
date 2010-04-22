@@ -170,9 +170,9 @@ As
 
 
 GO
-GRANT EXECUTE ON [dbo].[AddUpdateQuantMDIDMapping] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[AddUpdateQuantMDIDMapping] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[AddUpdateQuantMDIDMapping] TO [MTS_DB_Lite] AS [dbo]
 GO

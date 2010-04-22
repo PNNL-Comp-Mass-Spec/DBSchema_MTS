@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[T_Proteins](
 	[External_Reference_ID] [int] NULL,
 	[External_Protein_ID] [int] NULL,
 	[Protein_Collection_ID] [int] NULL,
-	[Last_Affected] [datetime] NOT NULL CONSTRAINT [DF_T_Proteins_Last_Affected]  DEFAULT (getdate()),
+	[Last_Affected] [datetime] NOT NULL,
  CONSTRAINT [PK_T_Proteins] PRIMARY KEY CLUSTERED 
 (
 	[Ref_ID] ASC
@@ -42,4 +42,6 @@ CREATE NONCLUSTERED INDEX [IX_T_Proteins_Reference] ON [dbo].[T_Proteins]
 (
 	[Reference] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_Proteins] ADD  CONSTRAINT [DF_T_Proteins_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

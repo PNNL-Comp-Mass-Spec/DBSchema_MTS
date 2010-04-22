@@ -21,6 +21,8 @@ CREATE PROCEDURE dbo.RequestMultiAlignTaskMaster
 **	Auth:	mem
 **	Date:	01/08/2008 mem - Initial version modelled after RequestPeakMatchingTaskMaster
 **			01/15/2008 mem - Now allowing for a DMS Job List of length > 8000 when populating T_MultiAlign_Params_Cached
+**			02/02/2010 mem - Now updating Results_URL in T_Analysis_Job
+**						   - Now populating T_Analysis_Job_Target_Jobs
 **
 *****************************************************/
 (
@@ -43,7 +45,7 @@ CREATE PROCEDURE dbo.RequestMultiAlignTaskMaster
 	@InternalStdExplicit varchar(255) = '' output,		-- Not used by MTDB schema version 1
 	@NETValueType tinyint=0 output,
 	@paramFilePath varchar(255) = '' output,
-	@outputFolderPath varchar(255) = '' output,
+	@outputFolderPath varchar(512) = '' output,
 	@logFilePath varchar(255) = '' output,
 	@taskAvailable tinyint = 0 output,
 	@message varchar(512) = '' output,
@@ -102,7 +104,8 @@ As
 			@PreferredServerName varchar(255),
 			@PreferredDBName varchar(255),
 			@WorkingServerPrefix varchar(255),
-			@analysisJobListCrossServer varchar(8000)
+			@analysisJobListCrossServer varchar(8000),
+			@ResultsURL varchar(512)
 
 	set @S = ''
 	set @CurrentServer = ''
@@ -136,6 +139,7 @@ As
 	set @NETValueType = 0
 	set @paramFilePath = ''
 	set @outputFolderPath = ''
+	set @ResultsURL = ''
 	set @logFilePath = ''
 	set @taskAvailable = 0
 	set @AssignedJobID = 0
@@ -427,7 +431,16 @@ As
 								Set @CurrentLocation = 'Task found; update T_Analysis_Task_Candidate_DBs'
 							
 								Set @Continue = 0
+
+								-- Parse @outputFolderPath to populate @ResultsURL
+								-- For example, change
+								--  from: \\porky\MTD_Peak_Matching\results\MT_Shewanella_ProdTest_Formic_P460\LTQ_Orb\Job566121_auto_pm_2253
+								--    to: http://porky/pm/results/MT_Shewanella_ProdTest_Formic_P460/LTQ_Orb/Job566121_auto_pm_2253/Index.html
 								
+								Set @ResultsURL = REPLACE(@outputFolderPath, '\\', 'http://')
+								Set @ResultsURL = REPLACE(@ResultsURL, '\MTD_Peak_Matching\', '/pm/')
+								Set @ResultsURL = REPLACE(@ResultsURL, '\', '/') + '/Index.html'
+
 								Set @serverName = @CurrentServer
 								Set @mtdbName = @CurrentMTDB
 								Set @TimeStarted = GETDATE()
@@ -514,14 +527,26 @@ As
 												Task_ID, Task_Server, Task_Database,
 												Assigned_Processor_Name, Tool_Version,
 												DMS_Job_Count, DMS_Job_Min, DMS_Job_Max,
-												Output_Folder_Path)
+												Output_Folder_Path,
+												Results_URL)
 								VALUES (@TimeStarted, @ToolID, '', 2,
 										@TaskID, @serverName, @mtdbName,
 										@ProcessorName, @toolVersion, 
 										@DMSJobCount, @DMSJobMin, @DMSJobMax,
-										@outputFolderPath)
+										@outputFolderPath,
+										@ResultsURL)
 								--
 								SELECT @myError = @@error, @myRowCount = @@rowcount, @AssignedJobID = SCOPE_IDENTITY()
+
+
+								Set @CurrentLocation = 'Add new entries to T_Analysis_Job_Target_Jobs'
+								
+								INSERT INTO T_Analysis_Job_Target_Jobs (Job_ID, DMS_Job)
+								SELECT @AssignedJobID AS Job_ID, Src.Job AS DMS_Job
+								FROM #TmpMultiAlignJobList Src
+								ORDER BY Src.Job								
+								--
+								SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
 								-- Update status of Processor in T_MultiAlign_Activity
@@ -721,7 +746,10 @@ As
 Done:
 	Return @myError
 
-
 GO
-GRANT EXECUTE ON [dbo].[RequestMultiAlignTaskMaster] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTaskMaster] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTaskMaster] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTaskMaster] TO [MTS_DB_Lite] AS [dbo]
 GO

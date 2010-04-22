@@ -17,8 +17,9 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Scan_Time_Peak_Apex] [real] NULL,
 	[Peak_Area] [real] NULL,
 	[Peak_SN_Ratio] [real] NULL,
-	[Max_Obs_Area_In_Job] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0),
-	[State_ID] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_State_ID]  DEFAULT ((1)),
+	[Max_Obs_Area_In_Job] [tinyint] NOT NULL,
+	[State_ID] [tinyint] NOT NULL,
+	[Cleavage_State_Max] [tinyint] NULL,
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY NONCLUSTERED 
 (
 	[Peptide_ID] ASC
@@ -33,6 +34,14 @@ CREATE CLUSTERED INDEX [IX_T_Peptides_AnalysisID_PeptideID] ON [dbo].[T_Peptides
 	[Analysis_ID] ASC,
 	[Peptide_ID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_Peptides_Cleavage_State_Max_include_AnalysisID] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Peptides_Cleavage_State_Max_include_AnalysisID] ON [dbo].[T_Peptides] 
+(
+	[Cleavage_State_Max] ASC
+)
+INCLUDE ( [Analysis_ID]) WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
 /****** Object:  Index [IX_T_Peptides_Scan_Number] ******/
@@ -62,4 +71,8 @@ ALTER TABLE [dbo].[T_Peptides]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptides_T_Sequ
 REFERENCES [T_Sequence] ([Seq_ID])
 GO
 ALTER TABLE [dbo].[T_Peptides] CHECK CONSTRAINT [FK_T_Peptides_T_Sequence]
+GO
+ALTER TABLE [dbo].[T_Peptides] ADD  CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0) FOR [Max_Obs_Area_In_Job]
+GO
+ALTER TABLE [dbo].[T_Peptides] ADD  CONSTRAINT [DF_T_Peptides_State_ID]  DEFAULT ((1)) FOR [State_ID]
 GO

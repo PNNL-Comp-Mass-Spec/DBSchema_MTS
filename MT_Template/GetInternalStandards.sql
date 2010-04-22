@@ -16,12 +16,14 @@ CREATE Procedure dbo.GetInternalStandards
 **  Auth:	mem
 **	Date:	12/20/2005
 **			06/22/2006 mem - Now posting an error if the internal standard name is unknown
+**			01/12/2010 mem - Now finding the closest match if the internal standard name is unknown
 **
 ****************************************************/
 (
 	@Job int = 0,									-- Set to a non-zero value to allow auto-selection of internal standards from this job; if @InternalStdExplicit is not blank, then both the job's internal standard(s) and that given by @InternalStdExplicit will be used
 	@InternalStdExplicit varchar(255) = '',			-- Specifies the name of the internal std to include (regardless of @Job); can be a comma-separated list of internal standards
-	@InternalStdListUsed varchar(255) = '' OUTPUT	-- List of internal standards used
+	@InternalStdListUsed varchar(255) = '' OUTPUT,	-- List of internal standards used
+	@DoNotLogUnknownStandards tinyint = 0			-- Set to 1 to not post a log entry when an unknown internal standard is encountered
 )
 As
 	Set NoCount On
@@ -49,13 +51,23 @@ As
 	Set @InternalStdComponents = 0
 	
 	Declare @UndefinedInternalStdList varchar(512)
+
+	Declare @InternalStandard varchar(64)
+	Declare @InternalStandardLike varchar(64)
+	Declare @Match varchar(64)
+	Declare @SimilarInternalStdMixes varchar(256)
+	
+	Declare @EntryID int
+
 	Set @UndefinedInternalStdList = ''
+	Set @SimilarInternalStdMixes = ''
 	
 	---------------------------------------------------	
 	-- Validate the input parameters
 	---------------------------------------------------	
 	Set @Job = IsNull(@Job, 0)
 	Set @InternalStdExplicit = IsNull(@InternalStdExplicit, '')
+	Set @DoNotLogUnknownStandards = IsNull(@DoNotLogUnknownStandards, 0)
 
 	Set @InternalStdListUsed = ''
 
@@ -82,39 +94,21 @@ As
 	-- Create a temporary table to hold the internal standards to include
 	---------------------------------------------------	
 	CREATE TABLE #TmpInternalStdMixes (
-		Internal_Std_Name varchar(512)
+		Internal_Std_Name varchar(512),
+		EntryID int identity(1,1)
 	)
 	
 
 	---------------------------------------------------	
 	-- Parse @InternalStdExplicit, splitting on @valueDelimiter
 	---------------------------------------------------	
-	Declare @ListRemaining varchar(255)
-	Declare @CurrValue varchar(255)
-	Declare @DelimiterLoc int
-	
-	Declare @valueDelimiter char(1)
-	Set @valueDelimiter = ','
-	
-	Set @ListRemaining = @InternalStdExplicit
-	While Len(@ListRemaining) > 0
-	Begin
-		Set @DelimiterLoc = CharIndex(@valueDelimiter, @ListRemaining)		
-		If @DelimiterLoc > 0
-		 Begin
-			Set @CurrValue = RTrim(LTrim(SubString(@ListRemaining, 1, @DelimiterLoc-1)))
-			Set @ListRemaining = RTrim(LTrim(SubString(@ListRemaining, @DelimiterLoc+1, Len(@ListRemaining)-@DelimiterLoc)))
-		 End
-		Else			--last inclusion item
-		 Begin
-			Set @CurrValue = RTrim(LTrim(@ListRemaining))
-			Set @ListRemaining = ''
-		 End
 
-		If Len(@CurrValue) > 0
-			INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
-			VALUES (@CurrValue)
-	End
+	INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
+	SELECT DISTINCT Value
+	FROM dbo.udfParseDelimitedList(@InternalStdExplicit, ',')
+	ORDER BY Value
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
 	---------------------------------------------------	
@@ -125,9 +119,9 @@ As
 		-- Lookup the internal standard(s) for the dataset
 		-- If @InternalStdExplicit contained any entries, then the dataset's internal standard(s)
 		--  will be appended to #TmpInternalStdMixes
-		SELECT 	@PreDigestIntStd = PreDigest_Internal_Std,
-				@PostDigestIntStd = PostDigest_Internal_Std,
-				@DatasetIntStd = Dataset_Internal_Std
+		SELECT 	@PreDigestIntStd = IsNull(PreDigest_Internal_Std, ''),
+				@PostDigestIntStd = IsNull(PostDigest_Internal_Std, ''),
+				@DatasetIntStd = IsNull(Dataset_Internal_Std, '')
 		FROM T_FTICR_Analysis_Description
 		WHERE Job = @Job
 		--
@@ -136,16 +130,25 @@ As
 		If @myRowCount > 0
 		Begin
 			If Len(@PreDigestIntStd) > 0
-				INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
-				VALUES (@PreDigestIntStd)
+			Begin
+				If Not Exists (SELECT * FROM #TmpInternalStdMixes WHERE Internal_Std_Name = @PreDigestIntStd)
+					INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
+					VALUES (@PreDigestIntStd)
+			End
 			
 			If Len(@PostDigestIntStd) > 0
-				INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
-				VALUES (@PostDigestIntStd)
+			Begin
+				If Not Exists (SELECT * FROM #TmpInternalStdMixes WHERE Internal_Std_Name = @PostDigestIntStd)
+					INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
+					VALUES (@PostDigestIntStd)
+			End
 
 			If Len(@DatasetIntStd) > 0
-				INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
-				VALUES (@DatasetIntStd)
+			Begin
+				If Not Exists (SELECT * FROM #TmpInternalStdMixes WHERE Internal_Std_Name = @DatasetIntStd)
+					INSERT INTO #TmpInternalStdMixes (Internal_Std_Name)
+					VALUES (@DatasetIntStd)
+			End
 		End
 	End
 	
@@ -161,7 +164,105 @@ As
 	If @InternalStdMixCount > 0
 	Begin -- <a>
 	
-		-- Construct a comma-separated list of the internal standard mixes in #TmpInternalStdMixes
+		-- Validate that each entry in #TmpInternalStdMixes is defined in MT_Main
+		-- For any entries that are not defined in MT_Main, find the closest match (assuming the closest match is not already in #TmpInternalStdMixes)
+		Set @UndefinedInternalStdList = ''
+		Set @EntryId = 0
+		
+		Set @Continue = 1
+		While @Continue = 1
+		Begin -- <b1>
+			SELECT TOP 1 @InternalStandard = IntStdMixes.Internal_Std_Name,
+			             @EntryID = EntryID
+			FROM #TmpInternalStdMixes IntStdMixes
+			     LEFT OUTER JOIN MT_Main.dbo.T_Internal_Standards IntStd
+			       ON IntStd.Name = IntStdMixes.Internal_Std_Name
+			WHERE EntryID > @EntryID AND
+			      IntStd.Internal_Std_Mix_ID IS NULL
+			ORDER BY EntryID
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			If @myRowCount = 0
+				Set @Continue = 0
+			Else
+			Begin -- <c1>
+			
+				-- Update the list of invalid internal standards
+				If @UndefinedInternalStdList = ''
+					Set @UndefinedInternalStdList = @InternalStandard
+				Else
+					Set @UndefinedInternalStdList = @UndefinedInternalStdList + ', ' + @InternalStandard
+				
+
+				-- Look for an internal standard in MT_Main.dbo.T_Internal_Standards whose name is similar to @InternalStandard
+				Set @Match = ''
+				
+				While Len(@InternalStandard) >= 3
+				Begin -- <d>
+					Set @InternalStandard = Substring(@InternalStandard, 1, Len(@InternalStandard)-1)
+					
+					Set @InternalStandardLike = Replace(@InternalStandard, '_', '[_]') + '%'
+					Set @Match = ''
+					
+					SELECT TOP 1 @Match = [Name]
+					FROM MT_Main.dbo.T_Internal_Standards 
+					WHERE [Name] LIKE @InternalStandardLike
+					ORDER BY Internal_Std_Mix_ID Desc
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+
+					If @myRowCount > 0
+					Begin -- <e>
+						-- Match found; if it is not already in #TmpInternalStdMixes then update @EntryID to have the matching name
+						If Not Exists (SELECT * FROM #TmpInternalStdMixes WHERE Internal_Std_Name = @Match)
+							UPDATE #TmpInternalStdMixes 
+							SET Internal_Std_Name = @Match
+							WHERE EntryID = @EntryID
+							
+						-- Now set @InternalStandard to '' so that we exit the While loop
+						Set @InternalStandard = ''
+						
+					End -- </e>
+					
+				End -- </d>
+				
+				If @Match = ''
+					-- A match was not found; remove this internal standard from #TmpInternalStdMixes
+					DELETE FROM #TmpInternalStdMixes WHERE EntryID = @EntryID
+				Else
+				Begin
+					If @SimilarInternalStdMixes = ''
+						Set @SimilarInternalStdMixes = @Match
+					Else
+					Begin
+						If @SimilarInternalStdMixes <> @Match
+							Set @SimilarInternalStdMixes = @SimilarInternalStdMixes + ', ' + @Match
+					End
+				End
+
+				
+			End  -- </c1>
+			
+		End -- </b1>
+		
+		If @UndefinedInternalStdList <> ''
+		Begin
+			Set @message = 'Unknown internal standard mix name requested: ' + @UndefinedInternalStdList
+			
+			If @SimilarInternalStdMixes <> ''
+				Set @message = @message + '; substituted "' + @SimilarInternalStdMixes + '"'
+			
+			If @DoNotLogUnknownStandards = 0
+				Execute PostLogEntry 'Error', @message, 'GetInternalStandards', 1
+			Else
+				Print 'Error: ' + @message
+				
+			Set @message = ''
+		End
+	
+		
+		-- Construct a comma-separated list of the valid internal standard mixes in #TmpInternalStdMixes
 		--
 		Set @InternalStdListUsed = ''
 		SELECT @InternalStdListUsed = @InternalStdListUsed + Internal_Std_Name + ', '
@@ -177,30 +278,7 @@ As
 		If Len(@InternalStdListUsed) > 2
 			Set @InternalStdListUsed = Left(RTrim(@InternalStdListUsed), Len(RTrim(@InternalStdListUsed))-1)
 
-		-- Validate that each entry in #TmpInternalStdMixes is defined in MT_Main
-		--
-		Set @UndefinedInternalStdList = ''
-		SELECT @UndefinedInternalStdList = @UndefinedInternalStdList + Internal_Std_Name + ', '
-		FROM (	SELECT DISTINCT IntStdMixes.Internal_Std_Name AS Internal_Std_Name
-				FROM #TmpInternalStdMixes IntStdMixes LEFT OUTER JOIN
-					 MT_Main.dbo.T_Internal_Standards IntStd ON IntStd.Name = IntStdMixes.Internal_Std_Name
-				WHERE IntStd.Internal_Std_Mix_ID IS NULL
-			 ) LookupQ
-		ORDER BY Internal_Std_Name
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
-		If @myRowCount > 0
-		Begin
-			If Len(@UndefinedInternalStdList) > 2
-				Set @UndefinedInternalStdList = Left(RTrim(@UndefinedInternalStdList), Len(RTrim(@UndefinedInternalStdList))-1)
-			
-			Set @message = 'Unknown internal standard mix name requested: ' + @UndefinedInternalStdList
-			Execute PostLogEntry 'Error', @message, 'GetInternalStandards', 1
-			Set @message = ''
-		End
-		
-
+	
 		-- Populate #TmpSeqsForInternalStds using the tables in MT_Main
 		--
 		INSERT INTO #TmpSeqsForInternalStds (Seq_ID, IsDefined, Description, Peptide, 
@@ -223,7 +301,7 @@ As
 			Goto Done
 			
 		If @InternalStdComponents > 0
-		Begin -- <b>
+		Begin -- <b2>
 			-- Need to validate that each entry in #TmpSeqsForInternalStds is present in T_Mass_Tags
 			-- First, mark the entries in #TmpSeqsForInternalStds that are present in T_Mass_Tags
 			
@@ -235,7 +313,7 @@ As
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			
 			If @myRowCount < @InternalStdComponents
-			Begin -- <c>
+			Begin -- <c2>
 				-- One or more entries in #TmpSeqsForInternalStds is not defined in T_Mass_Tags
 				-- Loop through #TmpSeqsForInternalStds and add each missing entry
 				
@@ -248,7 +326,7 @@ As
 				Set @SeqCountAdded = 0
 				Set @Continue = 1
 				While @Continue = 1 and @myError = 0
-				Begin -- <d>
+				Begin -- <d2>
 					-- Grab the next entry
 					SELECT TOP 1 @SeqID = Seq_ID
 					FROM #TmpSeqsForInternalStds
@@ -266,7 +344,7 @@ As
 						If @myError = 0
 							Set @SeqCountAdded = @SeqCountAdded + 1
 					End
-				End -- </d>
+				End -- </d2>
 				
 				If @SeqCountAdded > 0
 				Begin
@@ -280,8 +358,8 @@ As
 					Set @message = ''
 				End
 
-			End -- </c>
-		End -- </b>
+			End -- </c2>
+		End -- </b2>
 
 		If @myError <> 0
 		DELETE FROM #TmpSeqsForInternalStds
@@ -329,9 +407,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetInternalStandards] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetInternalStandards] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetInternalStandards] TO [MTS_DB_Lite] AS [dbo]
 GO

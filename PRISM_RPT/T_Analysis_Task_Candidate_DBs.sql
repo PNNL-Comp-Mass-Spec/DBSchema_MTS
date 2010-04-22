@@ -11,7 +11,7 @@ CREATE TABLE [dbo].[T_Analysis_Task_Candidate_DBs](
 	[Task_Count_Total] [int] NULL,
 	[Task_Count_New] [int] NULL,
 	[Task_Count_Processing] [int] NULL,
-	[Last_Affected] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Task_Candidate_DBs_Last_Affected]  DEFAULT (getdate()),
+	[Last_Affected] [datetime] NOT NULL,
 	[Last_NewTask_Date] [datetime] NULL,
 	[Last_Processing_Date] [datetime] NULL,
  CONSTRAINT [PK_T_Analysis_Task_Candidate_DBs] PRIMARY KEY CLUSTERED 
@@ -41,4 +41,6 @@ ALTER TABLE [dbo].[T_Analysis_Task_Candidate_DBs]  WITH CHECK ADD  CONSTRAINT [F
 REFERENCES [T_Analysis_Tool] ([Tool_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Task_Candidate_DBs] CHECK CONSTRAINT [FK_T_Analysis_Task_Candidate_DBs_T_Analysis_Tool]
+GO
+ALTER TABLE [dbo].[T_Analysis_Task_Candidate_DBs] ADD  CONSTRAINT [DF_T_Analysis_Task_Candidate_DBs_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

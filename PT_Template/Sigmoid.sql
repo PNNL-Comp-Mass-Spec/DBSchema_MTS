@@ -34,5 +34,5 @@ END
 
 
 GO
-GRANT EXECUTE ON [dbo].[Sigmoid] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[Sigmoid] TO [DMS_SP_User] AS [dbo]
 GO

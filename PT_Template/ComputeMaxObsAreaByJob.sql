@@ -28,6 +28,7 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
 **			03/20/2006 mem - Now sorting on job when populating #T_Jobs_To_Update
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **			07/29/2008 mem - Added parameter @PreviewSql
+**			01/19/2010 mem - Now setting @duplicateEntryHoldoffHours to 24 when posting error messages
 **    
 *****************************************************/
 (
@@ -164,14 +165,14 @@ As
 			else
 				Set @message = @message + ' jobs with 1 or more peptides having null Seq_ID values (Jobs ' + convert(varchar(19), @JobStart) + ' through ' +  convert(varchar(19), @JobEnd) + ')'
 			
-			Set @message = @message + '; cannot populate the Max_Obs_Are_In_Job column'
+			Set @message = @message + '; cannot populate the Max_Obs_Area_In_Job column'
 			
 			If @infoOnly = 0
 			Begin
 				If @JobsToUpdate - @MatchCount > 0
 					Set @message = @message + '; will skip the inappropriate jobs and process the remaining ones'
 				
-				execute PostLogEntry 'Error', @message, 'ComputeMaxObsAreaByJob'
+				execute PostLogEntry 'Error', @message, 'ComputeMaxObsAreaByJob', @duplicateEntryHoldoffHours=24
 
 				-- Delete the invalid jobs and continue
 				DELETE FROM #T_Jobs_To_Update
@@ -369,7 +370,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ComputeMaxObsAreaByJob] TO [MTS_DB_Lite] AS [dbo]
 GO

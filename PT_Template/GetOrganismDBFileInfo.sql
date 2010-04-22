@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.GetOrganismDBFileInfo
 **			07/15/2006 mem - Updated to properly report when the GetArchivedFileIDForProteinCollectionList could not be found
 **			09/07/2007 mem - Changed Protein_Sequences server reference to ProteinSeqs
 **			10/07/2007 mem - Increased @ProteinCollectionList size to varchar(max)
+**			02/19/2009 mem - Changed @ResidueCount to bigint
 **    
 *****************************************************/
 (
@@ -25,7 +26,7 @@ CREATE PROCEDURE dbo.GetOrganismDBFileInfo
 	@OrganismDBFileID int=0 Output,			-- Will be 0 if the Organism_DB_Name is 'na' or '', if @ProteinCollectionFileID <> 0, or if the file is not found in MT_Main.dbo.V_DMS_Organism_DB_File_Import
 	@ProteinCollectionFileID int=0 Output,	-- Will be 0 if the Protein_Collection_List is 'na' or '' or if the file is not known by the Protein_Sequences DB
 	@ProteinCount int=0 Output,
-	@ResidueCount int=0 Output,
+	@ResidueCount bigint=0 Output,
 	@message varchar(512)='' Output
 )
 As
@@ -235,7 +236,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetOrganismDBFileInfo] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetOrganismDBFileInfo] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetOrganismDBFileInfo] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetOrganismDBFileInfo] TO [MTS_DB_Lite] AS [dbo]
 GO

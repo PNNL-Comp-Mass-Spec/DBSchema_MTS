@@ -11,13 +11,16 @@ CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
 **
 **	Return values: 0: success, otherwise, error code
 **
-**
 **	Auth:	mem
 **	Date:	03/06/2007
 **			05/09/2007 mem - Now calling UpdateDMSCachedDataStatus to update the cache status variables (Ticket:422)
+**			09/18/2008 mem - Added parameters @MassCorrectionIDMinimum and @MassCorrectionIDMaximum
+**						   - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
 **
 *****************************************************/
 (
+	@MassCorrectionIDMinimum int = 0,		-- This parameter is not actually used, but is required for compatibility with the other RefreshCachedDMS procedures
+	@MassCorrectionIDMaximum int = 0,		-- This parameter is not actually used, but is required for compatibility with the other RefreshCachedDMS procedures
 	@message varchar(255) = '' output
 )
 AS
@@ -45,7 +48,7 @@ AS
 	Begin Try
 		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
 		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Mass_Correction_Factors_Cached', @IncrementRefreshCount = 0
+		Exec UpdateDMSCachedDataStatus 'T_DMS_Mass_Correction_Factors_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = 1, @LastRefreshMinimumID = 0
 
 		
 		Set @CurrentLocation = 'Delete extra rows in T_DMS_Mass_Correction_Factors_Cached'
@@ -128,7 +131,9 @@ AS
 											@IncrementRefreshCount = 1, 
 											@InsertCountNew = @InsertCount, 
 											@UpdateCountNew = @UpdateCount, 
-											@DeleteCountNew = @DeleteCount
+											@DeleteCountNew = @DeleteCount,
+											@FullRefreshPerformed = 1, 
+											@LastRefreshMinimumID = 0
 		
 	End Try
 	Begin Catch
@@ -143,4 +148,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSMassCorrectionFactors] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSMassCorrectionFactors] TO [MTS_DB_Lite] AS [dbo]
 GO

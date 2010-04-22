@@ -25,11 +25,13 @@ CREATE TABLE [dbo].[T_QR_Export_Job](
 	[gen_pep_crosstab] [bit] NOT NULL,
 	[pep_avg] [bit] NOT NULL,
 	[gen_propep_crosstab] [bit] NOT NULL,
-	[Verbose_Output_Columns] [bit] NOT NULL CONSTRAINT [DF_T_QR_Export_Job_Verbose_Output_Columns]  DEFAULT (0),
+	[Verbose_Output_Columns] [bit] NOT NULL,
  CONSTRAINT [PK_T_QR_Export_Job] PRIMARY KEY CLUSTERED 
 (
 	[jobkey] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_QR_Export_Job] ADD  CONSTRAINT [DF_T_QR_Export_Job_Verbose_Output_Columns]  DEFAULT (0) FOR [Verbose_Output_Columns]
 GO

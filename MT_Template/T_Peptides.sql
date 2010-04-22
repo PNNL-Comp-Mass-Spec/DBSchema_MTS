@@ -14,11 +14,11 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Peptide] [varchar](850) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Mass_Tag_ID] [int] NOT NULL,
 	[GANET_Obs] [real] NULL,
-	[State_ID] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_State]  DEFAULT (1),
+	[State_ID] [tinyint] NOT NULL,
 	[Scan_Time_Peak_Apex] [real] NULL,
 	[Peak_Area] [real] NULL,
 	[Peak_SN_Ratio] [real] NULL,
-	[Max_Obs_Area_In_Job] [tinyint] NOT NULL CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0),
+	[Max_Obs_Area_In_Job] [tinyint] NOT NULL,
 	[PMT_Quality_Score_Local] [real] NULL,
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY CLUSTERED 
 (
@@ -80,4 +80,8 @@ ALTER TABLE [dbo].[T_Peptides]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptides_T_Pe
 REFERENCES [T_Peptide_State_Name] ([State_ID])
 GO
 ALTER TABLE [dbo].[T_Peptides] CHECK CONSTRAINT [FK_T_Peptides_T_Peptide_State_Name]
+GO
+ALTER TABLE [dbo].[T_Peptides] ADD  CONSTRAINT [DF_T_Peptides_State]  DEFAULT (1) FOR [State_ID]
+GO
+ALTER TABLE [dbo].[T_Peptides] ADD  CONSTRAINT [DF_T_Peptides_Max_Obs_Area_In_Job]  DEFAULT (0) FOR [Max_Obs_Area_In_Job]
 GO

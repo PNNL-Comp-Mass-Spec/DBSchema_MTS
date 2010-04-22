@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config] ******/
-/****** RowCount: 39 ******/
+/****** RowCount: 40 ******/
 SET IDENTITY_INSERT [T_Process_Config] ON
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (100,'Campaign','<Fill In>','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (119,'Dataset_DMS_Creation_Date_Minimum','','9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -15,6 +15,7 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (117,'MS_Instrument_Class','BRUKERFTMS','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (116,'MS_Instrument_Class','Finnigan_FTICR','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (133,'MS_Instrument_Class','LTQ_FT','9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (154,'MS_Instrument_Class','Thermo_Exactive','4/22/2009 8:52:04 PM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (112,'MS_Result_Type','HMMA_Peak','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (140,'MSMS_Result_Type','Peptide_Hit','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (144,'MSMS_Result_Type','XT_Peptide_Hit','2/10/2007 12:00:00 AM','PNL\mtsadmin')

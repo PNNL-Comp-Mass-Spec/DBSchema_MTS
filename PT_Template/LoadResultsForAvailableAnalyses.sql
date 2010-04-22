@@ -38,11 +38,13 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			10/30/2007 mem - Fixed bug that examined the wrong table to determine the number of jobs that have reached state @NextProcessStateToUse
 **			08/26/2008 mem - Switched to finding the next available job using T_Analysis_Description instead of a temporary table
 **			10/16/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			10/04/2009 mem - Added support for scripted Peptide_Hit jobs (where the tool name isn't the traditional Sequest, X!Tandem, or Inspect)
+**			11/04/2009 mem - Changed states examined when counting the number of jobs loaded to date
 **    
 *****************************************************/
 (
 	@ProcessStateMatch int = 10,
-	@NextProcessState int = 20,
+	@NextProcessState int = 15,
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int = 0 OUTPUT
 )
@@ -187,7 +189,7 @@ AS
 			Set @ReindexDB = 0
 			Set @ReindexMessage = ''
 			
-			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect'))
+			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect') OR @ResultType LIKE '%Peptide_Hit')
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
 				exec @result = LoadPeptidesForOneAnalysis
@@ -199,10 +201,10 @@ AS
 			
 				Set @jobProcessed = 1
 				
-				-- Count the number jobs that have ever entered state @NextProcessStateToUse
+				-- Count the number jobs that have ever entered states 15 or 20
 				SELECT @JobCount = COUNT(*)
 				FROM T_Event_Log
-				WHERE Target_State = @NextProcessStateToUse
+				WHERE Target_State IN (15, 20)
 				
 				-- Reindex after 25 and after 100 Peptide_Hit jobs have been loaded
 				If @JobCount = 25 Or @JobCount = 100
@@ -225,7 +227,7 @@ AS
 				-- Count the number jobs currently in state 75
 				SELECT @JobCount = COUNT(*)
 				FROM T_Event_Log
-				WHERE Target_State = @NextProcessStateToUse
+				WHERE Target_State = 75
 				
 				-- Reindex after 25 SIC jobs have been loaded
 				If @JobCount = 25
@@ -340,7 +342,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

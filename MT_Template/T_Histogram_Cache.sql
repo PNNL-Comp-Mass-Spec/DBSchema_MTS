@@ -6,21 +6,21 @@ GO
 CREATE TABLE [dbo].[T_Histogram_Cache](
 	[Histogram_Cache_ID] [int] IDENTITY(1,1) NOT NULL,
 	[Histogram_Mode] [smallint] NOT NULL,
-	[Score_Minimum] [float] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Score_Minimum]  DEFAULT (0),
-	[Score_Maximum] [float] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Score_Maximum]  DEFAULT (0),
-	[Bin_Count] [int] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Bin_Count]  DEFAULT (100),
-	[Discriminant_Score_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Discriminant_Score_Minimum]  DEFAULT (0),
-	[Peptide_Prophet_Probability_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Peptide_Prophet_Probability_Minimum]  DEFAULT (0),
-	[PMT_Quality_Score_Minimum] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_PMT_Quality_Score_Minimum]  DEFAULT (0),
-	[Charge_State_Filter] [smallint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Charge_State_Filter]  DEFAULT (0),
-	[Use_Distinct_Peptides] [tinyint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Use_Distinct_Peptides]  DEFAULT (0),
-	[Result_Type_Filter] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Result_Type_Filter]  DEFAULT (''),
-	[Query_Date] [datetime] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Query_Date]  DEFAULT (getdate()),
-	[Result_Count] [int] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Result_Count]  DEFAULT (0),
-	[Query_Speed_Category] [smallint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Query_Speed_Category]  DEFAULT (0),
-	[Execution_Time_Seconds] [real] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Execution_Time_Seconds]  DEFAULT (0),
-	[Histogram_Cache_State] [smallint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Histogram_Cache_State]  DEFAULT (0),
-	[Auto_Update] [tinyint] NOT NULL CONSTRAINT [DF_T_Histogram_Cache_Auto_Update]  DEFAULT (0),
+	[Score_Minimum] [float] NOT NULL,
+	[Score_Maximum] [float] NOT NULL,
+	[Bin_Count] [int] NOT NULL,
+	[Discriminant_Score_Minimum] [real] NOT NULL,
+	[Peptide_Prophet_Probability_Minimum] [real] NOT NULL,
+	[PMT_Quality_Score_Minimum] [real] NOT NULL,
+	[Charge_State_Filter] [smallint] NOT NULL,
+	[Use_Distinct_Peptides] [tinyint] NOT NULL,
+	[Result_Type_Filter] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Query_Date] [datetime] NOT NULL,
+	[Result_Count] [int] NOT NULL,
+	[Query_Speed_Category] [smallint] NOT NULL,
+	[Execution_Time_Seconds] [real] NOT NULL,
+	[Histogram_Cache_State] [smallint] NOT NULL,
+	[Auto_Update] [tinyint] NOT NULL,
  CONSTRAINT [PK_T_Histogram_Cache] PRIMARY KEY CLUSTERED 
 (
 	[Histogram_Cache_ID] ASC
@@ -63,4 +63,34 @@ GO
 ALTER TABLE [dbo].[T_Histogram_Cache]  WITH NOCHECK ADD  CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter] CHECK  (([Result_Type_Filter] = '' or [Result_Type_Filter] = 'Peptide_Hit' or [Result_Type_Filter] = 'XT_Peptide_Hit'))
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Score_Minimum]  DEFAULT (0) FOR [Score_Minimum]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Score_Maximum]  DEFAULT (0) FOR [Score_Maximum]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Bin_Count]  DEFAULT (100) FOR [Bin_Count]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Discriminant_Score_Minimum]  DEFAULT (0) FOR [Discriminant_Score_Minimum]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Peptide_Prophet_Probability_Minimum]  DEFAULT (0) FOR [Peptide_Prophet_Probability_Minimum]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_PMT_Quality_Score_Minimum]  DEFAULT (0) FOR [PMT_Quality_Score_Minimum]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Charge_State_Filter]  DEFAULT (0) FOR [Charge_State_Filter]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Use_Distinct_Peptides]  DEFAULT (0) FOR [Use_Distinct_Peptides]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Result_Type_Filter]  DEFAULT ('') FOR [Result_Type_Filter]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Query_Date]  DEFAULT (getdate()) FOR [Query_Date]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Result_Count]  DEFAULT (0) FOR [Result_Count]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Query_Speed_Category]  DEFAULT (0) FOR [Query_Speed_Category]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Execution_Time_Seconds]  DEFAULT (0) FOR [Execution_Time_Seconds]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Histogram_Cache_State]  DEFAULT (0) FOR [Histogram_Cache_State]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Auto_Update]  DEFAULT (0) FOR [Auto_Update]
 GO

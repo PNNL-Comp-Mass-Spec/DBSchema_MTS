@@ -42,6 +42,8 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **						   - Added parameter @infoOnly
 **			01/03/2008 mem - Moved output folder name logic to after the Transaction Commit
 **			01/10/2008 mem - No longer including the DB_Name in the final output folder name since that can lead to path lengths over 255 characters when the .Ini file is copied over
+**			06/16/2009 mem - Now storing Exactive results in folder 'Exactive'
+**			02/02/2010 mem - Now storing Velos Orbitrap results (VOrbi) in folder 'LTQ_Orb'
 **    
 *****************************************************/
 (
@@ -354,24 +356,35 @@ As
 	
 	If Len(IsNull(@OutputFolderPrefix, '')) = 0
 		Set @OutputFolderPrefix = 'Unknown'
-		
-	-- Truncate @OutputFolderPrefix following the _ (if present)
-	-- If @OutputFolderPrefix contains LTQ_FT or LTQ_Orb, then skip the first underscore
-	Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
-	If @StartPos >= 1
-		Set @StartPos = @StartPos + 5
+	
+	-- @OutputFolderPrefix matches Exact[0-9]% then change to 'Exactive'
+	If @OutputFolderPrefix Like 'Exact[0-9]%'
+		Set @OutputFolderPrefix = 'Exactive'
 	Else
 	Begin
-		Set @StartPos = CharIndex('LTQ_ORB', Upper(@OutputFolderPrefix))
-		If @StartPos >= 1
-			Set @StartPos = @StartPos + 5
+		If @OutputFolderPrefix Like 'VOrbiETD%'
+			Set @OutputFolderPrefix = 'LTQ_Orb'
 		Else
-			Set @StartPos = 0
+		Begin
+			-- Truncate @OutputFolderPrefix following the _ (if present)
+			-- If @OutputFolderPrefix contains LTQ_FT or LTQ_Orb, then skip the first underscore
+			Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
+			If @StartPos >= 1
+				Set @StartPos = @StartPos + 5
+			Else
+			Begin
+				Set @StartPos = CharIndex('LTQ_ORB', Upper(@OutputFolderPrefix))
+				If @StartPos >= 1
+					Set @StartPos = @StartPos + 5
+				Else
+					Set @StartPos = 0
+			End
+
+			Set @CharLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
+			If @CharLoc > 2
+				Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @CharLoc-1)
+		End
 	End
-		
-	Set @CharLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
-	If @CharLoc > 2
-		Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @CharLoc-1)
 	
 	-- Construct the Output Folder Name
 	declare @Output_Folder_Name varchar(255)
@@ -529,11 +542,11 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [pnl\MTSProc] AS [dbo]
 GO

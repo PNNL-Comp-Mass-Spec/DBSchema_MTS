@@ -39,5 +39,9 @@ As
 	set @myError = @result
 	return  @myError 
 GO
-GRANT EXECUTE ON [dbo].[MakeFolder] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[MakeFolder] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MakeFolder] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MakeFolder] TO [MTS_DB_Lite] AS [dbo]
 GO

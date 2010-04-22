@@ -6,9 +6,9 @@ GO
 CREATE TABLE [dbo].[T_Process_Config](
 	[Process_Config_ID] [int] IDENTITY(100,1) NOT NULL,
 	[Name] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Value] [varchar](250) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_Process_Config_Last_Affected]  DEFAULT (getdate()),
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Process_Config_Entered_By]  DEFAULT (suser_sname()),
+	[Value] [varchar](800) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Last_Affected] [datetime] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Process_Config] PRIMARY KEY NONCLUSTERED 
 (
 	[Process_Config_ID] ASC
@@ -24,14 +24,11 @@ CREATE UNIQUE CLUSTERED INDEX [IX_T_Process_Config_UniqueNameValue] ON [dbo].[T_
 	[Value] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-
 /****** Object:  Trigger [dbo].[trig_iu_T_Process_Config] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER OFF
 GO
-
 
 CREATE TRIGGER [dbo].[trig_iu_T_Process_Config] ON [dbo].[T_Process_Config] 
 FOR INSERT, UPDATE
@@ -148,14 +145,11 @@ End
 
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Process_Config] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE TRIGGER [dbo].[trig_u_T_Process_Config] ON [dbo].[T_Process_Config] 
 FOR UPDATE
@@ -195,4 +189,8 @@ ALTER TABLE [dbo].[T_Process_Config]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Process
 REFERENCES [T_Process_Config_Parameters] ([Name])
 GO
 ALTER TABLE [dbo].[T_Process_Config] CHECK CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters]
+GO
+ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

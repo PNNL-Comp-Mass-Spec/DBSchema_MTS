@@ -37,6 +37,7 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 **			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **
 ****************************************************/
 (
@@ -48,7 +49,9 @@ CREATE Procedure dbo.QRProteinsWithPeptidesCrosstab
 	@IncludePrefixAndSuffixResidues tinyint = 0,		-- The query is slower if this is enabled
 	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 	@message varchar(512)='' output,
-	@PreviewSql tinyint=0
+	@PreviewSql tinyint=0,
+	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: Protein Description and Mod_Description
+
 )
 AS 
 
@@ -79,7 +82,21 @@ AS
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
-
+	
+		--------------------------------------------------------------
+		-- Validate the inputs
+		--------------------------------------------------------------
+		
+		Set @SeparateReplicateDataIDs = IsNull(@SeparateReplicateDataIDs, 1)
+		Set @SourceColName = IsNull(@SourceColName, 'MT_Abundance')
+		Set @AggregateColName = IsNull(@AggregateColName, 'AvgAbu')
+		Set @AverageAcrossColumns = IsNull(@AverageAcrossColumns, 0)
+		Set @IncludePrefixAndSuffixResidues = IsNull(@IncludePrefixAndSuffixResidues, 0)
+		Set @SortMode = IsNull(@SortMode, 0)
+		Set @message =  ''
+		Set @PreviewSql = IsNull(@PreviewSql, 0)
+		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
+	
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
 		-- This table is populated by QRGenerateCrosstabSql
@@ -118,8 +135,17 @@ AS
 		Set @CurrentLocation = 'Populate @Sql'
 
 		Set @ColumnListToShow = ''
-		Set @ColumnListToShow = @ColumnListToShow + 'PivotResults.Ref_ID, Prot.Reference,'
-		Set @ColumnListToShow = @ColumnListToShow + 'Prot.Description As Protein_Description,'
+		Set @ColumnListToShow = @ColumnListToShow + 'PivotResults.Ref_ID,'
+		
+		If @ChangeCommasToSemicolons = 0
+			Set @ColumnListToShow = @ColumnListToShow + 'Prot.Reference,'
+		Else
+			Set @ColumnListToShow = @ColumnListToShow + 'Replace(Prot.Reference, '','', '';'') AS Reference,'
+		
+		If @ChangeCommasToSemicolons = 0
+			Set @ColumnListToShow = @ColumnListToShow + 'Prot.Description As Protein_Description,'
+		Else
+			Set @ColumnListToShow = @ColumnListToShow + 'Replace(Prot.Description, '','', '';'') As Protein_Description,'
 
 		Set @ColumnListToShow = @ColumnListToShow + 'MT.Mass_Tag_ID,'
 		
@@ -133,7 +159,11 @@ AS
 		
 		If @ModsPresent > 0
 		Begin
-			Set @ColumnListToShow = @ColumnListToShow + ',MT.Mod_Description'
+			If @ChangeCommasToSemicolons = 0
+				Set @ColumnListToShow = @ColumnListToShow + ',MT.Mod_Description'
+			Else
+				Set @ColumnListToShow = @ColumnListToShow + ', Replace(MT.Mod_Description, '','', '';'') AS Mod_Description'
+			
 			Set @ColumnListToShow2 = @ColumnListToShow2 + ',Mod_Description'
 		End
 
@@ -142,7 +172,7 @@ AS
 		Set @sql = @sql +          @PivotColumnsSql
 
 		Set @sql = @sql + ' FROM  (SELECT QR.Quantitation_ID, QR.Ref_ID, QRD.Mass_Tag_ID,'
-		Set @sql = @sql +         ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
+		Set @sql = @sql +    ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 		Set @sql = @sql +         ' CONVERT(VARCHAR(19), QRD.' + @SourceColName + ') AS ' + @SourceColName
 		Set @sql = @sql +       ' FROM #TmpQIDSortInfo INNER JOIN '
 		Set @sql = @sql +            ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
@@ -198,9 +228,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRProteinsWithPeptidesCrosstab] TO [MTS_DB_Lite] AS [dbo]
 GO

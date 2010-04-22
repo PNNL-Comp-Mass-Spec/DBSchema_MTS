@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 **
 **  Auth:	mem
 **	Date:	04/06/2007
+**			01/11/2020 mem - Added parameter @infoOnly
 **  
 ****************************************************************/
 (
@@ -39,7 +40,8 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 	@MinimumPMTQualityScore decimal(9,5) = 0,	-- The minimum PMT_Quality_Score to allow; 0 to allow all
 	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
 	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
-	@DatasetToFilterOn varchar(256)='' output
+	@DatasetToFilterOn varchar(256)='' output,
+	@infoOnly tinyint = 0
 )
 As
 	Set NoCount On
@@ -82,6 +84,7 @@ As
 	Set @ExperimentExclusionFilter = IsNull(@ExperimentExclusionFilter, '')
 	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
 	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
+	Set @infoOnly = IsNull(@infoOnly, 0)
 
 	---------------------------------------------------	
 	-- Define the score filtering SQL
@@ -330,16 +333,16 @@ As
 			--
 			If @MyError <> 0
 				Goto Done
-
 	End -- </a>
 	Else
 	Begin -- <b>
 		---------------------------------------------------	
 		-- Do not filter on Modifications
 		---------------------------------------------------	
-		
+
 		Set @FullSql = Convert(nvarchar(2048), @BaseSql)
 		
+	
 		-- Execute the Sql to add mass tags to #TmpMassTags
 		EXECUTE sp_executesql @FullSql
 		--
@@ -349,13 +352,16 @@ As
 			Goto Done
 	End -- </b>
     
+	If @infoOnly <> 0
+		Print @FullSql
+
 
 Done:
 	Return @myError
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPassingFiltersWork] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPassingFiltersWork] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPassingFiltersWork] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPassingFiltersWork] TO [MTS_DB_Lite] AS [dbo]
 GO

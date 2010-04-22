@@ -13,12 +13,16 @@ CREATE PROCEDURE dbo.RefreshCachedDMSDatasetInfo
 **
 **	Auth:	mem
 **	Date:	05/09/2007 - See Ticket:422
+**			08/07/2008 mem - Added parameter @SourceMTSServer; if provided, then contacts that server rather than contacting DMS.
+**			09/18/2008 mem - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
 **
 *****************************************************/
 (
 	@DatasetIDMinimum int = 0,		-- Set to a positive value to limit the datasets examined; when non-zero, then datasets outside this range are ignored
 	@DatasetIDMaximum int = 0,
-	@message varchar(255) = '' output
+	@SourceMTSServer varchar(128) = 'porky',	-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Dataset_Import_Ex
+	@message varchar(255) = '' output,
+	@previewSql tinyint = 0
 )
 AS
 
@@ -31,6 +35,8 @@ AS
 
 	set @message = ''
 
+	Declare @UseDatasetIDFilter tinyint
+	
 	Declare @MaxInt int
 	Set @MaxInt = 2147483647
 
@@ -41,6 +47,11 @@ AS
 	Set @UpdateCount = 0
 	Set @InsertCount = 0
 
+	Declare @FullRefreshPerformed tinyint
+
+	Declare @SourceTable varchar(256)
+	Declare @S varchar(max)
+
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -48,26 +59,40 @@ AS
 	Begin Try
 		Set @CurrentLocation = 'Validate the inputs'
 
+		-- Validate the inputs
 		Set @DatasetIDMinimum = IsNull(@DatasetIDMinimum, 0)
 		Set @DatasetIDMaximum = IsNull(@DatasetIDMaximum, 0)
-		
+		Set @SourceMTSServer = IsNull(@SourceMTSServer, '')
+		Set @previewSql = IsNull(@previewSql, 0)
+
 		If @DatasetIDMinimum = 0 AND @DatasetIDMaximum = 0
 		Begin
+			Set @FullRefreshPerformed = 1
 			Set @DatasetIDMinimum = -@MaxInt
 			Set @DatasetIDMaximum = @MaxInt
+			Set @UseDatasetIDFilter = 0
 		End
 		Else
-		If @DatasetIDMinimum > @DatasetIDMaximum
-			Set @DatasetIDMaximum = @MaxInt
-
+		Begin
+			Set @FullRefreshPerformed = 0
+			If @DatasetIDMinimum > @DatasetIDMaximum
+				Set @DatasetIDMaximum = @MaxInt
+				
+			Set @UseDatasetIDFilter = 1
+		End
+		
 		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
 		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Dataset_Info_Cached', @IncrementRefreshCount = 0
+		Exec UpdateDMSCachedDataStatus 'T_DMS_Dataset_Info_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = @FullRefreshPerformed, @LastRefreshMinimumID = @DatasetIDMinimum
 
 
-		Set @CurrentLocation = 'Populate a temporary table with the data returned by V_DMS_Dataset_Import_Ex'
+		-- Source server cannot be this server; if they match, set @SourceMTSServer to ''
+		If @SourceMTSServer = @@ServerName
+			Set @SourceMTSServer = ''
 
-		-- Since we need to scan the contents of V_DMS_Dataset_Import_Ex three times, we'll first
+		Set @CurrentLocation = 'Create #Tmp_DMS_Dataset_Import_Ex'
+
+		-- Since we need to scan the contents of the source table three times, we'll first
 		-- populate a local temporary table using its contents
 		CREATE TABLE #Tmp_DMS_Dataset_Import_Ex (
 			Dataset varchar(128) NOT NULL,
@@ -102,30 +127,48 @@ AS
 		
 		-- Create a clustered index on DatasetID
 		CREATE CLUSTERED INDEX #IX_Tmp_DMS_Dataset_Import_Ex ON #Tmp_DMS_Dataset_Import_Ex (ID)
+
+		If @SourceMTSServer <> ''
+			Set @SourceTable = @SourceMTSServer + '.MT_Main.dbo.T_DMS_Dataset_Info_Cached'
+		Else
+			Set @SourceTable = 'V_DMS_Dataset_Import_Ex'
+			
+		Set @CurrentLocation = 'Populate a temporary table with the data in ' + @SourceTable
+
+		-- Construct the Sql to populate #Tmp_DMS_Analysis_Job_Import_Ex
+		Set @S = ''
+		Set @S = @S +   ' INSERT INTO #Tmp_DMS_Dataset_Import_Ex ('
+		Set @S = @S +     ' Dataset, Experiment, Organism, Instrument, '
+		Set @S = @S +     ' [Separation Type], [LC Column], [Wellplate Number], '
+		Set @S = @S +     ' [Well Number], [Dataset Int Std], Type, Operator, Comment, '
+		Set @S = @S +     ' Rating, Request, State, Created, [Folder Name], '
+		Set @S = @S +     ' [Dataset Folder Path], [Storage Folder], Storage, '
+		Set @S = @S +     ' [Compressed State], [Compressed Date], ID, '
+		Set @S = @S +     ' [Acquisition Start], [Acquisition End], [Scan Count], '
+		Set @S = @S +     ' [PreDigest Int Std], [PostDigest Int Std])'
+		Set @S = @S + ' SELECT Dataset, Experiment, Organism, Instrument, '
+		Set @S = @S +   ' [Separation Type], [LC Column], [Wellplate Number], '
+		Set @S = @S +   ' [Well Number], [Dataset Int Std], Type, Operator, Comment, '
+		Set @S = @S +   ' Rating, Request, State, Created, [Folder Name], '
+		Set @S = @S +   ' [Dataset Folder Path], [Storage Folder], Storage, ' 
+		Set @S = @S +   ' [Compressed State], [Compressed Date], ID, '
+		Set @S = @S +   ' [Acquisition Start], [Acquisition End], [Scan Count], '
+		Set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std]'
+		Set @S = @S + ' FROM ' + @SourceTable
 		
-		-- Populate #Tmp_DMS_Dataset_Import_Ex
-		INSERT INTO #Tmp_DMS_Dataset_Import_Ex (
-			Dataset, Experiment, Organism, Instrument, 
-			[Separation Type], [LC Column], [Wellplate Number], 
-			[Well Number], [Dataset Int Std], Type, Operator, Comment, 
-			Rating, Request, State, Created, [Folder Name], 
-			[Dataset Folder Path], [Storage Folder], Storage, 
-			[Compressed State], [Compressed Date], ID, 
-			[Acquisition Start], [Acquisition End], [Scan Count], 
-			[PreDigest Int Std], [PostDigest Int Std])
-		SELECT Dataset, Experiment, Organism, Instrument, 
-			   [Separation Type], [LC Column], [Wellplate Number], 
-			   [Well Number], [Dataset Int Std], Type, Operator, Comment, 
-			   Rating, Request, State, Created, [Folder Name], 
-			   [Dataset Folder Path], [Storage Folder], Storage, 
-			   [Compressed State], [Compressed Date], ID, 
-			   [Acquisition Start], [Acquisition End], [Scan Count], 
-			   [PreDigest Int Std], [PostDigest Int Std]
-		FROM V_DMS_Dataset_Import_Ex
-		WHERE ID >= @DatasetIDMinimum AND ID <= @DatasetIDMaximum
+		If @UseDatasetIDFilter <> 0
+			Set @S = @S + ' WHERE ID >= ' + Convert(varchar(12), @DatasetIDMinimum) + ' AND ID <= ' + Convert(varchar(12), @DatasetIDMaximum)
+		
+		If @previewSql <> 0
+		Begin
+			Print @S
+			Goto Done
+		End
+		Else
+			Exec (@S)
 		--
 		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		
+
 		
 		Set @CurrentLocation = 'Delete extra rows in T_DMS_Dataset_Info_Cached'
 		-- 
@@ -249,7 +292,7 @@ AS
 		
 		If Len(@message) > 0 
 		Begin	
-			Set @message = 'Updated T_DMS_Dataset_Info_Cached: ' + @message
+			Set @message = 'Updated T_DMS_Dataset_Info_Cached using ' + @SourceTable + ': ' + @message
 			execute PostLogEntry 'Normal', @message, 'RefreshCachedDMSDatasetInfo'
 		End
 
@@ -260,7 +303,9 @@ AS
 											@IncrementRefreshCount = 1, 
 											@InsertCountNew = @InsertCount, 
 											@UpdateCountNew = @UpdateCount, 
-											@DeleteCountNew = @DeleteCount
+											@DeleteCountNew = @DeleteCount,
+											@FullRefreshPerformed = @FullRefreshPerformed, 
+											@LastRefreshMinimumID = @DatasetIDMinimum
 		
 	End Try
 	Begin Catch
@@ -275,4 +320,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSDatasetInfo] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSDatasetInfo] TO [MTS_DB_Lite] AS [dbo]
 GO

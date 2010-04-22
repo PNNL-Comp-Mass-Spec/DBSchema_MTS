@@ -56,6 +56,7 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			07/23/2009 mem - Now auto-adding SIC jobs for any datasets that are defined in T_Analysis_Description (regardless of organism or other extended metadata filters)
 **    
 *****************************************************/
 (
@@ -590,7 +591,7 @@ As
 				Begin
 					Set @SICDSFilter = ''
 					Set @SICDSFilter = @SICDSFilter + ' AND Dataset IN (SELECT DISTINCT Dataset FROM T_Analysis_Description'
-					Set @SICDSFilter = @SICDSFilter +       ' UNION SELECT DISTINCT Dataset FROM #TmpNewAnalysisJobs)'
+					Set @SICDSFilter = @SICDSFilter +                 ' UNION SELECT DISTINCT Dataset FROM #TmpNewAnalysisJobs)'
 				End
 			End
 
@@ -625,44 +626,48 @@ As
 			Begin
 				Set @S = @S + ' AND ( ' + @Lf
 				Set @S = @S +   ' ' + @ResultTypeFilter + @Lf
-				Set @S = @S +   '  AND Organism = ''' + @ExperimentOrganism + '''' + @Lf
-
-				If Len(@OrganismDBNameFilter) > 0
-					Set @S = @S + ' ' + @OrganismDBNameFilter + @Lf
 
 				If Len(@SICDSFilter) > 0
 					Set @S = @S + ' ' + @SICDSFilter + @Lf
+				Else
+				Begin				
 				
-				if @FilterOnCampaign = 1
-					Set @S = @S + '  AND Campaign IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Campaign'')' + @Lf
+					Set @S = @S +   ' AND Organism = ''' + @ExperimentOrganism + '''' + @Lf
 
-				if @FilterOnEnzymeID = 1
-					Set @S = @S + ' AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')' + @Lf
+					If Len(@OrganismDBNameFilter) > 0
+						Set @S = @S + ' ' + @OrganismDBNameFilter + @Lf
 					
-				if @campaignListCountExcluded > 0
-				begin
-					set @S = @S + '  AND NOT Campaign IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Campaign FROM #TmpCampaignsExcluded '
-					set @S = @S + ')' + @Lf
-				end
-				
-				if @expListCount > 0
-				begin
-					set @S = @S + '  AND Experiment IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-					set @S = @S + ')' + @Lf
-				end
-				
-				if @expListCountExcluded > 0
-				begin
-					set @S = @S + '  AND NOT Experiment IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-					set @S = @S + ')' + @Lf
-				End
+					if @FilterOnCampaign = 1
+						Set @S = @S + '  AND Campaign IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Campaign'')' + @Lf
 
+					if @FilterOnEnzymeID = 1
+						Set @S = @S + ' AND EnzymeID IN (SELECT Value FROM T_Process_Config WHERE [Name] = ''Enzyme_ID'')' + @Lf
+						
+					if @campaignListCountExcluded > 0
+					begin
+						set @S = @S + '  AND NOT Campaign IN '
+						set @S = @S + '( '
+						set @S = @S + '	SELECT Campaign FROM #TmpCampaignsExcluded '
+						set @S = @S + ')' + @Lf
+					end
+					
+					if @expListCount > 0
+					begin
+						set @S = @S + '  AND Experiment IN '
+						set @S = @S + '( '
+						set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
+						set @S = @S + ')' + @Lf
+					end
+					
+					if @expListCountExcluded > 0
+					begin
+						set @S = @S + '  AND NOT Experiment IN '
+						set @S = @S + '( '
+						set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
+						set @S = @S + ')' + @Lf
+					End
+				End
+				
 				set @S = @S + ' ) ' + @Lf
 			End
 			
@@ -715,6 +720,7 @@ As
 
 				-- Validate all jobs with Valid = 0 against the Protein Collection 
 				--  filters defined in T_Process_Config
+				-- This includes parameters Protein_Collection_Filter, Seq_Direction_Filter, and Protein_Collection_and_Protein_Options_Combo
 				Exec @myError = ValidateNewAnalysesUsingProteinCollectionFilters @PreviewSql, @message = @message output
 				
 				If @myError <> 0
@@ -920,7 +926,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -17,15 +17,17 @@ CREATE PROCEDURE dbo.GetGANETFolderPaths
 **			11/28/2005 mem - Now verifying that @rootFolderPath ends in a slash before concatenating subfolders to it
 **						   - Now checking for no match found in T_Folder_Paths for 'GANET Transfer Root Folder', and posting entry to error log if not found
 **			07/20/2006 mem - Updated to use dbo.udfCombinePaths
+**			03/13/2010 mem - Added parameter @ObsNETsFileName
 **    
 *****************************************************/
 (
 	@clientPerspective int = 1,					-- 0 means running SP from local server; 1 means running SP from client
-	@outFileName varchar(256)='' output,
-	@outFileFolderPath varchar(256)='' output,
-	@inFileName varchar(256)='' output,
-	@inFileFolderPath varchar(256)='' output,
-	@predFileName varchar(256)='' output,
+	@SourceFileName varchar(256)='' output,
+	@SourceFolderPath varchar(256)='' output,
+	@ResultsFileName varchar(256)='' output,
+	@ResultsFolderPath varchar(256)='' output,
+	@PredNETsFileName varchar(256)='' output,
+	@ObsNETsFileName varchar(256)='' output,
 	@message varchar(512)='' output
 )
 AS
@@ -71,9 +73,10 @@ AS
 	-- Build paths from root
 	---------------------------------------------------
 
-	set @outFileName = 'peptideGANET.txt' -- where MTDB puts peptide data file
-	set @inFileName = 'JobGANETs.txt' -- where GANET program puts job results
-	set @predFileName = 'PredictGANETs.txt' -- where GANET program puts predicted results
+	set @SourceFileName = 'peptideGANET.txt'			-- where MTDB puts peptide data file
+	set @ResultsFileName = 'JobGANETs.txt'					-- where GANET program puts job results
+	set @PredNETsFileName = 'PredictGANETs.txt'				-- where GANET program puts predicted results
+	set @ObsNETsFileName = 'ObservedNETsAfterRegression.txt'	-- where GANET program puts computed observed NET values
 
 	declare @rootFolderPath varchar(256)
 	
@@ -82,8 +85,8 @@ AS
 	else
 		set @rootFolderPath = @serverRoot
 	
-	set @outFileFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'Out\')
-	set @inFileFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'In\' )
+	set @SourceFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'Out\')
+	set @ResultsFolderPath = dbo.udfCombinePaths(@rootFolderPath, 'In\' )
 
     ---------------------------------------------------
 	-- Exit
@@ -94,5 +97,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetGANETFolderPaths] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetGANETFolderPaths] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetGANETFolderPaths] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[GetGANETFolderPaths] TO [MTS_DB_Lite] AS [dbo]
 GO

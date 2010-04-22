@@ -8,7 +8,7 @@ CREATE TABLE [dbo].[T_Mass_Tag_Mod_Info](
 	[Mass_Tag_ID] [int] NOT NULL,
 	[Mod_Name] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Mod_Position] [smallint] NOT NULL,
-	[Entered] [smalldatetime] NOT NULL CONSTRAINT [DF_T_Mass_Tag_Mod_Info_Entered]  DEFAULT (getdate()),
+	[Entered] [smalldatetime] NOT NULL,
  CONSTRAINT [PK_T_Mass_Tag_Mod_Info] PRIMARY KEY NONCLUSTERED 
 (
 	[Entry_ID] ASC
@@ -28,4 +28,6 @@ ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_T
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info] CHECK CONSTRAINT [FK_T_Mass_Tag_Mod_Info_T_Mass_Tags]
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info] ADD  CONSTRAINT [DF_T_Mass_Tag_Mod_Info_Entered]  DEFAULT (getdate()) FOR [Entered]
 GO

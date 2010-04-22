@@ -32,7 +32,7 @@ CREATE TABLE [dbo].[T_DMS_Dataset_Info_Cached](
 	[Scan Count] [int] NULL,
 	[PreDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PostDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Last_Affected]  DEFAULT (getdate()),
+	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_T_DMS_Dataset_Info_Cached] PRIMARY KEY CLUSTERED 
 (
 	[ID] ASC
@@ -40,14 +40,11 @@ CREATE TABLE [dbo].[T_DMS_Dataset_Info_Cached](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_DMS_Dataset_Info_Cached] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger trig_u_DMS_Dataset_Info_Cached on T_DMS_Dataset_Info_Cached
 For Update
 AS
@@ -89,4 +86,6 @@ AS
 				 inserted ON DS.ID = inserted.ID
 	End
 
+GO
+ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

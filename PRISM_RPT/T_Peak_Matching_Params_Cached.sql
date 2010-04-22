@@ -23,11 +23,13 @@ CREATE TABLE [dbo].[T_Peak_Matching_Params_Cached](
 	[ParamFileName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[TransferFolderPath] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ResultsFolderName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Cache_Date] [datetime] NULL CONSTRAINT [DF_T_Peak_Matching_Params_Cached_Cache_Date]  DEFAULT (getdate()),
+	[Cache_Date] [datetime] NULL,
  CONSTRAINT [PK_T_Peak_Matching_Params_Cached] PRIMARY KEY CLUSTERED 
 (
 	[Job_ID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Params_Cached] ADD  CONSTRAINT [DF_T_Peak_Matching_Params_Cached_Cache_Date]  DEFAULT (getdate()) FOR [Cache_Date]
 GO

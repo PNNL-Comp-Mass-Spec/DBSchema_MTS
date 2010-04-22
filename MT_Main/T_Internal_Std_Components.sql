@@ -7,6 +7,7 @@ CREATE TABLE [dbo].[T_Internal_Std_Components](
 	[Seq_ID] [int] NOT NULL,
 	[Description] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Peptide] [varchar](850) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[PeptideEx] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Monoisotopic_Mass] [float] NOT NULL,
 	[Charge_Minimum] [int] NULL,
 	[Charge_Maximum] [int] NULL,

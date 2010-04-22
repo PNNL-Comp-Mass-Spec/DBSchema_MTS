@@ -16,13 +16,18 @@ CREATE Procedure dbo.UpdateDatabaseStates
 **			12/06/2004 mem - Removed Pogo from the @ServerFilter input parameter and switched to using V_Active_MTS_Servers
 **			08/02/2005 mem - Updated to pass @LocalSchemaVersionField and @RemoteSchemaVersionField to UpdateDatabaseStatesSingleTable
 **			08/30/2006 mem - Updated the log message
+**			06/25/2008 mem - Added parameter @StateIgnoreList
+**			04/20/2009 mem - Updated @StateIgnoreList to be '15,100'
+**			02/05/2010 mem - Now sending @RemoteDescriptionField, @RemoteOrganismField, @RemoteCampaignField,and @PreviewSql to UpdateDatabaseStatesSingleTable
 **    
 *****************************************************/
 (
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the databases on the given Server
 	@UpdateTableNames tinyint = 1,
 	@DBCountUpdatedTotal int = 0 OUTPUT,
-	@message varchar(255) = '' OUTPUT
+	@message varchar(255) = '' OUTPUT,
+	@StateIgnoreList varchar(128) = '15,100',
+	@PreviewSql tinyint = 0
 )
 As	
 	Set nocount on
@@ -51,9 +56,6 @@ As
 	Declare @Continue int
 	Declare @processCount int			-- Count of servers processed
 	Declare @DBCountUpdated int
-	
-	Declare @StateIgnoreList varchar(128)
-	Set @StateIgnoreList = '15, 100'
 	
 	-----------------------------------------------------------
 	-- Update the states for the entries in the MT, Peptide, and Protein tables,
@@ -96,8 +98,14 @@ As
 			Exec @result = UpdateDatabaseStatesSingleTable	@ServerID, @UpdateTableNames,
 															'T_MTS_MT_DBs', 'MT_DB_ID', 'MT_DB_Name', 'State_ID', 'DB_Schema_Version',
 															'T_MT_Database_List', 'MTL_ID', 'MTL_Name', 'MTL_State', 'MTL_DB_Schema_Version',
+															@RemoteDescriptionField = 'MTL_Description',
+															@RemoteOrganismField = 'MTL_Organism',
+															@RemoteCampaignField = 'MTL_Campaign',
+															@PreviewSql=@PreviewSql,
 															@RemoteStateIgnoreList = @StateIgnoreList,
-															@DBCountUpdated = @DBCountUpdated OUTPUT, @message = @message OUTPUT
+															@DBCountUpdated = @DBCountUpdated OUTPUT, 
+															@message = @message OUTPUT
+															
 			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
 			
 			If @result <> 0
@@ -109,15 +117,27 @@ As
 			Exec @result = UpdateDatabaseStatesSingleTable	@ServerID, @UpdateTableNames,
 															'T_MTS_Peptide_DBs', 'Peptide_DB_ID', 'Peptide_DB_Name', 'State_ID', 'DB_Schema_Version',
 															'T_Peptide_Database_List', 'PDB_ID', 'PDB_Name', 'PDB_State', 'PDB_DB_Schema_Version',
+															@RemoteDescriptionField = 'PDB_Description',
+															@RemoteOrganismField = 'PDB_Organism',
+															@RemoteCampaignField = '',
+															@PreviewSql=@PreviewSql,
 															@RemoteStateIgnoreList = @StateIgnoreList,
-															@DBCountUpdated = @DBCountUpdated OUTPUT, @message = @message OUTPUT
+															@DBCountUpdated = @DBCountUpdated OUTPUT, 
+															@message = @message OUTPUT
+															
 			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
 
 			Exec @result = UpdateDatabaseStatesSingleTable	@ServerID, @UpdateTableNames,
 															'T_MTS_Protein_DBs', 'Protein_DB_ID', 'Protein_DB_Name', 'State_ID', 'DB_Schema_Version',
 															'T_ORF_Database_List', 'ODB_ID', 'ODB_Name', 'ODB_State', 'ODB_DB_Schema_Version',
+															@RemoteDescriptionField = '',
+															@RemoteOrganismField = '',
+															@RemoteCampaignField = '',
+															@PreviewSql=@PreviewSql,
 															@RemoteStateIgnoreList = @StateIgnoreList,
-															@DBCountUpdated = @DBCountUpdated OUTPUT, @message = @message OUTPUT
+															@DBCountUpdated = @DBCountUpdated OUTPUT, 
+															@message = @message OUTPUT
+															
 			Set @DBCountUpdatedTotal = @DBCountUpdatedTotal + @DBCountUpdated
 
 /*
@@ -180,5 +200,9 @@ Done:
 	Return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[UpdateDatabaseStates] TO [MTUser]
+GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStates] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStates] TO [MTS_DB_Lite] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[UpdateDatabaseStates] TO [MTUser] AS [dbo]
 GO

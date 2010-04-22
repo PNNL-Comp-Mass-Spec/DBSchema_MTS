@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **			08/26/2006 mem - Added @RankScoreComparison and @RankScoreThreshold
 **						   - Updated to cache the criteria for the given filter set group locally to remove the need to repeatedly query MT_Main.dbo.V_DMS_Filter_Sets_Import
 **			10/30/2008 mem - Added @InspectMQScore, @InspectTotalPRMScore, and @InspectFScore criteria
+**			07/21/2009 mem - Added @InspectPValue
 **    
 *****************************************************/
 (
@@ -92,7 +93,10 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@InspectTotalPRMScoreThreshold real=-10000 output,
 
 	@InspectFScoreComparison varchar(2)='>=' output,
-	@InspectFScoreThreshold real=-10000 output
+	@InspectFScoreThreshold real=-10000 output,
+	
+	@InspectPValueComparison varchar(2)='<=' output,
+	@InspectPValueThreshold real=1 output
 )
 As
 	Set nocount on
@@ -171,6 +175,9 @@ As
 
 	Set @InspectFScoreComparison = '>='
 	Set @InspectFScoreThreshold  = -10000			-- FScore can be negative, so defaulting to >= -10000
+	
+	SEt @InspectPValueComparison = '<='
+	Set @InspectPValueThreshold = 1
 
 	-------------------------------------------------
 	-- Validate @FilterSetID
@@ -351,7 +358,12 @@ As
 					 @InspectFScoreThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 20	-- Inspect FScore
-	
+
+		SELECT TOP 1 @InspectPValueComparison = Criterion_Comparison,
+					 @InspectPValueThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 21	-- Inspect PValue
+
 	End
 
 DoneDropTable:
@@ -362,7 +374,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetThresholdsForFilterSet] TO [MTS_DB_Lite] AS [dbo]
 GO

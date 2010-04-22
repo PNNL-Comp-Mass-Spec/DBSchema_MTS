@@ -8,9 +8,7 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 /********************************************************
 **	Synchronizes tables T_Mass_Tags_NET and T_Mass_Tags
 **
-**	Updates NET statistics in T_Mass_Tags_NET utilizing
-**    ScanTime_NET_Slope and ScanTime_NET_Intercept from T_Analysis_Description
-**    and MIN(Scan_Time_Peak_Apex) from T_Peptides
+**	Updates NET statistics in T_Mass_Tags_NET utilizing GANET_Obs value from T_Peptides
 **
 **	Date:	06/27/2003 mem
 **			07/01/2003 mem
@@ -391,12 +389,12 @@ AS
 					T_Peptides.Peptide_ID = SD.Peptide_ID
 			WHERE	T_Peptides.Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND
 					( IsNull(TAD.GANET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-					IsNull(TAD.GANET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-					IsNull(TAD.GANET_Slope, 0) > 0
+					  IsNull(TAD.GANET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
+					  IsNull(TAD.GANET_Slope, 0) > 0
 					) OR
 					( IsNull(TAD.ScanTime_NET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-					IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-					IsNull(TAD.ScanTime_NET_Slope, 0) > 0
+					  IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
+					  IsNull(TAD.ScanTime_NET_Slope, 0) > 0
 					)
 			GROUP BY BestObsQ.Mass_Tag_ID, TAD.Dataset_ID, BestObsQ.Analysis_ID, BestObsQ.BestScanNum,
 					BestObsQ.BestScanTime, TAD.GANET_Slope, TAD.GANET_Intercept,
@@ -427,12 +425,12 @@ AS
 				T_Peptides.Peptide_ID = SD.Peptide_ID
 		WHERE	T_Peptides.Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND
 			    ( IsNull(TAD.GANET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-				IsNull(TAD.GANET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-				IsNull(TAD.GANET_Slope, 0) > 0
+				  IsNull(TAD.GANET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
+				  IsNull(TAD.GANET_Slope, 0) > 0
 				) OR
 				( IsNull(TAD.ScanTime_NET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-				IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-				IsNull(TAD.ScanTime_NET_Slope, 0) > 0
+				  IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
+				  IsNull(TAD.ScanTime_NET_Slope, 0) > 0
 				)
 		GROUP BY BestObsQ.Mass_Tag_ID, TAD.Dataset_ID
 	--
@@ -818,7 +816,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Lite] AS [dbo]
 GO

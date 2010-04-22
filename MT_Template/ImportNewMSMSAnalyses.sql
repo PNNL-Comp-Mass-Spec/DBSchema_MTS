@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ImportNewMSMSAnalyses
+CREATE Procedure dbo.ImportNewMSMSAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -54,6 +54,8 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			05/25/2007 mem - Now calling LookupPeptideDBLocations to determine the location of the peptide databases
 **			10/07/2007 mem - Increased size of Protein_Collection_List to varchar(max)
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Description
+**			12/08/2008 mem - Added support for a Valid code of 252 from ValidateNewAnalysesUsingProteinCollectionFilters
+**			03/25/2010 mem - Added new NET Regression fields
 **
 *****************************************************/
 (
@@ -368,49 +370,53 @@ As
 	drop table [#TmpNewAnalysisJobs]
 
 	CREATE TABLE #TmpNewAnalysisJobs (
-		[Job] [int] NOT NULL,
-		[Dataset] [varchar] (128) NOT NULL,
-		[Dataset_ID] [int] NOT NULL,
-		[Dataset_Created_DMS] [datetime] NULL,
-		[Dataset_Acq_Time_Start] [datetime] NULL,
-		[Dataset_Acq_Time_End] [datetime] NULL,
-		[Dataset_Scan_Count] [int] NULL,
-		[Experiment] [varchar] (64) NULL,
-		[Campaign] [varchar] (64) NULL,
-		[PDB_ID] [int] NULL,
-		[Dataset_SIC_Job] [int] NULL,
-		[Experiment_Organism] [varchar] (50) NOT NULL,
-		[Instrument_Class] [varchar] (32) NOT NULL,
-		[Instrument] [varchar] (64) NULL,
-		[Analysis_Tool] [varchar] (64) NOT NULL,
-		[Parameter_File_Name] [varchar] (255) NOT NULL,
-		[Settings_File_Name] [varchar] (255) NULL,
-		[Organism_DB_Name] [varchar] (64) NOT NULL,
-		[Protein_Collection_List] [varchar] (max) NOT NULL,
-		[Protein_Options_List] [varchar] (256) NOT NULL,
-		[Vol_Client] [varchar] (128) NOT NULL,
-		[Vol_Server] [varchar] (128) NULL,
-		[Storage_Path] [varchar] (255) NOT NULL,
-		[Dataset_Folder] [varchar] (128) NOT NULL,
-		[Results_Folder] [varchar] (128) NOT NULL,
-		[Completed] [datetime] NULL,
-		[ResultType] [varchar] (32) NULL,
-		[Separation_Sys_Type] [varchar] (50) NULL,
-		[PreDigest_Internal_Std] [varchar] (50) NULL,
-		[PostDigest_Internal_Std] [varchar] (50) NULL,
-		[Dataset_Internal_Std] [varchar] (50) NULL,
-		[Enzyme_ID] [int] NULL,
-		[Labelling] [varchar] (64) NULL,
-		[Created_Peptide_DB] [datetime] NOT NULL,
-		[State] [int] NOT NULL,
-		[GANET_Fit] [float] NULL,
-		[GANET_Slope] [float] NULL,
-		[GANET_Intercept] [float] NULL,
-		[GANET_RSquared] [real] NULL,
-		[ScanTime_NET_Slope] [real] NULL,
-		[ScanTime_NET_Intercept] [real] NULL,
-		[ScanTime_NET_RSquared] [real] NULL,
-		[ScanTime_NET_Fit] [real] NULL,
+		[Job] int NOT NULL,
+		[Dataset] varchar(128) NOT NULL,
+		[Dataset_ID] int NOT NULL,
+		[Dataset_Created_DMS] datetime NULL,
+		[Dataset_Acq_Time_Start] datetime NULL,
+		[Dataset_Acq_Time_End] datetime NULL,
+		[Dataset_Scan_Count] int NULL,
+		[Experiment] varchar(64) NULL,
+		[Campaign] varchar(64) NULL,
+		[PDB_ID] int NULL,
+		[Dataset_SIC_Job] int NULL,
+		[Experiment_Organism] varchar(50) NOT NULL,
+		[Instrument_Class] varchar(32) NOT NULL,
+		[Instrument] varchar(64) NULL,
+		[Analysis_Tool] varchar(64) NOT NULL,
+		[Parameter_File_Name] varchar(255) NOT NULL,
+		[Settings_File_Name] varchar(255) NULL,
+		[Organism_DB_Name] varchar(64) NOT NULL,
+		[Protein_Collection_List] varchar(max) NOT NULL,
+		[Protein_Options_List] varchar(256) NOT NULL,
+		[Vol_Client] varchar(128) NOT NULL,
+		[Vol_Server] varchar(128) NULL,
+		[Storage_Path] varchar(255) NOT NULL,
+		[Dataset_Folder] varchar(128) NOT NULL,
+		[Results_Folder] varchar(128) NOT NULL,
+		[Completed] datetime NULL,
+		[ResultType] varchar(32) NULL,
+		[Separation_Sys_Type] varchar(50) NULL,
+		[PreDigest_Internal_Std] varchar(50) NULL,
+		[PostDigest_Internal_Std] varchar(50) NULL,
+		[Dataset_Internal_Std] varchar(50) NULL,
+		[Enzyme_ID] int NULL,
+		[Labelling] varchar(64) NULL,
+		[Created_Peptide_DB] datetime NOT NULL,
+		[State] int NOT NULL,
+		[GANET_Fit] float NULL,
+		[GANET_Slope] float NULL,
+		[GANET_Intercept] float NULL,
+		[GANET_RSquared] real NULL,
+		[ScanTime_NET_Slope] real NULL,
+		[ScanTime_NET_Intercept] real NULL,
+		[ScanTime_NET_RSquared] real NULL,
+		[ScanTime_NET_Fit] real NULL,
+		[Regression_Order] tinyint NULL,
+		[Regression_Filtered_Data_Count] int NULL,
+		[Regression_Equation] varchar(512) NULL,
+		[Regression_Equation_XML] varchar(MAX) NULL,
 		[Valid] tinyint NOT NULL DEFAULT (0)
 	) ON [PRIMARY]
 
@@ -650,7 +656,8 @@ As
 			set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
 			set @S = @S + ' Enzyme_ID, Labelling, Created_Peptide_DB, State, '
 			set @S = @S + ' GANET_Fit, GANET_Slope, GANET_Intercept, GANET_RSquared,'
-			set @S = @S + ' ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit'
+			set @S = @S + ' ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit,'
+			set @S = @S + ' Regression_Order, Regression_Filtered_Data_Count, Regression_Equation, Regression_Equation_XML'
 			set @S = @S + ') ' + @Lf
 			set @S = @S + 'SELECT DISTINCT * '
 			set @S = @S + 'FROM (' + @Lf
@@ -666,7 +673,8 @@ As
 			set @S = @S + '  PT.PreDigest_Internal_Std, PT.PostDigest_Internal_Std, PT.Dataset_Internal_Std,' + @Lf
 			set @S = @S + '  PT.Enzyme_ID, PT.Labelling, PT.Created, 1 AS StateNew,' + @Lf
 			set @S = @S + '  PT.GANET_Fit, PT.GANET_Slope, PT.GANET_Intercept, PT.GANET_RSquared,' + @Lf
-			set @S = @S + '  ScanTime_NET_Slope, ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit ' + @Lf
+			set @S = @S + '  PT.ScanTime_NET_Slope, PT.ScanTime_NET_Intercept, PT.ScanTime_NET_RSquared, PT.ScanTime_NET_Fit,' + @Lf
+			set @S = @S + '  PT.Regression_Order, PT.Regression_Filtered_Data_Count, PT.Regression_Equation, PT.Regression_Equation_XML' + @Lf
 			set @S = @S + 'FROM ' + @Lf
 			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT LEFT OUTER JOIN ' + @Lf
 			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID ' + @Lf
@@ -760,7 +768,7 @@ As
 				---------------------------------------------------
 				UPDATE #TmpNewAnalysisJobs
 				SET Valid = 1
-				WHERE Protein_Collection_List = 'na' OR Protein_Collection_List = ''
+				WHERE Protein_Collection_List = 'na' OR IsNull(Protein_Collection_List, '') = '' OR Protein_Collection_List = '(na)'
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 			End
@@ -782,6 +790,7 @@ As
 					Begin
 						SELECT CASE WHEN Valid = 250 THEN 'No Valid Collection Names'
 									WHEN Valid = 251 THEN 'Incompatible Protein Options'
+									WHEN Valid = 252 THEN 'T_Process_Config has no Protein_Collection_Filter entries'
 									ELSE 'Unknown exclusion reason'
 								END As Exclusion_Reason, *
 						FROM #TmpNewAnalysisJobs
@@ -807,7 +816,8 @@ As
 						PreDigest_Internal_Std, PostDigest_Internal_Std, 
 						Dataset_Internal_Std, Enzyme_ID, Labelling, Created_Peptide_DB,
 						GANET_Fit, GANET_Slope, GANET_Intercept, GANET_RSquared, ScanTime_NET_Slope, 
-						ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit
+						ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit,
+						Regression_Order, Regression_Filtered_Data_Count, Regression_Equation, Regression_Equation_XML
 						)				
 					SELECT 
 						Job, Dataset, Dataset_ID, Dataset_Created_DMS, 
@@ -821,7 +831,8 @@ As
 						PreDigest_Internal_Std, PostDigest_Internal_Std, 
 						Dataset_Internal_Std, Enzyme_ID, Labelling, Created_Peptide_DB,
 						GANET_Fit, GANET_Slope, GANET_Intercept, GANET_RSquared, ScanTime_NET_Slope, 
-						ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit
+						ScanTime_NET_Intercept, ScanTime_NET_RSquared, ScanTime_NET_Fit,
+						Regression_Order, Regression_Filtered_Data_Count, Regression_Equation, Regression_Equation_XML
 					FROM #TmpNewAnalysisJobs 
 				Else
 					SELECT *
@@ -884,9 +895,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSMSAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

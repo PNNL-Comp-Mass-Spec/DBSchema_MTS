@@ -16,6 +16,7 @@ CREATE Procedure PreviewCurrentActivityForMTDBs
 **	Auth:	mem
 **	Date:	03/10/2006
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
+**			10/21/2008 mem - Updated to check for and correct database ID conflicts
 **    
 *****************************************************/
 (
@@ -92,15 +93,26 @@ As
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 
 				If @matchCount = 0
+				Begin
+					-- Database not present; need to add it
+					-- However, first check that no PT DBs exist with the same ID but different name
+					DELETE FROM T_Current_Activity
+					WHERE Database_ID = @MTL_ID AND Type = 'MT'
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+
 					INSERT INTO T_Current_Activity (Database_ID, Database_Name, Type, Update_Began, Update_Completed, 
 													Pause_Length_Minutes, State, Update_State)
 					VALUES (@MTL_ID, @MTL_Name, 'MT', GetDate(), 
 							Null, 0, @MTL_State, 1)
+				End
 				Else
+				Begin
 					UPDATE T_Current_Activity
 					SET	Database_Name = @MTL_Name, Update_Began = Null, Update_Completed = Null, 
 						Pause_Length_Minutes = 0, State = @MTL_State, Comment = '', Update_State = 1
 					WHERE Database_ID = @MTL_ID AND Database_Name = @MTL_Name
+				End
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
@@ -117,4 +129,8 @@ As
 Done:
 	return @myError
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[PreviewCurrentActivityForMTDBs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[PreviewCurrentActivityForMTDBs] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -25,6 +25,7 @@ CREATE Procedure dbo.QuantitationProcessStart
 **			02/21/2004 mem - Due to updates in QuantitationProcessWork, removed logic that aborts processing if other tasks have a state of 2
 **			05/28/2007 mem - Added call to VerifyUpdateEnabled
 **			10/20/2008 mem - Added parameter @MaxEntriesToProcess
+**			11/03/2009 mem - No longer displaying @message via a Select statement
 **
 ****************************************************/
 (
@@ -228,16 +229,13 @@ Done:
 			Print @message
 		End
 
-
-	Print @message
-	SELECT @message
 	Return @myError
 
 
 GO
-GRANT EXECUTE ON [dbo].[QuantitationProcessStart] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QuantitationProcessStart] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessStart] TO [MTS_DB_Lite] AS [dbo]
 GO

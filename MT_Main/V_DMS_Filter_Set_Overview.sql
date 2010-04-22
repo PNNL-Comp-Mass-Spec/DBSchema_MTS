@@ -6,11 +6,7 @@ GO
 
 CREATE VIEW dbo.V_DMS_Filter_Set_Overview
 AS
-SELECT DISTINCT 
-    TOP 100 PERCENT Filter_Type_ID, Filter_Type_Name, 
-    Filter_Set_ID, Filter_Set_Name, Filter_Set_Description
-FROM dbo.V_DMS_Filter_Sets_Import
-ORDER BY Filter_Type_ID, Filter_Set_ID
-
+SELECT t1.*
+FROM Gigasax.DMS5.dbo.V_Filter_Set_Overview t1
 
 GO

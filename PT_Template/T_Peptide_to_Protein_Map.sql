@@ -17,6 +17,14 @@ CREATE TABLE [dbo].[T_Peptide_to_Protein_Map](
 ) ON [PRIMARY]
 
 GO
+
+/****** Object:  Index [IX_T_Peptide_to_Protein_Map_Ref_ID_include_PeptideID] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Peptide_to_Protein_Map_Ref_ID_include_PeptideID] ON [dbo].[T_Peptide_to_Protein_Map] 
+(
+	[Ref_ID] ASC
+)
+INCLUDE ( [Peptide_ID]) WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[T_Peptide_to_Protein_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_to_Protein_Map_T_Peptide_Cleavage_State_Name] FOREIGN KEY([Cleavage_State])
 REFERENCES [T_Peptide_Cleavage_State_Name] ([Cleavage_State])
 GO

@@ -19,6 +19,7 @@ CREATE PROCEDURE UpdateUserPermissions
 **			07/15/2006 mem - Updated to use Sql Server 2005 syntax if possible
 **			08/10/2006 mem - Added MTS_DB_Reader
 **			04/21/2008 mem - Updated to grant ShowPlan permissions
+**			11/04/2008 mem - Now calling UpdateUserPermissionsViewDefinitions for MTS_DB_Dev and MTS_DB_Lite
 **    
 *****************************************************/
 AS
@@ -138,12 +139,17 @@ AS
 	exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 	exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
 
-	grant showplan to MTS_DB_Dev
-	grant showplan to MTS_DB_Lite
 	grant showplan to MTS_DB_Reader
 	grant showplan to MTUser
+
+	-- Call UpdateUserPermissionsViewDefinitions to grant view definition for each Stored Procedure and grant showplan
+	exec UpdateUserPermissionsViewDefinitions @UserList='MTS_DB_Dev, MTS_DB_Lite'
 
 	Return 0
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissions] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissions] TO [MTS_DB_Lite] AS [dbo]
 GO

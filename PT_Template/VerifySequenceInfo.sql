@@ -35,11 +35,13 @@ CREATE Procedure dbo.VerifySequenceInfo
 **			05/03/2006 mem - Switched Master_Sequences location from Albert to Daffy
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
+**			11/05/2009 mem - Changed default value for @NextProcessState to 31
+**			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **    
 *****************************************************/
 (
 	@ProcessStateMatch int = 30,
-	@NextProcessState int = 33,
+	@NextProcessState int = 31,
 	@numJobsToProcess int = 50000,
 	@numJobsProcessed int = 0 OUTPUT,
 	@numJobsAdvancedToNextState int = 0 OUTPUT
@@ -96,7 +98,7 @@ AS
 				) AS SequenceQ ON 
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
 				(	SELECT Monoisotopic_Mass, Seq_ID
-					FROM Porky.Master_Sequences.dbo.T_Sequence
+					FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence
 				) M ON S.Seq_ID = M.Seq_ID
 		WHERE S.Monoisotopic_Mass IS NULL AND 
 			  NOT (M.Monoisotopic_Mass IS NULL)
@@ -111,7 +113,7 @@ AS
 		FROM T_Sequence INNER JOIN
 		(
 			SELECT Monoisotopic_Mass, Seq_ID
-			FROM Porky.Master_Sequences.dbo.T_Sequence
+			FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence
 		) AS M ON T_Sequence.Seq_ID = M.Seq_ID
 		WHERE T_Sequence.Monoisotopic_Mass IS NULL AND
 			NOT M.Monoisotopic_Mass IS NULL
@@ -224,7 +226,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Lite] AS [dbo]
 GO

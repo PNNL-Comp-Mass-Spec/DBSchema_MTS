@@ -7,7 +7,7 @@ GO
 CREATE PROCEDURE dbo.UpdateUserPermissionsViewDefinitions
 /****************************************************
 **
-**	Desc: Grants view definition permission to all stored procedures for the specified users
+**	Desc: Grants view definition permission to all stored procedures and views for the specified users
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -15,10 +15,13 @@ CREATE PROCEDURE dbo.UpdateUserPermissionsViewDefinitions
 **
 **	Auth:	mem
 **	Date:	11/04/2008
+**			12/28/2009 mem - Updated to also update views (and to include parameters @UpdateSPs and @UpdateViews)
 **    
 *****************************************************/
 (
 	@UserList varchar(255) = 'MTS_DB_Dev, MTS_DB_Lite',
+	@UpdateSPs tinyint = 1,
+	@UpdateViews tinyint = 1,
 	@PreviewSql tinyint = 0,
 	@message varchar(512)='' output
 )
@@ -39,8 +42,8 @@ As
 	Declare @UniqueID int
 	Declare @LoginName varchar(255)
 	
-	Declare @SPName varchar(255)
-	Declare @SPCount int
+	Declare @ObjectName varchar(255)
+	Declare @ObjectUpdateCount int
 	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
@@ -53,6 +56,8 @@ As
 		------------------------------------------------
 		
 		Set @UserList = IsNull(@UserList, '')
+		Set @UpdateSPs = IsNull(@UpdateSPs, 1)
+		Set @UpdateViews = IsNull(@UpdateViews, 1)		
 		Set @PreviewSql = IsNull(@PreviewSql, 0)
 		Set @message = ''
 		
@@ -121,47 +126,93 @@ As
 					Set @message = 'Error executing "' + @S + '"'
 					Goto Done
 				End
-					
-				------------------------------------------------
-				-- Process each stored procedure in sys.procedures
-				------------------------------------------------
-				Set @CurrentLocation = 'Process each stored procedure in sys.procedures'
-		
-				Set @SPName = ''
-				Set @SPCount = 0
 				
-				Set @Continue2 = 1
-				While @Continue2 = 1
-				Begin -- <c>
-					SELECT TOP 1 @SPName = Name
-					FROM sys.procedures
-					WHERE Name > @SPName
-					ORDER BY Name
-					--
-					SELECT @myError = @@error, @myRowCount = @@rowcount
-
-					If @myRowCount = 0
-						Set @Continue2 = 0
-					Else
-					Begin -- <d>
-						Set @S = 'grant view definition on [' + @SPName + '] to [' + @LoginName + ']'
-						Set @CurrentLocation = @S
-
-						If @PreviewSql <> 0
-							Print @S
-						Else
-							Exec (@S)
-											
-						Set @SPCount = @SPCount + 1
-						
-					End -- </d>				
-				End -- </c>
+				If @UpdateSPs <> 0
+				Begin -- <c1>
+					------------------------------------------------
+					-- Process each stored procedure in sys.procedures
+					------------------------------------------------
+					Set @CurrentLocation = 'Process each stored procedure in sys.procedures'
 			
-				If @message <> ''
-					Set @message = @message + '; '
+					Set @ObjectName = ''
+					Set @ObjectUpdateCount = 0
 					
-				Set @message = @message + 'Updated ' + Convert(varchar(12), @SPCount) + ' procedures for [' + @LoginName + ']'
+					Set @Continue2 = 1
+					While @Continue2 = 1
+					Begin -- <d1>
+						SELECT TOP 1 @ObjectName = Name
+						FROM sys.procedures
+						WHERE Name > @ObjectName AND Type = 'P'
+						ORDER BY Name
+						--
+						SELECT @myError = @@error, @myRowCount = @@rowcount
+
+						If @myRowCount = 0
+							Set @Continue2 = 0
+						Else
+						Begin -- <e1>
+							Set @S = 'grant view definition on [' + @ObjectName + '] to [' + @LoginName + ']'
+							Set @CurrentLocation = @S
+
+							If @PreviewSql <> 0
+								Print @S
+							Else
+								Exec (@S)
+												
+							Set @ObjectUpdateCount = @ObjectUpdateCount + 1
+							
+						End -- </e1>				
+					End -- </d1>
 				
+					If @message <> ''
+						Set @message = @message + '; '
+						
+					Set @message = @message + 'Updated ' + Convert(varchar(12), @ObjectUpdateCount) + ' procedures for [' + @LoginName + ']'
+				End -- </c1>
+				
+				If @UpdateSPs <> 0
+				Begin -- <c2>
+					------------------------------------------------
+					-- Process each view in sys.views
+					------------------------------------------------
+					Set @CurrentLocation = 'Process each view in sys.views'
+			
+					Set @ObjectName = ''
+					Set @ObjectUpdateCount = 0
+					
+					Set @Continue2 = 1
+					While @Continue2 = 1
+					Begin -- <d2>
+						SELECT TOP 1 @ObjectName = Name
+						FROM sys.views
+						WHERE Name > @ObjectName
+						ORDER BY Name
+						--
+						SELECT @myError = @@error, @myRowCount = @@rowcount
+
+						If @myRowCount = 0
+							Set @Continue2 = 0
+						Else
+						Begin -- <e2>
+							Set @S = 'grant view definition on [' + @ObjectName + '] to [' + @LoginName + ']'
+							Set @CurrentLocation = @S
+
+							If @PreviewSql <> 0
+								Print @S
+							Else
+								Exec (@S)
+												
+							Set @ObjectUpdateCount = @ObjectUpdateCount + 1
+							
+						End -- </e2>				
+					End -- </d2>
+				
+					If @message <> ''
+						Set @message = @message + '; '
+						
+					Set @message = @message + 'Updated ' + Convert(varchar(12), @ObjectUpdateCount) + ' views for [' + @LoginName + ']'
+				End -- </c2>
+
 			End -- </b>
 		End -- </a>
 
@@ -180,7 +231,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissionsViewDefinitions] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissionsViewDefinitions] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissionsViewDefinitions] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissionsViewDefinitions] TO [MTS_DB_Lite] AS [dbo]
 GO

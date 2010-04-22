@@ -32,6 +32,8 @@ CREATE PROCEDURE dbo.UpdatePMTQSUsingDelMPPM
 **			02/23/2007 mem - Added parameter @PMTQSFilter
 **			04/17/2007 mem - Changed default tolerance to 10 ppm and changed window for correcting DelM values of -3, -2, -1, 1, 2, or 3 to a +/- 0.1 Da window
 **			10/22/2007 mem - Added parameter @PPMToleranceNeg and renamed @PPMTolerance to @PPMTolerancePos
+**			02/10/2009 mem - Added support for XTandem and Inspect data
+**						   - Slightly relaxed the window for correcting DelM values to a +/- 0.15 Da window
 **    
 *****************************************************/
 (
@@ -91,32 +93,61 @@ As
 		Mass_Tag_ID int
 	)
 
-	
+	-- Query for Sequest Peptides
 	Set @S = ''
 	Set @S = @S + ' INSERT INTO #TmpMTsToUpdate (Mass_Tag_ID)'
 	Set @S = @S + ' SELECT Mass_Tag_ID'
-	Set @S = @S + ' FROM T_Peptides INNER JOIN'
-	Set @S = @S +    ' ( SELECT Peptide_ID, DelM_PPM'
-	Set @S = @S +      ' FROM (SELECT Peptide_ID, CorrectedDelM / (Monoisotopic_Mass / 1e6) AS DelM_PPM'
+	Set @S = @S + ' FROM (SELECT Mass_Tag_ID, CorrectedDelM / (Monoisotopic_Mass / 1e6) AS DelM_PPM'
+
+	Set @S = @S +       ' FROM ( SELECT MT.Mass_Tag_ID, MT.Monoisotopic_Mass,'
+	Set @S = @S +                     ' CASE'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN -3.15 AND -2.85 THEN DelM + 3'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN -2.15 AND -1.85 THEN DelM + 2'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN -1.15 AND -0.85 THEN DelM + 1'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN 0.85 AND 1.15 THEN DelM - 1'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN 1.85 AND 2.15 THEN DelM - 2'
+	Set @S = @S +                        ' WHEN PeptideQ.DelM BETWEEN 2.85 AND 3.15 THEN DelM - 3'
+	Set @S = @S +                        ' ELSE PeptideQ.DelM'
+	Set @S = @S +                     ' END AS CorrectedDelM'
+	Set @S = @S +              ' FROM (SELECT Pep.Mass_Tag_ID, SS.DelM'
+	Set @S = @S +                    ' FROM T_Peptides Pep INNER JOIN T_Score_Sequest SS'
+	Set @S = @S +                         ' ON Pep.Peptide_ID = SS.Peptide_ID'
+	Set @S = @S +                    ' UNION'
+	Set @S = @S +                    ' SELECT Pep.Mass_Tag_ID, X.DelM'
+	Set @S = @S +                    ' FROM T_Peptides Pep INNER JOIN T_Score_XTandem X'
+	Set @S = @S +                         ' ON Pep.Peptide_ID = X.Peptide_ID'
+	Set @S = @S +                    ' UNION'
+	Set @S = @S +                    ' SELECT Pep.Mass_Tag_ID, I.DelM'
+	Set @S = @S +                    ' FROM T_Peptides Pep INNER JOIN T_Score_Inspect I'
+	Set @S = @S +                         ' ON Pep.Peptide_ID = I.Peptide_ID '
+	Set @S = @S +                    ' ) PeptideQ'
+	Set @S = @S +                    ' INNER JOIN T_Mass_Tags MT'
+	Set @S = @S +                      ' ON PeptideQ.Mass_Tag_ID = MT.Mass_Tag_ID '
+	If @PMTQSFilter <> 0
+		Set @S = @S +          ' WHERE MT.PMT_Quality_Score = ' + Convert(varchar(12), @PMTQSFilter)
+	Set @S = @S +           ' ) LookupQ '
+                               	
+/*	
 	Set @S = @S +            ' FROM (SELECT	Pep.Peptide_ID, MT.Monoisotopic_Mass,'
-	Set @S = @S +                         ' CASE WHEN SS.DelM BETWEEN -3.1 AND -2.9 THEN DelM + 3 '
-	Set @S = @S +          ' WHEN SS.DelM BETWEEN -2.1 AND -1.9 THEN DelM + 2 '
-	Set @S = @S +                         ' WHEN SS.DelM BETWEEN -1.1 AND -0.9 THEN DelM + 1' 
-	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 0.9 AND 1.1 THEN DelM - 1 '
-	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 1.9 AND 2.1 THEN DelM - 2 '
-	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 2.9 AND 3.1 THEN DelM - 3 '
-	Set @S = @S +              ' ELSE SS.DelM END AS CorrectedDelM'
+	Set @S = @S +                         ' CASE WHEN SS.DelM BETWEEN -3.15 AND -2.85 THEN DelM + 3 '
+	Set @S = @S +                         ' WHEN SS.DelM BETWEEN -2.15 AND -1.85 THEN DelM + 2 '
+	Set @S = @S +                         ' WHEN SS.DelM BETWEEN -1.15 AND -0.85 THEN DelM + 1' 
+	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 0.85 AND 1.15 THEN DelM - 1 '
+	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 1.85 AND 2.15 THEN DelM - 2 '
+	Set @S = @S +                         ' WHEN SS.DelM BETWEEN 2.85 AND 3.15 THEN DelM - 3 '
+	Set @S = @S +                         ' ELSE SS.DelM END AS CorrectedDelM'
 	Set @S = @S +                 ' FROM T_Peptides Pep INNER JOIN'
 	Set @S = @S +                       ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN'
 	Set @S = @S +                       ' T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID'
 	If @PMTQSFilter <> 0
 		Set @S = @S +              ' WHERE MT.PMT_Quality_Score = ' + Convert(varchar(12), @PMTQSFilter)
-	
 	Set @S = @S +                 ' ) LookupQ'
-	Set @S = @S +            ' ) OuterQ'
-	Set @S = @S +      ' WHERE DelM_PPM BETWEEN ' + Convert(varchar(12), @PPMToleranceNeg) + ' AND ' + Convert(varchar(12), @PPMTolerancePos)
-	Set @S = @S +    ' ) LookupQ ON T_Peptides.Peptide_ID = LookupQ.Peptide_ID'
-	Set @S = @S +    ' GROUP BY Mass_Tag_ID'
+*/
+	
+	
+	Set @S = @S +       ' ) OuterQ'
+	Set @S = @S + ' WHERE DelM_PPM BETWEEN ' + Convert(varchar(12), @PPMToleranceNeg) + ' AND ' + Convert(varchar(12), @PPMTolerancePos)
+	Set @S = @S + ' GROUP BY Mass_Tag_ID'
 	
 	If @PreviewSql <> 0
 		Print @S
@@ -186,7 +217,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdatePMTQSUsingDelMPPM] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdatePMTQSUsingDelMPPM] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdatePMTQSUsingDelMPPM] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdatePMTQSUsingDelMPPM] TO [MTS_DB_Lite] AS [dbo]
 GO

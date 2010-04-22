@@ -21,5 +21,5 @@ CREATE NONCLUSTERED INDEX [IX_T_Seq_to_Archived_Protein_Collection_File_Map] ON 
 	[File_ID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-GRANT INSERT ON [dbo].[T_Seq_to_Archived_Protein_Collection_File_Map] TO [DMS_SP_User]
+GRANT INSERT ON [dbo].[T_Seq_to_Archived_Protein_Collection_File_Map] TO [DMS_SP_User] AS [dbo]
 GO

@@ -44,6 +44,7 @@ CREATE Procedure ImportNewMSAnalyses
 **			05/12/2007 mem - Added parameter @UseCachedDMSDataTables (Ticket:422)
 **						   - Switched to Try/Catch error handling
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_FTICR_Analysis_Description
+**			08/07/2009 mem - Now sending @PreviewSql to ParseFilterListDualKey
 **    
 *****************************************************/
 (
@@ -336,7 +337,7 @@ As
 		set @JobsByDualKeyFilters = 0
 		
 		set @filterMatchCount = 0
-		Exec @myError = ParseFilterListDualKey 'Campaign_and_Experiment', @filterValueLookupTableName, 'Campaign', 'Experiment', 'Job', @SAddnl, @filterMatchCount OUTPUT
+		Exec @myError = ParseFilterListDualKey 'Campaign_and_Experiment', @filterValueLookupTableName, 'Campaign', 'Experiment', 'Job', @SAddnl, @filterMatchCount OUTPUT, @PreviewSql=@PreviewSql
 		--
 		if @myError <> 0
 		begin
@@ -699,9 +700,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ImportNewMSAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

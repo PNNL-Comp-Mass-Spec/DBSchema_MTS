@@ -54,6 +54,8 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			03/27/2008 mem - Added call to UpdateMassTagToProteinModMap
 **			04/07/2008 mem - Now sending @ComputePMTQualityScoreLocal to ComputePMTQualityScore
 **			04/23/2008 mem - Minor changes to the status messages posted to T_Log_Entries
+**			12/08/2008 mem - Now calling RefreshMSMSJobNETs and RefreshMSMSSICJobs if 'ForceMSMSProcessingOnNextUpdate' is enabled, even if @skipImport = 1
+**			03/10/2009 mem - Now retrieving @ProteinCountAdded and @ProteinCountUpdated from RefreshLocalProteinTable
 **    
 *****************************************************/
 (
@@ -77,14 +79,14 @@ As
 	set @result = 0
 	set @logLevel = 1		-- Default to normal logging
 
+	declare @ForceMSMSProcessing tinyint
 	declare @ForceGeneralStatisticsUpdate tinyint
 	declare @ComputeProteinCoverage tinyint
-	declare @ProteinCoverageComputed tinyint
 	declare @ComputePMTQualityScoreLocal tinyint
 	
+	set @ForceMSMSProcessing = 0
 	set @ForceGeneralStatisticsUpdate = 0
 	set @ComputeProteinCoverage = 0
-	set @ProteinCoverageComputed = 0
 	set @ComputePMTQualityScoreLocal = 0
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -106,6 +108,16 @@ As
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 
+	--------------------------------------------------------------
+	-- Check the status of 'ForceMSMSProcessingOnNextUpdate'
+	--------------------------------------------------------------
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate')
+
+	If @result <> 0
+		Set @ForceMSMSProcessing = 1
+
+
 	-- < A >
 	--------------------------------------------------------------
 	-- import new MS/MS analyses
@@ -115,7 +127,7 @@ As
 	set @entriesAdded = 0
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportMSMSJobs')
-	if @result > 0 And @skipImport <> 1
+	if @result > 0 And @skipImport = 0
 	begin
 		-- Import new analyses for peptide identification from peptide database
 		--
@@ -128,7 +140,7 @@ As
 		set @message = 'Skipped ImportMSMSJobs'
 	--
 	-- Note: ImportNewMSMSAnalyses will post an entry to the log if @entriesAdded is greater than 0
-	If @entriesAdded = 0 And @logLevel >= 2
+	If @logLevel >= 2 And @entriesAdded = 0
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -149,8 +161,7 @@ As
 	--
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'RefreshMSMSJobNets')
-	if @result > 0 And @skipImport <> 1
-
+	if @result > 0 And (@skipImport = 0 OR @ForceMSMSProcessing = 1)
 	begin
 		-- Look for Jobs in T_Analysis_Description with NET values differing from those in the associated Peptide DB
 		--
@@ -181,8 +192,7 @@ As
 	--
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'RefreshMSMSSICJobs')
-	if @result > 0 And @skipImport <> 1
-
+	if @result > 0 And (@skipImport = 0 OR @ForceMSMSProcessing = 1)
 	begin
 		-- Look for Jobs in T_Analysis_Description with missing Dataset_SIC_Job values or values differing from those in the associated Peptide DB
 		--
@@ -221,9 +231,8 @@ As
 			set @ForceGeneralStatisticsUpdate = 1
 		else
 		Begin
-			set @result = 0
-			SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate')
-			if @result = 0
+
+			if @ForceMSMSProcessing = 0
 			begin
 				-- Skipping is not enabled; jump to DoMSJobs
 				Set @message = 'No new MS/MS jobs were loaded; skipping MS/MS related processing'
@@ -277,19 +286,28 @@ As
 	-- refresh local Protein table
 	--------------------------------------------------------------
 	--
+	Declare @ProteinCountAdded int
+	Declare @ProteinCountUpdated int
+	Set @ProteinCountAdded = 0
+	Set @ProteinCountUpdated = 0
+
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'RefreshProteins')
 	if @result > 0
 	begin
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RefreshProteins', 'MasterUpdateMassTags'
-		exec @result = RefreshLocalProteinTable @message OUTPUT
+		exec @result = RefreshLocalProteinTable @message OUTPUT, 
+								@ProteinCountAdded = @ProteinCountAdded OUTPUT, 
+								@ProteinCountUpdated  = @ProteinCountUpdated  OUTPUT
+								
 		set @message = 'Complete RefreshLocalProteinTable: ' + @message
 	end
 	else
 		set @message = 'Skipped RefreshProteins'
 	--
-	If @logLevel >= 1
+	-- Note: RefreshLocalProteinTable will post an entry to the log if @ProteinCountAdded or @ProteinCountUpdated are greater than 0
+	If @logLevel >= 2 AND @ProteinCountUpdated = 0 And @ProteinCountUpdated = 0
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 
 	-- Validate that updating is enabled, abort if not enabled
@@ -703,7 +721,7 @@ DoMSJobs:
 	set @entriesAdded = 0
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'ImportMSJobs')
-	if @result > 0 And @skipImport <> 1
+	if @result > 0 And @skipImport = 0
 	begin
 		-- Import new analyses for peak results from DMS
 		--
@@ -909,8 +927,6 @@ DoMSJobs:
 				if @logLevel >= 2
 					execute PostLogEntry 'Normal', @message, 'MasterUpdateMassTags'
 			end
-
-			Set @ProteinCoverageComputed = 1
 		end
 		else
 		begin
@@ -934,7 +950,7 @@ DoMSJobs:
 	set @entriesAdded = 0
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'AddDefaultPeakMatchingTasks')
-	if @result > 0 And @skipImport <> 1
+	if @result > 0 And @skipImport = 0
 	begin
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin AddDefaultPeakMatchingTasks', 'MasterUpdateMassTags'
@@ -974,7 +990,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateMassTags] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateMassTags] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateMassTags] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateMassTags] TO [MTS_DB_Lite] AS [dbo]
 GO

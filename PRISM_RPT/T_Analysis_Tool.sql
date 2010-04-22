@@ -7,8 +7,8 @@ CREATE TABLE [dbo].[T_Analysis_Tool](
 	[Tool_ID] [int] NOT NULL,
 	[Tool_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Param_File_Storage_Path] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Tool_Active] [tinyint] NOT NULL CONSTRAINT [DF_T_Analysis_Tool_Tool_Active]  DEFAULT ((1)),
-	[Cache_Update_State] [int] NOT NULL CONSTRAINT [DF_T_Analysis_Tool_Cache_Update_State]  DEFAULT ((1)),
+	[Tool_Active] [tinyint] NOT NULL,
+	[Cache_Update_State] [int] NOT NULL,
 	[Cache_Update_Start] [datetime] NULL,
 	[Cache_Update_Finish] [datetime] NULL,
 	[Cache_Updated_By] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -19,14 +19,11 @@ CREATE TABLE [dbo].[T_Analysis_Tool](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Analysis_Tool] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE TRIGGER [dbo].[trig_u_T_Analysis_Tool] ON [dbo].[T_Analysis_Tool] 
 FOR UPDATE
@@ -64,4 +61,8 @@ ALTER TABLE [dbo].[T_Analysis_Tool]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_T
 REFERENCES [T_Analysis_Task_Cache_Update_State_Name] ([Cache_Update_State])
 GO
 ALTER TABLE [dbo].[T_Analysis_Tool] CHECK CONSTRAINT [FK_T_Analysis_Tool_T_Analysis_Task_Cache_Update_State_Name]
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Tool_Active]  DEFAULT ((1)) FOR [Tool_Active]
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Cache_Update_State]  DEFAULT ((1)) FOR [Cache_Update_State]
 GO

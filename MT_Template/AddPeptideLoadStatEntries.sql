@@ -47,7 +47,11 @@ AS
 	-----------------------------------------------------
 	-- Validate the inputs
 	-----------------------------------------------------
+	Set @AnalysisStateMatch = IsNull(@AnalysisStateMatch, 7)
+	Set @InfoOnly = IsNull(@InfoOnly, 0)
+	Set @JobDateMax = IsNull(@JobDateMax, '12/31/9999')
 
+	
 	CREATE TABLE #Tmp_ScoreThresholds (
 		UniqueID int NOT NULL Identity(1,1),
 		DiscriminantScoreMinimum real NOT NULL,
@@ -179,7 +183,9 @@ AS
 			Set @continue = 0
 		Else
 		Begin
-			Exec @myError = AddPeptideLoadStatEntry @DiscriminantScoreMinimum, @PeptideProphetMinimum, @AnalysisStateMatch, @InfoOnly, @JobDateMax
+			Exec @myError = AddPeptideLoadStatEntry @DiscriminantScoreMinimum, @PeptideProphetMinimum, 
+			                                        @AnalysisStateMatch, @InfoOnly, @JobDateMax
+
 			
 			If @myError <> 0
 				Goto Done
@@ -191,7 +197,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntries] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntries] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntries] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntries] TO [MTS_DB_Lite] AS [dbo]
 GO

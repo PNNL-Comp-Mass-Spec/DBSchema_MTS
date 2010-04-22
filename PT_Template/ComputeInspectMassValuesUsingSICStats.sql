@@ -8,7 +8,7 @@ CREATE Procedure ComputeInspectMassValuesUsingSICStats
 /****************************************************
 **
 **	Desc: 
-**		Populates MH in T_Peptides and DelM in T_Score_Inspect
+**		Populates DelM in T_Score_Inspect (and optionally MH in T_Peptides)
 **		This procedure is only appropriate for Inspect analysis jobs; other job types will be skipped
 **
 **	Return values: 0: success, otherwise, error code
@@ -16,12 +16,16 @@ CREATE Procedure ComputeInspectMassValuesUsingSICStats
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	10/29/2008
+**	Date:	10/29/2008 mem - Initial Version
+**			01/08/2009 mem - Now storing theoretical peptide MH in T_Peptides.MH
+**						   - Computing DelM as Theoretical_MH - Observed_MH, which is consistent with XTandem and Sequest data in MTS
+**						   - Added parameter @ForceMHRecalculation (with a default of 0)
 **    
 *****************************************************/
 (
 	@Job int,
-	@message varchar(512)='' output
+	@message varchar(512)='' output,
+	@ForceMHRecalculation tinyint = 0				-- When 0, then only calculates T_Peptides.MH if Null
 )
 As
 	Set NoCount On
@@ -37,6 +41,8 @@ As
 	Declare @SICProcessState int
 	Declare @RowCountUpdated int
 	Declare @RowCountUpdated2 int
+	Set @RowCountUpdated = 0
+	Set @RowCountUpdated2 = 0
 	
 	Declare @RowCountDefined int
 	
@@ -50,6 +56,7 @@ As
 		
 	Set @Job = IsNull(@Job, 0)
 	Set @message = ''
+	Set @ForceMHRecalculation = IsNull(@ForceMHRecalculation, 0)
 	
 	Set @JobStr = Convert(varchar(18), @Job)
 
@@ -106,7 +113,7 @@ As
 
 		If @myRowCount = 0
 		Begin
-			Set @ErrorMessage = 'Computation of MH in T_Peptides failed for job ' + @JobStr+ '; a corresponding SIC job could not be found'
+			Set @ErrorMessage = 'Computation of DelM in T_Score_Inspect failed for job ' + @JobStr+ '; a corresponding SIC job could not be found'
 			exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats', 24
 			Set @message = @ErrorMessage
 		End
@@ -116,7 +123,7 @@ As
 				Set @SICJobExists = 1
 			Else
 			Begin
-				Set @ErrorMessage = 'Computation of MH in T_Peptides failed for job ' + @JobStr + '; although a SIC job exists, its state is not 75'
+				Set @ErrorMessage = 'Computation of DelM in T_Score_Inspect failed for job ' + @JobStr + '; although a SIC job exists, its state is not 75'
 				exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats', 24
 				Set @message = @ErrorMessage
 			End
@@ -140,17 +147,17 @@ As
 			----------------------------------------------
 			
 			CREATE TABLE #TmpParentMZInfo (
-				Scan_Number int NOT NULL, 
-				Parent_Ion_MZ float NULL
+				Peptide_ID int NOT NULL,
+				Parent_Ion_MH float NULL
 			)
 			
-			CREATE CLUSTERED INDEX #IX_TmpParentMZInfo ON #TmpParentMZInfo (Scan_Number)
+			CREATE CLUSTERED INDEX #IX_TmpParentMZInfo ON #TmpParentMZInfo (Peptide_ID)
 			
-			-- Cache the SIC info for this job
+			-- Compute and store the observed Parent ion MH values for the peptides in this job
 			--
-			INSERT INTO #TmpParentMZInfo( Scan_Number, Parent_Ion_MZ )
-			SELECT DISTINCT Pep.Scan_Number,
-			                DS_SIC.MZ AS Parent_Ion_MZ
+			INSERT INTO #TmpParentMZInfo( Peptide_ID, Parent_Ion_MH)
+			SELECT DISTINCT Pep.Peptide_ID,
+			                DS_SIC.MZ * Pep.Charge_State - (Pep.Charge_State - 1) * 1.0073 AS Parent_Ion_MH
 			FROM T_Peptides Pep
 			     INNER JOIN T_Analysis_Description TAD
 			       ON Pep.Analysis_ID = TAD.Job
@@ -166,55 +173,66 @@ As
 
 			----------------------------------------------
 			-- Populate the MH column in T_Peptides
+			-- We store the theoretical peptide MH value in this column
 			----------------------------------------------
 			--
 			UPDATE T_Peptides
-			SET MH = MZInfo.Parent_Ion_MZ * Pep.Charge_State - (Pep.Charge_State - 1) * 1.0073
+			SET MH = S.Monoisotopic_Mass + 1.0073
 			FROM T_Peptides Pep
-				INNER JOIN #TmpParentMZInfo MZInfo
-				ON Pep.Scan_Number = MZInfo.Scan_Number
-			WHERE (Pep.Analysis_ID = @Job)
+				INNER JOIN T_Sequence S 
+				ON Pep.Seq_ID = S.Seq_ID
+			WHERE (Pep.Analysis_ID = @Job) And 
+				  (@ForceMHRecalculation <> 0 OR IsNull(Pep.MH, 0) = 0)
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
 			Set @RowCountUpdated = @myRowCount
 			
-			Set @message = 'Computed MH for ' + Convert(varchar(11), @RowCountUpdated) + ' rows in T_Peptides for job ' + @JobStr
+			If @RowCountUpdated > 0
+				Set @message = 'Computed MH for ' + Convert(varchar(11), @RowCountUpdated) + ' rows in T_Peptides for job ' + @JobStr
 			
-			-- Make a log entry if the number of updated rows doesn't match @RowCountDefined
-			If @RowCountUpdated < @RowCountDefined
+			If @ForceMHRecalculation <> 0
 			Begin
-				Set @ErrorMessage = 'Computation of MH in T_Peptides failed for Inspect job ' + @JobStr + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
-				exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats'
-			End
-			Else
-			Begin
-				If @RowCountUpdated = 0
+				-- Make a log entry if the number of updated rows doesn't match @RowCountDefined
+				If @RowCountUpdated < @RowCountDefined
 				Begin
-					-- Make a log entry if @RowCountUpdated = 0
-					Set @ErrorMessage = 'Computation of MH in T_Peptides failed for Inspect job  ' + @JobStr + '; 0 rows were updated'
+					Set @ErrorMessage = 'Computation of MH in T_Peptides failed for Inspect job ' + @JobStr + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
 					exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats'
 				End
+				Else
+				Begin
+					If @RowCountUpdated = 0
+					Begin
+						-- Make a log entry if @RowCountUpdated = 0
+						Set @ErrorMessage = 'Computation of MH in T_Peptides failed for Inspect job  ' + @JobStr + '; 0 rows were updated'
+						exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats'
+					End
+				End
 			End
-
-			If @RowCountUpdated > 0
+						
+			
+			If @RowCountUpdated > 0 OR @ForceMHRecalculation = 0
 			Begin -- <c>
 				-- Populate the DelM column in T_Score_Inspect
+				-- DelM = Theoretical_Mass - Observed_Mass
 				--
 				UPDATE T_Score_Inspect
-				SET DelM = S.Monoisotopic_Mass - (Pep.MH - 1.0073)
+				SET DelM = Pep.MH - PMI.Parent_Ion_MH
 				FROM T_Peptides Pep
 				     INNER JOIN T_Score_Inspect I
 				       ON Pep.Peptide_ID = I.Peptide_ID
-				     INNER JOIN T_Sequence S
-				       ON Pep.Seq_ID = S.Seq_ID
+				     INNER JOIN #TmpParentMZInfo PMI
+				       ON Pep.Peptide_ID = PMI.Peptide_ID
 				WHERE (Pep.Analysis_ID = @Job) AND Not Pep.MH Is Null
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
 				Set @RowCountUpdated2 = @myRowCount
 				
-				Set @message = @message + '; Computed DelM for ' + Convert(varchar(11), @myRowCount) + ' rows in T_Peptides for job ' + @JobStr
+				If @message <> ''
+					Set @message = @message + '; '
+					
+				Set @message = @message + 'Computed DelM for ' + Convert(varchar(11), @myRowCount) + ' rows in T_Score_Inspect for job ' + @JobStr
 				
 				If @RowCountUpdated2 < @RowCountDefined
 				Begin
@@ -226,14 +244,14 @@ As
 					If @RowCountUpdated2 = 0
 					Begin
 						-- Make a log entry if @RowCountUpdated2 = 0
-						Set @ErrorMessage = 'Computation of MH in T_Peptides failed for Inspect job  ' + @JobStr + '; 0 rows were updated'
+						Set @ErrorMessage = 'Computation of DelM in T_Score_Inspect failed for Inspect job  ' + @JobStr + '; 0 rows were updated'
 						exec PostLogEntry 'Error', @ErrorMessage, 'ComputeInspectMassValuesUsingSICStats'
 					End
 				End
 				
 			End -- </c>
 
-			If @RowCountUpdated > 0
+			If @RowCountUpdated + @RowCountUpdated2 > 0
 				exec PostLogEntry 'Normal', @message, 'ComputeInspectMassValuesUsingSICStats'
 				
 		end  -- </b>
@@ -243,7 +261,7 @@ Done:
 	return @myError
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeInspectMassValuesUsingSICStats] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ComputeInspectMassValuesUsingSICStats] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ComputeInspectMassValuesUsingSICStats] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ComputeInspectMassValuesUsingSICStats] TO [MTS_DB_Lite] AS [dbo]
 GO

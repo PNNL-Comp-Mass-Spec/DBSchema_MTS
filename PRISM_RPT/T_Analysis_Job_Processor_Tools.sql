@@ -6,8 +6,8 @@ GO
 CREATE TABLE [dbo].[T_Analysis_Job_Processor_Tools](
 	[Tool_ID] [int] NOT NULL,
 	[Processor_ID] [int] NOT NULL,
-	[Entered] [datetime] NULL CONSTRAINT [DF_T_Analysis_Job_Processor_Tools_Entered]  DEFAULT (getdate()),
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Analysis_Job_Processor_Tools_Entered_By]  DEFAULT (suser_sname()),
+	[Entered] [datetime] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Analysis_Job_Processor_Tools] PRIMARY KEY NONCLUSTERED 
 (
 	[Tool_ID] ASC,
@@ -32,4 +32,8 @@ ALTER TABLE [dbo].[T_Analysis_Job_Processor_Tools]  WITH CHECK ADD  CONSTRAINT [
 REFERENCES [T_Analysis_Tool] ([Tool_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_Processor_Tools] CHECK CONSTRAINT [FK_T_Analysis_Job_Processor_Tools_T_Analysis_Tool]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processor_Tools] ADD  CONSTRAINT [DF_T_Analysis_Job_Processor_Tools_Entered]  DEFAULT (getdate()) FOR [Entered]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processor_Tools] ADD  CONSTRAINT [DF_T_Analysis_Job_Processor_Tools_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

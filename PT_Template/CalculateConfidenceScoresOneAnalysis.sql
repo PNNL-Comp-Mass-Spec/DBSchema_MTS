@@ -26,6 +26,7 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysis
 **			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			10/29/2008 mem - Updated to use DeltaNormTotalPRMScore for DeltaCn2 for Inspect
+**			02/19/2009 mem - Changed @ResidueCount to bigint
 **    
 *****************************************************/
 (
@@ -52,7 +53,7 @@ AS
 	
 	declare	@MatchFound tinyint
 	declare @ProteinCount int
-	declare @ResidueCount int
+	declare @ResidueCount bigint
 	declare @result int
 	declare @ResultType varchar(32)
 	declare @JobAdvancedToNextState tinyint
@@ -304,7 +305,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysis] TO [MTS_DB_Lite] AS [dbo]
 GO

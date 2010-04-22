@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 **			03/14/2006 mem - Added tables T_Quantitation_Defaults, T_Peak_Matching_Defaults, and T_Histogram_Cache
 **			09/12/2006 mem - Added table T_Event_Log
 **			09/13/2006 mem - Added table T_Peptide_Load_Stats
+**			01/13/2010 mem - Added table T_FTICR_UMC_CS_Stats
 **
 *****************************************************/
 (
@@ -91,6 +92,8 @@ AS
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_ResultDetails',	'UMC_ResultDetails_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_InternalStdDetails', 'UMC_InternalStdDetails_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_Members',			'UMC_Members_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_CS_Stats',		'UMC_CS_Stats_ID')
+	
 
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Quantitation_Defaults',		'Default_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Quantitation_Description',	'Quantitation_ID')
@@ -214,7 +217,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ResetIdentityFieldSeed] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ResetIdentityFieldSeed] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ResetIdentityFieldSeed] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ResetIdentityFieldSeed] TO [MTS_DB_Lite] AS [dbo]
 GO

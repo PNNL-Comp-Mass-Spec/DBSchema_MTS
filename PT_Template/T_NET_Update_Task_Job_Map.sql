@@ -21,6 +21,7 @@ ALTER TABLE [dbo].[T_NET_Update_Task_Job_Map] CHECK CONSTRAINT [FK_T_NET_Update_
 GO
 ALTER TABLE [dbo].[T_NET_Update_Task_Job_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_NET_Update_Task_Job_Map_T_NET_Update_Task] FOREIGN KEY([Task_ID])
 REFERENCES [T_NET_Update_Task] ([Task_ID])
+ON DELETE CASCADE
 GO
 ALTER TABLE [dbo].[T_NET_Update_Task_Job_Map] CHECK CONSTRAINT [FK_T_NET_Update_Task_Job_Map_T_NET_Update_Task]
 GO

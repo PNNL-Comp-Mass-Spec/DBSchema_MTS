@@ -7,12 +7,12 @@ CREATE TABLE [dbo].[T_Protein_Coverage](
 	[Ref_ID] [int] NOT NULL,
 	[Coverage_PMTs] [real] NULL,
 	[Coverage_Confirmed] [real] NULL,
-	[Count_PMTs] [int] NOT NULL CONSTRAINT [DF_T_Protein_Coverage_CountPMT]  DEFAULT (0),
+	[Count_PMTs] [int] NOT NULL,
 	[Count_PMTs_Full_Enzyme] [int] NOT NULL,
 	[Count_PMTs_Partial_Enzyme] [int] NOT NULL,
-	[Count_Confirmed] [int] NOT NULL CONSTRAINT [DF_T_Protein_Coverage_CountPeaks]  DEFAULT (0),
-	[Total_MSMS_Observation_Count] [int] NOT NULL CONSTRAINT [DF_T_Protein_Coverage_CountPeptides]  DEFAULT (0),
-	[High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_Protein_Coverage_HighScore]  DEFAULT (0),
+	[Count_Confirmed] [int] NOT NULL,
+	[Total_MSMS_Observation_Count] [int] NOT NULL,
+	[High_Normalized_Score] [real] NOT NULL,
 	[High_Discriminant_Score] [real] NOT NULL,
 	[PMT_Quality_Score_Minimum] [real] NOT NULL,
  CONSTRAINT [PK_T_Protein_Coverage] PRIMARY KEY CLUSTERED 
@@ -27,4 +27,12 @@ ALTER TABLE [dbo].[T_Protein_Coverage]  WITH CHECK ADD  CONSTRAINT [FK_T_Protein
 REFERENCES [T_Proteins] ([Ref_ID])
 GO
 ALTER TABLE [dbo].[T_Protein_Coverage] CHECK CONSTRAINT [FK_T_Protein_Coverage_T_Proteins]
+GO
+ALTER TABLE [dbo].[T_Protein_Coverage] ADD  CONSTRAINT [DF_T_Protein_Coverage_CountPMT]  DEFAULT (0) FOR [Count_PMTs]
+GO
+ALTER TABLE [dbo].[T_Protein_Coverage] ADD  CONSTRAINT [DF_T_Protein_Coverage_CountPeaks]  DEFAULT (0) FOR [Count_Confirmed]
+GO
+ALTER TABLE [dbo].[T_Protein_Coverage] ADD  CONSTRAINT [DF_T_Protein_Coverage_CountPeptides]  DEFAULT (0) FOR [Total_MSMS_Observation_Count]
+GO
+ALTER TABLE [dbo].[T_Protein_Coverage] ADD  CONSTRAINT [DF_T_Protein_Coverage_HighScore]  DEFAULT (0) FOR [High_Normalized_Score]
 GO

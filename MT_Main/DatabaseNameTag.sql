@@ -29,5 +29,5 @@ AS
 	END
 
 GO
-GRANT EXECUTE ON [dbo].[DatabaseNameTag] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[DatabaseNameTag] TO [DMS_SP_User] AS [dbo]
 GO

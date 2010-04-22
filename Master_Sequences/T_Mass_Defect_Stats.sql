@@ -8,7 +8,7 @@ CREATE TABLE [dbo].[T_Mass_Defect_Stats](
 	[Mass_Start] [int] NOT NULL,
 	[Mass_Defect_Bin] [real] NOT NULL,
 	[Bin_Count] [int] NOT NULL,
-	[Query_Date] [datetime] NOT NULL CONSTRAINT [DF_T_Mass_Defect_Stats_Query_Date]  DEFAULT (getdate()),
+	[Query_Date] [datetime] NOT NULL,
  CONSTRAINT [PK_T_Mass_Defect_Stats] PRIMARY KEY CLUSTERED 
 (
 	[Sampling_Size] ASC,
@@ -17,4 +17,6 @@ CREATE TABLE [dbo].[T_Mass_Defect_Stats](
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Mass_Defect_Stats] ADD  CONSTRAINT [DF_T_Mass_Defect_Stats_Query_Date]  DEFAULT (getdate()) FOR [Query_Date]
 GO

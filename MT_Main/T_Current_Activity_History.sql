@@ -13,7 +13,7 @@ CREATE TABLE [dbo].[T_Current_Activity_History](
 	[TableCount3] [int] NULL,
 	[TableCount4] [int] NULL,
 	[Update_Completion_Date] [datetime] NULL,
-	[Pause_Length_Minutes] [real] NOT NULL CONSTRAINT [DF_T_Current_Activity_History_Pause_Length_Minutes]  DEFAULT (0),
+	[Pause_Length_Minutes] [real] NOT NULL,
  CONSTRAINT [PK_T_Current_Activity_History] PRIMARY KEY NONCLUSTERED 
 (
 	[History_ID] ASC
@@ -34,4 +34,6 @@ CREATE NONCLUSTERED INDEX [IX_T_Current_Activity_History_Snapshot_Date] ON [dbo]
 (
 	[Snapshot_Date] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_Current_Activity_History] ADD  CONSTRAINT [DF_T_Current_Activity_History_Pause_Length_Minutes]  DEFAULT (0) FOR [Pause_Length_Minutes]
 GO

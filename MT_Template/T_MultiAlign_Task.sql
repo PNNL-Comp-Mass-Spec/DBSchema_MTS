@@ -5,28 +5,28 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_MultiAlign_Task](
 	[Task_ID] [int] IDENTITY(1,1) NOT NULL,
-	[Minimum_High_Normalized_Score] [real] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)),
-	[Minimum_High_Discriminant_Score] [real] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)),
-	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)),
-	[Minimum_PMT_Quality_Score] [real] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)),
-	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Filter]  DEFAULT (''),
-	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Exclusion_Filter]  DEFAULT (''),
-	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)),
-	[Internal_Std_Explicit] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Internal_Std_Explicit]  DEFAULT (''),
-	[NET_Value_Type] [tinyint] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_NET_Value_Type]  DEFAULT ((0)),
-	[Param_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Param_File_Name]  DEFAULT (''),
-	[Output_Folder_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Output_Folder_Name]  DEFAULT (''),
-	[Processing_State] [tinyint] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Processing_State]  DEFAULT ((1)),
-	[Priority] [tinyint] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Priority]  DEFAULT ((5)),
-	[Processing_Error_Code] [int] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Processing_Error_Code]  DEFAULT ((0)),
-	[Processing_Warning_Code] [int] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Processing_Warning_Code]  DEFAULT ((0)),
-	[Job_Count] [int] NOT NULL CONSTRAINT [DF_T_MultiAlign_Task_Task_JobCount]  DEFAULT ((0)),
-	[Task_Created] [datetime] NULL CONSTRAINT [DF_T_MultiAlign_Task_Creation_Date]  DEFAULT (getdate()),
+	[Minimum_High_Normalized_Score] [real] NOT NULL,
+	[Minimum_High_Discriminant_Score] [real] NOT NULL,
+	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL,
+	[Minimum_PMT_Quality_Score] [real] NOT NULL,
+	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL,
+	[Internal_Std_Explicit] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[NET_Value_Type] [tinyint] NOT NULL,
+	[Param_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Output_Folder_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Processing_State] [tinyint] NOT NULL,
+	[Priority] [tinyint] NOT NULL,
+	[Processing_Error_Code] [int] NOT NULL,
+	[Processing_Warning_Code] [int] NOT NULL,
+	[Job_Count] [int] NOT NULL,
+	[Task_Created] [datetime] NULL,
 	[Task_Start] [datetime] NULL,
 	[Task_Finish] [datetime] NULL,
 	[Task_AssignedProcessorName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Analysis_Results_ID] [int] NULL,
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_MultiAlign_Task_Entered_By]  DEFAULT (suser_sname()),
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_MultiAlign_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
@@ -34,14 +34,11 @@ CREATE TABLE [dbo].[T_MultiAlign_Task](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_i_T_MultiAlign_Task] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 create Trigger trig_i_T_MultiAlign_Task on dbo.T_MultiAlign_Task
 For Insert
 AS
@@ -53,14 +50,11 @@ AS
 	FROM inserted
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_MultiAlign_Task] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 create TRIGGER trig_u_T_MultiAlign_Task ON dbo.T_MultiAlign_Task 
 FOR UPDATE
 AS
@@ -158,4 +152,40 @@ GO
 ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Param_File_Name],''))=(0) AND charindex(char((13)),isnull([Param_File_Name],''))=(0)))
 GO
 ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Param_File_Name]  DEFAULT ('') FOR [Param_File_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Priority]  DEFAULT ((5)) FOR [Priority]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Task_JobCount]  DEFAULT ((0)) FOR [Job_Count]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Creation_Date]  DEFAULT (getdate()) FOR [Task_Created]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

@@ -24,6 +24,10 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **						   - Upgraded for use with Sql Backup 5 (replacing the Threads argument with the ThreadCount argument)
 **			05/31/2007 mem - Now including FILEOPTIONS only if @UseLocalTransferFolder is non-zero
 **			09/07/2007 mem - Now returning the contents of #Tmp_DB_Backup_List when @InfoOnly = 1
+**			07/13/2009 mem - Upgraded for use with Sql Backup 6
+**						   - Added parameters @DiskRetryIntervalSec, @DiskRetryCount, and CompressionLevel
+**						   - Changed the default number of threads to 3
+**						   - Changed the default compression level to 4
 **    
 *****************************************************/
 (
@@ -33,12 +37,15 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 	@IncludeMTSInterfaceAndControlDBs tinyint = 0,	-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
 	@IncludeSystemDBs tinyint = 0,					-- Set to 1 to include master, model and MSDB databases; these always get full DB backups since transaction log backups are not allowed
 	@FileCount tinyint = 1,							-- Set to 2 or 3 to create multiple backup files (will automatically use one thread per file); If @FileCount is > 1, then @ThreadCount is ignored
-	@ThreadCount tinyint = 2,						-- Set to 2 or 3 to use multiple compression threads but create just a single output file; @FileCount must be 1 if @ThreadCount is > 1
+	@ThreadCount tinyint = 3,						-- Set to 2 or higher (up to the number of cores on the server) to use multiple compression threads but create just a single output file; @FileCount must be 1 if @ThreadCount is > 1
 	@DaysToKeepOldBackups smallint = 20,			-- Defines the number of days worth of backup files to retain; files older than @DaysToKeepOldBackups days prior to the present will be deleted; minimum value is 3
 	@Verify tinyint = 1,							-- Set to 1 to verify each backup
 	@InfoOnly tinyint = 1,							-- Set to 1 to display the Backup SQL that would be run
 	@BackupBatchSize tinyint = 32,					-- If greater than 1, then sends Sql Backup a comma separated list of databases to backup (up to 32 DBs at a time); this is much more efficient than calling Sql Backup with one database at a time, but has a downside of inability to explicitly define the log file names
 	@UseLocalTransferFolder tinyint = 0,			-- Set to 1 to backup to the local "Redgate Backup Transfer Folder" then copy the file to @BackupFolderRoot; only used if @BackupFolderRoot starts with "\\"
+	@DiskRetryIntervalSec smallint = 30,			-- Set to non-zero value to specify that the backup should be re-tried if a network error occurs; this is the delay time before the retry occurs
+	@DiskRetryCount smallint = 10,					-- When @DiskRetryIntervalSec is non-zero, this specifies the maximum number of times to retry the backup
+	@CompressionLevel tinyint = 4,					-- 1 is the fastest backup, but the largest file size; 4 is the slowest backup, but the smallest file size
 	@message varchar(2048) = '' OUTPUT
 )
 As	
@@ -89,6 +96,22 @@ As
 	Set @DaysToKeepOldBackups = IsNull(@DaysToKeepOldBackups, 20)
 	If @DaysToKeepOldBackups < 3
 		Set @DaysToKeepOldBackups = 3
+
+	Set @DiskRetryIntervalSec = IsNull(@DiskRetryIntervalSec, 0)
+	If @DiskRetryIntervalSec < 0
+		Set @DiskRetryIntervalSec = 0
+	If @DiskRetryIntervalSec > 1800
+		Set @DiskRetryIntervalSec = 1800
+		
+	Set @DiskRetryCount = IsNull(@DiskRetryCount, 10)
+	If @DiskRetryCount < 1
+		Set @DiskRetryCount = 1
+	If @DiskRetryCount > 50
+		Set @DiskRetryCount = 50
+
+	Set @CompressionLevel = IsNull(@CompressionLevel, 3)
+	If @CompressionLevel < 1 Or @CompressionLevel > 4
+		Set @CompressionLevel = 3
 
 	Set @message = ''
 
@@ -530,7 +553,7 @@ As
 				If @UseLocalTransferFolder <> 0
 					Set @Sql = @Sql + ' FILEOPTIONS=1,'
 					
-				Set @Sql = @Sql + ' COMPRESSION=3,'
+				Set @Sql = @Sql + ' COMPRESSION=' + Convert(varchar(4), @CompressionLevel) + ','
 
 				If @FileCount > 1
 					Set @Sql = @Sql + ' FILECOUNT=' + Convert(varchar(6), @FileCount) + ','
@@ -538,6 +561,12 @@ As
 				Begin
 					If @ThreadCount > 1
 						Set @Sql = @Sql + ' THREADCOUNT=' + Convert(varchar(4), @ThreadCount) + ','
+				End
+				
+				If @DiskRetryIntervalSec > 0
+				Begin
+					Set @Sql = @Sql + ' DISKRETRYINTERVAL=' + Convert(varchar(6), @DiskRetryIntervalSec) + ','
+					Set @Sql = @Sql + ' DISKRETRYCOUNT=' + Convert(varchar(6), @DiskRetryCount) + ','
 				End
 				
 				If @Verify <> 0
@@ -793,4 +822,8 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[BackupMTSDBs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[BackupMTSDBs] TO [MTS_DB_Lite] AS [dbo]
 GO

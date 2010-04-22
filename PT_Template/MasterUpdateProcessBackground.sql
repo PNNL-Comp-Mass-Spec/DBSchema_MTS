@@ -40,6 +40,8 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			08/25/2006 mem - Now posting log entry before calling UpdatePeptideSICStats if any jobs are in state 20
 **			12/02/2006 mem - Added a second call to CheckStaleJobs
 **			10/29/2008 mem - Added call to ComputeInspectMassValuesForAvailableAnalyses
+**			11/01/2009 mem - Added call to UpdateProteinDataForAvailableAnalyses
+**			11/02/2009 mem - Added call to CalculateCleavageStateForAvailableAnalyses
 **    
 *****************************************************/
 (
@@ -122,7 +124,7 @@ As
 	-- Load Peptides from analyses	
 	-- 
 	Set @ProcessStateMatch = 10
-	Set @NextProcessState = 20
+	Set @NextProcessState = 15
 
 	set @result = 0
 	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LoadAnalysisResults')
@@ -144,6 +146,40 @@ As
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
+
+
+
+	-- < B2 >
+	--------------------------------------------------------------
+	-- Update the protein data for jobs in state 15
+	--------------------------------------------------------------
+	--
+	-- Load Peptides from analyses	
+	-- 
+	Set @ProcessStateMatch = 15
+	Set @NextProcessState = 20
+
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'UpdateProteinData')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped UpdateProteinData', 'MasterUpdateProcessBackground'
+	end
+	else
+	begin
+		EXEC @result = UpdateProteinDataForAvailableAnalyses @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT
+
+		set @message = 'Completed updating proteins for available analyses: ' + convert(varchar(11), @count) + ' jobs processed'
+		if @count > 0 and @logLevel >= 1
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
 
 	-- < C >
 	--------------------------------------------------------------
@@ -274,7 +310,7 @@ As
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 30
-	Set @NextProcessState = 33
+	Set @NextProcessState = 31
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -290,6 +326,37 @@ As
 		EXEC @result = VerifySequenceInfo @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT, @count2 OUTPUT
 
 		set @message = 'Completed VerifySequenceInfo: ' + convert(varchar(11), @count) + ' jobs processed and ' + convert(varchar(11), @count2) + ' advanced to next state'
+		If @logLevel >= 1 and @count > 0
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+
+	-- < G2 >
+	--------------------------------------------------------------
+	-- Calculate cleavage state and terminus state
+	--------------------------------------------------------------
+	--
+	Set @ProcessStateMatch = 31
+	Set @NextProcessState = 33
+
+	-- Perform this subprocess if it is enabled
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'CalculateCleavageState')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped CalculateCleavageState', 'MasterUpdateProcessBackground'
+	end
+	Else
+	begin
+		EXEC @result = CalculateCleavageStateForAvailableAnalyses @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT
+
+		set @message = 'Completed CalculateCleavageState: ' + convert(varchar(11), @count) + ' jobs processed'
 		If @logLevel >= 1 and @count > 0
 			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 	end
@@ -707,7 +774,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Lite] AS [dbo]
 GO

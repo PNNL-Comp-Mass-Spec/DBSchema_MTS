@@ -13,8 +13,8 @@ CREATE TABLE [dbo].[T_ORF_Database_List](
 	[ODB_NetOleDB_Conn_String] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ODB_State] [int] NOT NULL,
 	[Notes] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[ODB_Created] [smalldatetime] NOT NULL CONSTRAINT [DF_T_ORF_Database_List_ODB_Created]  DEFAULT (getdate()),
-	[ODB_DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_ORF_Database_List_ODB_DB_Schema_Version]  DEFAULT (1),
+	[ODB_Created] [smalldatetime] NOT NULL,
+	[ODB_DB_Schema_Version] [real] NOT NULL,
 	[ODB_Fasta_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_ORF_Database_List] PRIMARY KEY CLUSTERED 
 (
@@ -30,16 +30,14 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_ORF_Database_List] ON [dbo].[T_ORF_Databa
 	[ODB_Name] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-
 /****** Object:  Trigger [dbo].[trig_d_ORF_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
 
-CREATE Trigger dbo.trig_d_ORF_Database_List on [dbo].[T_ORF_Database_List]
+CREATE Trigger [dbo].[trig_d_ORF_Database_List] on [dbo].[T_ORF_Database_List]
 For Delete
 /****************************************************
 **
@@ -64,12 +62,11 @@ AS
 	FROM deleted
 	ORDER BY ODB_ID
 
-GO
 
+GO
 /****** Object:  Trigger [dbo].[trig_i_ORF_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
@@ -92,12 +89,11 @@ AS
 	SELECT 3, inserted.ODB_ID, inserted.ODB_State, 0, GetDate()
 	FROM inserted
 
-GO
 
+GO
 /****** Object:  Trigger [dbo].[trig_u_ORF_Database_List] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
@@ -121,9 +117,14 @@ AS
 		SELECT 3, inserted.ODB_ID, inserted.ODB_State, deleted.ODB_State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.ODB_ID = inserted.ODB_ID
 
+
 GO
 ALTER TABLE [dbo].[T_ORF_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_ORF_Database_List_T_MT_Database_State_Name] FOREIGN KEY([ODB_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_ORF_Database_List] CHECK CONSTRAINT [FK_T_ORF_Database_List_T_MT_Database_State_Name]
+GO
+ALTER TABLE [dbo].[T_ORF_Database_List] ADD  CONSTRAINT [DF_T_ORF_Database_List_ODB_Created]  DEFAULT (getdate()) FOR [ODB_Created]
+GO
+ALTER TABLE [dbo].[T_ORF_Database_List] ADD  CONSTRAINT [DF_T_ORF_Database_List_ODB_DB_Schema_Version]  DEFAULT (1) FOR [ODB_DB_Schema_Version]
 GO

@@ -9,11 +9,11 @@ CREATE TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached](
 	[Description] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Monoisotopic_Mass_Correction] [float] NOT NULL,
 	[Average_Mass_Correction] [float] NULL,
-	[Affected_Atom] [char](1) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL CONSTRAINT [DF_T_Mass_Correction_Factors_Affected_Atom]  DEFAULT ('-'),
-	[Original_Source] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source]  DEFAULT (''),
-	[Original_Source_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source_Name]  DEFAULT (''),
+	[Affected_Atom] [char](1) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Original_Source] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Original_Source_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Alternative_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_Mass_Correction_Factors_Last_Affected]  DEFAULT (getdate()),
+	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_DMS_Mass_Correction_Factors_Cached] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Correction_ID] ASC
@@ -21,14 +21,11 @@ CREATE TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_DMS_Mass_Correction_Factors_Cached] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE Trigger [dbo].[trig_u_DMS_Mass_Correction_Factors_Cached] on [dbo].[T_DMS_Mass_Correction_Factors_Cached]
 For Update
@@ -51,4 +48,12 @@ AS
 
 
 
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Affected_Atom]  DEFAULT ('-') FOR [Affected_Atom]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source]  DEFAULT ('') FOR [Original_Source]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source_Name]  DEFAULT ('') FOR [Original_Source_Name]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

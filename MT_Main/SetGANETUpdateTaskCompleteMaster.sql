@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.SetGANETUpdateTaskCompleteMaster
+CREATE PROCEDURE SetGANETUpdateTaskCompleteMaster
 /****************************************************
 **
 **	Desc: 
@@ -16,7 +16,7 @@ CREATE PROCEDURE dbo.SetGANETUpdateTaskCompleteMaster
 **	Auth:	grk
 **	Date:	08/26/2003  
 **			06/28/2004 mem - Changed from @mtdbName to @dbName 
-**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**			11/23/2005 mem - Added brackets around @dbName to allow for DBs with dashes in the name
 **
 *****************************************************/
 (
@@ -52,5 +52,9 @@ Done:
 	return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[SetGANETUpdateTaskCompleteMaster] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[SetGANETUpdateTaskCompleteMaster] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskCompleteMaster] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskCompleteMaster] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -107,7 +107,11 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [MTUser]
+GRANT VIEW DEFINITION ON [dbo].[ConvertListToWhereClause] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ConvertListToWhereClause] TO [MTS_DB_Lite] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [MTUser] AS [dbo]
 GO

@@ -26,10 +26,13 @@ CREATE PROCEDURE dbo.ResetChangedAnalysisJobs
 **			03/21/2008 mem - Updated to use T_DMS_Analysis_Job_Info_Cached in MT_Main rather than directly polling DMS via the V_DMS view
 **			04/26/2008 mem - Now calling RefreshAnalysisDescriptionInfo to perform the updates.  This has the advantage of storing old and new values in T_Analysis_Description_Updates
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
+**			03/13/2010 mem - Added parameters @UpdateDMSCacheTable and @CacheUpdateJobMinimum
 **    
 *****************************************************/
 (
 	@NextProcessState int = 10,
+	@UpdateDMSCacheTable tinyint = 0,		-- If 1, then first calls RefreshCachedDMSAnalysisJobInfo in MT_Main; you will typically want to set @CacheUpdateJobMinimum to a non-zero value to cause the update to run faster
+	@CacheUpdateJobMinimum int = 0,			-- Set to a positive value to limit the jobs updated when @UpdateDMSCacheTable is non-zero
 	@infoOnly tinyint = 0
 )
 As
@@ -49,13 +52,15 @@ As
 	Declare @ProcessState varchar(9)
 	
 	Declare @JobList varchar(max)
-	
+	Declare @S varchar(max)
 	
 	---------------------------------------------------
 	-- Validate the inputs
 	---------------------------------------------------
 	--
 	Set @NextProcessState = IsNull(@NextProcessState, 10)
+	Set @UpdateDMSCacheTable = IsNull(@UpdateDMSCacheTable, 0)
+	Set @CacheUpdateJobMinimum = IsNull(@CacheUpdateJobMinimum, 0)
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	---------------------------------------------------
@@ -68,12 +73,28 @@ As
 	--	
 	if @ExperimentOrganism = ''
 	begin
-		set @message = 'ould not get experiment (and thus dataset) organism name from MT_Main'
+		set @message = 'Could not get experiment (and thus dataset) organism name from MT_Main'
 		execute PostLogEntry 'Error', @message, 'ResetChangedAnalysisJobs'
 		return 33
 	end
 
 	Set @ProcessState = Convert(varchar(9), @NextProcessState)
+
+	--------------------------------------------------------------
+	-- Possibly call RefreshCachedDMSAnalysisJobInfo
+	--------------------------------------------------------------
+	
+	If @UpdateDMSCacheTable <> 0
+	Begin
+		-- Call RefreshCachedDMSAnalysisJobInfo in MT_Main
+		Set @S = 'exec MT_Main.dbo.RefreshCachedDMSAnalysisJobInfo ' + Convert(varchar(12), @CacheUpdateJobMinimum) + ', @UpdateSourceMTSServer=1'
+		
+		If @infoOnly <> 0
+			Print @S
+		Else
+			Exec (@S)
+
+	End
 
 	---------------------------------------------------
 	-- Find changed analysis jobs
@@ -153,7 +174,7 @@ As
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ResetChangedAnalysisJobs] TO [MTS_DB_Lite] AS [dbo]
 GO

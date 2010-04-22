@@ -18,6 +18,7 @@ CREATE Procedure dbo.AckErrors
 **	Auth:	mem
 **	Date:	02/20/2008
 **			03/28/2008 mem - Added parameter @DBMatchList
+**			12/09/2008 mem - Updated to examine the value in @ErrorActionCode when calling AckError for each acknowledged error
 **    
 *****************************************************/
 (
@@ -41,7 +42,7 @@ As
 	Set @OnlyUseSpecifiedDBs = 0
 	
 	Declare @S varchar(2048)
-
+	
 	Declare @EntryCount int
 	Set @EntryCount = 0
 	
@@ -59,12 +60,16 @@ As
 	set @message = ''
 	
 	Declare @Sql nvarchar(2048)
+	Declare @SqlParams nvarchar(256)
 	Declare @CurrentServerPrefix varchar(128)
 
 	Declare @SortID int
 	Declare @EntryIDGlobal int
 	Declare @Server varchar(128)
 	Declare @DatabaseName varchar(256)
+	Declare @PostedBy varchar(256)
+	Declare @ErrorMessage varchar(4000)
+	Declare @ErrorActionCode tinyint
 	
 	Declare @EntryID int
 	Declare @EntryIDText varchar(24)
@@ -174,7 +179,9 @@ As
 							 @EntryIDGlobal = P.Entry_ID_Global,
 							 @Server = DBE.Server_Name,
 							 @DatabaseName = DBE.Database_Name,
-							 @EntryID = DBE.Entry_ID
+							 @EntryID = DBE.Entry_ID,
+							 @PostedBy = DBE.Posted_By,
+							 @ErrorMessage = DBE.Message
 				FROM #TmpEntriesToProcess P INNER JOIN 
 				     T_MTS_DB_Errors DBE ON P.Entry_ID_Global = DBE.Entry_ID_Global
 				WHERE P.SortID > @SortID
@@ -195,11 +202,12 @@ As
 					Else
 						Set @CurrentServerPrefix = @Server + '.'
 
-					Set @Sql = 'exec ' + @CurrentServerPrefix + '[' + @DatabaseName + '].dbo.AckError ' + @EntryIDText
+					Set @Sql = 'exec ' + @CurrentServerPrefix + '[' + @DatabaseName + '].dbo.AckError ' + @EntryIDText + ', @ErrorActionCode = @ErrorActionCode OUTPUT'
+					Set @SqlParams = '@ErrorActionCode tinyint OUTPUT'
 					
 					If @PreviewSql = 0
 					Begin -- <e>
-						EXEC @result = sp_executesql @sql
+						EXEC @result = sp_executesql @sql, @SqlParams, @ErrorActionCode output
 						--
 						SELECT @myError = @@error, @myRowCount = @@rowcount
 						
@@ -213,7 +221,15 @@ As
 							--
 							SELECT @myError = @@error, @myRowCount = @@rowcount	
 							
-							Print 'Acknowledged entry ' + @EntryIDText + ' in database ' + @Server + '.' + @DatabaseName
+							If @ErrorActionCode = 1
+								Print 'Acknowledged entry ' + @EntryIDText + ' in database ' + @Server + '.' + @DatabaseName + '; ' + @PostedBy + ': ' + @ErrorMessage
+							If @ErrorActionCode = 2
+								Print 'Skipped entry      ' + @EntryIDText + ' in database ' + @Server + '.' + @DatabaseName + ' since already acknowledged'
+							If @ErrorActionCode = 3
+								Print 'Did not find entry ' + @EntryIDText + ' in database ' + @Server + '.' + @DatabaseName + '.T_Log_Entries'
+							If @ErrorActionCode < 1 Or @ErrorActionCode > 3
+								Print 'Unknown value for @ErrorActionCode for entry ' + @EntryIDText + ' in database ' + @Server + '.' + @DatabaseName + '; @ErrorActionCode = ' + Convert(varchar(12), @ErrorActionCode)
+
 						End
 						Else
 						Begin
@@ -256,4 +272,8 @@ As
 	
 	Return @myError
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[AckErrors] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AckErrors] TO [MTS_DB_Lite] AS [dbo]
 GO

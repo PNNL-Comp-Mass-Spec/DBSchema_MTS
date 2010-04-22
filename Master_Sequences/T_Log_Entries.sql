@@ -6,10 +6,10 @@ GO
 CREATE TABLE [dbo].[T_Log_Entries](
 	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
 	[posted_by] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[posting_time] [datetime] NOT NULL CONSTRAINT [DF_T_Log_Entries_posting_time]  DEFAULT (getdate()),
+	[posting_time] [datetime] NOT NULL,
 	[type] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[message] [varchar](4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Log_Entries_Entered_By]  DEFAULT (suser_sname()),
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Log_Entries] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
@@ -24,14 +24,11 @@ CREATE NONCLUSTERED INDEX [IX_T_Log_Entries_Type] ON [dbo].[T_Log_Entries]
 	[type] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Log_Entries] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE TRIGGER [trig_u_T_Log_Entries] ON [dbo].[T_Log_Entries] 
 FOR UPDATE
@@ -83,5 +80,9 @@ AS
 
 
 GO
-GRANT INSERT ON [dbo].[T_Log_Entries] TO [DMS_SP_User]
+GRANT INSERT ON [dbo].[T_Log_Entries] TO [DMS_SP_User] AS [dbo]
+GO
+ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_posting_time]  DEFAULT (getdate()) FOR [posting_time]
+GO
+ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

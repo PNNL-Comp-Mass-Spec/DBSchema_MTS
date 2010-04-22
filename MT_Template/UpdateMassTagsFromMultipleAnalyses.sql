@@ -28,6 +28,9 @@ CREATE Procedure dbo.UpdateMassTagsFromMultipleAnalyses
 **	Auth:	mem
 **	Date:	02/26/2008
 **			04/04/2008 mem - Now updating Cleavage_State_Max in T_Mass_Tags
+**			11/07/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			07/16/2009 mem - Now populating PeptideEx in T_Mass_Tags
+**			11/11/2009 mem - Now examining state of ValidateSICStatsForImportedMSMSJobs
 **
 *****************************************************/
 (
@@ -89,7 +92,8 @@ As
 	
 	Declare @ImportStartTime datetime
 	Declare @PauseLengthSeconds int
-	
+
+	Declare @ValidateSICStatsForImportedMSMSJobs tinyint	
 	Declare @UpdateEnabledCheckTime datetime
 	Declare @UpdateEnabled tinyint
 	
@@ -306,7 +310,6 @@ As
 					Set @AddJobsToBatch = 0
 				
 			End -- </c2>
-			
 
 		End -- </b1>
 	End -- </a1>
@@ -396,7 +399,7 @@ As
 	-----------------------------------------------
 	--
 	CREATE INDEX #IX_TempTable_PeptideToProteinMapImported ON #PeptideToProteinMapImported (Reference)
-    
+
 	-----------------------------------------------------------
 	-- Create a temporary table to hold unique Mass Tag ID stats
 	-----------------------------------------------------------
@@ -408,7 +411,8 @@ As
 		Multiple_ORF int,
 		Mod_Count int, 
 		Mod_Description varchar (2048), 
-		GANET_Predicted real
+		GANET_Predicted real,
+		PeptideEx varchar(512)
 	)   
 	--
 	SELECT @myError = @@error
@@ -452,6 +456,16 @@ As
 	-----------------------------------------------
 	--
 	CREATE UNIQUE CLUSTERED INDEX #IX_TempTable_PeptideHitStats ON #PeptideHitStats (Mass_Tag_ID)
+	
+	-----------------------------------------------------------
+	-- Lookup setting for ValidateSICStatsForImportedMSMSJobs
+	-----------------------------------------------------------
+	
+	Set @ValidateSICStatsForImportedMSMSJobs = 1
+	
+	SELECT @ValidateSICStatsForImportedMSMSJobs = IsNull(Enabled, 1)
+	FROM T_Process_Step_Control
+	Where Processing_Step_Name = 'ValidateSICStatsForImportedMSMSJobs'
 	
 	
 	-----------------------------------------------------------
@@ -581,38 +595,48 @@ As
 		Begin -- <b2>
 			Set @JobStrCurrent = Convert(varchar(19), @JobCurrent)
 			
-			Set @MaxScanNumberPeptideHit = 0
-			Set @MaxScanNumberSICs = 0
-			Set @MaxScanNumberAllScans = 0
-			Set @message = ''
-			
-			set @S = ''
-			set @S = @S + ' SELECT @MaxA = MaxScanNumberPeptideHit, '
-			set @S = @S +        ' @MaxB = MaxScanNumberSICs,'
-			set @S = @S +        ' @MaxC = MaxScanNumberAllScans'
-			set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.V_PeptideHit_Job_Scan_Max '
-			set @S = @S + ' WHERE (Job = ' + @JobStrCurrent + ') '
-
-			set @ParamDef = '@MaxA int output, @MaxB int output, @MaxC int output'
-			
-			exec @result = sp_executesql @S, @ParamDef, @MaxA = @MaxScanNumberPeptideHit output, @MaxB = @MaxScanNumberSICs output, @MaxC = @MaxScanNumberAllScans output
-			
-			Set @MaxScanNumberPeptideHit = IsNull(@MaxScanNumberPeptideHit, 0)
-			
-			If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberSICs, 0)
+			If IsNull(@ValidateSICStatsForImportedMSMSJobs, 0) = 0
 			Begin
-				-- Invalid SIC data
-				set @message = 'Missing or invalid SIC data found for job ' + @JobStrCurrent + '; max Peptide_Hit scan number is greater than maximum SIC scan number'
+				Set @message = ''
 			End
-
-			If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberAllScans, 0) And Len(@message) = 0
+			Else
 			Begin
-				-- Invalid SIC data
-				set @message = 'Missing or invalid SIC data found for job ' + @JobStrCurrent + '; max Peptide_Hit scan number is greater than maximum scan stats scan number'
+				Set @MaxScanNumberPeptideHit = 0
+				Set @MaxScanNumberSICs = 0
+				Set @MaxScanNumberAllScans = 0
+				Set @message = ''
+				
+				set @S = ''
+				set @S = @S + ' SELECT @MaxA = MaxScanNumberPeptideHit, '
+				set @S = @S +        ' @MaxB = MaxScanNumberSICs,'
+				set @S = @S +        ' @MaxC = MaxScanNumberAllScans'
+				set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.V_PeptideHit_Job_Scan_Max '
+				set @S = @S + ' WHERE (Job = ' + @JobStrCurrent + ') '
+
+				set @ParamDef = '@MaxA int output, @MaxB int output, @MaxC int output'
+				
+				exec @result = sp_executesql @S, @ParamDef, @MaxA = @MaxScanNumberPeptideHit output, @MaxB = @MaxScanNumberSICs output, @MaxC = @MaxScanNumberAllScans output
+				
+				Set @MaxScanNumberPeptideHit = IsNull(@MaxScanNumberPeptideHit, 0)
+				
+				If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberSICs, 0)
+				Begin
+					-- Invalid SIC data
+					set @message = 'Missing or invalid SIC data found for job ' + @JobStrCurrent + '; max Peptide_Hit scan number is greater than maximum SIC scan number'
+				End
+
+				If @MaxScanNumberPeptideHit > IsNull(@MaxScanNumberAllScans, 0) And Len(@message) = 0
+				Begin
+					-- Invalid SIC data
+					set @message = 'Missing or invalid SIC data found for job ' + @JobStrCurrent + '; max Peptide_Hit scan number is greater than maximum scan stats scan number'
+				End
 			End
-			
+						
 			If Len(@message) > 0
 			Begin -- <c3>
+			
+				execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromMultipleAnalysis'
+
 				DELETE FROM #TmpJobsInBatch
 				WHERE Job = @JobCurrent
 				--
@@ -650,10 +674,12 @@ As
 	--
 	INSERT INTO #ImportedMassTags (
 		Mass_Tag_ID, Clean_Sequence, Monoisotopic_Mass,
-		Multiple_ORF, Mod_Count, Mod_Description, GANET_Predicted
+		Multiple_ORF, Mod_Count, Mod_Description, 
+		GANET_Predicted, PeptideEx
 		)
 	SELECT Seq_ID, Clean_Sequence, Monoisotopic_Mass,
-		   Max(Multiple_ORF), Mod_Count, Mod_Description, Avg(GANET_Predicted)
+		   Max(Multiple_ORF), Mod_Count, Mod_Description, 
+		   Avg(GANET_Predicted), Min(Peptide)
 	FROM #Imported_Peptides
 	GROUP BY Seq_ID, Clean_Sequence, Monoisotopic_Mass, Mod_Count, Mod_Description
 	--
@@ -789,8 +815,8 @@ As
 	UPDATE T_Mass_Tags
 	SET Multiple_Proteins = IMT.Multiple_ORF
 	FROM #ImportedMassTags AS IMT INNER JOIN
-	     T_Mass_Tags ON IMT.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID
-	WHERE T_Mass_Tags.Multiple_Proteins < IMT.Multiple_ORF
+	     T_Mass_Tags MT ON IMT.Mass_Tag_ID = MT.Mass_Tag_ID
+	WHERE MT.Multiple_Proteins < IMT.Multiple_ORF
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -810,8 +836,22 @@ As
 	UPDATE T_Mass_Tags
 	SET Internal_Standard_Only = 0
 	FROM #ImportedMassTags AS IMT INNER JOIN
-	     T_Mass_Tags ON IMT.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID
-	WHERE Internal_Standard_Only <> 0
+	     T_Mass_Tags MT ON IMT.Mass_Tag_ID = MT.Mass_Tag_ID
+	WHERE MT.Internal_Standard_Only <> 0
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+
+
+	-----------------------------------------------------------
+	-- Populate PeptideEx for matching mass tags 
+	-- that currently have blank/null PeptideEx values
+	-----------------------------------------------------------
+	--
+	UPDATE T_Mass_Tags
+	SET PeptideEx = IMT.PeptideEx
+	FROM #ImportedMassTags AS IMT INNER JOIN
+	     T_Mass_Tags MT ON IMT.Mass_Tag_ID = MT.Mass_Tag_ID
+	WHERE IsNull(MT.PeptideEx, '') = ''
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
@@ -824,12 +864,14 @@ As
 		Mass_Tag_ID, Peptide, Monoisotopic_Mass,
 		Is_Confirmed, Multiple_Proteins, Created, Last_Affected,
 		Number_Of_Peptides, High_Normalized_Score,
-		Mod_Count, Mod_Description, Internal_Standard_Only
+		Mod_Count, Mod_Description, Internal_Standard_Only,
+		PeptideEx
 		)
 	SELECT IMT.Mass_Tag_ID, IMT.Clean_Sequence, IMT.Monoisotopic_Mass,
 		0 AS Is_Confirmed, IMT.Multiple_ORF, GetDate() AS Created, GetDate() AS Last_Affected,
 		0 AS Number_Of_Peptides, 0 AS High_Normalized_Score,
-		IMT.Mod_Count, IMT.Mod_Description, 0 AS Internal_Standard_Only
+		IMT.Mod_Count, IMT.Mod_Description, 0 AS Internal_Standard_Only,
+		IMT.PeptideEx
 	FROM #ImportedMassTags AS IMT LEFT OUTER JOIN
 	  T_Mass_Tags ON IMT.Mass_Tag_ID = T_Mass_Tags.Mass_Tag_ID
 	WHERE (T_Mass_Tags.Mass_Tag_ID IS NULL)
@@ -978,6 +1020,62 @@ As
 		Set @ResultTypeValid = 1
 	End
 
+	If @ResultType = 'IN_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_Inspect
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_Inspect ('
+		set @S = @S +  ' Peptide_ID, MQScore, TotalPRMScore, MedianPRMScore,' 
+		set @S = @S +  ' FractionY, FractionB, Intensity, PValue, FScore,'
+		set @S = @S +  ' DeltaScore, DeltaScoreOther, DeltaNormMQScore, DeltaNormTotalPRMScore,'
+		set @S = @S +  ' RankTotalPRMScore, RankFScore, DelM, Normalized_Score'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, I.MQScore, I.TotalPRMScore, I.MedianPRMScore, '
+		set @S = @S +  ' I.FractionY, I.FractionB, I.Intensity, I.PValue, I.FScore, '
+		set @S = @S +  ' I.DeltaScore, I.DeltaScoreOther, I.DeltaNormMQScore, I.DeltaNormTotalPRMScore, '
+		set @S = @S +  ' I.RankTotalPRMScore, I.RankFScore, I.DelM, I.Normalized_Score'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Inspect AS I ON IP.Peptide_ID_Original = I.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @result <> 0 
+		begin
+			rollback transaction @transName
+			set @message = 'Error executing dynamic SQL for T_Score_Inspect for ' + @JobListMsgStr
+			set @myError = 50022
+			goto Done
+		end
+		--
+		Set @numAddedPeptideHitScores = @myRowCount
+		
+		-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+		--
+		INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+		SELECT	Mass_Tag_ID, 
+				COUNT(*) AS Observation_Count, 
+				MAX(Normalized_Score_Max) AS Normalized_Score_Max
+		FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+						IP.Scan_Number, 
+						MAX(ISNULL(I.Normalized_Score, 0)) AS Normalized_Score_Max
+				FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					 T_Score_Inspect AS I ON IP.Peptide_ID_New = I.Peptide_ID
+				GROUP BY IP.Seq_ID, IP.Scan_Number
+				) AS SubQ
+		GROUP BY SubQ.Mass_Tag_ID	
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		Set @ResultTypeValid = 1
+	End
+
+
 	If @ResultTypeValid = 0
 	Begin
 		rollback transaction @transName
@@ -988,7 +1086,7 @@ As
 
 	-----------------------------------------------------------
 	-- Add new entries to T_Score_Discriminant
-	-- Note that PassFilt and MScore are estimated for XTandem data
+	-- Note that PassFilt and MScore are estimated for XTandem and Inspect data
 	--  PassFilt was set to 1
 	--  MScore was set to 10.75
 	-----------------------------------------------------------
@@ -1026,7 +1124,7 @@ As
 		goto Done
 	End
 
-	-----------------------------------------------
+	-----------------------------------------------------------
 	-- Commit changes to T_Peptides, T_Score_Sequest, etc. if we made it this far
 	-----------------------------------------------------------
 	-- 
@@ -1213,7 +1311,7 @@ As
 	SET Cleavage_State_Max = LookupQ.Cleavage_State_Max
 	FROM T_Mass_Tags MT
 	     INNER JOIN ( SELECT Seq_ID AS Mass_Tag_ID,
-	                         Max(IsNull(Cleavage_State, 0)) AS Cleavage_State_Max
+	                  Max(IsNull(Cleavage_State, 0)) AS Cleavage_State_Max
 	                  FROM #PeptideToProteinMapImported
 	                  GROUP BY Seq_ID) LookupQ
 	       ON MT.Mass_Tag_ID = LookupQ.Mass_Tag_ID
@@ -1341,7 +1439,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromMultipleAnalyses] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -5,9 +5,9 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_Process_Step_Control](
 	[Processing_Step_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[enabled] [int] NOT NULL CONSTRAINT [DF_T_Process_Step_Control_enabled]  DEFAULT (0),
-	[Last_Affected] [datetime] NULL CONSTRAINT [DF_T_Process_Step_Control_Last_Affected]  DEFAULT (getdate()),
-	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL CONSTRAINT [DF_T_Process_Step_Control_Entered_By]  DEFAULT (suser_sname()),
+	[enabled] [int] NOT NULL,
+	[Last_Affected] [datetime] NULL,
+	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Process_Step_Control] PRIMARY KEY CLUSTERED 
 (
 	[Processing_Step_Name] ASC
@@ -15,14 +15,11 @@ CREATE TABLE [dbo].[T_Process_Step_Control](
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Trigger [dbo].[trig_u_T_Process_Step_Control] ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE TRIGGER [dbo].[trig_u_T_Process_Step_Control] ON [dbo].[T_Process_Step_Control] 
 FOR UPDATE
@@ -56,4 +53,10 @@ AS
 	End
 
 
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_enabled]  DEFAULT (0) FOR [enabled]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

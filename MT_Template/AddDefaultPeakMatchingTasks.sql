@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[AddDefaultPeakMatchingTasks] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE AddDefaultPeakMatchingTasks
+CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 /****************************************************
 **
 **	Desc: 
@@ -17,15 +17,14 @@ CREATE PROCEDURE AddDefaultPeakMatchingTasks
 **	Parameters: 
 **
 **	Auth:	grk
-**	Date:	6/24/2003
-**
+**	Date:	06/24/2003
 **			07/22/2003 mem
 **			07/30/2003 mem
 **			09/11/2003 mem - added new parameters
 **			10/06/2003 mem - added use of the Dataset_Name_Filter field in T_Peak_Matching_Defaults
 **			01/06/2004 mem - Added support for Minimum_PMT_Quality_Score
 **			03/05/2004 mem - Added support for Minimum_PMT_Quality_Score when no entry for @instrumentName exists in T_Peak_Matching_Defaults
-**			03/22/2004 mem - Moved lookup of instrument name (in MT_Main.dbo.V_DMS_Analysis_Job_Paths) to be part of the INSERT INTO #XAJ query, drastically increasing the execution speed of this stored procedure when long lists of jobs need to be added to T_Peak_Matching_Task
+**			03/22/2004 mem - Moved lookup of instrument name (in MT_Main.dbo.V_DMS_Analysis_Job_Paths) to be part of the INSERT INTO #TmpJobsToProcess query, drastically increasing the execution speed of this stored procedure when long lists of jobs need to be added to T_Peak_Matching_Task
 **			04/08/2004 mem - Added @jobCountAdded output parameter
 **			08/18/2004 mem - Added support for the Labelling_Filter field in T_Peak_Matching_Defaults
 **			08/31/2004 mem - Fixed bug with null @MinimumPMTQualityScore for instruments without defaults
@@ -40,6 +39,9 @@ CREATE PROCEDURE AddDefaultPeakMatchingTasks
 **			09/06/2006 mem - Added support for Minimum_Peptide_Prophet_Probability
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListFilter
 **			03/14/2007 mem - Changed @JobListOverride parameter from varchar(8000) to varchar(max)
+**			06/16/2009 mem - Updated to allow Instrument_Name, Dataset_Name_Filter, and Labelling_Filter to contain % wildcards in T_Peak_Matching_Defaults
+**			06/16/2009 mem - Added parameter @InfoOnly
+**			12/07/2009 mem - Changed the "Added job" display to be a Print instead of a Select
 **     
 *****************************************************/
 (
@@ -47,7 +49,8 @@ CREATE PROCEDURE AddDefaultPeakMatchingTasks
 	@jobCountAdded int = 0 output,				-- Number of jobs added
 	@JobListFilter varchar(max) = '',			-- Optional parameter: a comma separated list of Job Numbers; will only add the given jobs numbers
 	@IniFileOverride varchar(255) = '',			-- Optional parameter: Ini FileName to use instead of the default one
-	@SetStateToHolding tinyint = 1				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
+	@SetStateToHolding tinyint = 1,				-- If 1, will set the Processing_State to 5 = Holding; otherwise, sets state at 1
+	@InfoOnly tinyint = 0
 )
 AS
 	set nocount on
@@ -59,6 +62,33 @@ AS
 	
 	Declare @UsingJobListFilter tinyint
 	set @UsingJobListFilter = 0
+
+	Declare @iniFileName varchar(255)
+	Declare @confirmedOnly tinyint 
+	Declare @modList varchar(128)
+	Declare @MinimumHighNormalizedScore float
+	Declare @MinimumHighDiscriminantScore float
+	Declare @MinimumPeptideProphetProbability real
+	Declare @MinimumPMTQualityScore decimal(9,5)
+	Declare @priority tinyint
+	Declare @SetStateToHoldingThisJob tinyint
+
+	Declare @S varchar(2048)
+	Declare @Comparison varchar(12)
+
+	Declare @instrumentFilter varchar(64)
+	Declare @DatasetFilter varchar(255)	
+	Declare @LabellingFilter varchar(64)
+	
+	Declare @result int
+	Declare @taskID int
+	Declare @job int
+	declare @Labelling varchar(64)
+	
+	Declare @Continue int
+	Declare @EntryID int
+
+	Declare @DefaultID int
 	
 	---------------------------------------------------
 	-- Validate the inputs
@@ -72,11 +102,13 @@ AS
 	If @SetStateToHolding <> 0
 		Set @SetStateToHolding = 1
 		
+	Set @InfoOnly = IsNull(@InfoOnly, 0)
+		
 	---------------------------------------------------
 	-- temporary table to hold list of jobs to process
 	---------------------------------------------------
 	
-	CREATE TABLE #XAJ (
+	CREATE TABLE #TmpJobsToProcess (
 		Job int,
 		InstrumentName varchar(200) NULL,
 		Dataset varchar(200) NULL,
@@ -87,13 +119,23 @@ AS
 	--
 	If @myError <> 0
 	Begin
-		Set @message = 'Could not Create temporary table #XAJ'
+		Set @message = 'Could not Create temporary table #TmpJobsToProcess'
 		goto Done
 	End
 
+	CREATE UNIQUE INDEX #IX_TmpJobsToProcess_Job ON #TmpJobsToProcess (Job)
+
+	CREATE TABLE #TmpJobToPMDefaultMap (
+		EntryID int Identity(1,1),
+		Job int,
+		Default_ID int
+	)
+	
+	CREATE UNIQUE INDEX #IX_TmpJobToPMDefaultMap_EntryID ON #TmpJobToPMDefaultMap (EntryID)
+	
 	CREATE TABLE #XPMD (
+		EntryID int Identity(1,1),
 		Default_ID int,		
-		Checked int,
 		Dataset_Name_Filter varchar(255) NULL,
 		Labelling_Filter varchar(64) NULL
 	) 
@@ -117,7 +159,7 @@ AS
 		)
 		
 		INSERT INTO #T_Tmp_JobListFilter (JobFilter)
-		SELECT Value
+		SELECT DISTINCT Value
 		FROM dbo.udfParseDelimitedIntegerList(@JobListFilter, ',')
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -139,31 +181,32 @@ AS
 	If @UsingJobListFilter = 1
 	Begin
 		-- Get list of jobs that match @JobListFilter (stored in table #T_Tmp_JobListFilter)
-		INSERT INTO #XAJ
-		SELECT	T.Job,
-				T.Instrument,
-				T.Dataset, IsNull(T.Labelling, '')
-		FROM	T_FTICR_Analysis_Description AS T INNER JOIN
-				#T_Tmp_JobListFilter JobListQ ON T.Job = JobListQ.JobFilter
-		WHERE	NOT T.Analysis_Tool LIKE '%TIC%'
+		INSERT INTO #TmpJobsToProcess (Job, InstrumentName, Dataset, Labelling)
+		SELECT DISTINCT T.Job,
+		                T.Instrument,
+		                T.Dataset,
+		                IsNull(T.Labelling, '')
+		FROM T_FTICR_Analysis_Description AS T
+		     INNER JOIN #T_Tmp_JobListFilter JobListQ
+		       ON T.Job = JobListQ.JobFilter
+		WHERE NOT T.Analysis_Tool LIKE '%TIC%'
 		ORDER BY T.Job
 	End
 	Else
 	Begin
 		-- Get list of jobs that have no peak matching tasks
 		--
-		INSERT INTO #XAJ
-		SELECT	T.Job, 
-				T.Instrument, 
-				T.Dataset, IsNull(T.Labelling, '')
-		FROM	T_FTICR_Analysis_Description AS T
-		WHERE	(NOT EXISTS
-					(	SELECT *
-						FROM T_Peak_Matching_Task AS M
-						WHERE T.job = M.job
-					)
-				) AND 
-			    (NOT T.Analysis_Tool LIKE '%TIC%') AND (T.State <> 3)			-- Exclude jobs with State 3 = No Interest
+		INSERT INTO #TmpJobsToProcess (Job, InstrumentName, Dataset, Labelling)
+		SELECT DISTINCT T.Job,
+		                T.Instrument,
+		                T.Dataset,
+		                IsNull(T.Labelling, '')
+		FROM T_FTICR_Analysis_Description AS T
+		WHERE (NOT EXISTS ( SELECT *
+		                    FROM T_Peak_Matching_Task AS M
+		                    WHERE T.job = M.job )) AND
+		      (NOT T.Analysis_Tool LIKE '%TIC%') AND
+		      (T.State <> 3)			-- Exclude jobs with State 3 = No Interest
 		ORDER BY T.Job
 	End
 	--
@@ -174,230 +217,225 @@ AS
 		Set @message = 'Could not populate temporary table'
 		goto Done
 	End                       
-                
-
-	---------------------------------------------------
-	-- Declare default task parameters
-	---------------------------------------------------
-	--
-	Declare @iniFileName varchar(255)
-	Declare @confirmedOnly tinyint 
-	Declare @modList varchar(128)
-	Declare @MinimumHighNormalizedScore float
-	Declare @MinimumHighDiscriminantScore float
-	Declare @MinimumPeptideProphetProbability real
-	Declare @MinimumPMTQualityScore decimal(9,5)
-	Declare @priority tinyint
-	Declare @SetStateToHoldingThisJob tinyint
 
 	
 	---------------------------------------------------
-	-- Create a peak matching task for each job using
-	-- the default parameters
+	-- Step through the entries in T_Peak_Matching_Defaults
+	-- For each, find the jobs in #TmpJobsToProcess that match the instrument name filter, 
+	--  dataset name filter, and labelling filter
+	-- If a filter contains a % sign, then a LIKE comparison is used; otherwise, an exact match is used
 	---------------------------------------------------
-	Declare @instrumentName varchar(64)
-	Declare @Dataset varchar(255)	
-	Declare @Labelling varchar(64)
 	
-	Declare @result int
-	Declare @taskID int
-	Declare @job int
-	Declare @continue int
-	Declare @DefaultIDDone tinyint
-
-	Declare @ThisDefaultID int
-	Declare @ThisFilter varchar(1024)
-	Declare @MatchFound tinyint
-		
-	Set @continue = 1
-	While @continue = 1
+	Set @DefaultID = -1
+	Set @Continue = 1
+	While @Continue = 1
 	Begin -- <a>
-		-- Get next job from temporary table, plus instrument and dataset for the job
-		--
-		SELECT TOP 1 @job = Job,
-					 @instrumentName = InstrumentName,
-					 @Dataset = Dataset,
-					 @Labelling = Labelling
-		FROM #XAJ
+		
+		SELECT TOP 1 @DefaultID = Default_ID,
+		             @InstrumentFilter = Instrument_Name,
+		             @DatasetFilter = Dataset_Name_Filter,
+		             @LabellingFilter = Labelling_Filter
+		FROM T_Peak_Matching_Defaults
+		WHERE Default_ID > @DefaultID
+		ORDER BY Default_ID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-		If @myRowCount = 0 OR @myError <> 0
+		If @myRowCount = 0
+			Set @Continue = 0
+		Else
+		Begin -- <b>
+			Set @S = ''
+			Set @S = @S + ' INSERT INTO #TmpJobToPMDefaultMap (Job, Default_ID)'
+			Set @S = @S + ' SELECT Job, ' + Convert(varchar(12), @DefaultID)
+			Set @S = @S + ' FROM #TmpJobsToProcess'
+			Set @S = @S + ' WHERE '
+			
+			If @InstrumentFilter LIKE '%[%]%'
+				Set @Comparison = 'LIKE'
+			Else
+				Set @Comparison = '='
+				
+			Set @S = @S + ' InstrumentName ' + @Comparison + ' ''' + @InstrumentFilter + ''''
+			
+			
+			If IsNull(@DatasetFilter, '') <> ''
+			Begin
+				If @DatasetFilter LIKE '%[%]%'
+					Set @Comparison = 'LIKE'
+				Else
+					Set @Comparison = '='
+					
+				Set @S = @S + ' AND Dataset ' + @Comparison + ' ''' + @DatasetFilter + ''''
+
+			End
+
+			If IsNull(@LabellingFilter, '') <> ''
+			Begin
+				If @LabellingFilter LIKE '%[%]%'
+					Set @Comparison = 'LIKE'
+				Else
+					Set @Comparison = '='
+					
+				Set @S = @S + ' AND Labelling ' + @Comparison + ' ''' + @LabellingFilter + ''''
+
+			End
+			
+			If @InfoOnly <> 0
+				Print @S
+			
+			Exec (@S)
+
+		End -- </b>
+		
+	End -- </a>
+	
+	If @InfoOnly <> 0
+		SELECT JP.*,
+		       JobMap.Default_ID
+		FROM #TmpJobsToProcess JP
+		     LEFT OUTER JOIN #TmpJobToPMDefaultMap JobMap
+		       ON JP.Job = JobMap.Job
+		ORDER BY JobMap.Job, JobMap.Default_ID
+
+	---------------------------------------------------
+	-- Create a peak matching task for each entry in #TmpJobToPMDefaultMap
+	---------------------------------------------------
+	
+	Set @EntryID = 0
+	Set @Continue = 1
+	While @continue = 1
+	Begin -- <c>
+		-- Get next entry from #TmpJobToPMDefaultMap
+		--
+		SELECT TOP 1 @EntryID = JobMap.EntryID,
+		             @DefaultID = JobMap.Default_ID,
+		             @job = JobMap.Job,
+		             @iniFileName = PMD.IniFile_Name,
+		             @confirmedOnly = PMD.Confirmed_Only,
+		             @modList = PMD.Mod_List,
+		             @MinimumHighNormalizedScore = PMD.Minimum_High_Normalized_Score,
+		             @MinimumHighDiscriminantScore = PMD.Minimum_High_Discriminant_Score,
+		             @MinimumPeptideProphetProbability = PMD.Minimum_Peptide_Prophet_Probability,
+		             @MinimumPMTQualityScore = PMD.Minimum_PMT_Quality_Score,
+		             @priority = PMD.Priority
+		FROM #TmpJobToPMDefaultMap JobMap
+		     INNER JOIN T_Peak_Matching_Defaults PMD
+		       ON JobMap.Default_ID = PMD.Default_ID
+		WHERE EntryID > @EntryID
+		ORDER BY EntryID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		If @myRowCount = 0
 		Begin
-			-- Exit from loop If no more jobs to do
+			-- Exit from loop If no more entries to process
 			--
 			Set @continue = 0
 		End
 		Else
-		Begin -- <b>
-			-- Make Sure #XPMD is empty
-			TRUNCATE TABLE #XPMD
+		Begin -- <d>
 			
-			-- Make sure @MatchFound is 0
-			Set @MatchFound = 0
-					
-			-- Obtain a list of Default_ID values for entries in T_Peak_Matching_Defaults that
-			--  match this instrument and have a filter defined
-			INSERT INTO #XPMD (Default_ID, Checked, Dataset_Name_Filter, Labelling_Filter)
-			SELECT Default_ID, 0 AS Checked, Dataset_Name_Filter, Labelling_Filter
-			FROM T_Peak_Matching_Defaults
-			WHERE Instrument_Name = @instrumentName AND 
-					(Len(IsNull(Dataset_Name_Filter, '')) > 0) AND
-					IsNull(Labelling_Filter, '') = @Labelling
-			ORDER BY Default_ID
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-			
-			If @myRowCount > 0 AND Len(IsNull(@IniFileOverride, '')) = 0
-			Begin -- <c1>
-				-- For each entry in #XPMD, see if Dataset_Name_Filter matches this job's dataset
-				-- However, do not do this if @IniFileOverride is defined
-				Set @DefaultIDDone = 0
-				While @DefaultIDDone = 0
-				Begin -- <d>
-					Set @ThisFilter = ''
-					SELECT TOP 1 @ThisDefaultID = Default_ID, @ThisFilter = IsNull(Dataset_Name_Filter, '')
-					FROM #XPMD
-					WHERE Checked = 0
-					ORDER BY Default_ID
-					--
-					SELECT @myError = @@error, @myRowCount = @@rowcount
-					
-					If @myRowCount = 0
-						Set @DefaultIDDone = 1
-					Else
-					Begin -- <e>
+			If Len(IsNull(@IniFileOverride, '')) > 0
+				Set @iniFileName = @IniFileOverride
+
+			Set @message = ''
+			If @InfoOnly = 0
+				Exec @result = AddUpdatePeakMatchingTask	@job, @iniFileName,
+															@confirmedOnly, @modList,
+															@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+															@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
+															@priority, @taskID output,
+															'add', @message output,
+															@SetStateToHolding
 						
-						UPDATE #XPMD
-						SET Checked = 1
-						WHERE Default_ID = @ThisDefaultID
-
-						-- See if the filter matches this dataset
-						-- If Match, then Set @MatchFound = 1
-						-- If no match, then delete from #XPMD
-						
-						If PatIndex(@ThisFilter, @Dataset) > 0
-							-- A match was found with the filter
-							Set @MatchFound = 1
-						Else
-							DELETE FROM #XPMD
-							WHERE Default_ID = @ThisDefaultID
-					End -- </e>
-				End -- </d>
-			End -- </c1>
-
-			-- If @MatchFound = 0, but one or more entries exist in T_Peak_Matching_Defaults having a Null Filter,
-			--  then add that entry to #XPMD
-			If @MatchFound = 0
-			Begin -- <c2>
-				TRUNCATE TABLE #XPMD
-		
-				INSERT INTO #XPMD (Default_ID, Checked)
-				SELECT Default_ID, 1 AS Checked
-				FROM T_Peak_Matching_Defaults
-				WHERE Instrument_Name = @instrumentName AND 
-					(Len(IsNull(Dataset_Name_Filter, '')) = 0) AND
-					IsNull(Labelling_Filter, '') = @Labelling
-				ORDER BY Default_ID Desc
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-
-				If @myRowCount > 0
-					Set @MatchFound = 1
-			End -- </c2>
-
-			If @MatchFound <> 0
-			Begin -- <c3>
-				-- Either a match was found using Dataset_Name_Filter, or the default entry was found
-				
-				-- #XPMD now contains one or more Default_ID values
-				-- Step through #XPMD and obtain the parameters for each Default_ID in the table, calling
-				--   AddUpdatePeakMatchingTask for each
-				Set @DefaultIDDone = 0
-				While @DefaultIDDone = 0
-				Begin -- <d3>
-					-- Set default task parameters based on instrument for ThisDefaultID
-					--
-
-					SELECT TOP 1 @ThisDefaultID = Default_ID
-					FROM #XPMD
-					ORDER BY Default_ID
-					--
-					SELECT @myError = @@error, @myRowCount = @@rowcount
-
-					If @myRowCount = 0
-					Begin
-						Set @DefaultIDDone = 1
-					End
-					Else
-					Begin -- <e3>
-						
-						SELECT TOP 1
-							@iniFileName = IniFile_Name, 
-							@confirmedOnly = Confirmed_Only, 
-							@modList = Mod_List, 
-							@MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
-							@MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score,
-							@MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
-							@MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
-							@priority = Priority
-						FROM T_Peak_Matching_Defaults
-						WHERE Default_ID = @ThisDefaultID
-						--
-						SELECT @myError = @@error, @myRowCount = @@rowcount
-						--
-						If @myError <> 0
-						Begin
-							Set @message = 'Could not get default values for peak matching task'
-							goto Done
-						End
-						Else
-						Begin -- <f3>
-							If Len(IsNull(@IniFileOverride, '')) > 0
-								Set @iniFileName = @IniFileOverride
-
-							Exec @result = AddUpdatePeakMatchingTask	@job, @iniFileName,
-																		@confirmedOnly, @modList,
-																		@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
-																		@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
-																		@priority, @taskID output,
-																		'add', @message output,
-																		@SetStateToHolding
-
-							DELETE FROM #XPMD
-							WHERE Default_ID = @ThisDefaultID
-						End -- </f3>
-					End -- </e3>
-				End -- </d3>
-			End -- </c3>
+			-- If AddUpdatePeakMatchingTask returns a message then an error occurred
+			If @message <> ''
+				exec PostLogEntry 'Error', @message, 'AddDefaultPeakMatchingTasks'				
 			Else
-			Begin -- <c4>
-				-- Either no entry for @instrumentName exists in T_Peak_Matching_Defaults, or
-				--  an entry exists, but the labelling method isn't compatible (or is Null)
-				-- In this case, set @iniFileName to be @IniFileOverride or blank, and the other values to defaults
-				-- The exception: If @Labelling is not 'none' or 'Unknown', then 
-				--                set @iniFileName to '__' + @Labelling + '__' and @SetStateToHoldingThisJob to 1
-				
+			Begin
+				If @JobListFilter <> '' OR @InfoOnly <> 0
+					Print 'Added job ' + Convert(varchar(19), @job) + ' using default ID ' + Convert(varchar(12), @DefaultID)
+				--
+				Set @jobCountAdded = @jobCountAdded + 1
+			End
+			
+		End -- </d>
+	End -- </c>
+   
+	---------------------------------------------------
+	-- Now process any jobs that didn't have any matching entries in T_Peak_Matching_Defaults
+	---------------------------------------------------
+	
+	DELETE #TmpJobsToProcess
+	FROM #TmpJobsToProcess J
+	     INNER JOIN #TmpJobToPMDefaultMap JobMap
+	       ON J.Job = JobMap.Job
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	
+	IF Exists (SELECT * FROM #TmpJobsToProcess)
+	Begin
+		-- Find the minimum job number in #TmpJobsToProcess
+		SELECT @Job = MIN(Job)
+		FROM #TmpJobsToProcess
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		Set @Job = IsNull(@Job, 0) - 1
+		Set @Continue = 1
+	End
+	Else
+		Set @Continue = 0
+		
+	While @Continue = 1
+	Begin -- <e>
+		SELECT TOP 1 @job = J.Job,
+		             @Labelling = IsNull(FAD.Labelling, '')
+		FROM #TmpJobsToProcess J
+		     INNER JOIN T_FTICR_Analysis_Description FAD
+		       ON J.Job = FAD.Job
+		WHERE J.Job > @Job
+		ORDER BY J.Job
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-				Set @iniFileName = IsNull(@IniFileOverride, '')
-				Set @confirmedOnly = 0
-				Set @modList = ''
-				Set @MinimumHighNormalizedScore = 1
-				Set @MinimumHighDiscriminantScore = 0.2
-				Set @MinimumPeptideProphetProbability = 0.2
-				Set @MinimumPMTQualityScore = 1
-				Set @priority = 6
-				Set @SetStateToHoldingThisJob = @SetStateToHolding
+		If @myRowCount = 0
+		Begin
+			-- Exit from loop If no more jobs
+			--
+			Set @continue = 0
+		End
+		Else
+		Begin -- <f>
+		
+			-- This did not match an entry in T_Peak_Matching_Defaults
+			-- Set @iniFileName to be @IniFileOverride or blank, and the other values to defaults
+			-- The exception: If @Labelling is not 'none' or 'Unknown', then 
+			--                set @iniFileName to '__' + @Labelling + '__' and @SetStateToHoldingThisJob to 1
+			
+			Set @iniFileName = IsNull(@IniFileOverride, '')
+			Set @confirmedOnly = 0
+			Set @modList = ''
+			Set @MinimumHighNormalizedScore = 1
+			Set @MinimumHighDiscriminantScore = 0.2
+			Set @MinimumPeptideProphetProbability = 0.2
+			Set @MinimumPMTQualityScore = 1
+			Set @priority = 6
+			Set @SetStateToHoldingThisJob = @SetStateToHolding
 
-				If @Labelling <> 'none' AND @Labelling <> 'Unknown'
+			If @Labelling <> 'none' AND @Labelling <> 'Unknown'
+			Begin
+				If Len(IsNull(@JobListFilter, '')) = 0
 				Begin
-					If Len(IsNull(@JobListFilter, '')) = 0
-					Begin
-						Set @iniFileName = '__' + @Labelling + '__'
-						Set @SetStateToHoldingThisJob = 1
-					End
+					Set @iniFileName = '__' + @Labelling + '__'
+					Set @SetStateToHoldingThisJob = 1
 				End
+			End
 
+			Set @message = ''
+			If @InfoOnly = 0
 				Exec @result = AddUpdatePeakMatchingTask	@job, @iniFileName,
 															@confirmedOnly, @modList,
 															@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
@@ -405,37 +443,20 @@ AS
 															@priority, @taskID output,
 															'add', @message output,
 															@SetStateToHoldingThisJob
-			End -- </c4>
-						
-			-- output message if one is returned
-			--
+
+			-- If AddUpdatePeakMatchingTask returns a message then an error occurred
 			If @message <> ''
-			Begin
 				exec PostLogEntry 'Error', @message, 'AddDefaultPeakMatchingTasks'				
-			End
 			Else
 			Begin
-				Select 'Added job ' + Convert(varchar(19), @job)
+				If @JobListFilter <> '' OR @InfoOnly <> 0
+					Select 'Added job ' + Convert(varchar(19), @job)
 				--
 				Set @jobCountAdded = @jobCountAdded + 1
 			End
+		End -- </f>
+	End -- </e>
 			
-			-- remove current job from temporary table
-			--
-			DELETE FROM #XAJ WHERE Job = @job
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-			--
-			If @myError <> 0
-			Begin
-				Set @message = 'Could not remove job from temporary table'
-				goto Done
-			End
-
-		End -- </b>
-	End -- </a>
-   
-
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------
@@ -443,10 +464,11 @@ Done:
 
 	RETURN @myError
 
+
 GO
-GRANT EXECUTE ON [dbo].[AddDefaultPeakMatchingTasks] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[AddDefaultPeakMatchingTasks] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddDefaultPeakMatchingTasks] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[AddDefaultPeakMatchingTasks] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddDefaultPeakMatchingTasks] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[AddDefaultPeakMatchingTasks] TO [MTS_DB_Lite] AS [dbo]
 GO

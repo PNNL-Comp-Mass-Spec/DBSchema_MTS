@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[DeletePeptidesForJobAndResetToNew] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
+CREATE Procedure DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
 **	Desc: 
@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **						   - Now posting a log entry for the processed jobs
 **			09/09/2006 mem - Updated to post a log entry only if rows were deleted from T_Peptides
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListToDelete
+**			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -130,6 +131,15 @@ AS
 	--
 	If @myError <> 0 Goto Done
 
+	DELETE T_Score_Inspect
+	FROM T_Peptides INNER JOIN T_Score_Inspect
+		 ON T_Peptides.Peptide_ID = T_Score_Inspect.Peptide_ID
+		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto Done
+
 	DELETE T_Peptides 
 	FROM T_Peptides
 		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
@@ -182,9 +192,8 @@ AS
 Done:
 	Return @myError
 
-
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Lite] AS [dbo]
 GO

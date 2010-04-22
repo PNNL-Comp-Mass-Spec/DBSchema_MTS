@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[ShrinkTempDBLogIfRequired] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
+
 CREATE PROCEDURE dbo.ShrinkTempDBLogIfRequired
 /****************************************************
 **
@@ -14,6 +15,8 @@ CREATE PROCEDURE dbo.ShrinkTempDBLogIfRequired
 **
 **	Auth:	mem
 **	Date:	04/12/2006
+**			01/30/2009 mem - Switched to using DBCC SHRINKDATABASE, which is compatible with Sql Server 2008
+**			04/20/2009 mem - Now shrinking both the tempdev and the templog file
 **
 *****************************************************/
 (
@@ -77,7 +80,11 @@ AS
 	Begin
 		set @message = @message + '; truncating and shrinking log'
 
-		BACKUP LOG tempdb WITH TRUNCATE_ONLY
+		-- This command worked in Sql Server 2005 but is no longer valid in Sql Server 2008
+		--  since "TRUNCATE_ONLY" is no longer supported with the BACKUP command
+		--  BACKUP LOG tempdb WITH TRUNCATE_ONLY
+		
+		DBCC SHRINKDATABASE(N'tempdb' )
 
 		-- Set @FinalSizeMB to 5% of @LogSizeMBThreshold
 		Set @FinalSizeMB = Convert(int, @LogSizeMBThreshold * 0.05)
@@ -87,6 +94,14 @@ AS
 		Set @message = @message + ' to ' + convert(varchar(12), @FinalSizeMB) + ' MB'
 		If @InfoOnly = 0
 		Begin
+			-- Shrink the Temp DB data file
+			Set @S = ''
+			Set @S = @S + ' USE TempDB'
+			Set @S = @S + ' DBCC SHRINKFILE (tempdev, ' + Convert(varchar(12), @FinalSizeMB) + ')'
+			
+			Exec (@S)
+
+			-- Shrink the Temp DB log file
 			Set @S = ''
 			Set @S = @S + ' USE TempDB'
 			Set @S = @S + ' DBCC SHRINKFILE (templog, ' + Convert(varchar(12), @FinalSizeMB) + ')'
@@ -104,4 +119,9 @@ AS
 Done:
 	Return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[ShrinkTempDBLogIfRequired] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ShrinkTempDBLogIfRequired] TO [MTS_DB_Lite] AS [dbo]
 GO

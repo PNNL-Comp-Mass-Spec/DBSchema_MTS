@@ -35,14 +35,18 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **						   - Now storing old and new values in T_Analysis_Description_Updates when updates are applied
 **			04/26/2008 mem - Added parameter @JobListForceUpdate
 **			08/14/2008 mem - Now updating Experiment_Organism
+**			12/09/2008 mem - Increased size of @message to varchar(4000)
+**			03/13/2010 mem - Added parameters @UpdateDMSCacheTable and @CacheUpdateJobMinimum
 **    
 *****************************************************/
 (
-	@UpdateInterval int = 30,			-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
- 	@message varchar(255) = '' output,
+	@UpdateInterval int = 30,				-- Minimum interval in hours to limit update frequency; Set to 0 to force update now (looks in T_Log_Entries for last update time)
+ 	@message varchar(4000) = '' output,
+	@UpdateDMSCacheTable tinyint = 0,		-- If 1, then first calls RefreshCachedDMSAnalysisJobInfo in MT_Main; you will typically want to set @CacheUpdateJobMinimum to a non-zero value to cause the update to run faster
+	@CacheUpdateJobMinimum int = 0,			-- Set to a positive value to limit the jobs updated when @UpdateDMSCacheTable is non-zero
  	@infoOnly tinyint = 0,
  	@PreviewSql tinyint = 0,
-	@JobListForceUpdate varchar(max) = ''		-- Comma separated list of jobs onto which an update will be forced
+	@JobListForceUpdate varchar(max) = ''	-- Comma separated list of jobs onto which an update will be forced
 
 )
 As
@@ -60,7 +64,7 @@ As
 	set @JobCountUpdated = 0
 	set @DatasetCountUpdated = 0
 
-	Declare @JobList varchar(256)
+	Declare @JobList varchar(3900)
 	Declare @S varchar(max)
 	
 	--------------------------------------------------------------
@@ -69,6 +73,9 @@ As
 
 	Set @UpdateInterval = IsNull(@UpdateInterval, 30)
  	set @message = ''
+	Set @UpdateDMSCacheTable = IsNull(@UpdateDMSCacheTable, 0)
+	Set @CacheUpdateJobMinimum = IsNull(@CacheUpdateJobMinimum, 0)
+
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	Set @PreviewSql = IsNull(@PreviewSql, 0)
 	Set @JobListForceUpdate = IsNull(@JobListForceUpdate, '')
@@ -97,7 +104,24 @@ As
 	
 	If GetDate() > DateAdd(hour, @UpdateInterval, @LastUpdated) OR @myRowCount = 0
 	Begin -- <a>
+
+		--------------------------------------------------------------
+		-- Possibly call RefreshCachedDMSAnalysisJobInfo
+		--------------------------------------------------------------
 		
+		If @UpdateDMSCacheTable <> 0
+		Begin
+			-- Call RefreshCachedDMSAnalysisJobInfo in MT_Main
+			Set @S = 'exec MT_Main.dbo.RefreshCachedDMSAnalysisJobInfo ' + Convert(varchar(12), @CacheUpdateJobMinimum) + ', @UpdateSourceMTSServer=1'
+			
+			If @previewSql <> 0
+				Print @S
+			Else
+				Exec (@S)
+
+		End
+		
+
 		--------------------------------------------------------------
 		-- Look for changed data
 		--------------------------------------------------------------
@@ -179,7 +203,7 @@ As
 			Set @S = @S +           ' IsNull(L.Dataset_Folder, '''') <> R.DatasetFolder OR'
 			Set @S = @S +           ' IsNull(L.Results_Folder, '''') <> R.ResultsFolder OR'
 			Set @S = @S +           ' IsNull(L.Completed, ''1/1/1980'') <> R.Completed OR'
-			Set @S = @S +        ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
+			Set @S = @S +      ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Settings_File_Name,'''') <> IsNull(R.SettingsFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Organism_DB_Name,'''') <> IsNull(R.OrganismDBName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Protein_Collection_List,'''') <> IsNull(R.ProteinCollectionList,'''') OR'
@@ -441,7 +465,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Lite] AS [dbo]
 GO

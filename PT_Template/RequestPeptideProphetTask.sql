@@ -428,9 +428,9 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RequestPeptideProphetTask] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[RequestPeptideProphetTask] TO [pnl\MTSProc] AS [dbo]
 GO

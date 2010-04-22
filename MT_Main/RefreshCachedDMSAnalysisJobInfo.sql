@@ -15,12 +15,18 @@ CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 **	Date:	05/09/2007 - See Ticket:422
 **			10/03/2007 mem - Now populating the Processor column
 **			10/05/2007 mem - Updated ProteinCollectionList to varchar(max)
+**			08/07/2008 mem - Added parameter @SourceMTSServer; if provided, then contacts that server rather than contacting DMS.
+**			09/18/2008 mem - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
+**			03/13/2010 mem - Added parameter @UpdateSourceMTSServer
 **
 *****************************************************/
 (
 	@JobMinimum int = 0,		-- Set to a positive value to limit the jobs examined; when non-zero, then jobs outside this range are ignored
 	@JobMaximum int = 0,
-	@message varchar(255) = '' output
+	@SourceMTSServer varchar(128) = 'porky',	-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Analysis_Job_Import_Ex
+	@UpdateSourceMTSServer tinyint = 0,			-- If 1, then first calls RefreshCachedDMSAnalysisJobInfo on the source MTS server; only valid if @SourceMTSServer is not blank
+	@message varchar(255) = '' output,
+	@previewSql tinyint = 0
 )
 AS
 
@@ -43,6 +49,11 @@ AS
 	Set @UpdateCount = 0
 	Set @InsertCount = 0
 	
+	Declare @FullRefreshPerformed tinyint
+	
+	Declare @SourceTable varchar(256)
+	Declare @S varchar(max)
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -50,24 +61,47 @@ AS
 	Begin Try
 		Set @CurrentLocation = 'Validate the inputs'
 
+		-- Validate the inputs
 		Set @JobMinimum = IsNull(@JobMinimum, 0)
 		Set @JobMaximum = IsNull(@JobMaximum, 0)
+		Set @SourceMTSServer = IsNull(@SourceMTSServer, '')
+		Set @UpdateSourceMTSServer = IsNull(@UpdateSourceMTSServer, 0)
+		Set @previewSql = IsNull(@previewSql, 0)
 		
 		If @JobMinimum = 0 AND @JobMaximum = 0
 		Begin
+			Set @FullRefreshPerformed = 1
 			Set @JobMinimum = -@MaxInt
 			Set @JobMaximum = @MaxInt
 		End
 		Else
-		If @JobMinimum > @JobMaximum
-			Set @JobMaximum = @MaxInt
+		Begin
+			Set @FullRefreshPerformed = 0
+			If @JobMinimum > @JobMaximum
+				Set @JobMaximum = @MaxInt
+		End
 
-		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
+		Set @CurrentLocation = 'Update T_DMS_Cached_Data_Status'
 		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Analysis_Job_Info_Cached', @IncrementRefreshCount = 0
+		Exec UpdateDMSCachedDataStatus 'T_DMS_Analysis_Job_Info_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = @FullRefreshPerformed, @LastRefreshMinimumID = @JobMinimum
 
+		-- Source server cannot be this server; if they match, set @SourceMTSServer to ''
+		If @SourceMTSServer = @@ServerName
+			Set @SourceMTSServer = ''
 
-		Set @CurrentLocation = 'Populate a temporary table with the data returned by V_DMS_Analysis_Job_Import_Ex'
+		If @SourceMTSServer <> '' And @UpdateSourceMTSServer <> 0
+		Begin
+			-- Call RefreshCachedDMSAnalysisJobInfo on server @SourceMTSServer
+			Set @S = 'exec ' + @SourceMTSServer + '.MT_Main.dbo.RefreshCachedDMSAnalysisJobInfo ' + Convert(varchar(12), @JobMinimum) + ', ' +  + Convert(varchar(12), @JobMaximum)
+			
+			If @previewSql <> 0
+				Print @S
+			Else
+				Exec (@S)
+
+		End
+		
+		Set @CurrentLocation = 'Create #Tmp_DMS_Analysis_Job_Import_Ex'
 
 		-- Since we need to scan the contents of V_DMS_Analysis_Job_Import_Ex three times, we'll first
 		-- populate a local temporary table using its contents
@@ -107,30 +141,62 @@ AS
 		
 		-- Create a clustered index on Job
 		CREATE CLUSTERED INDEX #IX_Tmp_DMS_Analysis_Job_Import_Ex ON #Tmp_DMS_Analysis_Job_Import_Ex (Job)
+
+		If @SourceMTSServer <> ''
+			Set @SourceTable = @SourceMTSServer + '.MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached'
+		Else
+			Set @SourceTable = 'V_DMS_Analysis_Job_Import_Ex'
+			
+		Set @CurrentLocation = 'Populate a temporary table with the data in ' + @SourceTable
+
+		-- Construct the Sql to populate #Tmp_DMS_Analysis_Job_Import_Ex
+		Set @S = ''
+		Set @S = @S + ' INSERT INTO #Tmp_DMS_Analysis_Job_Import_Ex ('
+		Set @S = @S +   ' Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
+		Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
+		Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, '
+		Set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
+		Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
+		Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID, '
+		Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std])'
+
+		If @SourceMTSServer <> ''
+		Begin
+			Set @S = @S + ' SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
+			Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor, '
+			Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, OrganismDBName, ProteinCollectionList, ProteinOptions, '
+			Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
+			Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
+			Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID, '
+			Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std]'
+			Set @S = @S + ' FROM ' + @SourceTable
+		End
+		Else
+		Begin
+			Set @S = @S + ' SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
+			Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
+			Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, '
+			Set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
+			Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
+			Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
+			Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID,'
+			Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std]'
+			Set @S = @S + ' FROM ' + @SourceTable
+		End		
+
+		Set @S = @S + ' WHERE Job >= ' + Convert(varchar(12), @JobMinimum) + ' AND Job <= ' + Convert(varchar(12), @JobMaximum)
 		
-		-- Populate #Tmp_DMS_Analysis_Job_Import_Ex
-		INSERT INTO #Tmp_DMS_Analysis_Job_Import_Ex (
-			 Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
-			 Completed, ParameterFileName, SettingsFileName, 
-			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
-			 StoragePathClient, StoragePathServer, DatasetFolder, 
-			 ResultsFolder, Owner, Comment, SeparationSysType, 
-			 ResultType, [Dataset Int Std], DS_created, EnzymeID, 
-			 Labelling, [PreDigest Int Std], [PostDigest Int Std])
-		SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
-			 Completed, ParameterFileName, SettingsFileName, 
-			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
-			 StoragePathClient, StoragePathServer, DatasetFolder, 
-			 ResultsFolder, Owner, Comment, SeparationSysType, 
-			 ResultType, [Dataset Int Std], DS_created, EnzymeID, 
-			 Labelling, [PreDigest Int Std], [PostDigest Int Std]
-		FROM V_DMS_Analysis_Job_Import_Ex
-		WHERE Job >= @JobMinimum AND Job <= @JobMaximum
+		If @previewSql <> 0
+		Begin
+			Print @S
+			Goto Done
+		End
+		Else
+			Exec (@S)
 		--
 		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		
+
 		
 		Set @CurrentLocation = 'Delete extra rows in T_DMS_Analysis_Job_Info_Cached'
 		-- 
@@ -259,7 +325,7 @@ AS
 		
 		If Len(@message) > 0 
 		Begin	
-			Set @message = 'Updated T_DMS_Analysis_Job_Info_Cached: ' + @message
+			Set @message = 'Updated T_DMS_Analysis_Job_Info_Cached using ' + @SourceTable + ': ' + @message
 			execute PostLogEntry 'Normal', @message, 'RefreshCachedDMSAnalysisJobInfo'
 		End
 
@@ -271,7 +337,9 @@ AS
 											@IncrementRefreshCount = 1, 
 											@InsertCountNew = @InsertCount, 
 											@UpdateCountNew = @UpdateCount, 
-											@DeleteCountNew = @DeleteCount
+											@DeleteCountNew = @DeleteCount,
+											@FullRefreshPerformed = @FullRefreshPerformed, 
+											@LastRefreshMinimumID = @JobMinimum
 
 	End Try
 	Begin Catch
@@ -286,4 +354,10 @@ Done:
 	Return @myError
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Lite] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTUser] AS [dbo]
 GO

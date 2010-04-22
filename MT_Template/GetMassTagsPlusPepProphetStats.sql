@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 **			05/21/2007 mem - Replaced PepProphet_Probability_Avg_CS1 with PepProphet_FScore_Avg_CS1
 **			11/08/2007 mem - Now returning Cleavage_State as the final column
 **			04/05/2008 mem - Updated to use Cleavage_State_Max in T_Mass_Tags
+**			03/09/2009 mem - Now including column NET_Obs_Count
 **  
 ****************************************************************/
 (
@@ -102,7 +103,8 @@ As
 				CASE WHEN @NETValueType = 1
 				THEN MTN.PNET
 				ELSE MIN(P.GANET_Obs) 
-				END As Net_Value_to_Use, 
+				END As NET_Value_to_Use, 
+				MTN.Cnt_GANET AS NET_Obs_Count,
 				MTN.PNET,
 				MT.High_Normalized_Score, 
 				0 AS StD_GANET,
@@ -150,8 +152,9 @@ As
 			CASE WHEN @NETValueType = 1 
 			THEN MTN.PNET
 			ELSE MTN.Avg_GANET 
-			END As Net_Value_to_Use, 
-			MTN.PNET, 
+			END As NET_Value_to_Use, 
+			MTN.Cnt_GANET AS NET_Obs_Count,
+			MTN.PNET,
 			MT.High_Normalized_Score, 
 			MTN.StD_GANET,
 			MT.High_Discriminant_Score,
@@ -188,9 +191,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetMassTagsPlusPepProphetStats] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetMassTagsPlusPepProphetStats] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPlusPepProphetStats] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPlusPepProphetStats] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPlusPepProphetStats] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetMassTagsPlusPepProphetStats] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -8,14 +8,15 @@ CREATE FUNCTION dbo.calcDiscriminantScoreNorm
 /***************************
 ** Calculates Probability values for a Peptide based on Discriminant score
 ** 
-** Auth: EFS
-** Date: 09/01/2004
-**		 07/06/2005 mem - Updated to group all @chargeState values >= 3 together
+** Auth:	EFS
+** Date:	09/01/2004
+**			07/06/2005 mem - Updated to group all @chargeState values >= 3 together
+**			02/19/2009 mem - Changed @dbSize to bigint
 ** 
 ***************************/
 (	@DiscriminantScore float, 
 	@chargeState int,
-	@dbSize as int				-- the number of residues present in the peptide database (aka fasta file)
+	@dbSize as bigint				-- the number of residues present in the peptide database (aka fasta file)
 ) 
 	RETURNS float 
 AS  

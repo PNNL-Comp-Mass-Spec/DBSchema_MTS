@@ -73,11 +73,13 @@ Done:
 	Return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTUser]
+GRANT VIEW DEFINITION ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [pogo\MTS_DB_Dev]
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTUser] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

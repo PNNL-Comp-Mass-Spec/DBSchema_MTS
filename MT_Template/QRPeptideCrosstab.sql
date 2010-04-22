@@ -31,6 +31,7 @@ CREATE Procedure dbo.QRPeptideCrosstab
 **			11/28/2006 mem - Added parameter @SortMode, which affects the order in which the results are returned
 **			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
+**			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **
 ****************************************************/
 (
@@ -42,7 +43,8 @@ CREATE Procedure dbo.QRPeptideCrosstab
 	@IncludePrefixAndSuffixResidues tinyint = 0,		-- The query is slower if this is enabled
 	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 	@message varchar(512)='' output,
-	@PreviewSql tinyint=0
+	@PreviewSql tinyint=0,
+	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: Mod_Description
 )
 AS
 
@@ -73,7 +75,20 @@ AS
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
-		
+	
+		--------------------------------------------------------------
+		-- Validate the inputs
+		--------------------------------------------------------------
+		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
+		Set @SourceColName  = IsNull(@SourceColName, 'MT_Abundance')
+		Set @AggregateColName  = IsNull(@AggregateColName, 'AvgAbu')
+		Set @AverageAcrossColumns  = IsNull(@AverageAcrossColumns, 0)
+		Set @IncludePrefixAndSuffixResidues = IsNull(@IncludePrefixAndSuffixResidues, 0)
+		Set @SortMode  = IsNull(@SortMode, 0)
+		set @message = ''
+		Set @PreviewSql  = IsNull(@PreviewSql, 0)
+		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
+
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
 		-- This table is populated by QRGenerateCrosstabSql
@@ -123,7 +138,11 @@ AS
 		
 		If @ModsPresent > 0
 		Begin
-			Set @ColumnListToShow = @ColumnListToShow + ',MT.Mod_Description'
+			If @ChangeCommasToSemicolons = 0
+				Set @ColumnListToShow = @ColumnListToShow + ',MT.Mod_Description'
+			Else
+				Set @ColumnListToShow = @ColumnListToShow + ', Replace(MT.Mod_Description, '','', '';'') AS Mod_Description'
+				
 			Set @ColumnListToShow2 = @ColumnListToShow2 + ',Mod_Description'
 		End
 		
@@ -187,9 +206,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[QRPeptideCrosstab] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[QRPeptideCrosstab] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[QRPeptideCrosstab] TO [MTS_DB_Lite] AS [dbo]
 GO

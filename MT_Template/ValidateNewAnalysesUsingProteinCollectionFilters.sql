@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.ValidateNewAnalysesUsingProteinCollectionFilters
 **	Auth:	mem
 **	Date:	06/10/2006
 **			11/29/2006 mem - Updated to set #TmpNewAnalysisJobs.Valid to >= 250 for invalid jobs if @PreviewSql <> 0.  If @PreviewSql is 0, then deletes invalid jobs
+**			12/08/2008 mem - Updated to ignore Seq_Direction_Filter entries if no 'Protein_Collection_Filter' entries are present in T_Process_Config
 **    
 *****************************************************/
 (
@@ -138,17 +139,28 @@ As
 	If @MatchCount > 0
 	Begin -- <b>
 		---------------------------------------------------
-		-- Count the number of Protein_Collection_Filter or Seq_Direction_Filter
+		-- Count the number of Protein_Collection_Filter
 		-- entries in T_Process_Config
 		---------------------------------------------------
 		--
 		Set @MatchCount = 0
 		SELECT @MatchCount = COUNT(*)
 		FROM T_Process_Config
-		WHERE [Name] IN ('Protein_Collection_Filter', 'Seq_Direction_Filter')
+		WHERE [Name] = 'Protein_Collection_Filter'
 		--
-		If @MatchCount > 0
-		Begin -- <c>
+		If @MatchCount = 0
+		Begin -- <c1>
+			If @PreviewSql <> 0
+			Begin
+				UPDATE #TmpNewAnalysisJobs
+				SET Valid = 252
+				WHERE Valid = 0
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
+			End
+		End -- </c1>
+		Else
+		Begin -- <c2>
 			---------------------------------------------------
 			-- Validate the values for Protein_Collection_Filter and Seq_Direction_Filter in fields 
 			--  Protein_Collectionst_List and Protein_Options_List in #TmpNewAnalysisJobs
@@ -225,8 +237,8 @@ As
 			End -- </d1>
 
 			---------------------------------------------------
-			-- Count number of Protein_Collection_Filter
-			-- entries in T_Process_Config
+			-- Count number of Protein_Collection_Filter entries in T_Process_Config
+			-- Note: Seq_Direction_Filter entries will be examined only if 1 or more Protein_Collection_Filter entries exist
 			---------------------------------------------------
 			--
 			Set @MatchCount = 0
@@ -280,69 +292,71 @@ As
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
 				End				
+				
+				---------------------------------------------------
+				-- Count number of Seq_Direction_Filter
+				-- entries in T_Process_Config
+				-- Note: Seq_Direction_Filter is only examined in jobs that have a protein collection (ignoring entries with 'na')
+				---------------------------------------------------
+				--
+				Set @MatchCount = 0
+				SELECT @MatchCount = COUNT(*)
+				FROM T_Process_Config
+				WHERE [Name] IN ('Seq_Direction_Filter')
+				--
+				If @MatchCount > 0
+				Begin -- <e>
+				
+					---------------------------------------------------
+					-- Validate the protein option values; currently only checks seq_direction,
+					--  but could add other checks in the future
+					---------------------------------------------------
+					--
+					-- Mark jobs in #TmpNewAnalysisJobProteinOptions as valid if they contain 'seq_direction' values
+					--  that match those defined in T_Process_Config
+					UPDATE #TmpNewAnalysisJobProteinOptions
+					SET Valid = 1
+					WHERE Keyword = 'seq_direction' AND 
+						Value IN (SELECT [Value] FROM T_Process_Config WHERE [Name] = 'Seq_Direction_Filter') AND
+						Job IN (SELECT DISTINCT Job FROM #TmpNewAnalysisJobProteinCollectionNames WHERE Valid = 1)
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+
+					-- Delete entries from #TmpNewAnalysisJobProteinOptions that have 
+					--  unknown keywords or keywords that we do not filter on
+					DELETE FROM #TmpNewAnalysisJobProteinOptions
+					WHERE NOT Keyword IN ('seq_direction')
+					--
+					SELECT @myRowCount = @@rowcount, @myError = @@error
+
+					-- Delete jobs from #TmpNewAnalysisJobs that have non-valid entries in #TmpNewAnalysisJobProteinOptions
+					-- However, if @PreviewSql is non-zero, then update Valid to 251
+					If @PreviewSql <> 0
+					Begin
+						UPDATE #TmpNewAnalysisJobs
+						SET Valid = 251
+						FROM #TmpNewAnalysisJobs NAJ INNER JOIN
+							#TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
+						WHERE NAJ.Valid = 0 AND NAJPO.Valid = 0
+						--
+						SELECT @myRowCount = @@rowcount, @myError = @@error
+					End
+					Else				
+					Begin
+						DELETE #TmpNewAnalysisJobs
+						FROM #TmpNewAnalysisJobs NAJ INNER JOIN
+							#TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
+						WHERE NAJPO.Valid = 0
+						--
+						SELECT @myRowCount = @@rowcount, @myError = @@error
+					End				
+				End -- </e>
 			End -- </d2>
-
-			---------------------------------------------------
-			-- Count number of Seq_Direction_Filter
-			-- entries in T_Process_Config
-			---------------------------------------------------
-			--
-			Set @MatchCount = 0
-			SELECT @MatchCount = COUNT(*)
-			FROM T_Process_Config
-			WHERE [Name] IN ('Seq_Direction_Filter')
-			--
-			If @MatchCount > 0
-			Begin -- <d3>
-			
-				---------------------------------------------------
-				-- Validate the protein option values; currently only checks seq_direction,
-				--  but could add other checks in the future
-				---------------------------------------------------
-				--
-				-- Mark jobs in #TmpNewAnalysisJobProteinOptions as valid if they contain 'seq_direction' values
-				--  that match those defined in T_Process_Config
-				UPDATE #TmpNewAnalysisJobProteinOptions
-				SET Valid = 1
-				WHERE Keyword = 'seq_direction' AND 
-					Value IN (SELECT [Value] FROM T_Process_Config WHERE [Name] = 'Seq_Direction_Filter')
-				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error
-
-				-- Delete entries from #TmpNewAnalysisJobProteinOptions that have 
-				--  unknown keywords or keywords that we do not filter on
-				DELETE FROM #TmpNewAnalysisJobProteinOptions
-				WHERE NOT Keyword IN ('seq_direction')
-				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error
-
-				-- Delete jobs from #TmpNewAnalysisJobs that have non-valid entries in #TmpNewAnalysisJobProteinOptions
-				-- However, if @PreviewSql is non-zero, then update Valid to 251
-				If @PreviewSql <> 0
-				Begin
-					UPDATE #TmpNewAnalysisJobs
-					SET Valid = 251
-					FROM #TmpNewAnalysisJobs NAJ INNER JOIN
-						 #TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
-					WHERE NAJPO.Valid = 0
-					--
-					SELECT @myRowCount = @@rowcount, @myError = @@error
-				End
-				Else				
-				Begin
-					DELETE #TmpNewAnalysisJobs
-					FROM #TmpNewAnalysisJobs NAJ INNER JOIN
-						 #TmpNewAnalysisJobProteinOptions NAJPO ON NAJ.Job = NAJPO.Job
-					WHERE NAJPO.Valid = 0
-					--
-					SELECT @myRowCount = @@rowcount, @myError = @@error
-				End				
-			End -- </d3>
 
 			---------------------------------------------------
 			-- Since T_Process_Config contained Protein_Collection_Filter or Seq_Direction_Filter,
 			--  update Valid to 1 for any jobs in #TmpNewAnalysisJobs that still have Valid = 0,
-			--  since these jobs were not deleted by section d2 or d3 above
+			--  since these jobs were not deleted by section <d2> or <e> above
 			---------------------------------------------------
 			UPDATE #TmpNewAnalysisJobs
 			SET Valid = 1
@@ -350,8 +364,8 @@ As
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 
-		End -- </c>
-	End -- </b>		
+		End -- </c2>
+	End -- </b>
 
 
 	---------------------------------------------------
@@ -361,7 +375,7 @@ As
 	If @PreviewSql <> 0
 	Begin
 		UPDATE #TmpNewAnalysisJobs
-		SET Valid = 252
+		SET Valid = 253
 		WHERE Valid = 0
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -379,7 +393,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ValidateNewAnalysesUsingProteinCollectionFilters] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ValidateNewAnalysesUsingProteinCollectionFilters] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ValidateNewAnalysesUsingProteinCollectionFilters] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ValidateNewAnalysesUsingProteinCollectionFilters] TO [MTS_DB_Lite] AS [dbo]
 GO

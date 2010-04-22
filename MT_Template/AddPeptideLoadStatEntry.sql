@@ -38,6 +38,8 @@ AS
 	Declare @PMTCountFiltered int
 	Declare @EntryDate datetime
 	
+	Declare @AMTCollectionID int
+	
 	Set @JobCount = 0
 	Set @PeptideCountUnfiltered = 0
 	Set @PMTCountUnfiltered = 0
@@ -49,7 +51,8 @@ AS
 	-----------------------------------------------------
 	Set @DiscriminantScoreMinimum = IsNull(@DiscriminantScoreMinimum, 0)
 	Set @PeptideProphetMinimum = IsNull(@PeptideProphetMinimum, 0)
-
+	Set @JobDateMax = IsNull(@JobDateMax, '12/31/9999')
+	
 	CREATE TABLE #Tmp_Job_List (
 		Job int NOT NULL
 	)
@@ -67,7 +70,7 @@ AS
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
-	Set @JobCount  = @myRowCount
+	Set @JobCount = @myRowCount
 
 	Set @PeptideCountUnfiltered = 0
 	Set @PMTCountUnfiltered = 0
@@ -152,12 +155,13 @@ AS
 		VALUES 	(@EntryDate, @JobCount, @PeptideCountUnfiltered, @PMTCountUnfiltered, 
 				 @PeptideCountFiltered, @PMTCountFiltered, @DiscriminantScoreMinimum, @PeptideProphetMinimum)
 
+	
 Done:
 	Return @myError
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntry] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntry] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntry] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntry] TO [MTS_DB_Lite] AS [dbo]
 GO

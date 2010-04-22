@@ -390,3 +390,7 @@ Done:
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[MakeNewPeptideDB] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[MakeNewPeptideDB] TO [MTS_DB_Lite] AS [dbo]
+GO

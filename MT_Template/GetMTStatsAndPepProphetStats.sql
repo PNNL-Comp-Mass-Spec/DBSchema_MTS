@@ -10,6 +10,9 @@ CREATE PROCEDURE dbo.GetMTStatsAndPepProphetStats
 **		  Returns all MTs passing the filters.  Returns a sampling of the MTs that do not pass the filters
 **		  Unlike GetMassTagsGANETParam and GetMassTagsPlusPepProphetStats, this procedure does not return peptide sequence information
 **
+**		Note: This procedure was used by the 2008 version of SMART and is no longer used
+**		      The 2010 version of SMART uses GetMTStats
+**
 **  Return values: 0 if success, otherwise, error code 
 **
 **  Parameters: See comments below
@@ -217,9 +220,9 @@ Done:
 
 
 GO
-GRANT EXECUTE ON [dbo].[GetMTStatsAndPepProphetStats] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[GetMTStatsAndPepProphetStats] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMTStatsAndPepProphetStats] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[GetMTStatsAndPepProphetStats] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[GetMTStatsAndPepProphetStats] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[GetMTStatsAndPepProphetStats] TO [MTS_DB_Lite] AS [dbo]
 GO

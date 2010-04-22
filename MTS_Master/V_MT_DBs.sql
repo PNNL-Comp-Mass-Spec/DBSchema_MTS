@@ -4,17 +4,21 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW dbo.V_MT_DBs
-AS
-SELECT TOP 100 PERCENT S.Server_Name,
-    M.MT_DB_ID, 
-    M.MT_DB_Name, 
-    M.State_ID, 
-    M.Last_Affected, 
-    M.DB_Schema_Version
-FROM dbo.T_MTS_MT_DBs M INNER JOIN
-    dbo.T_MTS_Servers S ON M.Server_ID = S.Server_ID
-WHERE (S.Active = 1) AND (M.State_ID < 15)
 
+CREATE VIEW [dbo].[V_MT_DBs]
+AS
+	SELECT Server_Name,
+		   MT_DB_ID,
+		   MT_DB_Name,
+		   State_ID,
+		   State,
+		   Last_Affected,
+		   [Description],
+		   Organism,
+		   Campaign,
+		   DB_Schema_Version
+	FROM V_MTS_MT_DBs
+	WHERE Server_Active = 1 AND
+		  State_ID < 15
 
 GO

@@ -84,6 +84,20 @@ As
 	-- @result will be 1 if @outFilepath didn't exist; that's ok
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	
+	/**************************************************************************
+	** xp_cmdshell note 
+	**
+	** When user MTSProc calls this SP, xp_cmdshell will run under the
+	** xp_cmdshell Proxy Account.  This account must be created
+	** by a system admin using:
+	**
+	** EXEC sp_xp_cmdshell_proxy_account 'PNL\MTSProc', 'TypePasswordHere';
+	**
+	** Additionally, when the password for MTSProc changes, this
+	** command must be run to update the password
+	** 
+	**************************************************************************/
+	
 	--------------------------------------------------------------
 	-- get the count of peptide lockers
 	--------------------------------------------------------------
@@ -244,7 +258,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Lite] AS [dbo]
 GO

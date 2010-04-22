@@ -30,6 +30,7 @@ CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
 **			12/01/2006 mem - Changed the minimum log level for the "Update" progress messages to be 2 rather than 1
 **			05/23/2007 mem - Now passing source server and database name to ProcessCandidateSequences
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
+**			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **    
 *****************************************************/
 (
@@ -57,7 +58,7 @@ As
 	set @message = ''
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'Porky'
+	set @MasterSequencesServerName = 'ProteinSeqs2'
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
@@ -233,8 +234,8 @@ As
 
 			Set @CandidateTablesContainJobColumn = 0
 			
-			-- Warning: Update @MasterSequencesServerName above if changing from Porky to another computer
-			exec Porky.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidateSequencesTableName output, @CandidateModDetailsTableName output
+			-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs2 to another computer
+			exec ProteinSeqs2.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidateSequencesTableName output, @CandidateModDetailsTableName output
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			--
@@ -345,7 +346,7 @@ As
 		If @logLevel >= 1
 			execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
 		--
-		exec @myError = Porky.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
+		exec @myError = ProteinSeqs2.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
 																@CandidateSequencesTableName, @CandidateModDetailsTableName, 
 																@CandidateTablesContainJobColumn = @CandidateTablesContainJobColumn,
 																@Job = @Job, 
@@ -573,7 +574,7 @@ Done:
 	Begin
 		Begin Try
 			Set @CurrentLocation = 'Delete temporary tables ' + @CandidateSequencesTableName + ' and ' + @CandidateModDetailsTableName
-			exec Porky.Master_Sequences.dbo.DropTempSequenceTables @CandidateSequencesTableName, @CandidateModDetailsTableName
+			exec ProteinSeqs2.Master_Sequences.dbo.DropTempSequenceTables @CandidateSequencesTableName, @CandidateModDetailsTableName
 		End Try
 		Begin Catch
 			-- Error caught
@@ -587,7 +588,7 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Lite] AS [dbo]
 GO

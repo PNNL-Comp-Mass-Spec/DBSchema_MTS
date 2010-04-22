@@ -21,6 +21,7 @@ CREATE TABLE [dbo].[T_Score_Inspect](
 	[RankFScore] [smallint] NULL,
 	[DelM] [real] NULL,
 	[Normalized_Score] [real] NULL,
+	[PrecursorError] [real] NULL,
  CONSTRAINT [PK_T_Score_Inspect] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_ID] ASC

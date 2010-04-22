@@ -50,11 +50,11 @@ As
 
 
 GO
-GRANT EXECUTE ON [dbo].[PostLogEntry] TO [DMS_SP_User]
+GRANT EXECUTE ON [dbo].[PostLogEntry] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[PostLogEntry] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[PostLogEntry] TO [pnl\MTSProc] AS [dbo]
 GO

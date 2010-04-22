@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task](
 	[Task_ID] [int] IDENTITY(1,1) NOT NULL,
 	[Processing_State] [tinyint] NOT NULL,
-	[Task_Created] [datetime] NULL CONSTRAINT [DF_T_Peptide_Prophet_DB_Update_Task_Task_Created]  DEFAULT (getdate()),
+	[Task_Created] [datetime] NULL,
 	[Task_Start] [datetime] NULL,
 	[Task_Finish] [datetime] NULL,
 	[Task_AssignedProcessorName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -21,4 +21,6 @@ ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task]  WITH CHECK ADD  CONSTRAINT
 REFERENCES [T_Peptide_Prophet_DB_Update_Task_State_Name] ([Processing_State])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task] CHECK CONSTRAINT [FK_T_Peptide_Prophet_DB_Update_Task_T_Peptide_Prophet_DB_Update_Task_State_Name]
+GO
+ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Update_Task_Task_Created]  DEFAULT (getdate()) FOR [Task_Created]
 GO

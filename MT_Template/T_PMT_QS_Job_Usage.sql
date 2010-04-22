@@ -7,7 +7,7 @@ CREATE TABLE [dbo].[T_PMT_QS_Job_Usage](
 	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
 	[Filter_Set_Info_ID] [int] NOT NULL,
 	[Job] [int] NOT NULL,
-	[Entered] [datetime] NOT NULL CONSTRAINT [DF_T_PMT_QS_Job_Usage_Entered]  DEFAULT (getdate()),
+	[Entered] [datetime] NOT NULL,
  CONSTRAINT [PK_T_PMT_QS_Job_Usage] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
@@ -33,4 +33,6 @@ ALTER TABLE [dbo].[T_PMT_QS_Job_Usage]  WITH CHECK ADD  CONSTRAINT [FK_T_PMT_QS_
 REFERENCES [T_PMT_QS_Job_Usage_Filter_Info] ([Filter_Set_Info_ID])
 GO
 ALTER TABLE [dbo].[T_PMT_QS_Job_Usage] CHECK CONSTRAINT [FK_T_PMT_QS_Job_Usage_T_PMT_QS_Job_Usage_Filter_Info]
+GO
+ALTER TABLE [dbo].[T_PMT_QS_Job_Usage] ADD  CONSTRAINT [DF_T_PMT_QS_Job_Usage_Entered]  DEFAULT (getdate()) FOR [Entered]
 GO

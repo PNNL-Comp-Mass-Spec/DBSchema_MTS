@@ -8,7 +8,7 @@ CREATE TABLE [dbo].[T_Analysis_Job_to_MT_DB_Map](
 	[MTL_ID] [int] NOT NULL,
 	[ResultType] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Created] [datetime] NOT NULL,
-	[Last_Affected] [datetime] NOT NULL CONSTRAINT [DF_T_Analysis_Job_to_MT_DB_Map_Last_Affected]  DEFAULT (getdate()),
+	[Last_Affected] [datetime] NOT NULL,
 	[Process_State] [int] NOT NULL,
  CONSTRAINT [PK_T_Analysis_Job_to_MT_DB_Map] PRIMARY KEY CLUSTERED 
 (
@@ -30,4 +30,6 @@ ALTER TABLE [dbo].[T_Analysis_Job_to_MT_DB_Map]  WITH NOCHECK ADD  CONSTRAINT [F
 REFERENCES [T_MT_Database_List] ([MTL_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_to_MT_DB_Map] CHECK CONSTRAINT [FK_T_Analysis_Job_to_MT_DB_Map_T_MT_Database_List]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_to_MT_DB_Map] ADD  CONSTRAINT [DF_T_Analysis_Job_to_MT_DB_Map_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

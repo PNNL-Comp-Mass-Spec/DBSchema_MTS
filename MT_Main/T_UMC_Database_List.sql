@@ -16,10 +16,10 @@ CREATE TABLE [dbo].[T_UMC_Database_List](
 	[UDB_Last_Update] [datetime] NULL,
 	[UDB_Last_Import] [datetime] NULL,
 	[UDB_Import_Holdoff] [int] NULL,
-	[UDB_Created] [datetime] NOT NULL CONSTRAINT [DF_T_UMC_Database_List_UDB_Created]  DEFAULT (getdate()),
+	[UDB_Created] [datetime] NOT NULL,
 	[UDB_Demand_Import] [tinyint] NULL,
-	[UDB_Max_Jobs_To_Process] [int] NULL CONSTRAINT [DF_T_UMC_Database_List_UDB_Max_Jobs_To_Process]  DEFAULT (500),
-	[UDB_DB_Schema_Version] [real] NOT NULL CONSTRAINT [DF_T_UMC_Database_List_UDB_DB_Schema_Version]  DEFAULT (2),
+	[UDB_Max_Jobs_To_Process] [int] NULL,
+	[UDB_DB_Schema_Version] [real] NOT NULL,
  CONSTRAINT [PK_T_UMC_Database_List] PRIMARY KEY CLUSTERED 
 (
 	[UDB_ID] ASC
@@ -38,4 +38,10 @@ ALTER TABLE [dbo].[T_UMC_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_UMC_
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_UMC_Database_List] CHECK CONSTRAINT [FK_T_UMC_Database_List_T_MT_Database_State_Name]
+GO
+ALTER TABLE [dbo].[T_UMC_Database_List] ADD  CONSTRAINT [DF_T_UMC_Database_List_UDB_Created]  DEFAULT (getdate()) FOR [UDB_Created]
+GO
+ALTER TABLE [dbo].[T_UMC_Database_List] ADD  CONSTRAINT [DF_T_UMC_Database_List_UDB_Max_Jobs_To_Process]  DEFAULT (500) FOR [UDB_Max_Jobs_To_Process]
+GO
+ALTER TABLE [dbo].[T_UMC_Database_List] ADD  CONSTRAINT [DF_T_UMC_Database_List_UDB_DB_Schema_Version]  DEFAULT (2) FOR [UDB_DB_Schema_Version]
 GO

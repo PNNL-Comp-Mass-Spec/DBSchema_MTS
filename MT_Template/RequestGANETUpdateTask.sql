@@ -23,12 +23,14 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			09/23/2004 mem - Now checking for tasks stuck in states 2 or 7
 **			04/11/2005 mem - Removed checking for stuck tasks since this is now accomplished with CheckStaleTasks, which is called during Master Update
 **			11/04/2008 mem - Updated to allow TaskID to be 0
+**			03/19/2010 mem - Added parameter @ParamFileName
 **
 *****************************************************/
 	@processorName varchar(128),
 	@taskID int output,					-- Will be -1 if not task is available
 	@taskAvailable tinyint output,		-- Set to 1 if a task is available
-	@message varchar(512) output
+	@ParamFileName varchar(256) = '' output,
+	@message varchar(512)='' output
 As
 	set nocount on
 
@@ -45,6 +47,7 @@ As
 	---------------------------------------------------
 	set @taskID = -1
 	set @TaskAvailable = 0
+	Set @ParamFileName = ''
 	set @message = ''
 	
 	---------------------------------------------------
@@ -88,7 +91,7 @@ As
 
 
 	---------------------------------------------------
-	-- set state and path for task
+	-- Set state for task
 	---------------------------------------------------
 
 	UPDATE T_GANET_Update_Task
@@ -112,6 +115,16 @@ As
 	---------------------------------------------------
 	commit transaction @transName
 
+
+	---------------------------------------------------
+	-- Look up the parameter file name defined in T_Process_Config
+	---------------------------------------------------
+	--
+	Set @ParamFileName = ''
+	SELECT @ParamFileName = Value
+	FROM T_Process_Config 
+	WHERE [Name] = 'NET_Regression_Param_File_Name'
+
 	---------------------------------------------------
 	-- If we get to this point, then all went fine
 	-- Update TaskAvailable
@@ -127,9 +140,9 @@ Done:
 
 
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev]
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite]
+GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc]
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc] AS [dbo]
 GO

@@ -7,9 +7,9 @@ CREATE TABLE [dbo].[T_FTICR_UMC_Results](
 	[UMC_Results_ID] [int] IDENTITY(1,1) NOT NULL,
 	[MD_ID] [int] NOT NULL,
 	[UMC_Ind] [int] NOT NULL,
-	[Member_Count] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_Member_Count]  DEFAULT (0),
+	[Member_Count] [int] NOT NULL,
 	[Member_Count_Used_For_Abu] [int] NULL,
-	[UMC_Score] [float] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_UMC_Score]  DEFAULT (0),
+	[UMC_Score] [float] NOT NULL,
 	[Scan_First] [int] NOT NULL,
 	[Scan_Last] [int] NOT NULL,
 	[Scan_Max_Abundance] [int] NOT NULL,
@@ -33,15 +33,15 @@ CREATE TABLE [dbo].[T_FTICR_UMC_Results](
 	[Expression_Ratio] [float] NULL,
 	[FPR_Type_ID] [int] NOT NULL,
 	[MassTag_Hit_Count] [int] NOT NULL,
-	[Pair_UMC_Ind] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_Pair_UMC_Ind]  DEFAULT ((-1)),
-	[InternalStd_Hit_Count] [int] NOT NULL CONSTRAINT [DF_T_FTICR_UMC_Results_GANET_Locker_Count]  DEFAULT (0),
+	[Pair_UMC_Ind] [int] NOT NULL,
+	[InternalStd_Hit_Count] [int] NOT NULL,
 	[Expression_Ratio_StDev] [float] NULL,
 	[Expression_Ratio_Charge_State_Basis_Count] [smallint] NULL,
 	[Expression_Ratio_Member_Basis_Count] [int] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_Results] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_Results_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -50,15 +50,23 @@ GO
 CREATE CLUSTERED INDEX [IX_T_FTICR_UMC_Results] ON [dbo].[T_FTICR_UMC_Results] 
 (
 	[MD_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-ALTER TABLE [dbo].[T_FTICR_UMC_Results]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_Results_T_FPR_Type_Name] FOREIGN KEY([FPR_Type_ID])
+ALTER TABLE [dbo].[T_FTICR_UMC_Results]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_Results_T_FPR_Type_Name] FOREIGN KEY([FPR_Type_ID])
 REFERENCES [T_FPR_Type_Name] ([FPR_Type_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_Results] CHECK CONSTRAINT [FK_T_FTICR_UMC_Results_T_FPR_Type_Name]
 GO
-ALTER TABLE [dbo].[T_FTICR_UMC_Results]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_Results_T_Match_Making_Description] FOREIGN KEY([MD_ID])
+ALTER TABLE [dbo].[T_FTICR_UMC_Results]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_Results_T_Match_Making_Description] FOREIGN KEY([MD_ID])
 REFERENCES [T_Match_Making_Description] ([MD_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_Results] CHECK CONSTRAINT [FK_T_FTICR_UMC_Results_T_Match_Making_Description]
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_Results] ADD  CONSTRAINT [DF_T_FTICR_UMC_Results_Member_Count]  DEFAULT ((0)) FOR [Member_Count]
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_Results] ADD  CONSTRAINT [DF_T_FTICR_UMC_Results_UMC_Score]  DEFAULT ((0)) FOR [UMC_Score]
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_Results] ADD  CONSTRAINT [DF_T_FTICR_UMC_Results_Pair_UMC_Ind]  DEFAULT ((-1)) FOR [Pair_UMC_Ind]
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_Results] ADD  CONSTRAINT [DF_T_FTICR_UMC_Results_GANET_Locker_Count]  DEFAULT ((0)) FOR [InternalStd_Hit_Count]
 GO
