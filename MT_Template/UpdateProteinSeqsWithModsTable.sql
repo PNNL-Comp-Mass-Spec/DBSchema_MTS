@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.UpdateProteinSeqsWithModsTable
 /****************************************************
 **
@@ -18,6 +19,9 @@ CREATE PROCEDURE dbo.UpdateProteinSeqsWithModsTable
 **	Auth:	mem
 **	Date:	02/24/2010 mem - Initial Version
 **			02/26/2010 mem - Added parameter @MinimumPMTQualityScore and removed parameter @UpdateSeqsWithModsTable
+**			04/28/2010 mem - Now passing parameter @ModNamesAndSymbols to procedure GetProteinSequenceWithMods
+**			07/12/2010 mem - Added parameter @MinObsCountPassingFilter
+**						   - Now posting a progress message every 5 minutes
 **
 *****************************************************/
 (
@@ -25,6 +29,7 @@ CREATE PROCEDURE dbo.UpdateProteinSeqsWithModsTable
 	@RefIDMax int = 200,						-- Optional filter
 	@MinimumPMTQualityScore real = 1,			-- Used to filter the entries in T_Mass_Tags
 	@ModNamesAndSymbols varchar(2048) = 'Hexose=#, Plus1Oxy=*',
+	@MinObsCountPassingFilter int = 0,			-- When non-zero, then filters out peptides with T_Mass_Tags.dbo.Peptide_Obs_Count_Passing_Filter less than this value
 	@SkipExistingEntries tinyint = 1,			-- If @SkipExistingEntries is non-zero, then will skip proteins already present in T_Protein_SeqsWithMods
 	@message varchar(512) = '' output
 )
@@ -43,9 +48,13 @@ AS
 	Declare @ProteinsProcessed int
 	Declare @ProteinsSkipped int
 
+	Declare @TotalProteinsToProcess int
+	Set @TotalProteinsToProcess = 0
+
 	Declare @ProteinResidueCount int
 	Declare @ModSymbolCount int
-
+	
+	Declare @LastLogTime datetime
 	
 	CREATE TABLE #Tmp_ProteinsToProcess (
 		Ref_ID int NOT NULL
@@ -61,6 +70,7 @@ AS
 	Set @RefIDMin = IsNull(@RefIDMin, 0)
 	Set @RefIDMax = IsNull(@RefIDMax, 0)
 	Set @ModNamesAndSymbols = IsNull(@ModNamesAndSymbols, '')
+	set @MinObsCountPassingFilter = IsNull(@MinObsCountPassingFilter, 0)
 	Set @SkipExistingEntries = IsNull(@SkipExistingEntries, 1)
 	
 	Set @message = ''
@@ -138,6 +148,12 @@ AS
 		CREATE UNIQUE CLUSTERED INDEX IX_T_Protein_SeqsWithMods ON T_Protein_SeqsWithMods (Ref_ID)
 	End
 
+	---------------------------------------------------
+	-- Count the number of proteins to process
+	---------------------------------------------------
+	
+	SELECT @TotalProteinsToProcess = COUNT(*)
+	FROM #Tmp_ProteinsToProcess
 
 	---------------------------------------------------
 	-- Step through the proteins in #Tmp_ProteinsToProcess
@@ -145,6 +161,7 @@ AS
 	---------------------------------------------------
 	
 	Set @RefID = @RefIDMin - 1
+	Set @LastLogTime = GetDate()
 	
 	Set @continue = 1
 	While @Continue = 1
@@ -161,7 +178,12 @@ AS
 		Else
 		Begin
 			
-			Exec @myError = GetProteinSequenceWithMods @RefID, @MinimumPMTQualityScore, @ProteinResiduesWithMods=@ProteinResiduesWithMods output, @message = @message output
+			Exec @myError = GetProteinSequenceWithMods @RefID, 
+													   @MinimumPMTQualityScore, 
+													   @ModNamesAndSymbols,
+													   @MinObsCountPassingFilter,
+													   @ProteinResiduesWithMods=@ProteinResiduesWithMods output, 
+													   @message = @message output
 			
 			Set @ProteinResidueCount = 0
 			Set @ModSymbolCount = 0
@@ -196,6 +218,15 @@ AS
 				Set @continue = 0
 			
 			Set @ProteinsProcessed = @ProteinsProcessed + 1
+			
+			If DateDiff(second, @LastLogTime, GetDate()) > 60*5
+			Begin
+				Set @message = '...Processing: ' + Convert(varchar(12), @ProteinsProcessed) + ' / ' + Convert(varchar(12), @TotalProteinsToProcess) + ' proteins'
+				exec PostLogEntry 'Progress', @message, 'UpdateProteinSeqsWithModsTable'
+				Set @message = ''
+				
+				Set @LastLogTime = GetDate()
+			End
 		End
 	
 	End

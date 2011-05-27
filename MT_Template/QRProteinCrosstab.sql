@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.QRProteinCrosstab
+CREATE Procedure QRProteinCrosstab
 /****************************************************	
 **  Desc: Generates a cross tab query of the proteins observed
 **		  in 1 or more QuantitationID tasks
@@ -36,7 +36,7 @@ CREATE Procedure dbo.QRProteinCrosstab
 (
 	@QuantitationIDList varchar(max),					-- Comma separated list of Quantitation ID's
 	@SeparateReplicateDataIDs tinyint = 1,				-- For quantitation ID's with replicates, separates the resultant crosstab table into a separate column for each replicate
-	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return; valid columns include Abundance_Average, MassTagCountUniqueObserved, MassTagCountUsedForAbundanceAvg, FractionScansMatchingSingleMassTag, etc.
+	@SourceColName varchar(128) = 'Abundance_Average',	-- Column to return; valid columns include Abundance_Average, MassTagCountUniqueObserved, MassTagCountUsedForAbundanceAvg, FractionScansMatchingSingleMassTag, ER, etc.
 	@AggregateColName varchar(128) = 'AvgAbu',
 	@AverageAcrossColumns tinyint = 0,					-- When = 1, then adds averages across columns, creating a more informative, but also more complex query
 	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job), 5 = Dataset Acq_Time_Start
@@ -193,7 +193,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRProteinCrosstab] TO [DMS_SP_User] AS [dbo]

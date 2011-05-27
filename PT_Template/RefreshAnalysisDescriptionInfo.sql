@@ -37,6 +37,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			08/14/2008 mem - Now updating Experiment_Organism
 **			12/09/2008 mem - Increased size of @message to varchar(4000)
 **			03/13/2010 mem - Added parameters @UpdateDMSCacheTable and @CacheUpdateJobMinimum
+**			07/13/2010 mem - Now populating Acq_Length in T_Datasets
 **    
 *****************************************************/
 (
@@ -402,6 +403,7 @@ As
 				Created_DMS = P.Created,
 				Acq_Time_Start = P.[Acquisition Start], 
 				Acq_Time_End = P.[Acquisition End],
+				Acq_Length = DATEDIFF(second, P.[Acquisition Start], P.[Acquisition End]) / 60.0,
 				Scan_Count = P.[Scan Count]
 			FROM T_Datasets AS DS INNER JOIN (
 				SELECT L.Dataset_ID, R.Created, R.[Acquisition Start], R.[Acquisition End], R.[Scan Count]

@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE VIEW [dbo].[V_MTS_MT_DBs]
 AS
 SELECT M.MT_DB_ID,
@@ -12,6 +13,7 @@ SELECT M.MT_DB_ID,
        M.State_ID,
        DBStates.Name AS State,
        M.Last_Affected,
+       M.Last_Online,
        M.[Description],
        M.Organism,
        M.Campaign,
@@ -24,6 +26,7 @@ FROM dbo.T_MTS_MT_DBs AS M
        ON M.Server_ID = S.Server_ID
      LEFT OUTER JOIN MT_Main.dbo.T_MT_Database_State_Name AS DBStates
        ON M.State_ID = DBStates.ID
+
 
 
 GO

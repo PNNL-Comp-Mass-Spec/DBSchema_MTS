@@ -38,10 +38,11 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			09/24/2008 mem - Updated to check for the existence of certain tables before attempting to access them
 **			10/10/2008 mem - Added support for Inspect tables
 **			03/17/2010 mem - Now clearing the NET Regression fields in T_Analysis_Description
+**			03/11/2011 mem - Updated @JobListToDelete to varchar(max)
 **    
 *****************************************************/
 (
-	@JobListToDelete varchar(4096),			-- Comma separated list of jobs to delete
+	@JobListToDelete varchar(max),			-- Comma separated list of jobs to delete
 	@ResetStateToNew tinyint = 0,
 	@DeleteUnusedSequences tinyint = 0,
 	@DropAndAddConstraints tinyint = 0

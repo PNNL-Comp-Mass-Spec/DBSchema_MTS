@@ -24,6 +24,7 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 **			11/28/2006 mem - Updated to return error 55000 if VerifyUpdateEnabled returns @UpdateEnabled = 0
 **			11/13/2007 mem - Added @previewSql and @infoOnly
 **			03/11/2008 mem - Added parameters @DBStateMin and @DBStateMax
+**			07/27/2010 mem - Changed default value for @DBStateMax to be 10 instead of 9
 **    
 *****************************************************/
 (
@@ -33,7 +34,7 @@ CREATE Procedure UpdateAnalysisJobToPeptideDBMap
 	@RowCountAdded int = 0 OUTPUT,
 	@message varchar(255) = '' OUTPUT,
 	@DBStateMin int = 0,							-- Ignored if @PeptideDBNameFilter contains a DB name
-	@DBStateMax int = 9								-- Ignored if @PeptideDBNameFilter contains a DB name
+	@DBStateMax int = 10							-- Ignored if @PeptideDBNameFilter contains a DB name
 )
 As	
 	set nocount on

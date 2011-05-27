@@ -42,6 +42,7 @@ CREATE Procedure dbo.QRRetrieveProteins
 **			05/25/2005 mem - Renamed output column MonoMassKDa to Mono_Mass_KDa
 **			07/25/2006 mem - Now obtaining the protein Description from T_Proteins instead of from an external ORF database
 **			06/05/2007 mem - Added parameters @message and @PreviewSql; switched to Try/Catch error handling
+**			10/13/2010 mem - Now passing @MatchScoreMode to QRGenerateORFColumnSql
 **
 ****************************************************/
 (
@@ -71,13 +72,21 @@ AS
 			@TopLevelFractionCount int,
 			@ERValuesPresent float
 	
+	Declare @MatchScoreMode tinyint
+	
 	Set @MDIDCount = 0
-
+	Set @MatchScoreMode = 0
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
+		
+		-- Lookup Match_Score_Mode for this QuantitationID
+		SELECT @MatchScoreMode = IsNull(Match_Score_Mode, 0)
+		FROM T_Quantitation_Description
+		WHERE Quantitation_ID = @QuantitationID
 		
 		-- Determine if this QuantitationID has more than one MDID defined
 		SELECT @MDIDCount = Count(MD_ID)
@@ -129,7 +138,9 @@ AS
 		
 		-- Generate the sql for the ORF columns in T_Quantitation_Results
 		Set @CurrentLocation = 'Call QRLookupReplicateAndFractionCounts'
-		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT
+		Exec QRGenerateORFColumnSql @ERValuesPresent, @ORFColumnSql = @OrfColumnSql OUTPUT, 
+		                            @MatchScoreModeMin=@MatchScoreMode,
+		                            @MatchScoreModeMax=@MatchScoreMode
 		
 		Set @sql = @ORFColumnSql
 		

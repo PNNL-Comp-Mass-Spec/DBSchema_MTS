@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE dbo.QCMSMSSeqStatDetails
+
+CREATE PROCEDURE QCMSMSSeqStatDetails
 /****************************************************
 ** 
 **		Desc: 
@@ -17,6 +18,7 @@ create PROCEDURE dbo.QCMSMSSeqStatDetails
 **		Date:	11/14/2005
 **				11/16/2005 mem - Now returning additional columns: Peak_Apex_Scan, Peak_Scan_Start, Peak_Scan_End, and Peak_Width_Base_Points
 **			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**				09/22/2010 mem - Added parameters @ResultTypeFilter and @PreviewSql
 **    
 *****************************************************/
 (
@@ -37,7 +39,11 @@ create PROCEDURE dbo.QCMSMSSeqStatDetails
 	
 	@maximumRowCount int = 0,						-- 0 means to return all rows
 	
-	@SeqIDList varchar(7000)						-- Required: Comma separated list of Seq_ID values to match
+	@SeqIDList varchar(7000),						-- Required: Comma separated list of Seq_ID values to match
+	
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
+	@PreviewSql tinyint = 0
+
 )
 As
 	Set NoCount On
@@ -94,6 +100,8 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
+	Set @previewSql = IsNull(@previewSql, 0)
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
 	If @returnRowCount = 'true'
@@ -119,7 +127,8 @@ As
 	Exec @myError = QCMSMSJobsTablePopulate	@DBName, @message output, 
 											@InstrumentFilter, @CampaignFilter, @ExperimentFilter, @DatasetFilter, 
 											@OrganismDBFilter, @DatasetDateMinimum, @DatasetDateMaximum, 
-											@JobMinimum, @JobMaximum, @maximumRowCount
+											@JobMinimum, @JobMaximum, @maximumRowCount,
+											@ResultTypeFilter, @PreviewSql
 	If @myError <> 0
 	Begin
 		If Len(IsNull(@message, '')) = 0
@@ -288,7 +297,10 @@ As
 	---------------------------------------------------
 	-- Run the query to populate #TmpSICStats
 	---------------------------------------------------
-	Exec (@Sql + ' ' + @sqlWhere)
+	If @previewSql <> 0
+		Print @Sql + ' ' + @sqlWhere
+	Else
+		Exec (@Sql + ' ' + @sqlWhere)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	    
@@ -371,7 +383,11 @@ As
 	Set @Sql = @Sql +    ' SS.Frag_Scan_Number = DSS.Frag_Scan_Number AND SS.SIC_Job = DSS.Job'
 
 	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
-	Exec (@Sql)
+	
+	If @previewSql <> 0
+		Print @Sql
+	Else
+		Exec (@Sql)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
@@ -397,7 +413,10 @@ As
 	Set @Sql = @Sql +                '  #TmpSICStatsSummary.Frag_Scan_Number = LookupQ.Frag_Scan_Number'
 
 	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
-	Exec (@Sql)
+	If @previewSql <> 0
+		Print @Sql
+	Else
+		Exec (@Sql)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
@@ -418,7 +437,10 @@ As
 	Set @Sql = @Sql +      ' INNER JOIN MT_Main.dbo.V_DMS_Dataset_Detail_Report DDR ON DS.Dataset_ID = DDR.ID'
 
 	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
-	Exec (@Sql)
+	If @previewSql <> 0
+		Print @Sql
+	Else
+		Exec (@Sql)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -456,7 +478,8 @@ As
 	ORDER BY DatasetInfoQ.Instrument, SS.Seq_ID, DatasetInfoQ.Acq_Time_Start
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
+
+
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
 	Exec PostUsageLogEntry 'QCMSMSSeqStatDetails', @DBName, @UsageMessage	

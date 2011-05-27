@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE Procedure PMExportMatchOverview
+CREATE Procedure dbo.PMExportMatchOverview
 /****************************************************	
 **  Desc:	Exports overview info
 **			for the peak matching tasks specified by the given MDID list
@@ -14,6 +14,8 @@ CREATE Procedure PMExportMatchOverview
 **  Auth:	mem
 **	Date:	07/15/2009
 **			08/24/2009 jds - Rearranged queries to reference #Tmp_MDIDList first
+**			10/13/2010 mem - Now returning STAC-related columns from T_Match_Making_Description
+**			02/16/2011 mem - Added column Match_Score_Mode to #Tmp_MDIDList
 **
 ****************************************************/
 (
@@ -56,7 +58,8 @@ AS
 		-------------------------------------------------	
 
 		CREATE TABLE #Tmp_MDIDList (
-			MD_ID int NOT NULL
+			MD_ID int NOT NULL,
+			Match_Score_Mode tinyint not null
 		)
 		CREATE UNIQUE INDEX IX_Tmp_MDIDList_MDID ON #Tmp_MDIDList (MD_ID ASC)
 
@@ -72,8 +75,8 @@ AS
 		If @infoOnly <> 0
 		Begin
 			SELECT COUNT(DISTINCT FAD.Dataset_ID) AS Dataset_Count,
-				COUNT(DISTINCT FAD.Job) AS Job_Count,
-				COUNT(*) AS MDID_Count
+			       COUNT(DISTINCT FAD.Job) AS Job_Count,
+			       COUNT(*) AS MDID_Count
 			FROM #Tmp_MDIDList ML
 			     INNER JOIN T_Match_Making_Description MMD
 			       ON MMD.MD_ID = ML.MD_ID
@@ -123,7 +126,14 @@ AS
 			       MMD.Refine_NET_Tol_PeakWidth,
 			       MMD.Refine_NET_Tol_PeakCenter,
 			       MMD.Refine_NET_Tol_Used,
-			       MMD.Ini_File_Name
+			       MMD.Ini_File_Name,
+			       MMD.Match_Score_Mode,
+			       MMD.STAC_Used_Prior_Probability,
+			       MMD.AMT_Count_1pct_FDR,
+			       MMD.AMT_Count_5pct_FDR,
+			       MMD.AMT_Count_10pct_FDR,
+			       MMD.AMT_Count_25pct_FDR,
+			       MMD.AMT_Count_50pct_FDR
 			FROM #Tmp_MDIDList ML
 			     INNER JOIN T_Match_Making_Description MMD
 			       ON MMD.MD_ID = ML.MD_ID
@@ -157,6 +167,7 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[PMExportMatchOverview] TO [DMS_SP_User] AS [dbo]

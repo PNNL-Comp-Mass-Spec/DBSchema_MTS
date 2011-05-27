@@ -22,6 +22,8 @@ CREATE TABLE [dbo].[T_Quantitation_Description](
 	[Maximum_Matches_per_UMC_to_Keep] [smallint] NOT NULL,
 	[Minimum_Match_Score] [decimal](9, 5) NOT NULL,
 	[Minimum_Del_Match_Score] [real] NOT NULL,
+	[Minimum_Uniqueness_Probability] [real] NULL,
+	[Maximum_FDR_Threshold] [real] NULL,
 	[Minimum_Peptide_Replicate_Count] [smallint] NOT NULL,
 	[ORF_Coverage_Computation_Level] [tinyint] NULL,
 	[RepNormalization_PctSmallDataToDiscard] [tinyint] NOT NULL,
@@ -42,6 +44,13 @@ CREATE TABLE [dbo].[T_Quantitation_Description](
 	[UniqueMassTagCountFilteredOut] [int] NULL,
 	[UniqueInternalStdCount] [int] NULL,
 	[UniqueInternalStdCountFilteredOut] [int] NULL,
+	[Match_Score_Mode] [tinyint] NULL,
+	[AMT_Count_1pct_FDR] [int] NULL,
+	[AMT_Count_2pt5pct_FDR] [int] NULL,
+	[AMT_Count_5pct_FDR] [int] NULL,
+	[AMT_Count_10pct_FDR] [int] NULL,
+	[AMT_Count_25pct_FDR] [int] NULL,
+	[AMT_Count_50pct_FDR] [int] NULL,
 	[ReplicateNormalizationStats] [varchar](1024) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_T_Quantitation_Description] PRIMARY KEY CLUSTERED 
@@ -96,6 +105,10 @@ ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitatio
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Minimum_Del_Match_Score]  DEFAULT ((0)) FOR [Minimum_Del_Match_Score]
 GO
+ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Minimum_Uniqueness_Probability]  DEFAULT ((0)) FOR [Minimum_Uniqueness_Probability]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Maximum_FDR_Threshold]  DEFAULT ((1)) FOR [Maximum_FDR_Threshold]
+GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Minimum_Peptide_Replicate_Count]  DEFAULT ((0)) FOR [Minimum_Peptide_Replicate_Count]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_ORF_Coverage_Computation_Level]  DEFAULT ((1)) FOR [ORF_Coverage_Computation_Level]
@@ -121,6 +134,8 @@ GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_FractionCrossReplicateAvgInRange]  DEFAULT ((2)) FOR [FractionCrossReplicateAvgInRange]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_AddBackExcludedMassTags]  DEFAULT ((1)) FOR [AddBackExcludedMassTags]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Match_Score_Mode]  DEFAULT ((0)) FOR [Match_Score_Mode]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

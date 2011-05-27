@@ -4,9 +4,13 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW dbo.V_DMS_Filter_Set_Overview
+CREATE VIEW V_DMS_Filter_Set_Overview
 AS
-SELECT t1.*
-FROM Gigasax.DMS5.dbo.V_Filter_Set_Overview t1
+SELECT Filter_Type_ID,
+       Filter_Type_Name,
+       Filter_Set_ID,
+       Filter_Set_Name,
+       Filter_Set_Description
+FROM T_DMS_Filter_Set_Overview_Cached
 
 GO

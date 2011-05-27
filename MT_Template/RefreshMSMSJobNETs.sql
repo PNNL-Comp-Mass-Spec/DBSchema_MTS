@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSJobNETs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
+
 
 CREATE Procedure dbo.RefreshMSMSJobNETs
 /****************************************************
@@ -35,6 +36,8 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **			11/26/2008 mem - Fixed data type conversion when populating @InvalidDBList with a list of PeptideDBID values
 **			03/25/2010 mem - Added new NET Regression fields
+**			05/28/2010 mem - Fixed query bug when @infoOnly is non-zero
+**			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
 **    
 *****************************************************/
 (
@@ -375,8 +378,8 @@ As
 					Set @S = @S + ' TAD.ScanTime_NET_Intercept, PTAD.ScanTime_NET_Intercept AS Intercept_In_PeptideDB, '
 					Set @S = @S + ' TAD.ScanTime_NET_RSquared, PTAD.ScanTime_NET_RSquared AS RSquared_In_PeptideDB,'
 					Set @S = @S + ' TAD.ScanTime_NET_Fit, PTAD.ScanTime_NET_Fit AS Fit_In_PeptideDB,'
-					Set @S = @S + ' TAD.Regression_Order, Regression_Filtered_Data_Count,'
-					Set @S = @S + ' TAD.Regression_Equation, Regression_Equation_XML'
+					Set @S = @S + ' PTAD.Regression_Order, PTAD.Regression_Filtered_Data_Count,'
+					Set @S = @S + ' PTAD.Regression_Equation, PTAD.Regression_Equation_XML'
 				End
 				Else
 				Begin
@@ -391,7 +394,7 @@ As
 					Set @S = @S +     ' ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared,'
 					Set @S = @S +     ' Regression_Order = PTAD.Regression_Order, '
 					Set @S = @S +     ' Regression_Filtered_Data_Count = PTAD.Regression_Filtered_Data_Count,'
-					Set @S = @S +     ' Regression_Equation = PTAD.Regression_Equation, '
+					Set @S = @S +    ' Regression_Equation = PTAD.Regression_Equation, '
 					Set @S = @S +     ' Regression_Equation_XML = PTAD.Regression_Equation_XML'
 
 				End
@@ -433,7 +436,7 @@ As
 		-- Make sure the MSMS Processing will occur on the next master update
 		UPDATE T_Process_Step_Control
 		Set Enabled = 1
-		WHERE Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate'
+		WHERE Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End

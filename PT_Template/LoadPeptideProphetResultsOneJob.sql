@@ -17,6 +17,7 @@ CREATE Procedure dbo.LoadPeptideProphetResultsOneJob
 **
 **	Auth:	mem
 **	Date:	08/01/2006
+**			10/12/2010 mem - Now setting @myError to 52099 when ValidateDelimitedFile returns a result code = 63
 **
 *****************************************************/
 (
@@ -61,8 +62,15 @@ AS
 	Begin
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideProphetResultsFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
-		
-		Set @myError = 52001		
+
+		if @myError = 63
+			-- OpenTextFile was unable to open the file
+			-- We need to set the completion code to 9, meaning we want to retry the load
+			-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+			set @myError = 52099
+		else
+			Set @myError = 52001
+			
 		Goto Done
 	End
 	else

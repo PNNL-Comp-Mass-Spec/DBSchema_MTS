@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[CalculateMonoisotopicMass] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.CalculateMonoisotopicMass
@@ -18,23 +18,22 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 **		@message - '' if successful, otherwise a message about
 **			what went wrong
 **
-**		Auth: mem (modified version of CalculateMonoisotopicMass written by kal)
-**		Date: 03/25/2004
-**
-**		Updated: 03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
-**				 04/14/2005 mem - Ported for use with Peptide DB Schema version 2, synchronizing to the mass calculation SP in the PMT Tag DBs
+**	Auth:	mem (modified version of CalculateMonoisotopicMass written by kal)
+**	Date:	03/25/2004
+**			03/27/2004 mem - Changed logic to store mass of 0 if an unknown symbol is found and it is not a letter
+**			04/14/2005 mem - Ported for use with Peptide DB Schema version 2, synchronizing to the mass calculation SP in the PMT Tag DBs
+**			11/11/2010 mem - Added parameter @VerifyUpdateEnabled		
 **    
 *****************************************************/
-	(
-		@message varchar(255) = '' output,
-		@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all peptides; when 0, only computes if the mass is currently Null
-		@AbortOnUnknownSymbolError tinyint = 0		-- When 1, then aborts calculations if an unknown symbol is found
-	)
+(
+	@message varchar(255) = '' output,
+	@RecomputeAll tinyint = 0,					-- When 1, recomputes masses for all peptides; when 0, only computes if the mass is currently Null
+	@AbortOnUnknownSymbolError tinyint = 0,		-- When 1, then aborts calculations if an unknown symbol is found
+	@VerifyUpdateEnabled tinyint = 1			-- When 1, then calls VerifyUpdateEnabled() to verify that updating is enabled
+)
 AS
 	Set NOCOUNT ON
-
-	Set @message = ''
-
+	
 	Declare @PeptidesProcessedCount int
 	Declare @myRowCount int
 	Declare @myError int
@@ -42,6 +41,16 @@ AS
 	Set @PeptidesProcessedCount = 0
 	Set @myRowCount = 0
 	Set @myError = 0
+
+	--------------------------------------------
+	-- Validate the inputs
+	--------------------------------------------
+	
+	Set @message = ''
+	Set @RecomputeAll = IsNull(@RecomputeAll, 0)
+	Set @AbortOnUnknownSymbolError = IsNull(@AbortOnUnknownSymbolError, 0)
+	Set @VerifyUpdateEnabled = IsNull(@VerifyUpdateEnabled, 1)
+
 
 	Declare @Progress varchar(255)
 	Declare @result int
@@ -77,6 +86,8 @@ AS
 	Declare @totalCountN int
 	Declare @totalCountO int
 	Declare @totalCountS int
+
+	Declare @UpdateEnabled tinyint
 
 	-- tells whether main loop has been completed
 	Declare @continue int
@@ -360,7 +371,7 @@ AS
 		if @modDescription <> ''
 		Begin
 			-- Note: Rather than using Truncate Table after every sequence to clear #TModDescriptors, it is
-			--       more efficient to continually add new modifications to the table as peptides are processed
+			--    more efficient to continually add new modifications to the table as peptides are processed
 			--       and only Truncate the table every 1000 sequences (arbitrary value)
 			-- Continual use of Truncate Table actually slows down this procedure due to drastically increased disk activity
 
@@ -484,6 +495,14 @@ UpdateMass:
 		-- Since mass computation can take awhile, post an entry to T_Log_Entries every 10,000 peptides
 		If @PeptidesProcessedCount % 25000 = 0
 		Begin
+			If @VerifyUpdateEnabled <> 0
+			Begin
+				-- Validate that updating is enabled, abort if not enabled
+				exec VerifyUpdateEnabled @CallingFunctionDescription = 'CalculateMonoisotopicMass', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+				If @UpdateEnabled = 0
+					Goto Done
+			End
+			
 			Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
 			Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
 		End
@@ -491,22 +510,28 @@ UpdateMass:
 		
 	End		--End of main While loop
 
-done:
+Done:
 	DROP INDEX #TModDescriptors.#IX_ModDescriptors_UniqueModID
 	DROP TABLE #TModDescriptors
 
 	DROP INDEX #TMP_AA.#IX_TMP_AA_Symbol
 	DROP TABLE #TMP_AA
 
-	if @myError = 0
-		Execute PostLogEntry 'Error', @message, 'CalculateMonoisotopicMass'
-	else
-	begin
+	If @myError = 0
+	Begin
 		Set @message = 'Monoisotopic mass calculations completed: ' + convert(varchar(11), @PeptidesProcessedCount) + ' sequences processed'
 		Execute PostLogEntry 'Normal', @message, 'CalculateMonoisotopicMass'
-	end
+	End
+	Else
+	Begin
+		If IsNull(@message, '') = ''
+			Set @message = 'Error occurred: ' + Convert(varchar(12), @myError)
+
+		Execute PostLogEntry 'Error', @message, 'CalculateMonoisotopicMass'
+	End
 		
 	RETURN @PeptidesProcessedCount
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CalculateMonoisotopicMass] TO [MTS_DB_Dev] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QCMSMSMetricByJobSN
+CREATE PROCEDURE QCMSMSMetricByJobSN
 /****************************************************
 **
 **	Desc: 
@@ -22,6 +22,7 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobSN
 **	Auth:	mem
 **	Date:	08/29/2005
 **			10/07/2008 mem - Added parameter @PreviewSql
+**			09/22/2010 mem - Added parameter @ResultTypeFilter
 **
 *****************************************************/
 (
@@ -45,6 +46,7 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobSN
 	@UseNaturalLog tinyint = 1,
 	@SeqIDList varchar(7000),						-- Required: Comma separated list of Seq_ID values to match
 	@MeanSquareError float = 0 output,
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
 	@PreviewSql tinyint = 0
 )
 As
@@ -66,7 +68,7 @@ As
 											@DatasetDateMinimum, @DatasetDateMaximum, @JobMinimum, @JobMaximum,
 											@maximumRowCount, @MetricID = 1, @UseNaturalLog = @UseNaturalLog,
 											@SeqIDList = @SeqIDList, @MeanSquareError = @MeanSquareError output,
-											@PreviewSql = @PreviewSql
+											@ResultTypeFilter = @ResultTypeFilter, @PreviewSql = @PreviewSql
 	--
 	Declare @UsageMessage varchar(512)
 	Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
@@ -75,7 +77,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobSN] TO [DMS_SP_User] AS [dbo]

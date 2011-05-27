@@ -3,12 +3,17 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE QCMSMSJobsTablePopulate
+
+CREATE PROCEDURE QCMSMSJobsTablePopulate
 /****************************************************
 **
 **	Desc: 
-**	Populates a temporary table with the jobs matching the given job filters in the specified database
-**	The calling procedure must have already created the temporary table (#TmpQCJobList)
+**		Populates a temporary table with the jobs matching the given job filters in the specified database
+**		The calling procedure must have already created the temporary table (#TmpQCJobList)
+**
+**			CREATE TABLE #TmpQCJobList (
+**				Job int NOT NULL 
+**			)
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -22,6 +27,9 @@ create PROCEDURE QCMSMSJobsTablePopulate
 **			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **			06/21/2006 mem - Added support for Protein_Collection_List
 **							 Now auto-adding % sign wildcards to the beginning and end of @CampaignFilter, @CampaignFilter, @ExperimentFilter, and @OrganismDBFilter (provided they don't already contain a % sign)
+**			10/07/2008 mem - Now returning jobs in state 3=Load Failed (since that state is used for jobs that were loaded, but had no filter-passing results)
+**			09/22/2010 mem - Added parameters @ResultTypeFilter and @PreviewSql
+**			10/06/2010 mem - Replaced '..' with '.dbo.'
 **
 *****************************************************/
 (
@@ -40,7 +48,9 @@ create PROCEDURE QCMSMSJobsTablePopulate
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@maximumJobCount int = 0						-- 0 means to return all rows
+	@maximumJobCount int = 0,						-- 0 means to return all rows
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -63,6 +73,8 @@ As
 	Set @DatasetFilter = IsNull(@DatasetFilter, '')
 	Set @OrganismDBFilter = IsNull(@OrganismDBFilter, '')
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
+	Set @previewSql = IsNull(@previewSql, 0)
 
 	---------------------------------------------------
 	-- Auto add percent signs (wildcards) to the filter names
@@ -160,9 +172,10 @@ As
 		Set @sqlFromA = @sqlFromA + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE..T_Analysis_Description JobTable'
-		Set @sqlFromA = @sqlFromA +  ' WHERE  JobTable.ResultType = ''Peptide_Hit'''
-		Set @sqlFromA = @sqlFromA +     ' AND JobTable.State <> 5'				-- Exclude jobs marked as 'No Interest' in PMT Tag DBs
+		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
+		Set @sqlFromA = @sqlFromA +  ' WHERE JobTable.State <> 5 '				-- Exclude jobs marked as 'No Interest' in PMT Tag DBs
+		If @ResultTypeFilter <> ''
+			Set @sqlFromA = @sqlFromA +  ' AND JobTable.ResultType = ''' + @ResultTypeFilter + ''''
 
 		-- Add the optional dataset range filters
 		If Len(@DatasetDateMinimum) > 0
@@ -185,11 +198,12 @@ As
 		-- Peptide DB
 		Set @sqlFromA = @sqlFromA + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE..T_Analysis_Description JobTable'
-		Set @sqlFromA = @sqlFromA +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-		Set @sqlFromA = @sqlFromA +  ' WHERE  JobTable.ResultType = ''Peptide_Hit'''
-		Set @sqlFromA = @sqlFromA +     ' AND JobTable.Process_State = 70'				-- Only include jobs with state 70 in Peptide DBs
+		Set @sqlFromA = @sqlFromA +    ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
+		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
+		Set @sqlFromA = @sqlFromA +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		Set @sqlFromA = @sqlFromA +  ' WHERE JobTable.Process_State IN (3, 70)'				-- Include jobs with state 70 in Peptide DBs; also include jobs with state 3 so that we return counts of "0" for jobs with no filter-passing results
+		If @ResultTypeFilter <> ''
+			Set @sqlFromA = @sqlFromA +  ' AND JobTable.ResultType = ''' + @ResultTypeFilter + ''''
 
 		-- Add the optional dataset range filters
 		If Len(@DatasetDateMinimum) > 0
@@ -229,7 +243,7 @@ As
 	-- Customize the columns for the given database
 	---------------------------------------------------
 
-	set @sqlFromA = replace(@sqlFromA, 'DATABASE..', '[' + @DBName + ']..')
+	set @sqlFromA = replace(@sqlFromA, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
 
 
 	---------------------------------------------------
@@ -286,8 +300,10 @@ As
 	-- Populate #TmpQCJobList with the list of jobs
 	---------------------------------------------------
 	
-	--print	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy
-	Exec (	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
+	if @PreviewSql <> 0
+		print	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy
+	else
+		Exec (	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	

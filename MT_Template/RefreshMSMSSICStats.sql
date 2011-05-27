@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSSICStats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure RefreshMSMSSICStats
+CREATE Procedure dbo.RefreshMSMSSICStats
 /****************************************************
 **
 **	Desc: 
@@ -24,6 +24,7 @@ CREATE Procedure RefreshMSMSSICStats
 **						   - Increased size of @peptideDBName from 64 to 128 characters
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
+**			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
 **    
 *****************************************************/
 (
@@ -327,7 +328,7 @@ As
 		-- Make sure the MSMS Processing will occur on the next master update
 		UPDATE T_Process_Step_Control
 		Set Enabled = 1
-		WHERE Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate'
+		WHERE Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
@@ -363,6 +364,7 @@ Done:
 	DROP TABLE #T_Tmp_JobsToRefreshSICStats
 		
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSSICStats] TO [MTS_DB_Dev] AS [dbo]

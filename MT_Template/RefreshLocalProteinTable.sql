@@ -31,6 +31,10 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **			03/10/2009 mem - Added output parameters @ProteinCountAdded and @ProteinCountUpdated
 **						   - Now logging the number of proteins added and/or updated
 **			10/30/2009 mem - Now properly updating @ProteinCountUpdated when using the Protein Sequences DB
+**			07/10/2010 mem - Split apart the query to populate #T_Tmp_Protein_Sequence_Updates to occur in two parts; first obtaining the protein names to update, then obtaining their corresponding sequences
+**						   - Switched to using a common table expression (CTE) when querying MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
+**			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_Info
+**			02/17/2011 mem - Now posting a log entry before adding new proteins to T_Proteins
 **    
 *****************************************************/
 (
@@ -76,7 +80,6 @@ As
 	
 	Declare @ProteinDBIDListCount int
 	Declare @ProteinDBIDList varchar(256)
-
 
 	---------------------------------------------------
 	-- Validate the input parameters
@@ -144,6 +147,12 @@ As
 			Protein_Sequence text NULL,
 			Residue_Count int NULL
 		)
+		
+		CREATE TABLE #T_Tmp_Proteins_ToUpdate (
+			Protein_Name varchar(128)
+		)
+		
+		CREATE UNIQUE CLUSTERED INDEX IX_Tmp_Proteins_ToUpdate ON #T_Tmp_Proteins_ToUpdate (Protein_Name)
 
 
 		---------------------------------------------------
@@ -214,14 +223,14 @@ As
 	
 		---------------------------------------------------
 		-- Update Protein_Collection_ID in #T_Tmp_Protein_Collection_List
-		--  using MT_Main.dbo.V_DMS_Protein_Collection_List_Import
+		--  using MT_Main.dbo.T_DMS_Protein_Collection_Info
 		---------------------------------------------------
 		--
 		UPDATE #T_Tmp_Protein_Collection_List
-		Set Protein_Collection_ID = PCLI.Protein_Collection_ID
+		Set Protein_Collection_ID = PCI.Protein_Collection_ID
 		FROM #T_Tmp_Protein_Collection_List PC INNER JOIN
-			 MT_Main.dbo.V_DMS_Protein_Collection_List_Import PCLI ON
-			 PC.Protein_Collection_Name = PCLI.[Name]
+			 MT_Main.dbo.T_DMS_Protein_Collection_Info PCI ON
+			 PC.Protein_Collection_Name = PCI.[Name]
 		WHERE PC.Protein_Collection_ID IS NULL
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -236,10 +245,10 @@ As
 		--
 		INSERT INTO #T_Tmp_Protein_Collection_List (Protein_Collection_Name, Protein_Collection_ID, Import_All_Proteins)
 		SELECT SourceQ.[Name], SourceQ.Protein_Collection_ID, 0 AS Import_All_Proteins
-		FROM (	SELECT DISTINCT PCLI.[Name], T_Proteins.Protein_Collection_ID
+		FROM (	SELECT DISTINCT PCI.[Name], T_Proteins.Protein_Collection_ID
 				FROM T_Proteins INNER JOIN 
-					 MT_Main.dbo.V_DMS_Protein_Collection_List_Import PCLI ON 
-					 T_Proteins.Protein_Collection_ID = PCLI.Protein_Collection_ID
+					 MT_Main.dbo.T_DMS_Protein_Collection_Info PCI ON 
+					 T_Proteins.Protein_Collection_ID = PCI.Protein_Collection_ID
 				WHERE NOT (T_Proteins.Protein_Collection_ID IS NULL)
 			 ) SourceQ LEFT OUTER JOIN #T_Tmp_Protein_Collection_List Target ON
 			   SourceQ.Protein_Collection_ID = Target.Protein_Collection_ID
@@ -331,6 +340,7 @@ As
 					If @importAllProteins <> 0 And @AllowImportAllProteins <> 0
 					Begin -- <e1>
 						If @infoOnly <> 0
+						Begin
 							-- Preview missing proteins from Protein_Collection_ID @CurrentID
 							SELECT SourceQ.*
 							FROM (	SELECT  Protein_Name, Description, Protein_Sequence, Residue_Count, 
@@ -341,7 +351,14 @@ As
 								) SourceQ LEFT OUTER JOIN
 								T_Proteins ON SourceQ.Protein_Name = T_Proteins.Reference
 							WHERE T_Proteins.Reference IS NULL
+						End
 						Else
+						Begin
+							-- The following query  can take a while; post an "in progress" log message
+							Set @message = 'Adding proteins for ' + @ProteinCollectionDescription							
+							execute PostLogEntry 'Progress', @message, 'RefreshLocalProteinTable'
+							set @message = ''
+							
 							-- Insert missing proteins from Protein_Collection_ID @CurrentID
 							INSERT INTO T_Proteins (Reference, Description, Protein_Sequence, 
 													Protein_Residue_Count, Monoisotopic_Mass, 
@@ -356,7 +373,7 @@ As
 								) SourceQ LEFT OUTER JOIN
 								T_Proteins ON SourceQ.Protein_Name = T_Proteins.Reference
 							WHERE T_Proteins.Reference IS NULL
-
+						End
 						--
 						SELECT @myError = @result, @myRowcount = @@rowcount
 						--
@@ -446,33 +463,62 @@ As
 						--  that currently have null protein sequences, then update them below
 						-- However, we won't update them right away since we want to link on Protein_ID
 						--  and that might currently be Null in T_Proteins
+						--
 						---------------------------------------------------
 						--
+						TRUNCATE TABLE #T_Tmp_Proteins_ToUpdate
 						TRUNCATE TABLE #T_Tmp_Protein_Sequence_Updates
 						--
-						INSERT INTO #T_Tmp_Protein_Sequence_Updates (Protein_ID, Protein_Sequence, Residue_Count)
-						SELECT Protein_ID, Protein_Sequence, Residue_Count
-						FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
-						WHERE Protein_Collection_ID = @CurrentID AND 
-							  Protein_Name IN (	SELECT Reference
-												FROM T_Proteins
-												WHERE ISNULL(T_Proteins.Protein_DB_ID, 0) = 0 AND 
-													  ISNULL(T_Proteins.Protein_Collection_ID, @CurrentID) = @CurrentID AND 
-													  Protein_Sequence IS NULL)
+						---------------------------------------------------
+						-- July 2010 note: Stored Procedure execution was observed to come to a crawl at this point
+						-- It turned out the problem was fragmented indices in the Protein_Sequences database
+						-- To fix, run stored procedure ReindexDatabase in Protein_Sequences on the ProteinSeqs server
+						---------------------------------------------------
+						--
+						INSERT INTO #T_Tmp_Proteins_ToUpdate( Protein_Name )
+						SELECT DISTINCT Reference
+						FROM T_Proteins
+						WHERE ISNULL(T_Proteins.Protein_DB_ID, 0) = 0 AND
+						      ISNULL(T_Proteins.Protein_Collection_ID, @CurrentID) = @CurrentID AND
+						      Protein_Sequence IS NULL
 						--
 						SELECT @myError = @result, @myRowcount = @@rowcount
-						--
-						If @myRowCount > 0
-							Set @ProteinSequenceUpdateRequired = 1
-						Else
-							Set @ProteinSequenceUpdateRequired = 0
-						--
-						If @myError <> 0
-						Begin
-							Set @message = 'Error obtaining protein sequences to update for ' + @ProteinCollectionDescription
-							goto Done
-						End
 
+						If @myRowCount = 0
+							Set @ProteinSequenceUpdateRequired = 0
+						Else
+						Begin
+							-- execute PostLogEntry 'Debug', 'Populating #T_Tmp_Protein_Sequence_Updates', 'RefreshLocalProteinTable'
+
+							INSERT INTO #T_Tmp_Protein_Sequence_Updates( Protein_ID,
+																		Protein_Sequence,
+																		Residue_Count )
+							SELECT PCM.Protein_ID,
+								PCM.Protein_Sequence,
+								PCM.Residue_Count
+							FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import PCM
+								INNER JOIN #T_Tmp_Proteins_ToUpdate Prot
+								ON PCM.Protein_Name = Prot.Protein_Name
+							WHERE PCM.Protein_Collection_ID = @CurrentID
+							--
+							SELECT @myError = @result, @myRowcount = @@rowcount
+							--
+							If @myRowCount > 0
+								Set @ProteinSequenceUpdateRequired = 1
+							Else
+								Set @ProteinSequenceUpdateRequired = 0
+							--
+							If @myError <> 0
+							Begin
+								Set @message = 'Error obtaining protein sequences to update for ' + @ProteinCollectionDescription
+								goto Done
+							End
+							
+							--set @message = '#T_Tmp_Protein_Sequence_Updates contains ' + Convert(varchar(12), @myRowcount) + ' rows'
+							--execute PostLogEntry 'Debug', @message , 'RefreshLocalProteinTable'
+							--set @message = ''
+						End
+						
 						---------------------------------------------------
 						-- Now update the other fields as needed
 						-- Note: We cannot update Protein_Sequence here because
@@ -483,22 +529,39 @@ As
 						--    Internal SQL Server error.
 						---------------------------------------------------
 						--
+						---------------------------------------------------
+						-- July 2010 note: Stored Procedure execution was observed to come to a crawl at this point
+						--   It turned out the problem was fragmented indices in the Protein_Sequences database
+						--   To fix, run stored procedure ReindexDatabase in Protein_Sequences on the ProteinSeqs server
+						--
+						-- To mitigate this from recurring, Sql Server is now configured to auto-run the ReindexDatabase
+						--   stored procedure every two months
+						---------------------------------------------------
+						--
+						SET @myError = 0;
+						
+						WITH SourceQ ( Protein_Name, Description, Residue_Count, Monoisotopic_Mass, Reference_ID, Protein_ID )
+						AS(	SELECT Protein_Name,
+							       Description,
+							       Residue_Count,
+							       Monoisotopic_Mass,
+							       Reference_ID,
+							       Protein_ID
+						    FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
+							WHERE Protein_Collection_ID = @CurrentID 
+						  )
 						UPDATE T_Proteins
 						SET Description = Left(SourceQ.Description, 7500),
-							Protein_Residue_Count = SourceQ.Residue_Count,
-							Monoisotopic_Mass = SourceQ.Monoisotopic_Mass, 
-							Protein_DB_ID = 0, 
-							External_Reference_ID = SourceQ.Reference_ID, 
-							External_Protein_ID = SourceQ.Protein_ID, 
-							Protein_Collection_ID = @CurrentID,
-							Last_Affected = GetDate()
-						FROM (	SELECT  Protein_Name, Description, Residue_Count, 
-										Monoisotopic_Mass, 
-										Reference_ID, Protein_ID
-								FROM MT_Main.dbo.V_DMS_Protein_Collection_Members_Import 
-								WHERE Protein_Collection_ID = @CurrentID
-							) SourceQ INNER JOIN
-							T_Proteins ON SourceQ.Protein_Name = T_Proteins.Reference
+						    Protein_Residue_Count = SourceQ.Residue_Count,
+						    Monoisotopic_Mass = SourceQ.Monoisotopic_Mass,
+						    Protein_DB_ID = 0,
+						    External_Reference_ID = SourceQ.Reference_ID,
+						    External_Protein_ID = SourceQ.Protein_ID,
+						    Protein_Collection_ID = @CurrentID,
+						    Last_Affected = GetDate()
+						FROM SourceQ
+						     INNER JOIN T_Proteins
+						       ON SourceQ.Protein_Name = T_Proteins.Reference
 						WHERE ISNULL(T_Proteins.Protein_DB_ID, 0) = 0 AND 
 							  ISNULL(T_Proteins.Protein_Collection_ID, @CurrentID) = @CurrentID AND
 							  (IsNull(T_Proteins.Description,'') <> Left(SourceQ.Description, 7500) OR 
@@ -509,7 +572,7 @@ As
 							   T_Proteins.External_Protein_ID IS NULL OR
 							   T_Proteins.Protein_Collection_ID IS NULL OR
 							   T_Proteins.External_Protein_ID IN (SELECT DISTINCT Protein_ID FROM #T_Tmp_Protein_Sequence_Updates)
-							  )
+							  ) ;
 						--
 						SELECT @myError = @result, @myRowcount = @@rowcount
 						--

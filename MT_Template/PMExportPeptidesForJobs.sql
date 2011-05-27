@@ -19,6 +19,8 @@ CREATE Procedure PMExportPeptidesForJobs
 **	Date:	10/29/2009 mem - Initial Version (with most of the code coming from GetPeptidesAndSICStats)
 **			11/11/2009 mem - Added parameter @ReturnJobInfoTable
 **							 Now returning columns Peptide_ID and RankXC
+**			07/13/2010 mem - Now returning dataset acquisition length
+**			01/28/2011 mem - Added parameter @MSGFThreshold and now returning MSGF_SpecProb
 **
 ****************************************************/
 (
@@ -26,6 +28,7 @@ CREATE Procedure PMExportPeptidesForJobs
 	@LookupDefaults tinyint = 0,					-- If non-zero, then lookup default filter values using T_Peak_Matching_Defaults
 	@MinimumDiscriminantScore real = 0,				-- The minimumDiscriminant_Score to allow; 0 to allow all
 	@MinimumPeptideProphetProbability real = 0.5,	-- The minimum Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MSGFThreshold real = 1,						-- If less than 1, then will filter the results using MSGF (for example, using 1E-9)
 	@MinimumPMTQualityScore real = 0,				-- The minimum PMT_Quality_Score to allow; 0 to allow all
 	@MinimumCleavageState smallint = 0,				-- The minimum Cleavage_State to allow; 0 to allow all
 
@@ -97,6 +100,7 @@ AS
 		Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 		Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
 		Set @MinimumCleavageState = IsNull(@MinimumCleavageState, 2)
+		Set @MSGFThreshold = IsNull(@MSGFThreshold, 1)
 
 		Set @GroupByPeptide = IsNull(@GroupByPeptide, 1)
 		Set @GroupByChargeState = IsNull(@GroupByChargeState, 0)
@@ -328,6 +332,7 @@ AS
 			Charge_State smallint NULL,
 			Discriminant real NULL ,
 			Peptide_Prophet_Prob real NULL ,
+			MSGF_SpecProb real NULL ,
 			Elution_Time real NULL ,			-- Scan_Time_Peak_Apex
 			Peak_SN real NULL ,					-- Peak_SN_Ratio
 			Peak_Area float NULL ,				-- Peak_Area
@@ -354,6 +359,7 @@ AS
 
 			Discriminant real NULL ,
 			Peptide_Prophet_Prob real NULL ,
+			MSGF_SpecProb real NULL ,
 
 			Elution_Time real NULL ,		-- Scan_Time_Peak_Apex
 			Peak_SN real NULL ,				-- Peak_SN_Ratio
@@ -443,7 +449,7 @@ AS
 			If @Iteration = 3
 				Set @S = @S +   ' XCorr, MQScore, TotalPRMScore, FScore, DeltaCn2, RankXC, '
 
-			Set @S = @S +   ' Charge_State, Discriminant, Peptide_Prophet_Prob, Elution_Time, Peak_SN, Peak_Area)'
+			Set @S = @S +   ' Charge_State, Discriminant, Peptide_Prophet_Prob, MSGF_SpecProb, Elution_Time, Peak_SN, Peak_Area)'
 			Set @S = @S + ' SELECT Pep.Analysis_ID as Job, Pep.Peptide_ID, Pep.Scan_Number, MT.Cleavage_State_Max, '
 			Set @S = @S +        ' Pep.Mass_Tag_ID, Pep.Peptide, MT.Monoisotopic_Mass, '
 			If @Iteration = 1
@@ -454,6 +460,7 @@ AS
 				Set @S = @S +    ' I.Normalized_Score, I.MQScore, I.TotalPRMScore, I.FScore, I.DeltaScore, RankFScore AS RankXC, '
 
 			Set @S = @S +        ' Pep.Charge_State, SD.DiscriminantScoreNorm, SD.Peptide_Prophet_Probability, '
+			Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb, '
 			Set @S = @S +        ' Pep.Scan_Time_Peak_Apex, Pep.Peak_SN_Ratio, Pep.Peak_Area '
 			Set @S = @S + ' FROM T_Peptides Pep INNER JOIN '
 			Set @S = @S +      ' #TmpJobsCurrentBatch B On Pep.Analysis_ID = B.Job INNER JOIN '
@@ -475,8 +482,12 @@ AS
 			If @MinimumDiscriminantScore > 0
 				Set @S = @S +   ' SD.DiscriminantScoreNorm >= @MinimumDiscriminantScore AND '
 
-			If @MinimumPeptideProphetProbability > 0
-				Set @S = @S +   ' SD.Peptide_Prophet_Probability >= @MinimumPeptideProphetProbability AND '
+			-- Note: Do not filter X!Tandem data on Peptide Prophet 
+			If @Iteration <> 2 And @MinimumPeptideProphetProbability > 0
+				Set @S = @S +   ' IsNull(SD.Peptide_Prophet_Probability, 0) >= @MinimumPeptideProphetProbability AND '
+
+			If @MSGFThreshold < 1
+				Set @S = @S +   ' IsNull(SD.MSGF_SpecProb, 1) <= @MSGFThreshold AND '
 			
 			If @MinimumPMTQualityScore > 0
 				Set @S = @S +   ' MT.PMT_Quality_Score >= @MinimumPMTQualityScore AND '
@@ -558,7 +569,7 @@ AS
 				Set @S = @S +   ' MQScore, TotalPRMScore, FScore,'
 
 			Set @S = @S +   ' DeltaCn2, RankXC, Charge_State,'
-			Set @S = @S +   ' Discriminant, Peptide_Prophet_Prob,'
+			Set @S = @S +   ' Discriminant, Peptide_Prophet_Prob, MSGF_SpecProb,'
 			Set @S = @S +   ' Elution_Time, Peak_SN, Peak_Area, Spectra_Count'
 
 			If @Iteration = 1
@@ -572,7 +583,7 @@ AS
 		End -- </a1>
 		
 		-- Params string for sp_ExecuteSql
-		Set @Params = '@MinimumCleavageState tinyint, @MinimumDiscriminantScore real, @MinimumPeptideProphetProbability real, @MinimumPMTQualityScore real, @MinDelCn2 real, @MinXCorrFullyTrypticCharge1 real, @MinXCorrFullyTrypticCharge2 real, @MinXCorrFullyTrypticCharge3 real, @MinXCorrPartiallyTrypticCharge1 real, @MinXCorrPartiallyTrypticCharge2 real, @MinXCorrPartiallyTrypticCharge3 real'
+		Set @Params = '@MinimumCleavageState tinyint, @MinimumDiscriminantScore real, @MinimumPeptideProphetProbability real, @MSGFThreshold real, @MinimumPMTQualityScore real, @MinDelCn2 real, @MinXCorrFullyTrypticCharge1 real, @MinXCorrFullyTrypticCharge2 real, @MinXCorrFullyTrypticCharge3 real, @MinXCorrPartiallyTrypticCharge1 real, @MinXCorrPartiallyTrypticCharge2 real, @MinXCorrPartiallyTrypticCharge3 real'
 				
 		--------------------------------------------------------------
 		-- Obtain the data for each job in #TmpJobList and place in #TmpPeptideStats_Results
@@ -700,7 +711,7 @@ AS
 						if @PreviewSql <> 0
 							Print @InsertSqlPeptideHit
 						else
-							exec sp_ExecuteSql @InsertSqlPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
+							exec sp_ExecuteSql @InsertSqlPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MSGFThreshold, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
 						--
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 					End
@@ -710,7 +721,7 @@ AS
 						if @PreviewSql <> 0
 							Print @InsertSqlXTPeptideHit
 						else
-							exec sp_ExecuteSql @InsertSqlXTPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
+							exec sp_ExecuteSql @InsertSqlXTPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MSGFThreshold, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
 						--
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 					End
@@ -720,7 +731,7 @@ AS
 						if @PreviewSql <> 0
 							Print @InsertSqlInsPeptideHit
 						else
-							exec sp_ExecuteSql @InsertSqlInsPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
+							exec sp_ExecuteSql @InsertSqlInsPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MSGFThreshold, @MinimumPMTQualityScore, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
 						--
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 					End
@@ -732,6 +743,7 @@ AS
 								@MinimumCleavageState AS CleavageStateMinimum,
 								@MinimumDiscriminantScore AS MinimumDiscriminantScore,
 								@MinimumPeptideProphetProbability AS MinimumPeptideProphetProbability,
+								@MSGFThreshold AS MSGF_Threshold,
 								@MinimumPMTQualityScore AS MinimumPMTQualityScore,
 								@MinDelCn2 As MinDeltaCN, 
 								@MinXCorrFullyTrypticCharge1 as MinXCorrCharge1, 
@@ -844,7 +856,7 @@ AS
 							Set @S = @S + ' S.MQScore, S.TotalPRMScore, S.FScore,'
 
 						Set @S = @S +   ' S.DeltaCn2, S.RankXC, S.Charge_State,'
-						Set @S = @S +   ' S.Discriminant, S.Peptide_Prophet_Prob,'
+						Set @S = @S +   ' S.Discriminant, S.Peptide_Prophet_Prob, S.MSGF_SpecProb, '
 						Set @S = @S +   ' S.Elution_Time, S.Peak_SN, S.Peak_Area, 1 AS Spectra_Count'
 						
 						Set @S = @S + ' FROM #TmpPeptideStats S '
@@ -946,11 +958,13 @@ AS
 							Set @S = ''
 							Set @S = @S + ' UPDATE #TmpPeptideStats_Results'
 							Set @S = @S + ' SET Discriminant = MaxValuesQ.Discriminant,'
-							Set @S = @S +   ' Peptide_Prophet_Prob = MaxValuesQ.Peptide_Prophet_Prob'
+							Set @S = @S +   ' Peptide_Prophet_Prob = MaxValuesQ.Peptide_Prophet_Prob,'
+							Set @S = @S +   ' MSGF_SpecProb = MaxValuesQ.MSGF_SpecProb'
 							Set @S = @S + ' FROM #TmpPeptideStats_Results Target INNER JOIN'
 							Set @S = @S + ' ( SELECT Job, Mass_Tag_ID,'
 							Set @S = @S +          ' MAX(Discriminant) AS Discriminant,'
-							Set @S = @S +          ' MAX(Peptide_Prophet_Prob) AS Peptide_Prophet_Prob'
+							Set @S = @S +          ' MAX(Peptide_Prophet_Prob) AS Peptide_Prophet_Prob,'
+							Set @S = @S +          ' MAX(MSGF_SpecProb) AS MSGF_SpecProb'
 							If @GroupByChargeState <> 0
 								Set @S = @S +    ', Charge_State'
 							Set @S = @S +   ' FROM #TmpPeptideStats'
@@ -1104,6 +1118,7 @@ AS
 					Dataset_Created_DMS, 
 					Dataset_Acq_Time_Start, 
 					Dataset_Acq_Time_End, 
+					Dataset_Acq_Length,
 					Dataset_Scan_Count, 
 					Experiment, Campaign, Experiment_Organism, 
 					Instrument_Class, Instrument, Analysis_Tool, 

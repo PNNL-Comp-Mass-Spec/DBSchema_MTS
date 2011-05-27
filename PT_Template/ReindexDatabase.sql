@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.ReindexDatabase
 **	Date:	10/11/2007
 **			10/30/2007 mem - Now calling VerifyUpdateEnabled
 **			10/09/2008 mem - Added T_Score_Inspect
+**			01/13/2011 mem - Now calling PostLogEntry after re-indexing each table
 **    
 *****************************************************/
 (
@@ -38,6 +39,8 @@ As
 	declare @UpdateEnabled tinyint
 	
 	Set @message = ''
+
+	Exec PostLogEntry 'Debug', 'Reindexing tables', 'ReindexDatabase'
 	
 	-----------------------------------------------------------
 	-- Reindex the data tables
@@ -48,6 +51,8 @@ As
 	DBCC DBREINDEX (T_Datasets, '', 90)
 	Set @TableCount = @TableCount + 1
 
+	Exec PostLogEntry 'Debug', ' ... T_Analysis_Description and T_Datasets', 'ReindexDatabase'
+
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
@@ -55,6 +60,7 @@ As
 	
 	DBCC DBREINDEX (T_Peptides, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Peptides', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -63,6 +69,7 @@ As
 	
 	DBCC DBREINDEX (T_Sequence, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Sequence', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -71,6 +78,7 @@ As
 	
 	DBCC DBREINDEX (T_Score_Sequest, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Score_Sequest', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -79,6 +87,7 @@ As
 	
 	DBCC DBREINDEX (T_Score_XTandem, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Score_XTandem', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -87,6 +96,7 @@ As
 
 	DBCC DBREINDEX (T_Score_Inspect, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Score_Inspect', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -95,6 +105,7 @@ As
 	
 	DBCC DBREINDEX (T_Score_Discriminant, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Score_Discriminant', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -103,6 +114,7 @@ As
 	
 	DBCC DBREINDEX (T_Proteins, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Proteins', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -111,7 +123,8 @@ As
 	
 	DBCC DBREINDEX (T_Peptide_to_Protein_Map, '', 90)
 	Set @TableCount = @TableCount + 1
-
+	Exec PostLogEntry 'Debug', ' ... T_Peptide_to_Protein_Map', 'ReindexDatabase'
+	
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
@@ -119,6 +132,7 @@ As
 	
 	DBCC DBREINDEX (T_Dataset_Stats_Scans, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Dataset_Stats_Scans', 'ReindexDatabase'
 
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
@@ -127,6 +141,7 @@ As
 	
 	DBCC DBREINDEX (T_Dataset_Stats_SIC, '', 90)
 	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Dataset_Stats_SIC', 'ReindexDatabase'
 	
 	-----------------------------------------------------------
 	-- Log the reindex

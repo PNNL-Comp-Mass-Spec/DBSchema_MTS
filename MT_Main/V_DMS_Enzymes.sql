@@ -3,9 +3,14 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW dbo.V_DMS_Enzymes
+
+CREATE VIEW [dbo].[V_DMS_Enzymes]
 AS
-SELECT T1.*
-FROM GIGASAX.DMS5.dbo.T_Enzymes T1
+SELECT Enzyme_ID,
+       Enzyme_Name,
+       Description,
+       Protein_Collection_Name
+FROM dbo.T_DMS_Enzymes_Cached
+
 
 GO

@@ -44,6 +44,8 @@ CREATE Procedure dbo.ComputePMTQualityScore
 **			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			07/22/2009 mem - Added support for Inspect_PValue filtering
 **						   - Added parameters @PopulatePMTQSJobUsage, @DebugMode, and, @PeptideIDMax
+**			11/12/2010 klc - Added support for MSGF_SpecProb filtering
+**			12/04/2010 mem - Now displaying additional MT count info in the status message
 **
 ****************************************************/
 (
@@ -71,8 +73,11 @@ As
 			@FilterSetInstrumentClassFilter varchar(128),
 			@FilterSetInfoID int
 
-	Declare @MassTagCountNonZero int,
-			@MassTagCountZero int,
+	Declare @MassTagCountNonZero int = 0,
+			@MassTagCountZero int = 0,
+			@MassTagCount1 int = 0,
+			@MassTagCount2 int = 0,
+			@MassTagCount3 int = 0,			
 			@UniqueRowID int,
 			@Continue int,
 			@TestThresholds int
@@ -204,7 +209,8 @@ As
 			[FScore_Max] [real] NOT NULL,				-- Only used for Inspect data
 			[PValue_Min] [real] NOT NULL,				-- Only used for Inspect data
 			[Discriminant_Score_Max] [float] NOT NULL,
-			[Peptide_Prophet_Max] [float] NOT NULL
+			[Peptide_Prophet_Max] [float] NOT NULL,
+			[MSGF_SpecProb_Min] [float] NOT NULL			-- Used for Sequest, X!Tandem, or Inspect results
 		) ON [PRIMARY]
 		
 		CREATE UNIQUE INDEX #IX_PeptideStats ON #PeptideStats (Mass_Tag_ID, Charge_State)
@@ -314,7 +320,9 @@ As
 			@InspectFScoreComparison varchar(2),			-- Only used for Inspect results
 			@InspectFScoreThreshold real,
 			@InspectPValueComparison varchar(2),			-- Only used for Inspect results
-			@InspectPValueThreshold real
+			@InspectPValueThreshold real,
+			@MSGFSpecProbComparison varchar(2),				-- Used for Sequest, X!Tandem, or Inspect results
+			@MSGFSpecProbThreshold real
 
 	-----------------------------------------------------------
 	-- The following hold the DeltaCn thresholds last used to populate #PeptideStats
@@ -501,7 +509,8 @@ As
 											@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
 											@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
 											@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
-											@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT
+											@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
+											@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT
 
 						If @myError <> 0
 						Begin
@@ -599,7 +608,7 @@ As
 								Set @S = @S +   ' NETDifferenceAbsolute, ProteinCount, MaxCleavageState, MaxTerminusState,'
 								Set @S = @S +   ' ObservationCount, Charge_State, XCorr_Max, Hyperscore_Max, Log_EValue_Min,'
 								Set @S = @S +   ' MQScore_Max, TotalPRMScore_Max, FScore_Max, PValue_Min,'
-								Set @S = @S +   ' Discriminant_Score_Max, Peptide_Prophet_Max'
+								Set @S = @S +   ' Discriminant_Score_Max, Peptide_Prophet_Max, MSGF_SpecProb_Min'
 								Set @S = @S + ' )'
 								Set @S = @S + ' SELECT	MT.Mass_Tag_ID, '
 								Set @S = @S +   ' LEN(MT.Peptide) AS PeptideLength,'
@@ -618,7 +627,8 @@ As
 								Set @S = @S +   ' MAX(StatsQ.FScore_Max) AS FScore_Max,'
 								Set @S = @S +   ' MIN(StatsQ.PValue_Min) AS PValue_Min,'
 								Set @S = @S +   ' MAX(StatsQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
-								Set @S = @S +   ' MAX(StatsQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
+								Set @S = @S +   ' MAX(StatsQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
+								Set @S = @S +   ' MIN(StatsQ.MSGF_SpecProb) AS MSGF_SpecProb'
 								Set @S = @S + ' FROM ('
 								Set @S = @S +    ' SELECT Mass_Tag_ID,'
 								Set @S = @S +      ' Charge_State,'
@@ -630,7 +640,8 @@ As
 								Set @S = @S +      ' MAX(SubQ.FScore_Max) AS FScore_Max,'
 								Set @S = @S +      ' MAX(SubQ.PValue_Min) AS PValue_Min,'								
 								Set @S = @S +      ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
-								Set @S = @S +      ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max'
+								Set @S = @S +      ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
+								Set @S = @S +      ' MIN(SubQ.MSGF_SpecProb) AS MSGF_SpecProb'
 								Set @S = @S +  ' FROM ('
 								Set @S = @S +          ' SELECT P.Mass_Tag_ID,'
 								Set @S = @S +            ' P.Scan_Number,'
@@ -647,7 +658,8 @@ As
 									Set @S = @S +        ' 0 AS FScore_Max,'
 									Set @S = @S +        ' 0 AS PValue_Min,'
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
-									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
+									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
+									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
 									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
@@ -668,7 +680,8 @@ As
 									Set @S = @S +        ' 0 AS FScore_Max,'
 									Set @S = @S +        ' 0 AS PValue_Min,'
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
-									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
+									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
+									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
 									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
@@ -679,7 +692,7 @@ As
 								If @ResultType = 'IN_Peptide_Hit'
 								Begin -- <h3>
 									-- Inspect
-									Set @S = @S +        ' 0 AS XCorr_Max,'
+									Set @S = @S +     ' 0 AS XCorr_Max,'
 									Set @S = @S +        ' 0 AS Hyperscore_Max,'
 									Set @S = @S +        ' 0 AS Log_EValue_Min,'
 									Set @S = @S +        ' MAX(IsNull(I.MQScore, 0)) AS MQScore_Max,'
@@ -687,7 +700,8 @@ As
 									Set @S = @S +        ' MAX(IsNull(I.FScore, 0)) AS FScore_Max,'
 									Set @S = @S +        ' MIN(IsNull(I.PValue, 1)) AS PValue_Min,'
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
-									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max'
+									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
+									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
 									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Inspect AS I ON P.Peptide_ID = I.Peptide_ID'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
@@ -801,10 +815,11 @@ As
 							Set @S = @S +          ' MaxTerminusState ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
 							Set @S = @S +		   ' PeptideLength ' + @PeptideLengthComparison +    Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
 							Set @S = @S +		   ' MonoisotopicMass ' + @MassComparison +          Convert(varchar(11), @MassThreshold) + ' AND '
-							Set @S = @S +          ' Discriminant_Score_Max ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-							Set @S = @S +          ' Peptide_Prophet_Max ' + @PeptideProphetComparison +        Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+							Set @S = @S +          ' Discriminant_Score_Max ' + @DiscriminantScoreComparison +    Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
+							Set @S = @S +          ' Peptide_Prophet_Max ' + @PeptideProphetComparison +          Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
 							Set @S = @S +          ' NETDifferenceAbsolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
-							Set @S = @S +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold)
+							Set @S = @S +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold) + ' AND '
+							Set @S = @S +          ' MSGF_SpecProb_Min ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 							Set @S = @S +   ' ) AS CompareQ'
 							Set @S = @S +   ' WHERE #NewMassTagScores.Mass_Tag_ID = CompareQ.Mass_Tag_ID AND '
 							Set @S = @S +     ' PMT_Quality_Score < ' + Convert(varchar(11), @FilterSetScore)
@@ -860,7 +875,8 @@ As
 									Set @S = @S +        ' SS.RankXc ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(SS.XCorr, 0) ' +  @HighNormalizedScoreComparison +  Convert(varchar(11), @HighNormalizedScoreThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(SD.DiscriminantScoreNorm, 0) ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold)
+									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 								End -- </h4>
 
 								If @ResultType = 'XT_Peptide_Hit'
@@ -874,7 +890,8 @@ As
 									Set @S = @S +        ' IsNull(X.Hyperscore, 0) ' +  @XTandemHyperscoreComparison +  Convert(varchar(11), @XTandemHyperscoreThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(X.Log_EValue, 0) ' +  @XTandemLogEValueComparison +  Convert(varchar(11), @XTandemLogEValueThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(SD.DiscriminantScoreNorm, 0) ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold)
+									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 								End -- </h5>
 
 								If @ResultType = 'IN_Peptide_Hit'
@@ -891,7 +908,8 @@ As
 									Set @S = @S +        ' IsNull(I.FScore, 0) ' +  @InspectFScoreComparison +  Convert(varchar(11), @InspectFScoreThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(I.PValue, 1) ' +  @InspectPValueComparison +  Convert(varchar(11), @InspectPValueThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(SD.DiscriminantScoreNorm, 0) ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
-									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold)
+									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 								End -- </h6>
 
 								If Len(@FilterSetExperimentFilter) > 0
@@ -912,7 +930,7 @@ As
 								Set @S = @S +              ' SubQ.Scan_Number,'
 								Set @S = @S +              ' MT.Mass_Tag_ID, '
 								Set @S = @S +              ' LEN(MT.Peptide),'
-								Set @S = @S +              ' IsNull(MT.Monoisotopic_Mass, 0),'
+								Set @S = @S +   ' IsNull(MT.Monoisotopic_Mass, 0),'
 								Set @S = @S +              ' IsNull(ABS(SubQ.GANET_Obs - MTN.PNET), 0),'
 								Set @S = @S +              ' IsNull(MT.Multiple_Proteins, 0) + 1,'
 								Set @S = @S +              ' ' + @ObsSql
@@ -999,6 +1017,18 @@ As
 		SELECT @MassTagCountZero = COUNT(Mass_Tag_ID)
 		FROM #NewMassTagScores
 		WHERE PMT_Quality_Score <=0
+
+		SELECT @MassTagCount1 = COUNT(Mass_Tag_ID)
+		FROM #NewMassTagScores
+		WHERE PMT_Quality_Score = 1
+
+		SELECT @MassTagCount2 = COUNT(Mass_Tag_ID)
+		FROM #NewMassTagScores
+		WHERE PMT_Quality_Score = 2
+
+		SELECT @MassTagCount3 = COUNT(Mass_Tag_ID)
+		FROM #NewMassTagScores
+		WHERE PMT_Quality_Score = 3
 	End
 		
 	If @InfoOnly <> 0
@@ -1116,8 +1146,14 @@ As
 	
 	If @PreviewSql = 0
 	Begin
-		Set @message = @message + convert(varchar(11), @MassTagCountNonZero) + ' mass tags have scores > 0; '
-		Set @message = @message + convert(varchar(11), @MassTagCountZero) + ' mass tags have scores <= 0'
+		Set @message = @message + convert(varchar(11), @MassTagCountNonZero) + ' AMTs have scores > 0; '
+		Set @message = @message + convert(varchar(11), @MassTagCountZero) +    ' AMTs have scores <= 0'
+		
+		Set @message = @message + '; PMTQS 1 = ' + convert(varchar(11), @MassTagCount1) + ' AMTs'
+		Set @message = @message + ', PMTQS 2 = ' + convert(varchar(11), @MassTagCount2) + ' AMTs'
+		
+		If @MassTagCount3 > 0
+			Set @message = @message + ', PMTQS 3 = ' + convert(varchar(11), @MassTagCount3) + ' AMTs'			
 	End
 	Set @message = @message + '; ' + @FilterSetList
 	

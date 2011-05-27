@@ -3,15 +3,15 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.QuantitationProcessWorkStepA
+CREATE PROCEDURE QuantitationProcessWorkStepA
 /****************************************************	
 **  Desc: 
 **
 **  Return values: 0 if success, otherwise, error code
 **
 **  Auth:	mem
-**	Date:	09/07/2006
+**	Date:	09/07/2006 mem - Initial Version
+**			10/13/2010 mem - Added parameters @MinimumUniquenessProbability and @MaximumFDRThreshold; these are only used when Match_Score_Mode <> 0
 **
 ****************************************************/
 (
@@ -26,6 +26,9 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepA
 	@MinimumPeptideLength tinyint,
 	@MinimumMatchScore real,
 	@MinimumDelMatchScore real,
+	
+	@MinimumUniquenessProbability real,		-- Should be set to 0 if Match_Score_Mode is 0
+	@MaximumFDRThreshold real,				-- Should be set to 1 if Match_Score_Mode is 0
 				
 	@message varchar(512)='' output
 )
@@ -61,6 +64,7 @@ AS
 		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind)
 		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind
 		FROM T_Quantitation_MDIDs TMDID INNER JOIN
+			 T_Match_Making_Description MMD on TMDID.MD_ID = MMD.MD_ID INNER JOIN
 			 T_FTICR_UMC_Results R ON TMDID.MD_ID = R.MD_ID INNER JOIN
 			 T_FTICR_UMC_ResultDetails RD ON R.UMC_Results_ID = RD.UMC_Results_ID INNER JOIN
 			 T_Mass_Tags MT ON RD.Mass_Tag_ID = MT.Mass_Tag_ID LEFT OUTER JOIN
@@ -73,6 +77,8 @@ AS
 				ISNULL(MT.PMT_Quality_Score, 0) >= @MinimumPMTQualityScore AND 
 				ISNULL(RD.Match_Score, -1) >= @MinimumMatchScore AND 
 				ISNULL(RD.Del_Match_Score, 0) >= @MinimumDelMatchScore AND
+				IsNull(RD.Uniqueness_Probability, 0) >= @MinimumUniquenessProbability AND
+				IsNull(RD.FDR_Threshold, 1) <= @MaximumFDRThreshold AND
 				LEN(MT.Peptide) >= @MinimumPeptideLength
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -91,6 +97,7 @@ AS
 		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind)
 		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind
 		FROM T_Quantitation_MDIDs TMDID INNER JOIN
+			 T_Match_Making_Description MMD on TMDID.MD_ID = MMD.MD_ID INNER JOIN
 			 T_FTICR_UMC_Results R ON TMDID.MD_ID = R.MD_ID INNER JOIN
 			 T_FTICR_UMC_InternalStdDetails ISD ON R.UMC_Results_ID = ISD.UMC_Results_ID INNER JOIN
 			 T_Mass_Tags MT ON ISD.Seq_ID = MT.Mass_Tag_ID
@@ -98,6 +105,8 @@ AS
 				ISD.Match_State = 6 AND
 				ISNULL(ISD.Match_Score, -1) >= @MinimumMatchScore AND 
 				ISNULL(ISD.Del_Match_Score, 0) >= @MinimumDelMatchScore AND
+				(MMD.Match_Score_Mode = 0 OR IsNull(ISD.Uniqueness_Probability, 0) >= @MinimumUniquenessProbability) AND
+				(MMD.Match_Score_Mode = 0 OR IsNull(ISD.FDR_Threshold, 1) <= @MaximumFDRThreshold) AND
 				LEN(MT.Peptide) >= @MinimumPeptideLength
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -135,7 +144,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepA] TO [MTS_DB_Dev] AS [dbo]

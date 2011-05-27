@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE VIEW [dbo].[V_Analysis_Description_Updates]
 AS
 SELECT  Entered, Job, 
@@ -14,6 +15,10 @@ SELECT  Entered, Job,
             THEN '* ' + Convert(varchar(19), Dataset_ID) + ' --> ' + Convert(varchar(19), Dataset_ID_New)
             ELSE Convert(varchar(19), Dataset_ID)
         END AS Dataset_ID,
+        CASE WHEN IsNull(Dataset_Acq_Length, 0) <> IsNull(Dataset_Acq_Length_New, 0)
+            THEN '* ' + Convert(varchar(19), ISNULL(Dataset_Acq_Length, 0)) + ' --> ' + Convert(varchar(19), Dataset_Acq_Length_New)
+            ELSE Convert(varchar(19), Dataset_Acq_Length)
+        END AS Dataset_Acq_Length,
         CASE WHEN IsNull(Experiment, '') <> IsNull(Experiment_New, '')
             THEN '* ' + Experiment + ' --> ' + Experiment_New
             ELSE Experiment

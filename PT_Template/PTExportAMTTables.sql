@@ -18,6 +18,7 @@ CREATE Procedure PTExportAMTTables
 **	Date:	10/30/2009 mem - Initial Version (modelled after PMExportAMTTables in MT DBs)
 **			11/11/2009 mem - Switched to using #TmpPeptideStats_Results to determine the peptides and proteins to export
 **						   - Added parameter @ReturnPeptideToProteinMapTable
+**			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 
 ****************************************************/
 (
@@ -95,9 +96,11 @@ AS
 				    Prot.External_Protein_ID,
 				    Prot.Protein_Collection_ID,
 				    CASE
-				        WHEN Prot.Reference LIKE 'reversed[_]%' OR
-				            Prot.Reference LIKE 'scrambled[_]%' OR
-				            Prot.Reference LIKE '%[:]reversed' THEN 1
+				        WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
+				             Prot.Reference LIKE 'scrambled[_]%' OR		-- MTS scrambled proteins
+				             Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
+				             Prot.Reference LIKE 'xxx.%' 				-- Inspect reversed/scrambled proteins
+				        THEN 1
 				        ELSE 0
 				    END AS Decoy_Protein
 			FROM T_Proteins Prot
@@ -125,9 +128,11 @@ AS
 				            PPM.Cleavage_State,
 				            PPM.Terminus_State,
 				            CASE
-				                WHEN Prot.Reference LIKE 'reversed[_]%' OR
-				                     Prot.Reference LIKE 'scrambled[_]%' OR
-				                     Prot.Reference LIKE '%[:]reversed' THEN 1
+								WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
+									 Prot.Reference LIKE 'scrambled[_]%' OR		-- MTS scrambled proteins
+									 Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
+									 Prot.Reference LIKE 'xxx.%' 				-- Inspect reversed/scrambled proteins
+								THEN 1
 				                ELSE 0
 				            END AS Decoy_Protein
 			FROM #TmpPeptideStats_Results PSR
@@ -150,10 +155,12 @@ AS
 			       PPM.Cleavage_State,
 			       PPM.Terminus_State,
 			       CASE
-			           WHEN Prot.Reference LIKE 'reversed[_]%' OR
-			                Prot.Reference LIKE 'scrambled[_]%' OR
-			                Prot.Reference LIKE '%[:]reversed' THEN 1
-			           ELSE 0
+						WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
+							 Prot.Reference LIKE 'scrambled[_]%' OR		-- MTS scrambled proteins
+							 Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
+							 Prot.Reference LIKE 'xxx.%' 				-- Inspect reversed/scrambled proteins
+						THEN 1
+				        ELSE 0
 			       END AS Decoy_Protein
 			FROM #TmpPeptideStats_Results PSR
 			     INNER JOIN T_Peptide_to_Protein_Map PPM
@@ -188,6 +195,5 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
-
 
 GO

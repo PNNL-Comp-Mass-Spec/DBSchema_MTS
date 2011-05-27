@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[LoadInspectPeptidesBulk] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE Procedure LoadInspectPeptidesBulk
@@ -26,6 +26,11 @@ CREATE Procedure LoadInspectPeptidesBulk
 **			01/08/2009 mem - Added parameter @SynFileColumnCount
 **						   - Added support for 27 column file format (adds columns PrecursorMZ and PrecursorError)
 **			09/22/2009 mem - Now calling UpdatePeptideCleavageStateMax
+**			07/23/2010 mem - Added support for MSGF results
+**						   - Added 'xxx.%' as a potential prefix for reversed proteins
+**			08/24/2010 mem - Fixed bug populating #Tmp_Peptide_Import_MatchedEntries
+**			02/01/2011 mem - Added support for MSGF filtering
+**			02/25/2011 mem - Expanded SpecProbNote to varchar(512) in #Tmp_MSGF_Results
 **
 *****************************************************/
 (
@@ -34,6 +39,7 @@ CREATE Procedure LoadInspectPeptidesBulk
 	@PeptideSeqInfoFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_SeqInfo.txt',
 	@PeptideSeqModDetailsFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_ModDetails.txt',
 	@PeptideSeqToProteinMapFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_SeqToProteinMap.txt',
+	@MSGFResultsFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_inspect_syn_MSGF.txt',
 	@Job int,
 	@FilterSetID int,
 	@SynFileColumnCount smallint=0,		-- If this is 0, then this SP will call ValidateDelimitedFile; if non-zero, then assumes the calling procedure called ValidateDelimitedFile to get this value
@@ -41,6 +47,7 @@ CREATE Procedure LoadInspectPeptidesBulk
 	@numLoaded int=0 output,
 	@numSkipped int=0 output,
 	@SeqCandidateFilesFound tinyint=0 output,
+	@MSGFFileFound tinyint=0 output,
 	@message varchar(512)='' output
 )
 As
@@ -58,6 +65,7 @@ As
 	set @numLoaded = 0
 	set @numSkipped = 0
 	set @SeqCandidateFilesFound = 0
+	set @MSGFFileFound = 0
 	set @message = ''
 
 	declare @jobStr varchar(12)
@@ -78,6 +86,8 @@ As
 
 	declare @LongProteinNameCount int
 	set @LongProteinNameCount = 0
+	
+	declare @UseMSGFFilter tinyint
 	
 	declare @LogLevel int
 	declare @LogMessage varchar(512)
@@ -165,6 +175,21 @@ As
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
 	CREATE INDEX #IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
 
+
+	-----------------------------------------------
+	-- Create a table that will match up entries
+	-- in #Tmp_Peptide_Import that are nearly identical, 
+	--  with the only difference being protein name
+	-- Entries have matching:
+	--	Scan, Charge, TotalPRMScore, and Peptide
+	-----------------------------------------------
+	CREATE TABLE #Tmp_Peptide_Import_MatchedEntries (
+		Result_ID1 int NOT NULL,
+		Result_ID2 int NOT NULL
+	)
+
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_MatchedEntries ON #Tmp_Peptide_Import_MatchedEntries (Result_ID2)
+	
 	-----------------------------------------------
 	-- Also create a table for holding flags of whether or not
 	-- the peptides pass the import filter
@@ -299,6 +324,9 @@ As
 
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_SeqToProteinMap]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_SeqToProteinMap]
+
+		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_MSGF_Results]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [dbo].[#Tmp_MSGF_Results]
 	End
 	
 	
@@ -394,6 +422,54 @@ As
 
 
 	-----------------------------------------------
+	-- Create a temporary table to hold contents 
+	-- of the MSGF results file (if it exists)
+	-----------------------------------------------
+	CREATE TABLE #Tmp_MSGF_Results (
+		Result_ID int NOT NULL,						-- Corresponds to #Tmp_Peptide_Import.Result_ID
+		Scan int NOT NULL,
+		Charge smallint NOT NULL,
+		Protein varchar(255) NULL,
+		Peptide varchar(255) NOT NULL,
+		SpecProb real NULL,
+		SpecProbNote varchar(512) NULL
+	)
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem creating temporary table #Tmp_MSGF_Results for job ' + @jobStr
+		goto Done
+	end
+
+
+	-----------------------------------------------
+	-- Call LoadMSGFResultsOneJob to load
+	-- the MSGF results file (if it exists)
+	-----------------------------------------------
+	Declare @MSGFCountLoaded int
+	Set @MSGFCountLoaded = 0
+
+	Set @LogMessage = 'Bulk load contents of MSGF file into temporary table; source path: ' + @MSGFResultsFilePath
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+
+	exec @myError = LoadMSGFResultsOneJob @job, @MSGFResultsFilePath, @MSGFCountLoaded output, @message output
+
+	Set @LogMessage = 'Load complete; loaded ' + Convert(varchar(12), @MSGFCountLoaded) + ' entries'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+
+	if @myError <> 0
+	Begin
+		If Len(IsNull(@message, '')) = 0
+			Set @message = 'Error calling LoadMSGFResultsOneJob for job ' + @jobStr
+		Goto Done
+	End
+	
+	
+	-----------------------------------------------
 	-- Call LoadSeqInfoAndModsPart1 to load the SeqInfo related files if they exist
 	-- If they do not exist, then @ResultToSeqMapCountLoaded will be 0; 
 	--  if an error occurs, then @result will be non-zero
@@ -460,6 +536,23 @@ As
 		--Set @message = ''
 	End
 
+	-----------------------------------------------
+	-- Make sure all peptides in #Tmp_Peptide_Import have
+	-- TotalPRMScore defined; if they don't, assign a value of -1000
+	-----------------------------------------------
+	UPDATE #Tmp_Peptide_Import
+	SET TotalPRMScore = -1000
+	WHERE TotalPRMScore IS NULL
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myRowCount > 0
+	Begin
+		Set @message = 'Newly imported peptides found with Null TotalPRMScore values for job ' + @jobStr + ' (' + convert(varchar(11), @myRowCount) + ' peptides)'
+		execute PostLogEntry 'Error', @message, 'LoadInspectPeptidesBulk'
+		Set @message = ''
+	End
+
 
 	-----------------------------------------------------------
 	-- Define the filter threshold values
@@ -500,7 +593,10 @@ As
 			@PeptideProphetComparison varchar(2),		-- Not used in this SP
 			@PeptideProphetThreshold float,				-- Not used in this SP
 			@RankScoreComparison varchar(2),
-			@RankScoreThreshold smallint
+			@RankScoreThreshold smallint,
+			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, or Inspect results
+			@MSGFSpecProbThreshold real
+
 
 	If IsNull(@FilterSetID, 0) = 0
 	Begin
@@ -536,7 +632,8 @@ As
 										@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
 										@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 										@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
-										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
+										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
+										@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT
 		
 		if @myError <> 0
 		begin
@@ -578,6 +675,16 @@ As
 		While @CriteriaGroupMatch > 0
 		Begin -- <CriteriaGroupMatch
 
+			Set @UseMSGFFilter = 0
+			If @MSGFCountLoaded > 0
+			Begin
+				If @MSGFSpecProbComparison = '<' AND @MSGFSpecProbThreshold < 1
+					Set @UseMSGFFilter = 1
+				
+				If @MSGFSpecProbComparison = '<=' AND @MSGFSpecProbThreshold < 1
+					Set @UseMSGFFilter = 1					
+			End
+			
 			-- Construct the Sql Update Query
 			--
 			Set @Sql = ''
@@ -589,6 +696,9 @@ As
 			Set @Sql = @Sql +          ' #Tmp_Peptide_ResultToSeqMap RTSM ON TPI.Result_ID = RTSM.Result_ID INNER JOIN'
 			Set @Sql = @Sql +          ' #Tmp_Peptide_SeqInfo PSI ON RTSM.Seq_ID_Local = PSI.Seq_ID_Local INNER JOIN'
 			Set @Sql = @Sql +          ' #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local'
+
+			If @UseMSGFFilter = 1
+				Set @Sql = @Sql +      ' INNER JOIN #Tmp_MSGF_Results MSGF ON TPI.Result_ID = MSGF.Result_ID '
 				 
 			-- Construct the Where clause		
 			Set @W = ''
@@ -597,6 +707,9 @@ As
 			Set @W = @W +	' TPI.Charge_State ' + @ChargeStateComparison + Convert(varchar(6), @ChargeStateThreshold) + ' AND '
 			Set @W = @W +	' PSI.Monoisotopic_Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold)
 
+			If @UseMSGFFilter = 1
+				Set @W = @W +      ' AND IsNull(MSGF.SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
+	 
 			Set @W = @W +    ' ) LookupQ ON LookupQ.Result_ID = TFF.Result_ID'
 
 			-- Append the Where clause to @Sql
@@ -647,7 +760,8 @@ As
 											@XTandemHyperscoreComparison OUTPUT, @XTandemHyperscoreThreshold OUTPUT,
 											@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 											@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
-											@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT
+											@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
+											@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT
 			If @myError <> 0
 			Begin
 				Set @Message = 'Error retrieving next entry from GetThresholdsForFilterSet in LoadInspectPeptidesBulk'
@@ -778,9 +892,10 @@ As
 	SELECT @LongProteinNameCount = COUNT(Distinct Reference)
 	FROM #Tmp_Peptide_SeqToProteinMap
 	WHERE Len(Reference) > 34 AND
-		  NOT (	Reference LIKE 'reversed[_]%' OR
-				Reference LIKE 'scrambled[_]%' OR
-				Reference LIKE '%[:]reversed'
+		  NOT (	Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+				Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+				Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
+				Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
 			  )
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -1177,6 +1292,58 @@ As
 	End
 
 	-----------------------------------------------
+	-- Now that the transaction is commited, we will 
+	-- store the peptide prophet and/or MSGF values in T_Score_Discriminant
+	-- We do this outside of the transaction since this can be a slow process
+	-----------------------------------------------
+
+	-----------------------------------------------
+	-- Populate #Tmp_Peptide_Import_MatchedEntries with a list of equivalent rows in #Tmp_Peptide_Import
+	-- This table is used by StoreMSGFValues
+	-----------------------------------------------
+	--
+	INSERT INTO #Tmp_Peptide_Import_MatchedEntries( Result_ID1,
+	                                                Result_ID2 )
+	SELECT TPI.Result_ID AS ResultID1,
+	       TPI2.Result_ID AS ResultID2
+	FROM #Tmp_Unique_Records UR
+	     INNER JOIN #Tmp_Peptide_Import TPI2
+	       ON UR.Result_ID = TPI2.Result_ID
+	     INNER JOIN #Tmp_Peptide_Import TPI
+	       ON TPI2.Scan_Number = TPI.Scan_Number AND
+	          TPI2.Charge_State = TPI.Charge_State AND
+	          TPI2.TotalPRMScore = TPI.TotalPRMScore AND
+	          TPI2.Peptide = TPI.Peptide AND
+	          TPI2.Result_ID <> TPI.Result_ID
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	
+	
+	Set @LogMessage = 'Populated #Tmp_Peptide_Import_MatchedEntries with ' + Convert(varchar(12), @myRowCount) + ' rows'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadXTandemPeptidesBulk'
+	
+
+	-----------------------------------------------
+	-- Populate the MSGF_SpecProb column in T_Score_Discriminant
+	-----------------------------------------------
+	--
+	If @MSGFCountLoaded > 0
+	Begin
+		Set @MSGFFileFound = 1
+	
+		Exec StoreMSGFValues @job, @numAddedDiscScores,
+						     @LogLevel, @LogMessage,
+							 @UsingPhysicalTempTables, 
+							 @infoOnly=0, @message=@message output
+
+	End
+	Else
+	Begin
+		Set @MSGFCountLoaded = 0
+	End
+
+	-----------------------------------------------
 	-- Update Multiple_ORF column in T_Peptides
 	-----------------------------------------------
 	UPDATE T_Peptides
@@ -1248,7 +1415,7 @@ As
 
 	-----------------------------------------------
 	-- If @ResultToSeqMapCountLoaded > 0, then call LoadSeqInfoAndModsPart2 
-	--  to populate the Candidate Sequence tables (this should always be true)
+	--  to populate the Candidate Sequence tables (this should always be true for Inspect)
 	-- Note that LoadSeqInfoAndModsPart2 uses tables:
 	--  #Tmp_Peptide_Import
 	--  #Tmp_Unique_Records

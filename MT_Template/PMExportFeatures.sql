@@ -14,6 +14,7 @@ CREATE Procedure PMExportFeatures
 **  Auth:	mem
 **	Date:	07/15/2009
 **			08/24/2009 jds - Removed use of T_Match_Making_Description from the queries
+**			02/16/2011 mem - Added column Match_Score_Mode to #Tmp_MDIDList
 **
 ****************************************************/
 (
@@ -56,7 +57,8 @@ AS
 		-------------------------------------------------	
 
 		CREATE TABLE #Tmp_MDIDList (
-			MD_ID int NOT NULL
+			MD_ID int NOT NULL,
+			Match_Score_Mode tinyint not null
 		)
 		CREATE UNIQUE INDEX IX_Tmp_MDIDList_MDID ON #Tmp_MDIDList (MD_ID ASC)
 
@@ -146,6 +148,7 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[PMExportFeatures] TO [DMS_SP_User] AS [dbo]

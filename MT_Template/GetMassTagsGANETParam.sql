@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[GetMassTagsGANETParam] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE dbo.GetMassTagsGANETParam
@@ -27,6 +27,8 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **						   - Updated parsing of @ExperimentFilter and @ExperimentExclusionFilter to check for percent signs in the parameter; if no percent signs are present, then auto-adds them at the beginning and end
 **			10/09/2006 mem - Now returning Peptide Prophet Probability in the 12th column (where the 1st column is column 1)
 **			04/06/2007 mem - Updated to call GetMassTagsPassingFiltersWork to populate #TmpMassTags with the PMTs to use
+**			09/15/2010 mem - Now returning Cnt_GANET as the 12th column
+**			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
 **  
 ****************************************************************/
 (
@@ -50,7 +52,8 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@JobToFilterOnByDataset int = 0,				-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
-	@MinimumPeptideProphetProbability real = 0		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MaximumMSGFSpecProb float = 0					-- The maximum MSGF Spectrum Probability value to allow (examines Min_MSGF_SpecProb in T_Mass_Tags); 0 to allow all
 )
 As
 	Set NoCount On
@@ -84,6 +87,7 @@ As
 							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
 							@MinimumHighNormalizedScore, @MinimumPMTQualityScore, 
 							@MinimumHighDiscriminantScore, @MinimumPeptideProphetProbability,
+							@MaximumMSGFSpecProb,
 							@DatasetToFilterOn = @DatasetToFilterOn Output
 	
 	If @myError <> 0
@@ -112,7 +116,8 @@ As
 				MT.Peptide_Obs_Count_Passing_Filter,
 				MT.Mod_Count,
 				MT.Mod_Description,
-				MT.High_Peptide_Prophet_Probability
+				MT.High_Peptide_Prophet_Probability,
+				MTN.Cnt_GANET
 		FROM #TmpMassTags
 			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
 			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
@@ -123,7 +128,7 @@ As
 		GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, 
 					MT.High_Normalized_Score, MT.High_Discriminant_Score, 
 					MT.Peptide_Obs_Count_Passing_Filter, MT.Mod_Count, MT.Mod_Description, 
-					MTN.PNET, MT.High_Peptide_Prophet_Probability
+					MTN.PNET, MTN.Cnt_GANET, MT.High_Peptide_Prophet_Probability
 		ORDER BY MT.Monoisotopic_Mass
 	Else
 		-- Return Avg_GANET as Net_Value_To_Use
@@ -142,7 +147,8 @@ As
 			MT.Peptide_Obs_Count_Passing_Filter,
 			MT.Mod_Count,
 			MT.Mod_Description,
-			MT.High_Peptide_Prophet_Probability
+			MT.High_Peptide_Prophet_Probability,
+			MTN.Cnt_GANET
 		FROM #TmpMassTags 
 			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID

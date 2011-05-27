@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdateProteinDataForAvailableAnalyses
+CREATE Procedure UpdateProteinDataForAvailableAnalyses
 /****************************************************
 **
 **	Desc: 
@@ -17,6 +17,7 @@ CREATE Procedure dbo.UpdateProteinDataForAvailableAnalyses
 **
 **	Auth:	mem
 **	Date:	11/02/2009
+**			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -132,9 +133,11 @@ AS
 						       ON PPM.Ref_ID = Prot.Ref_ID
 						WHERE Pep.Analysis_ID = @Job AND
 						      Prot.Protein_Collection_ID IS NULL AND
-						      NOT (Prot.Reference LIKE 'reversed[_]%' OR
-						           Prot.Reference LIKE 'scrambled[_]%' OR
-						           Prot.Reference LIKE '%[:]reversed')
+						      NOT (	Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+									Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+									Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
+									Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+						           )
 
 						If @MatchCount > 0
 						Begin
@@ -180,6 +183,5 @@ AS
 
 Done:
 	return @myError
-
 
 GO

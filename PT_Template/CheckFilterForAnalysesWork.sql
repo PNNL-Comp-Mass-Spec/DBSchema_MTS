@@ -36,6 +36,7 @@ CREATE PROCEDURE dbo.CheckFilterForAnalysesWork
 **			10/12/2007 mem - Added support for Peptide Prophet scores and for RankScore (aka RankXc for Sequest)
 **			10/29/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			07/21/2009 mem - Added support for Inspect_PValue filtering
+**			08/16/2010 mem - Added support for MSGF_SpecProb filtering
 **    
 *****************************************************/
 (
@@ -114,7 +115,9 @@ AS
 				@InspectFScoreComparison varchar(2),			-- Only used for Inspect results
 				@InspectFScoreThreshold real,
 				@InspectPValueComparison varchar(2),			-- Only used for Inspect results
-				@InspectPValueThreshold real
+				@InspectPValueThreshold real,
+				@MSGFSpecProbComparison varchar(2),
+				@MSGFSpecProbThreshold real
 
 		-----------------------------------------------------------
 		-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -166,7 +169,8 @@ AS
 			Peptide_Prophet_Probability real NOT NULL,		-- Note, for Inspect data, T_Score_Discriminant.Peptide_Prophet_Probability actually contains "1 minus T_Score_Inspect.PValue"
 			NET_Difference_Absolute float NOT NULL,
 			PassFilt int NOT NULL,							-- aka Discriminant_Initial_Filter; only used for Sequest
-			Pass_FilterSet_Group tinyint NOT NULL			-- 0 or 1
+			Pass_FilterSet_Group tinyint NOT NULL,			-- 0 or 1
+			MSGF_SpecProb real NOT NULL						-- Closer to 0 means higher confidence
 		)
 				
 		CREATE UNIQUE INDEX #IX_PeptideStats ON #PeptideStats ([Peptide_ID])
@@ -229,18 +233,19 @@ AS
 				set @myError = 51200
 				If @ResultType = 'Peptide_Hit'
 				Begin
+					-- Sequest results
 					INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 												XCorr, RankScore, Hyperscore, Log_EValue, 
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
-												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
+												MSGF_SpecProb, NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							XCorr, RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
 							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							MAX(Cleavage_State), MAX(Terminus_State), MH, 
 							DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability, 
-							NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
+							MSGF_SpecProb, NET_Difference_Absolute, PassFilt, 0 as Pass_FilterSet_Group
 					FROM (	SELECT	P.Analysis_ID, 
 									P.Peptide_ID, 
 									Len(TS.Clean_Sequence) AS PeptideLength, 
@@ -253,10 +258,11 @@ AS
 									IsNull(S.DeltaCn, 0) AS DeltaCn, 
 									IsNull(S.DeltaCn2, 0) AS DeltaCn2, 
 									IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
-									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,									
+									IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,
 									CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
-									THEN 0
-									ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
+									     THEN 0
+									     ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
 									END AS NET_Difference_Absolute,
 									SD.PassFilt AS PassFilt
 							FROM #JobsInBatch INNER JOIN
@@ -270,7 +276,7 @@ AS
 					GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							 XCorr, RankScore, MH, DeltaCN, DeltaCN2, 
 							 DiscriminantScoreNorm, Peptide_Prophet_Probability,
-							 NET_Difference_Absolute, PassFilt
+							 MSGF_SpecProb, NET_Difference_Absolute, PassFilt
 					ORDER BY Peptide_ID
 					--
 					SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -283,13 +289,13 @@ AS
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
-												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
+												MSGF_SpecProb, NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, 1 AS RankScore, Hyperscore, Log_EValue, 
 							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
-							NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
+							MSGF_SpecProb, NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
 					FROM (	SELECT	P.Analysis_ID, 
 									P.Peptide_ID, 
 									Len(TS.Clean_Sequence) AS PeptideLength, 
@@ -302,9 +308,10 @@ AS
 									IsNull(X.DeltaCn2, 0) AS DeltaCn2, 
 									IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
 									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+									IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,
 									CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
-									THEN 0
-									ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
+									     THEN 0
+									     ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
 									END AS NET_Difference_Absolute
 							FROM #JobsInBatch INNER JOIN
 								 T_Analysis_Description TAD ON #JobsInBatch.Job = TAD.Job AND TAD.ResultType = @ResultType INNER JOIN
@@ -317,7 +324,7 @@ AS
 					GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							 Hyperscore, Log_EValue, MH, DeltaCN2, 
 							 DiscriminantScoreNorm, Peptide_Prophet_Probability,
-							 NET_Difference_Absolute
+							 MSGF_SpecProb, NET_Difference_Absolute
 					ORDER BY Peptide_ID
 					--
 					SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -330,13 +337,13 @@ AS
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
-												NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
+												MSGF_SpecProb, NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
 					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, RankFScore AS RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
 							Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaNormTotalPRMScore AS DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
-							NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
+							MSGF_SpecProb, NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
 					FROM (	SELECT	P.Analysis_ID, 
 									P.Peptide_ID, 
 									Len(TS.Clean_Sequence) AS PeptideLength, 
@@ -352,9 +359,10 @@ AS
 									IsNull(I.DeltaNormTotalPRMScore, 0) AS DeltaNormTotalPRMScore, 
 									IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
 									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+									IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,
 									CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
-									THEN 0
-									ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
+									     THEN 0
+									     ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
 									END AS NET_Difference_Absolute
 							FROM #JobsInBatch INNER JOIN
 								 T_Analysis_Description TAD ON #JobsInBatch.Job = TAD.Job AND TAD.ResultType = @ResultType INNER JOIN
@@ -367,12 +375,62 @@ AS
 					GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
 							 RankFScore, Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue, 
 							 MH, DeltaNormTotalPRMScore, DiscriminantScoreNorm, Peptide_Prophet_Probability,
-							 NET_Difference_Absolute
+							 MSGF_SpecProb, NET_Difference_Absolute
 					ORDER BY Peptide_ID
 					--
 					SELECT @myError = @@error, @myRowCount = @@RowCount
 				End
 				
+				/*
+				If @ResultType = 'OM_Peptide_Hit'
+				Begin
+					-- OMSSA results
+					INSERT INTO #PeptideStats (	Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+												XCorr, RankScore, Hyperscore, Log_EValue, 
+												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
+												Cleavage_State, Terminus_State, Mass,
+												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
+												MSGF_SpecProb, NET_Difference_Absolute, PassFilt, Pass_FilterSet_Group)
+					SELECT  Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+							0 AS XCorr, RankFScore AS RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
+							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
+							OMSSA_Score,
+							Max(Cleavage_State), Max(Terminus_State), MH, 
+							0 AS DeltaCN, DeltaNormTotalPRMScore AS DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
+							MSGF_SpecProb, NET_Difference_Absolute, 1 AS PassFilt, 0 as Pass_FilterSet_Group
+					FROM (	SELECT	P.Analysis_ID, 
+									P.Peptide_ID, 
+									Len(TS.Clean_Sequence) AS PeptideLength, 
+									IsNull(P.Charge_State, 0) AS Charge_State,
+									IsNull(O.OMSSA_Score, 0) AS OMSSA_Score,
+									IsNull(PP.Cleavage_State, 0) AS Cleavage_State, 
+									IsNull(PP.Terminus_State, 0) AS Terminus_State, 
+									IsNull(P.MH, 0) AS MH,
+									IsNull(I.DeltaNormTotalPRMScore, 0) AS DeltaNormTotalPRMScore, 
+									IsNull(SD.DiscriminantScoreNorm, 0) AS DiscriminantScoreNorm,
+									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+									IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,
+									CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(TS.GANET_Predicted, 0) = 0
+									     THEN 0
+									     ELSE Abs(IsNull(P.GANET_Obs - TS.GANET_Predicted, 0))
+									END AS NET_Difference_Absolute
+							FROM #JobsInBatch INNER JOIN
+								 T_Analysis_Description TAD ON #JobsInBatch.Job = TAD.Job AND TAD.ResultType = @ResultType INNER JOIN
+								 T_Peptides P ON #JobsInBatch.Job = P.Analysis_ID INNER JOIN 
+								 T_Score_OMSSA O ON P.Peptide_ID = I.Peptide_ID INNER JOIN 
+								 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN 
+								 T_Peptide_to_Protein_Map PP ON P.Peptide_ID = PP.Peptide_ID INNER JOIN 
+								 T_Sequence TS ON P.Seq_ID = TS.Seq_ID
+						) LookupQ
+					GROUP BY Analysis_ID, Peptide_ID, PeptideLength, Charge_State,
+							 RankFScore, Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue, 
+							 MH, DeltaNormTotalPRMScore, DiscriminantScoreNorm, Peptide_Prophet_Probability,
+							 MSGF_SpecProb, NET_Difference_Absolute
+					ORDER BY Peptide_ID
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+				End
+				*/
 				--
 				If @myError <> 0 
 				Begin
@@ -417,7 +475,8 @@ AS
 										@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
 										@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
 										@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
-										@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT
+										@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
+										@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT
 
 					If @myError <> 0
 					Begin
@@ -456,6 +515,8 @@ AS
 							Set @S = @S +        ' Inspect_PValue ' +         @InspectPValueComparison +         Convert(varchar(11), @InspectPValueThreshold) + ' AND '
 						End
 						
+						Set @S = @S +        ' MSGF_SpecProb ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold) + ' AND '						
+
 						Set @S = @S +        ' Cleavage_State ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
 						Set @S = @S +        ' Terminus_State ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
 						Set @S = @S +		 ' PeptideLength ' + @PeptideLengthComparison +  Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
@@ -502,9 +563,8 @@ AS
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 			
 			End -- </b>
-
+			
 		End -- </a>
-
 
 	End Try
 	Begin Catch

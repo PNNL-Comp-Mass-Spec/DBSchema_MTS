@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[LoadSeqInfoAndModsPart1] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadSeqInfoAndModsPart1
+CREATE Procedure dbo.LoadSeqInfoAndModsPart1
 /****************************************************
 **
 **	Desc: 
@@ -34,6 +34,7 @@ CREATE Procedure LoadSeqInfoAndModsPart1
 **			02/14/2006 mem - Added parameterse @PeptideResultToSeqMapFilePath and @PeptideSeqToProteinMapFilePath
 **						   - Additionally, now populating tables #Tmp_Peptide_ResultToSeqMap and #Tmp_Peptide_SeqToProteinMap
 **			08/26/2008 mem - Added additional logging when LogLevel >= 2
+**			10/12/2010 mem - Now setting @myError to 52099 when ValidateDelimitedFile returns a result code = 63
 **
 *****************************************************/
 (
@@ -107,7 +108,14 @@ As
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideResultToSeqMapFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
 		
-		Set @myError = 51001		
+		if @myError = 63
+			-- OpenTextFile was unable to open the file
+			-- We need to set the completion code to 9, meaning we want to retry the load
+			-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+			set @myError = 52099
+		else
+			Set @myError = 52001
+
 		Goto Done
 	End
 	else
@@ -154,7 +162,14 @@ As
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSeqInfoFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
 		
-		Set @myError = 51001		
+		if @myError = 63
+			-- OpenTextFile was unable to open the file
+			-- We need to set the completion code to 9, meaning we want to retry the load
+			-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+			set @myError = 52099
+		else
+			Set @myError = 52001
+
 		Goto Done
 	End
 	else
@@ -201,7 +216,14 @@ As
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSeqModDetailsFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
 		
-		Set @myError = 51004
+		if @myError = 63
+			-- OpenTextFile was unable to open the file
+			-- We need to set the completion code to 9, meaning we want to retry the load
+			-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+			set @myError = 52099
+		else
+			Set @myError = 51004
+
 	End
 	else
 	Begin
@@ -233,7 +255,14 @@ As
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSeqToProteinMapFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
 		
-		Set @myError = 51001		
+		if @myError = 63
+			-- OpenTextFile was unable to open the file
+			-- We need to set the completion code to 9, meaning we want to retry the load
+			-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+			set @myError = 52099
+		else
+			Set @myError = 51001
+
 		Goto Done
 	End
 	else
@@ -385,6 +414,7 @@ As
 	
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart1] TO [MTS_DB_Dev] AS [dbo]

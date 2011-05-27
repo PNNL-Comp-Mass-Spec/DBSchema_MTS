@@ -42,6 +42,7 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			10/29/2008 mem - Added call to ComputeInspectMassValuesForAvailableAnalyses
 **			11/01/2009 mem - Added call to UpdateProteinDataForAvailableAnalyses
 **			11/02/2009 mem - Added call to CalculateCleavageStateForAvailableAnalyses
+**			10/12/2010 mem - Added call to ResetLoadFailedJobs
 **    
 *****************************************************/
 (
@@ -92,7 +93,7 @@ As
 	If @logLevel >= 2
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
-	-- < A >
+	-- < A1 >
 	--------------------------------------------------------------
 	-- Look for Jobs with different Results_Folder values from DMS
 	--------------------------------------------------------------
@@ -116,6 +117,14 @@ As
 	If @UpdateEnabled = 0
 		Goto Done
 
+
+	-- < A2 >
+	--------------------------------------------------------------
+	-- Look for Jobs in state 9 that need to be retried
+	--------------------------------------------------------------
+	--
+	exec @result = ResetLoadFailedJobs @infoonly = 0
+	
 	-- < B >
 	--------------------------------------------------------------
 	-- Load Peptides or SIC results for jobs in state 10

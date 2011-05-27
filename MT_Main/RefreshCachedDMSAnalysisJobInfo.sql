@@ -18,15 +18,22 @@ CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 **			08/07/2008 mem - Added parameter @SourceMTSServer; if provided, then contacts that server rather than contacting DMS.
 **			09/18/2008 mem - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
 **			03/13/2010 mem - Added parameter @UpdateSourceMTSServer
+**			07/13/2010 mem - Expanded Comment to varchar(512)
+**						   - Now populating DS_Acq_Length
+**			08/02/2010 mem - Updated to use a single-step MERGE statement instead of three separate Delete, Update, and Insert statements
+**			09/24/2010 mem - Now populating RequestID
+**			01/19/2011 mem - Now casting DS_Acq_Length to decimal(9, 2) when querying @SourceTable
+**						   - Added parameter @ShowActionTable
 **
 *****************************************************/
 (
-	@JobMinimum int = 0,		-- Set to a positive value to limit the jobs examined; when non-zero, then jobs outside this range are ignored
+	@JobMinimum int = 0,						-- Set to a positive value to limit the jobs examined; when non-zero, then jobs outside this range are ignored
 	@JobMaximum int = 0,
 	@SourceMTSServer varchar(128) = 'porky',	-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Analysis_Job_Import_Ex
 	@UpdateSourceMTSServer tinyint = 0,			-- If 1, then first calls RefreshCachedDMSAnalysisJobInfo on the source MTS server; only valid if @SourceMTSServer is not blank
 	@message varchar(255) = '' output,
-	@previewSql tinyint = 0
+	@previewSql tinyint = 0,
+	@ShowActionTable tinyint = 0				-- Displays the contents of #Tmp_UpdateSummary; ignored if @previewSql is non-zero
 )
 AS
 
@@ -48,7 +55,7 @@ AS
 	Set @DeleteCount = 0
 	Set @UpdateCount = 0
 	Set @InsertCount = 0
-	
+
 	Declare @FullRefreshPerformed tinyint
 	
 	Declare @SourceTable varchar(256)
@@ -57,6 +64,17 @@ AS
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
+	
+	---------------------------------------------------
+	-- Create the temporary table that will be used to
+	-- track the number of inserts, updates, and deletes 
+	-- performed by the MERGE statement
+	---------------------------------------------------
+	
+	CREATE TABLE #Tmp_UpdateSummary (
+		UpdateAction varchar(32),
+		Job int null
+	)
 	
 	Begin Try
 		Set @CurrentLocation = 'Validate the inputs'
@@ -81,16 +99,14 @@ AS
 				Set @JobMaximum = @MaxInt
 		End
 
-		Set @CurrentLocation = 'Update T_DMS_Cached_Data_Status'
-		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Analysis_Job_Info_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = @FullRefreshPerformed, @LastRefreshMinimumID = @JobMinimum
-
 		-- Source server cannot be this server; if they match, set @SourceMTSServer to ''
 		If @SourceMTSServer = @@ServerName
 			Set @SourceMTSServer = ''
 
 		If @SourceMTSServer <> '' And @UpdateSourceMTSServer <> 0
 		Begin
+			Set @CurrentLocation = 'Call RefreshCachedDMSAnalysisJobInfo on server ' + @SourceMTSServer
+
 			-- Call RefreshCachedDMSAnalysisJobInfo on server @SourceMTSServer
 			Set @S = 'exec ' + @SourceMTSServer + '.MT_Main.dbo.RefreshCachedDMSAnalysisJobInfo ' + Convert(varchar(12), @JobMinimum) + ', ' +  + Convert(varchar(12), @JobMaximum)
 			
@@ -101,246 +117,159 @@ AS
 
 		End
 		
-		Set @CurrentLocation = 'Create #Tmp_DMS_Analysis_Job_Import_Ex'
-
-		-- Since we need to scan the contents of V_DMS_Analysis_Job_Import_Ex three times, we'll first
-		-- populate a local temporary table using its contents
-		CREATE TABLE #Tmp_DMS_Analysis_Job_Import_Ex (
-			Job int NOT NULL,
-			Priority int NOT NULL,
-			Dataset varchar(128) NOT NULL,
-			Experiment varchar(128) NOT NULL,
-			Campaign varchar(128) NOT NULL,
-			DatasetID int NOT NULL,
-			Organism varchar(128) NOT NULL,
-			InstrumentName varchar(64) NULL,
-			InstrumentClass varchar(64) NULL,
-			AnalysisTool varchar(64) NOT NULL,
-			Processor varchar(128) NULL,
-			Completed datetime NULL,
-			ParameterFileName varchar(255) NOT NULL,
-			SettingsFileName varchar(255) NULL,
-			OrganismDBName varchar(64) NOT NULL,
-			ProteinCollectionList varchar(max) NOT NULL,
-			ProteinOptions varchar(256) NOT NULL,
-			StoragePathClient varchar(8000) NOT NULL,
-			StoragePathServer varchar(4096) NULL,
-			DatasetFolder varchar(128) NULL,
-			ResultsFolder varchar(128) NULL,
-			Owner varchar(64) NULL,
-			Comment varchar(255) NULL,
-			SeparationSysType varchar(64) NULL,
-			ResultType varchar(64) NULL,
-			[Dataset Int Std] varchar(64) NOT NULL,
-			DS_created datetime NOT NULL,
-			EnzymeID int NOT NULL,
-			Labelling varchar(64) NULL,
-			[PreDigest Int Std] varchar(64) NOT NULL,
-			[PostDigest Int Std] varchar(64) NOT NULL
-		)
-		
-		-- Create a clustered index on Job
-		CREATE CLUSTERED INDEX #IX_Tmp_DMS_Analysis_Job_Import_Ex ON #Tmp_DMS_Analysis_Job_Import_Ex (Job)
-
 		If @SourceMTSServer <> ''
 			Set @SourceTable = @SourceMTSServer + '.MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached'
 		Else
 			Set @SourceTable = 'V_DMS_Analysis_Job_Import_Ex'
-			
-		Set @CurrentLocation = 'Populate a temporary table with the data in ' + @SourceTable
 
-		-- Construct the Sql to populate #Tmp_DMS_Analysis_Job_Import_Ex
+
+		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
+		-- 
+		Exec UpdateDMSCachedDataStatus 'T_DMS_Analysis_Job_Info_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = @FullRefreshPerformed, @LastRefreshMinimumID = @JobMinimum
+
+
+		Set @CurrentLocation = 'Merge data into T_DMS_Analysis_Job_Info_Cached'
+
+		-- Use a MERGE Statement to synchronize T_DMS_Analysis_Job_Info_Cached with @SourceTable
+		--
 		Set @S = ''
-		Set @S = @S + ' INSERT INTO #Tmp_DMS_Analysis_Job_Import_Ex ('
-		Set @S = @S +   ' Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
-		Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
-		Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, '
+		Set @S = @S + ' MERGE T_DMS_Analysis_Job_Info_Cached AS target'
+		Set @S = @S + ' USING (SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
+		Set @S = @S +               ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
+		Set @S = @S +               ' Completed, ParameterFileName, SettingsFileName, '
+		Set @S = @S +               ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
+		Set @S = @S +               ' StoragePathClient, StoragePathServer, DatasetFolder, '
+		Set @S = @S +               ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +               ' ResultType, [Dataset Int Std], DS_created, '
+		Set @S = @S +               ' Convert(decimal(9, 2), DS_Acq_Length), EnzymeID, '
+		Set @S = @S +               ' Labelling, [PreDigest Int Std], [PostDigest Int Std], RequestID'
+		Set @S = @S +        ' FROM ' + @SourceTable
+		Set @S = @S +        ' WHERE Job >= ' + Convert(varchar(12), @JobMinimum) + ' AND Job <= ' + Convert(varchar(12), @JobMaximum)
+		Set @S = @S + '	) AS Source ( Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
+		Set @S = @S +               ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
+		Set @S = @S +               ' Completed, ParameterFileName, SettingsFileName, '
+		Set @S = @S +               ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
+		Set @S = @S +               ' StoragePathClient, StoragePathServer, DatasetFolder, '
+		Set @S = @S +               ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +               ' ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, '
+		Set @S = @S +               ' Labelling, [PreDigest Int Std], [PostDigest Int Std], RequestID)'
+		Set @S = @S + ' ON (target.Job = source.Job)'
+		Set @S = @S + ' WHEN Matched AND ( 	Target.RequestID <> source.RequestID OR'
+		Set @S = @S +                     ' Target.Priority <> source.Priority OR'
+		Set @S = @S +                     ' Target.Dataset <> source.Dataset OR'
+		Set @S = @S +                     ' Target.Experiment <> source.Experiment OR'
+		Set @S = @S +                     ' Target.Campaign <> source.Campaign OR'
+		Set @S = @S +                     ' Target.DatasetID <> source.DatasetID OR'
+		Set @S = @S +                     ' Target.Organism <> source.Organism OR'
+		Set @S = @S +                     ' IsNull(Target.InstrumentName, '''') <> IsNull(source.InstrumentName, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.InstrumentClass, '''') <> IsNull(source.InstrumentClass, '''') OR'
+		Set @S = @S +                     ' Target.AnalysisTool <> source.AnalysisTool OR'
+		Set @S = @S +                     ' IsNull(Target.Processor, '''') <> IsNull(source.Processor, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.Completed, ''1/1/1980'') <> IsNull(source.Completed, ''1/1/1980'') OR'
+		Set @S = @S +                     ' Target.ParameterFileName <> source.ParameterFileName OR'
+		Set @S = @S +                     ' IsNull(Target.SettingsFileName, '''') <> IsNull(source.SettingsFileName, '''') OR'
+		Set @S = @S +                     ' Target.OrganismDBName <> source.OrganismDBName OR'
+		Set @S = @S +    ' Target.ProteinCollectionList <> source.ProteinCollectionList OR'
+		Set @S = @S +                     ' Target.ProteinOptions <> source.ProteinOptions OR'
+		Set @S = @S +                     ' Target.StoragePathClient <> source.StoragePathClient OR'
+		Set @S = @S +                     ' IsNull(Target.StoragePathServer, '''') <> IsNull(source.StoragePathServer, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.DatasetFolder, '''') <> IsNull(source.DatasetFolder, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.ResultsFolder, '''') <> IsNull(source.ResultsFolder, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.Owner, '''') <> IsNull(source.Owner, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.Comment, '''') <> IsNull(source.Comment, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.SeparationSysType, '''') <> IsNull(source.SeparationSysType, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.ResultType, '''') <> IsNull(source.ResultType, '''') OR'
+		Set @S = @S +                     ' IsNull(Target.[Dataset Int Std], '''') <> IsNull(source.[Dataset Int Std], '''') OR'
+		Set @S = @S +                     ' Target.DS_created <> source.DS_created OR'
+		Set @S = @S +                     ' IsNull(Target.DS_Acq_Length, 0) <> IsNull(source.DS_Acq_Length, 0) OR'
+		Set @S = @S +                     ' Target.EnzymeID <> source.EnzymeID OR'
+		Set @S = @S +                     ' IsNull(Target.Labelling, '''') <> IsNull(source.Labelling, '''') OR'
+		Set @S = @S +                     ' Target.[PreDigest Int Std] <> source.[PreDigest Int Std] OR'
+		Set @S = @S +                     ' Target.[PostDigest Int Std] <> source.[PostDigest Int Std] ) THEN '
+		Set @S = @S + '	UPDATE set RequestID = source.RequestID,'
+		Set @S = @S +            ' Priority = source.Priority,'
+		Set @S = @S +            ' Dataset = source.Dataset,'
+		Set @S = @S +            ' Experiment = source.Experiment,'
+		Set @S = @S +            ' Campaign = source.Campaign,'
+		Set @S = @S +            ' DatasetID = source.DatasetID,'
+		Set @S = @S +            ' Organism = source.Organism,'
+		Set @S = @S +            ' InstrumentName = source.InstrumentName,'
+		Set @S = @S +            ' InstrumentClass = source.InstrumentClass,'
+		Set @S = @S +            ' AnalysisTool = source.AnalysisTool,'
+		Set @S = @S +            ' Processor = source.Processor,'
+		Set @S = @S +            ' Completed = source.Completed,'
+		Set @S = @S +            ' ParameterFileName = source.ParameterFileName,'
+		Set @S = @S +            ' SettingsFileName = source.SettingsFileName,'
+		Set @S = @S +            ' OrganismDBName = source.OrganismDBName,'
+		Set @S = @S +            ' ProteinCollectionList = source.ProteinCollectionList,'
+		Set @S = @S +            ' ProteinOptions = source.ProteinOptions,'
+		Set @S = @S +            ' StoragePathClient = source.StoragePathClient,'
+		Set @S = @S +            ' StoragePathServer = source.StoragePathServer,'
+		Set @S = @S +            ' DatasetFolder = source.DatasetFolder,'
+		Set @S = @S +            ' ResultsFolder = source.ResultsFolder,'
+		Set @S = @S +            ' Owner = source.Owner,'
+		Set @S = @S +            ' Comment = source.Comment,'
+		Set @S = @S +            ' SeparationSysType = source.SeparationSysType,'
+		Set @S = @S +            ' ResultType = source.ResultType,'
+		Set @S = @S +            ' [Dataset Int Std] = source.[Dataset Int Std],'
+		Set @S = @S +            ' DS_created = source.DS_created,'
+		Set @S = @S +            ' DS_Acq_Length = source.DS_Acq_Length,'
+		Set @S = @S +            ' EnzymeID = source.EnzymeID,'
+		Set @S = @S +            ' Labelling = source.Labelling,'
+		Set @S = @S +            ' [PreDigest Int Std] = source.[PreDigest Int Std],'
+		Set @S = @S +            ' [PostDigest Int Std] = source.[PostDigest Int Std],'
+		Set @S = @S +            ' Last_Affected = GetDate()'
+		Set @S = @S + ' WHEN Not Matched THEN'
+		Set @S = @S + '	INSERT (Job, RequestID, Priority, Dataset, Experiment, Campaign, DatasetID, '
+		Set @S = @S +         ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
+		Set @S = @S +         ' Completed, ParameterFileName, SettingsFileName, '
 		Set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
-		Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
-		Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
-		Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID, '
-		Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std])'
+		Set @S = @S +         ' StoragePathClient, StoragePathServer, DatasetFolder, '
+		Set @S = @S +         ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +        ' ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, '
+		Set @S = @S +         ' Labelling, [PreDigest Int Std], [PostDigest Int Std], Last_Affected)'
+		Set @S = @S + '	VALUES ( source.Job, source.RequestID, source.Priority, source.Dataset, source.Experiment, source.Campaign, source.DatasetID, '
+		Set @S = @S +         '  source.Organism, source.InstrumentName, source.InstrumentClass, source.AnalysisTool, source.Processor,'
+		Set @S = @S +         '  source.Completed, source.ParameterFileName, source.SettingsFileName, '
+		Set @S = @S +         '  source.OrganismDBName, source.ProteinCollectionList, source.ProteinOptions, '
+		Set @S = @S +         '  source.StoragePathClient, source.StoragePathServer, source.DatasetFolder, '
+		Set @S = @S +         '  source.ResultsFolder, source.Owner, source.Comment, source.SeparationSysType, '
+		Set @S = @S +         '  source.ResultType, source.[Dataset Int Std], source.DS_created, source.DS_Acq_Length, source.EnzymeID, '
+		Set @S = @S +         '  source.Labelling, source.[PreDigest Int Std], source.[PostDigest Int Std], GetDate())'
+		Set @S = @S + ' WHEN NOT MATCHED BY SOURCE AND '
+		Set @S = @S + '    Target.Job >= ' + Convert(varchar(12), @JobMinimum) + ' AND Target.Job <= ' + Convert(varchar(12), @JobMaximum) + ' THEN'
+		Set @S = @S + '	DELETE'
+		Set @S = @S + ' OUTPUT $action, IsNull(inserted.job, deleted.job) INTO #Tmp_UpdateSummary'
+		Set @S = @S + ';'
 
-		If @SourceMTSServer <> ''
-		Begin
-			Set @S = @S + ' SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
-			Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor, '
-			Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, OrganismDBName, ProteinCollectionList, ProteinOptions, '
-			Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
-			Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
-			Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID, '
-			Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std]'
-			Set @S = @S + ' FROM ' + @SourceTable
-		End
-		Else
-		Begin
-			Set @S = @S + ' SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, '
-			Set @S = @S +   ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
-			Set @S = @S +   ' Completed, ParameterFileName, SettingsFileName, '
-			Set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
-			Set @S = @S +   ' StoragePathClient, StoragePathServer, DatasetFolder, '
-			Set @S = @S +   ' ResultsFolder, Owner, Comment, SeparationSysType, '
-			Set @S = @S +   ' ResultType, [Dataset Int Std], DS_created, EnzymeID,'
-			Set @S = @S +   ' Labelling, [PreDigest Int Std], [PostDigest Int Std]'
-			Set @S = @S + ' FROM ' + @SourceTable
-		End		
-
-		Set @S = @S + ' WHERE Job >= ' + Convert(varchar(12), @JobMinimum) + ' AND Job <= ' + Convert(varchar(12), @JobMaximum)
-		
-		If @previewSql <> 0
-		Begin
+		if @PreviewSql <> 0
 			Print @S
-			Goto Done
-		End
 		Else
 			Exec (@S)
 		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-		
-		Set @CurrentLocation = 'Delete extra rows in T_DMS_Analysis_Job_Info_Cached'
-		-- 
-		DELETE T_DMS_Analysis_Job_Info_Cached 
-		FROM T_DMS_Analysis_Job_Info_Cached Target LEFT OUTER JOIN
-			 #Tmp_DMS_Analysis_Job_Import_Ex Src ON Target.Job = Src.Job
-		WHERE (Src.Job IS NULL) AND
-			  Target.Job >= @JobMinimum AND Target.Job <= @JobMaximum
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @DeleteCount = @myRowCount
-		
-		If @DeleteCount > 0
-			Set @message = 'Deleted ' + convert(varchar(12), @DeleteCount) + ' extra rows'
-			
-		Set @CurrentLocation = 'Update existing rows in T_DMS_Analysis_Job_Info_Cached'
-		--
-		UPDATE T_DMS_Analysis_Job_Info_Cached
-		SET Priority = Src.Priority,
-			Dataset = Src.Dataset,
-			Experiment = Src.Experiment,
-			Campaign = Src.Campaign,
-			DatasetID = Src.DatasetID,
-			Organism = Src.Organism,
-			InstrumentName = Src.InstrumentName,
-			InstrumentClass = Src.InstrumentClass,
-			AnalysisTool = Src.AnalysisTool,
-			Processor = Src.Processor,
-			Completed = Src.Completed,
-			ParameterFileName = Src.ParameterFileName,
-			SettingsFileName = Src.SettingsFileName,
-			OrganismDBName = Src.OrganismDBName,
-			ProteinCollectionList = Src.ProteinCollectionList,
-			ProteinOptions = Src.ProteinOptions,
-			StoragePathClient = Src.StoragePathClient,
-			StoragePathServer = Src.StoragePathServer,
-			DatasetFolder = Src.DatasetFolder,
-			ResultsFolder = Src.ResultsFolder,
-			Owner = Src.Owner,
-			Comment = Src.Comment,
-			SeparationSysType = Src.SeparationSysType,
-			ResultType = Src.ResultType,
-			[Dataset Int Std] = Src.[Dataset Int Std],
-			DS_created = Src.DS_created,
-			EnzymeID = Src.EnzymeID,
-			Labelling = Src.Labelling,
-			[PreDigest Int Std] = Src.[PreDigest Int Std],
-			[PostDigest Int Std] = Src.[PostDigest Int Std],
-			Last_Affected = GetDate()
-		FROM T_DMS_Analysis_Job_Info_Cached Target INNER JOIN
-			 #Tmp_DMS_Analysis_Job_Import_Ex Src ON Target.Job = Src.Job
-		WHERE Target.Job <> Src.Job OR
-			  Target.Priority <> Src.Priority OR
-			  Target.Dataset <> Src.Dataset OR
-			  Target.Experiment <> Src.Experiment OR
-			  Target.Campaign <> Src.Campaign OR
-			  Target.DatasetID <> Src.DatasetID OR
-			  Target.Organism <> Src.Organism OR
-			  IsNull(Target.InstrumentName, '') <> IsNull(Src.InstrumentName, '') OR
-			  IsNull(Target.InstrumentClass, '') <> IsNull(Src.InstrumentClass, '') OR
-			  Target.AnalysisTool <> Src.AnalysisTool OR
-			  IsNull(Target.Processor, '') <> IsNull(Src.Processor, '') OR
-			  IsNull(Target.Completed, '1/1/1980') <> IsNull(Src.Completed, '1/1/1980') OR
-			  Target.ParameterFileName <> Src.ParameterFileName OR
-			  IsNull(Target.SettingsFileName, '') <> IsNull(Src.SettingsFileName, '') OR
-			  Target.OrganismDBName <> Src.OrganismDBName OR
-			  Target.ProteinCollectionList <> Src.ProteinCollectionList OR
-			  Target.ProteinOptions <> Src.ProteinOptions OR
-			  Target.StoragePathClient <> Src.StoragePathClient OR
-			  IsNull(Target.StoragePathServer, '') <> IsNull(Src.StoragePathServer, '') OR
-			  IsNull(Target.DatasetFolder, '') <> IsNull(Src.DatasetFolder, '') OR
-			  IsNull(Target.ResultsFolder, '') <> IsNull(Src.ResultsFolder, '') OR
-			  IsNull(Target.Owner, '') <> IsNull(Src.Owner, '') OR
-			  IsNull(Target.Comment, '') <> IsNull(Src.Comment, '') OR
-			  IsNull(Target.SeparationSysType, '') <> IsNull(Src.SeparationSysType, '') OR
-			  IsNull(Target.ResultType, '') <> IsNull(Src.ResultType, '') OR
-			  IsNull(Target.[Dataset Int Std], '') <> IsNull(Src.[Dataset Int Std], '') OR
-			  Target.DS_created <> Src.DS_created OR
-			  Target.EnzymeID <> Src.EnzymeID OR
-			  IsNull(Target.Labelling, '') <> IsNull(Src.Labelling, '') OR
-			  Target.[PreDigest Int Std] <> Src.[PreDigest Int Std] OR
-			  Target.[PostDigest Int Std] <> Src.[PostDigest Int Std]
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @UpdateCount = @myRowcount
-		
-		If @UpdateCount > 0
+		If @PreviewSql = 0 And @ShowActionTable <> 0
 		Begin
-			If Len(@message) > 0 
-				Set @message = @message + '; '
-			Set @message = @message + 'Updated ' + convert(varchar(12), @UpdateCount) + ' rows'
+			SELECT *
+			FROM #Tmp_UpdateSummary
 		End
-		
-		Set @CurrentLocation = 'Add new rows to T_DMS_Analysis_Job_Info_Cached'
-		--
-		INSERT INTO T_DMS_Analysis_Job_Info_Cached
-			(Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
-			 Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,
-			 Completed, ParameterFileName, SettingsFileName, 
-			 OrganismDBName, ProteinCollectionList, ProteinOptions, 
-			 StoragePathClient, StoragePathServer, DatasetFolder, 
-			 ResultsFolder, Owner, Comment, SeparationSysType, 
-			 ResultType, [Dataset Int Std], DS_created, EnzymeID, 
-			 Labelling, [PreDigest Int Std], [PostDigest Int Std], Last_Affected)
-		SELECT Src.Job, Src.Priority, Src.Dataset, Src.Experiment, Src.Campaign, Src.DatasetID, 
-			   Src.Organism, Src.InstrumentName, Src.InstrumentClass, Src.AnalysisTool, Src.Processor,
-			   Src.Completed, Src.ParameterFileName, Src.SettingsFileName, 
-			   Src.OrganismDBName, Src.ProteinCollectionList, Src.ProteinOptions, 
-			   Src.StoragePathClient, Src.StoragePathServer, Src.DatasetFolder, 
-			   Src.ResultsFolder, Src.Owner, Src.Comment, Src.SeparationSysType, 
-			   Src.ResultType, Src.[Dataset Int Std], Src.DS_created, Src.EnzymeID, 
-			   Src.Labelling, Src.[PreDigest Int Std], Src.[PostDigest Int Std], GetDate()
-		FROM T_DMS_Analysis_Job_Info_Cached Target RIGHT OUTER JOIN
-			 #Tmp_DMS_Analysis_Job_Import_Ex Src ON Target.Job = Src.Job
-		WHERE (Target.Job IS NULL)
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @InsertCount = @myRowcount
-		
-		If @InsertCount > 0
+
+		If @myError <> 0
 		Begin
-			If Len(@message) > 0 
-				Set @message = @message + '; '
-			Set @message = @message + 'Added ' + convert(varchar(12), @InsertCount) + ' new rows'
+			set @message = 'Error merging ' + @SourceTable + ' with T_DMS_Analysis_Job_Info_Cached (ErrorID = ' + Convert(varchar(12), @myError) + ')'
+			execute PostLogEntry 'Error', @message, 'RefreshCachedDMSAnalysisJobInfo'
+		End
+		Else
+		Begin
+
+			-- Update the stats in T_DMS_Cached_Data_Status
+			exec RefreshCachedDMSInfoFinalize 'RefreshCachedDMSAnalysisJobInfo', @SourceTable, 'T_DMS_Analysis_Job_Info_Cached',
+												@IncrementRefreshCount = 1, 
+												@FullRefreshPerformed = @FullRefreshPerformed, 
+												@LastRefreshMinimumID = @JobMinimum
 		End
 		
-		If Len(@message) > 0 
-		Begin	
-			Set @message = 'Updated T_DMS_Analysis_Job_Info_Cached using ' + @SourceTable + ': ' + @message
-			execute PostLogEntry 'Normal', @message, 'RefreshCachedDMSAnalysisJobInfo'
-		End
-
-
-		Set @CurrentLocation = 'Update stats in T_DMS_Cached_Data_Status'
-		--
-		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Analysis_Job_Info_Cached', 
-											@IncrementRefreshCount = 1, 
-											@InsertCountNew = @InsertCount, 
-											@UpdateCountNew = @UpdateCount, 
-											@DeleteCountNew = @DeleteCount,
-											@FullRefreshPerformed = @FullRefreshPerformed, 
-											@LastRefreshMinimumID = @JobMinimum
-
 	End Try
 	Begin Catch
 		-- Error caught; log the error then abort processing

@@ -43,6 +43,7 @@ CREATE Procedure dbo.QRSummary
 **			06/05/2007 mem - Switched to Try/Catch error handling (added parameter @message)
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			01/24/2007 mem - Expanded the size of @WorkingList to varchar(max)
+**			10/13/2010 mem - Now returning columns [AMTs 1% FDR] through [AMTs 50% FDR] if @VerboseColumnOutput=1 or if any of the entries in T_Quantitation_Description has Match_Score_Mode = 1
 **
 ****************************************************/
 (
@@ -102,6 +103,12 @@ AS
 			[Unique PMT Tag Count Matched] [int] NULL ,
 			[Unique Internal Std Count Matched] [int] NULL ,
 			[Comparison PMT Tag Count] [int] NULL ,
+			[AMTs 1% FDR] [int] NULL ,
+			[AMTs 2.5% FDR] [int] NULL ,
+			[AMTs 5% FDR] [int] NULL ,
+			[AMTs 10% FDR] [int] NULL ,
+			[AMTs 25% FDR] [int] NULL ,
+			[AMTs 50% FDR] [int] NULL ,
 			[MD UMC TolerancePPM] [numeric](9, 4) NOT NULL ,
 			[MD NetAdj NET Min] [numeric](9, 5) NULL ,
 			[MD NetAdj NET Max] [numeric](9, 5) NULL ,
@@ -111,7 +118,8 @@ AS
 			[Total_Scans_Avg] [int] NULL ,
 			[Scan_Start] [int] NULL ,
 			[Scan_End] [int] NULL ,
-			[ReplicateNormalizationStats] [varchar](1024) NULL		
+			[ReplicateNormalizationStats] [varchar](1024) NULL,
+			[Match Score Mode] tinyint NULL	
 		)
 		
 		-- Copy from @WorkingQIDList into @WorkingList
@@ -175,11 +183,18 @@ AS
 							[Unique PMT Tag Count Matched], 
 							[Unique Internal Std Count Matched], 
 							[Comparison PMT Tag Count], 
+							[AMTs 1% FDR],
+							[AMTs 2.5% FDR],
+							[AMTs 5% FDR],
+							[AMTs 10% FDR],
+							[AMTs 25% FDR],
+							[AMTs 50% FDR],
 							[MD UMC TolerancePPM], [MD NetAdj NET Min], [MD NetAdj NET Max],
 							[MD MMA TolerancePPM], [MD NET Tolerance],
 							[Refine Mass Cal PPMShift], 
 							[Total_Scans_Avg], [Scan_Start], [Scan_End],
-							[ReplicateNormalizationStats])
+							[ReplicateNormalizationStats],
+							[Match Score Mode])
 					SELECT QD.Quantitation_ID, QD.SampleName, QD.Comment, FAD.Experiment, 
 						CONVERT(varchar(19), MMD.MD_Reference_Job) AS Jobs, 
 						CONVERT(varchar(19), MMD.MD_ID) AS Jobs,
@@ -191,11 +206,18 @@ AS
 						QD.UniqueMassTagCount, 
 						QD.UniqueInternalStdCount,
 						MMD.MD_Comparison_Mass_Tag_Count, 
+						QD.AMT_Count_1pct_FDR, 
+						QD.AMT_Count_2pt5pct_FDR, 
+						QD.AMT_Count_5pct_FDR, 
+						QD.AMT_Count_10pct_FDR, 
+						QD.AMT_Count_25pct_FDR, 
+						QD.AMT_Count_50pct_FDR,
 						MMD.MD_UMC_TolerancePPM, MMD.MD_NetAdj_NET_Min, MMD.MD_NetAdj_NET_Max, 
 						MMD.MD_MMA_TolerancePPM, MMD.MD_NET_Tolerance, 
 						MMD.Refine_Mass_Cal_PPMShift, 
 						IsNull(FAD.Total_Scans, 0), IsNull(FAD.Scan_Start, 0), IsNull(FAD.Scan_End, 0),
-						IsNull(QD.ReplicateNormalizationStats, '')
+						IsNull(QD.ReplicateNormalizationStats, ''),
+						QD.Match_Score_Mode
 					FROM T_Quantitation_Description AS QD INNER JOIN
 						T_Quantitation_MDIDs ON 
 						QD.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
@@ -265,11 +287,18 @@ AS
 							[Unique PMT Tag Count Matched], 
 							[Unique Internal Std Count Matched],
 							[Comparison PMT Tag Count], 
+							[AMTs 1% FDR],
+							[AMTs 2.5% FDR],
+							[AMTs 5% FDR],
+							[AMTs 10% FDR],
+							[AMTs 25% FDR],
+							[AMTs 50% FDR],
 							[MD UMC TolerancePPM], [MD NetAdj NET Min], [MD NetAdj NET Max],
 							[MD MMA TolerancePPM], [MD NET Tolerance],
 							[Refine Mass Cal PPMShift], 
 							[Total_Scans_Avg], [Scan_Start], [Scan_End],
-							[ReplicateNormalizationStats])
+							[ReplicateNormalizationStats],
+							[Match Score Mode])
 					SELECT QD.Quantitation_ID, QD.SampleName, QD.Comment, @ExperimentList, 
 						@JobList, @MDIDList,
 						dbo.udfPeakMatchingPathForMDID(MIN(MMD.MD_ID)),
@@ -280,14 +309,21 @@ AS
 						QD.UniqueMassTagCount, 
 						QD.UniqueInternalStdCount,
 						AVG(MMD.MD_Comparison_Mass_Tag_Count),
+						QD.AMT_Count_1pct_FDR, 
+						QD.AMT_Count_2pt5pct_FDR, 
+						QD.AMT_Count_5pct_FDR, 
+						QD.AMT_Count_10pct_FDR, 
+						QD.AMT_Count_25pct_FDR, 
+						QD.AMT_Count_50pct_FDR,
 						AVG(MMD.MD_UMC_TolerancePPM),
 						AVG(MMD.MD_NetAdj_NET_Min),
 						AVG(MMD.MD_NetAdj_NET_Max),
 						AVG(MMD.MD_MMA_TolerancePPM),
-					AVG(MMD.MD_NET_Tolerance),
+						AVG(MMD.MD_NET_Tolerance),
 						AVG(ABS(MMD.Refine_Mass_Cal_PPMShift)),
 						@TotalScanAvg, @ScanStartMin, @ScanEndMax,
-						IsNull(QD.ReplicateNormalizationStats, '')					
+						IsNull(QD.ReplicateNormalizationStats, ''),
+						QD.Match_Score_Mode					
 					FROM T_Quantitation_Description AS QD INNER JOIN
 						T_Quantitation_MDIDs ON 
 						QD.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
@@ -301,7 +337,14 @@ AS
 						QD.Fraction_Highest_Abu_To_Use, 
 						QD.UniqueMassTagCount,
 						QD.UniqueInternalStdCount,
-						QD.ReplicateNormalizationStats
+						QD.AMT_Count_1pct_FDR, 
+						QD.AMT_Count_2pt5pct_FDR, 
+						QD.AMT_Count_5pct_FDR, 
+						QD.AMT_Count_10pct_FDR, 
+						QD.AMT_Count_25pct_FDR, 
+						QD.AMT_Count_50pct_FDR,
+						QD.ReplicateNormalizationStats,
+						QD.Match_Score_Mode
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 				End
@@ -422,7 +465,7 @@ AS
 			Set @myError = 50001
 			Goto Done
 		End
-		
+
 		--------------------------------------------------------------
 		-- Populate #TmpQIDSortInfo based on @SortMode (using #TmpQIDValues)
 		--------------------------------------------------------------
@@ -441,11 +484,18 @@ AS
 					[Feature Count With Hits], [Percent Features With Hits],
 					[Unique PMT Tag Count Matched], [Unique Internal Std Count Matched],
 					[Comparison PMT Tag Count],
+					[AMTs 1% FDR],
+					[AMTs 2.5% FDR],
+					[AMTs 5% FDR],
+					[AMTs 10% FDR],
+					[AMTs 25% FDR],
+					[AMTs 50% FDR],
 					[MD UMC TolerancePPM],
 					[MD NetAdj NET Min], [MD NetAdj NET Max],
 					[MD MMA TolerancePPM], [MD NET Tolerance],
 					[Refine Mass Cal PPMShift],
 					[Total_Scans_Avg], [Scan_Start], [Scan_End],
+					[Match Score Mode],
 					[ReplicateNormalizationStats]
 			FROM #QIDSummary INNER JOIN 
 				#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
@@ -453,22 +503,48 @@ AS
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 		End
+
 		Else
 		Begin
-			SELECT 	[Quantitation ID],
-					[Sample Name], [Experiments],
-					[Jobs], [MDIDs],
-					[Feature (UMC) Count],
-					[Feature Count With Hits],
-					[Unique PMT Tag Count Matched],
-					[Unique Internal Std Count Matched],
-					[Comparison PMT Tag Count],
-					[Total_Scans_Avg],
-					[MD NetAdj NET Min], [MD NetAdj NET Max],
-					[Refine Mass Cal PPMShift]
-			FROM #QIDSummary INNER JOIN 
-				#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
-			ORDER BY #TmpQIDSortInfo.SortKey
+			IF EXISTS (SELECT * FROM #QIDSummary WHERE [Match Score Mode] <> 0)
+				-- Used STAC Scores
+				SELECT 	[Quantitation ID],
+						[Sample Name], [Experiments],
+						[Jobs], [MDIDs],
+						[Feature (UMC) Count],
+						[Feature Count With Hits],
+						[Unique PMT Tag Count Matched],
+						[Unique Internal Std Count Matched],
+						[Comparison PMT Tag Count],
+						[AMTs 1% FDR],
+						[AMTs 2.5% FDR],
+						[AMTs 5% FDR],
+						[AMTs 10% FDR],
+						[AMTs 25% FDR],
+						[AMTs 50% FDR],
+						[Total_Scans_Avg],
+						[MD NetAdj NET Min], [MD NetAdj NET Max],
+						[Refine Mass Cal PPMShift]
+				FROM #QIDSummary INNER JOIN 
+					#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+				ORDER BY #TmpQIDSortInfo.SortKey
+
+			Else
+				-- Used SLiC Scores
+				SELECT 	[Quantitation ID],
+						[Sample Name], [Experiments],
+						[Jobs], [MDIDs],
+						[Feature (UMC) Count],
+						[Feature Count With Hits],
+						[Unique PMT Tag Count Matched],
+						[Unique Internal Std Count Matched],
+						[Comparison PMT Tag Count],
+						[Total_Scans_Avg],
+						[MD NetAdj NET Min], [MD NetAdj NET Max],
+						[Refine Mass Cal PPMShift]
+				FROM #QIDSummary INNER JOIN 
+					#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+				ORDER BY #TmpQIDSortInfo.SortKey
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 		End
@@ -485,6 +561,7 @@ End Try
 Done:
 	--
 	Return @myError
+
 
 
 GO

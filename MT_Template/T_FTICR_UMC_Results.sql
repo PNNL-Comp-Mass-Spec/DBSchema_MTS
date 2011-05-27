@@ -38,6 +38,7 @@ CREATE TABLE [dbo].[T_FTICR_UMC_Results](
 	[Expression_Ratio_StDev] [float] NULL,
 	[Expression_Ratio_Charge_State_Basis_Count] [smallint] NULL,
 	[Expression_Ratio_Member_Basis_Count] [int] NULL,
+	[Drift_Time] [real] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_Results] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_Results_ID] ASC

@@ -27,6 +27,7 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			03/20/2007 mem - Updated to look for the results folder at the Vol_Server location, and, if not found, return the Vol_Client location
 **			04/16/2007 mem - Now using LookupCurrentResultsFolderPathsByJob to determine the results folder path (Ticket #423)
 **			07/22/2009 mem - Added Try/Catch error handling
+**			10/12/2010 mem - Now setting @completionCode to 9 when ValidateDelimitedFile returns a result code = 63
 **    
 *****************************************************/
 (
@@ -169,6 +170,11 @@ AS
 			If Len(@message) = 0
 				Set @message = 'Error calling ValidateDelimitedFile for ' + @ScanStatsFilePath + ' (Code ' + Convert(varchar(11), @result) + ')'
 			
+			if @result = 63
+				-- OpenTextFile was unable to open the file
+				-- Set the completion code to 9, meaning we want to retry the load
+				set @completionCode = 9
+				
 			Set @myError = 60003		
 		End
 		else
@@ -208,6 +214,11 @@ AS
 		Begin
 			If Len(@message) = 0
 				Set @message = 'Error calling ValidateDelimitedFile for ' + @SICStatsFilePath + ' (Code ' + Convert(varchar(11), @result) + ')'
+
+			if @result = 63
+				-- OpenTextFile was unable to open the file
+				-- Set the completion code to 9, meaning we want to retry the load
+				set @completionCode = 9
 			
 			Set @myError = 60003		
 		End

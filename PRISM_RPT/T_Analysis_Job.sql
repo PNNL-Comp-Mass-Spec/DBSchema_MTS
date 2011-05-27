@@ -24,6 +24,11 @@ CREATE TABLE [dbo].[T_Analysis_Job](
 	[Analysis_Manager_Warning] [int] NOT NULL,
 	[Analysis_Manager_ResultsID] [int] NULL,
 	[Results_URL] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[AMT_Count_1pct_FDR] [int] NULL,
+	[AMT_Count_5pct_FDR] [int] NULL,
+	[AMT_Count_10pct_FDR] [int] NULL,
+	[AMT_Count_25pct_FDR] [int] NULL,
+	[AMT_Count_50pct_FDR] [int] NULL,
  CONSTRAINT [T_Analysis_Job_PK] PRIMARY KEY CLUSTERED 
 (
 	[Job_ID] ASC

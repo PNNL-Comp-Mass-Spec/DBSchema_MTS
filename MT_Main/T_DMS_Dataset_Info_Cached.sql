@@ -30,6 +30,7 @@ CREATE TABLE [dbo].[T_DMS_Dataset_Info_Cached](
 	[Acquisition Start] [datetime] NULL,
 	[Acquisition End] [datetime] NULL,
 	[Scan Count] [int] NULL,
+	[File Size MB] [real] NULL,
 	[PreDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PostDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Last_Affected] [datetime] NULL,
@@ -45,7 +46,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE Trigger trig_u_DMS_Dataset_Info_Cached on T_DMS_Dataset_Info_Cached
+CREATE Trigger [dbo].[trig_u_DMS_Dataset_Info_Cached] on [dbo].[T_DMS_Dataset_Info_Cached]
 For Update
 AS
 	If @@RowCount = 0
@@ -77,6 +78,7 @@ AS
 		Update([Acquisition Start]) OR
 		Update([Acquisition End]) OR
 		Update([Scan Count]) OR
+		Update([File Size MB]) OR
 		Update([PreDigest Int Std]) OR
 		Update([PostDigest Int Std])
 	Begin
@@ -86,6 +88,14 @@ AS
 				 inserted ON DS.ID = inserted.ID
 	End
 
+GO
+GRANT DELETE ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT INSERT ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT SELECT ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
 GO
 ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

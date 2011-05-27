@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.UpdatePeptideStateID
+CREATE PROCEDURE UpdatePeptideStateID
 /****************************************************
 **
 **	Desc:	Updates column State_ID in T_Peptides 
@@ -13,6 +13,7 @@ CREATE PROCEDURE dbo.UpdatePeptideStateID
 **	Auth:	mem
 **	Date:	11/27/2006
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobList
+**			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **
 *****************************************************/
 (
@@ -124,12 +125,12 @@ As
 	FROM #Tmp_PeptideStateIDs INNER JOIN 
 		 (	SELECT Job, Peptide_ID
 			FROM (	SELECT  Pep.Analysis_ID as Job, Pep.Peptide_ID, COUNT(*) AS Protein_Count, 
-							SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR
-										  Prot.Reference LIKE 'scrambled[_]%' OR
-										  Prot.Reference LIKE '%[:]reversed' 
-								THEN 1 
-								ELSE 0 
-								END) AS Rev_Protein_Count
+							SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
+										  Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+										  Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
+										  Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+									THEN 1
+									ELSE 0 END) AS Rev_Protein_Count
 					FROM #Tmp_JobsToProcess JobQ INNER JOIN
 						 T_Peptides Pep ON JobQ.Job = Pep.Analysis_ID INNER JOIN
 						 T_Peptide_to_Protein_Map PPM ON 
@@ -164,7 +165,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideStateID] TO [MTS_DB_Dev] AS [dbo]

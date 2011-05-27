@@ -48,6 +48,8 @@ CREATE TABLE [dbo].[T_Quantitation_ResultDetails](
 	[ORF_Count] [smallint] NOT NULL,
 	[PMT_Quality_Score] [decimal](9, 5) NOT NULL,
 	[JobCount_Observed_Both_MS_and_MSMS] [smallint] NOT NULL,
+	[MT_Uniqueness_Probability_Avg] [real] NULL,
+	[MT_FDR_Threshold_Avg] [real] NULL,
  CONSTRAINT [PK_T_Quantitation_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[QRD_ID] ASC

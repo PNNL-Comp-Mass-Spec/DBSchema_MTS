@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 **			11/08/2007 mem - Now returning Cleavage_State as the final column
 **			04/05/2008 mem - Updated to use Cleavage_State_Max in T_Mass_Tags
 **			03/09/2009 mem - Now including column NET_Obs_Count
+**			12/02/2010 mem - No longer returning the Mass_Tag_ID column twice in the resultset returned
 **  
 ****************************************************************/
 (
@@ -113,7 +114,6 @@ As
 				MT.Mod_Count,
 				MT.Mod_Description,
 				MT.High_Peptide_Prophet_Probability,
-				MTPPS.Mass_Tag_ID, 
 				MTPPS.ObsCount_CS1, 
 				MTPPS.ObsCount_CS2, 
 				MTPPS.ObsCount_CS3, 
@@ -162,7 +162,6 @@ As
 			MT.Mod_Count,
 			MT.Mod_Description,
 			MT.High_Peptide_Prophet_Probability,
-			MTPPS.Mass_Tag_ID, 
 			MTPPS.ObsCount_CS1, 
 			MTPPS.ObsCount_CS2, 
 			MTPPS.ObsCount_CS3, 

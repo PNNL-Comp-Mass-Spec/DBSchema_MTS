@@ -1,10 +1,11 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 39 ******/
+/****** RowCount: 40 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Custom_SP_MSMS','Custom Processing',0,99,'Enter a stored procedure name to run it during Master Update; Optionally, supply stored procedure parameter values after the SP name, separating each value with a comma, for example: UpdatePMTQS, -10, 10, 0, 1, 2')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Dataset','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this dataset name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Dataset_Acq_Length_Range','MS/MS analysis job import, FTICR analysis job import',0,1,'Allow MS/MS and FTICR analysis jobs whose datasets have acquisition lengths (in minutes) between the two specified values; separate the values with a comma.  For example, "80,120" means acquisition lengths between 80 and 120 minutes')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Dataset_DMS_Creation_Date_Minimum','MS/MS analysis job import, FTICR analysis job import',0,1,'Earliest allowable dataset creation date in DMS')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Dataset_Exclusion','MS/MS analysis job import, FTICR analysis job import',1,99,'Exclude MS/MS and FTICR analysis jobs that are associated with this dataset name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('DB_Schema_Version','Info only',1,1,'Version of MTDB schema')

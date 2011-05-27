@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure PMLookupFilterThresholdsWork
+CREATE Procedure dbo.PMLookupFilterThresholdsWork
 /****************************************************	
 **  Desc:	
 **		Determines the filter thresholds used during the peak matching for the given MDIDs
@@ -22,6 +22,8 @@ CREATE Procedure PMLookupFilterThresholdsWork
 **  Auth:	mem
 **	Date:	07/16/2009
 **			10/27/2009 mem - Added support for Minimum_Cleavage_State
+**			10/12/2010 mem - Explicitly passing @FDRThreshold=0 to PMPopulateAMTTable
+**			02/16/2011 mem - Added column Match_Score_Mode to #Tmp_MDIDList
 **
 ****************************************************/
 (
@@ -72,7 +74,8 @@ AS
 		-------------------------------------------------	
 
 		CREATE TABLE #Tmp_MDIDList (
-			MD_ID int NOT NULL
+			MD_ID int NOT NULL,
+			Match_Score_Mode tinyint not null
 		)
 		CREATE UNIQUE INDEX IX_Tmp_MDIDList_MDID ON #Tmp_MDIDList (MD_ID ASC)
 
@@ -211,7 +214,7 @@ AS
 			While @continue = 1
 			Begin -- <f>
 				SELECT TOP 1 @EntryID = EntryID,
-				             @MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
+				       @MinimumHighNormalizedScore = Minimum_High_Normalized_Score,
 				             @MinimumHighDiscriminantScore = Minimum_High_Discriminant_Score,
 				             @MinimumPeptideProphetProbability = Minimum_Peptide_Prophet_Probability,
 				             @MinimumPMTQualityScore = Minimum_PMT_Quality_Score,
@@ -247,6 +250,7 @@ AS
 										@MinimumPeptideProphetProbability = @MinimumPeptideProphetProbability,
 										@MinimumPMTQualityScore = @MinimumPMTQualityScore,
 										@MinimumCleavageState = @MinimumCleavageState,
+										@FDRThreshold = 0,
 										@CountRowsOnly = 1,
 										@AMTCount = @AMTCount output,
 										@AMTLastAffectedMax = @AMTLastAffectedMax output,

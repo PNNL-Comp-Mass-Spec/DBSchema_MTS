@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
+CREATE PROCEDURE QuantitationProcessWorkStepB
 /****************************************************	
 **  Desc: 
 **
@@ -19,6 +19,8 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 **			06/06/2007 mem - Now populating Rank_Match_Score_Avg, then filtering based on parameter @MaximumMatchesPerUMCToKeep
 **			06/08/2007 mem - Updated call to QuantitationProcessCheckForMSMSPeptideIDs to include score filters
 **			10/20/2008 mem - Added Try/Catch error handling
+**			09/13/2010 mem - Added more @CurrentLocation checkpoints
+**			10/13/2010 mem - Added support for Uniqueness_Probability and FDR_Threshold
 **
 ****************************************************/
 (
@@ -36,6 +38,9 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepB
 	@MaximumMatchesPerUMCToKeep smallint,		-- 0 to use all matches for each UMC, > 0 to only use the top @MaximumMatchesPerUMCToKeep matches to each UMC (favoring the ones with the closest SLiC score first); matches with identical SLiC scores will all be used
 	@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
 	@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score (aka Del SLiC Score); only used if @MinimumMatchScore is > 0
+
+	@MinimumUniquenessProbability real,			-- 0 to use all matching AMTs, > 0 to filter by Uniqueness_Probability; should be set to 0 if Match_Score_Mode = 0
+	@MaximumFDRThreshold real,					-- 1 to use all matching AMTs, < 1 to filter by FDR_Threshold; should be set to 1 if Match_Score_Mode = 0
 
 	@message varchar(512)='' output
 )
@@ -77,6 +82,8 @@ AS
 		--
 		-- Define the fields for the temporary table that will hold the source data for the #UMCMatchResultsByJob table
 
+		Set @CurrentLocation = 'Create temporary table'
+		
 		if exists (select * from dbo.sysobjects where id = object_id(N'[#UMCMatchResultsSource]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [#UMCMatchResultsSource]
 
@@ -102,6 +109,8 @@ AS
 			[Matching_Member_Count] int NOT NULL ,
 			[Match_Score] float NOT NULL ,
 			[Del_Match_Score] real NOT NULL ,
+			[Uniqueness_Probability] real NOT NULL ,
+			[FDR_Threshold] real NOT NULL,
 			[MassTag_Hit_Count] int NOT NULL ,
 			[Scan_First] int NOT NULL ,
 			[Scan_Last] int NOT NULL ,
@@ -123,6 +132,8 @@ AS
 			--
 			-- Step 5b - Populate the temporary table with PMT tag matches
 			--
+			Set @CurrentLocation = 'Step 5b: Populate the temporary table with PMT tag matches'
+			
 			INSERT INTO #UMCMatchResultsSource
 			   (MD_ID,
 				Job,
@@ -144,6 +155,8 @@ AS
 				Matching_Member_Count,
 				Match_Score,
 				Del_Match_Score,
+				Uniqueness_Probability,
+				FDR_Threshold,
 				MassTag_Hit_Count,
 				Scan_First,
 				Scan_Last,
@@ -191,6 +204,9 @@ AS
 					IsNull(RD.Matching_Member_Count, 0),
 					IsNull(RD.Match_Score, -1),
 					IsNull(RD.Del_Match_Score, 0),
+					
+					IsNull(RD.Uniqueness_Probability, 0),
+					IsNull(RD.FDR_Threshold, 1),
 					
 					R.MassTag_Hit_Count,
 					R.Scan_First,
@@ -255,6 +271,9 @@ AS
 			-- Step 5c - Populate the temporary table with the Internal Standard Matches
 			--			 Do not add new matches for PMTs that are already present
 			--
+			
+			Set @CurrentLocation = 'Step 5c: Populate the temporary table with the Internal Standard Matches'
+			
 			INSERT INTO #UMCMatchResultsSource
 			   (MD_ID,
 				Job,
@@ -276,6 +295,8 @@ AS
 				Matching_Member_Count,
 				Match_Score,
 				Del_Match_Score,
+				Uniqueness_Probability,
+				FDR_Threshold,
 				MassTag_Hit_Count,
 				Scan_First,
 				Scan_Last,
@@ -323,6 +344,8 @@ AS
 					IsNull(ISD.Matching_Member_Count, 0),
 					IsNull(ISD.Match_Score, -1),
 					IsNull(ISD.Del_Match_Score, 0),
+					IsNull(ISD.Uniqueness_Probability, 0),
+					IsNull(ISD.FDR_Threshold, 1),
 					
 					R.MassTag_Hit_Count,
 					R.Scan_First,
@@ -390,11 +413,16 @@ AS
 		--
 		-- Step 5d - Possibly delete low scoring matches
 		--
-		If (@MinimumMatchScore > 0 OR @MinimumDelMatchScore > 0) AND @ResultsCount > 0
+		If (@MinimumMatchScore > 0 OR @MinimumDelMatchScore > 0 OR @MinimumUniquenessProbability > 0 OR @MaximumFDRThreshold < 1) AND @ResultsCount > 0
 		Begin
+			Set @CurrentLocation = 'Step 5d: Delete low scoring matches'
+		
 			-- Transact-SQL delete notation
 			DELETE FROM #UMCMatchResultsSource
-			WHERE NOT (Match_Score >= @MinimumMatchScore AND Del_Match_Score >= @MinimumDelMatchScore)
+			WHERE NOT (Match_Score >= @MinimumMatchScore AND 
+			           Del_Match_Score >= @MinimumDelMatchScore AND
+			           Uniqueness_Probability >= @MinimumUniquenessProbability AND
+			           FDR_Threshold <= @MaximumFDRThreshold)
 			--
 			SELECT @myError = @@error, @myRowCount = @@RowCount
 			--
@@ -413,7 +441,11 @@ AS
 				If @myRowCount = 0
 				Begin
 					-- Post an error message to T_Log_Entries
-					set @message = 'All matching mass tags were filtered out by the Minimum_Match_Score (SLiC Score) value of ' + Convert(varchar(12), Round(@MinimumMatchScore, 3)) + ' and Minimum_Del_Match_Score of ' +  Convert(varchar(12), Round(@MinimumDelMatchScore, 3)) + ' for Quantitation_ID = ' + convert(varchar(19), @QuantitationID) + ' listed in T_Quantitation_MDIDs'
+					set @message = 'All matching mass tags were filtered out using Match_Score >= ' + Convert(varchar(12), Round(@MinimumMatchScore, 3)) 
+					set @message = @message + ', Del_Match_Score >= ' +  Convert(varchar(12), Round(@MinimumDelMatchScore, 3))
+					set @message = @message + ', Uniqueness_Probability >= ' +  Convert(varchar(12), Round(@MinimumUniquenessProbability, 3))
+					set @message = @message + ', and FDR_Threshold <= ' +  Convert(varchar(12), Round(@MaximumFDRThreshold, 3))
+					set @message = @message + ' for Quantitation_ID = ' + convert(varchar(19), @QuantitationID)
 					set @myError = 121
 					goto Done
 				End
@@ -426,6 +458,8 @@ AS
 		--
 		If @ResultsCount > 0
 		Begin
+		
+			Set @CurrentLocation = 'Step 5e: Populate Rank_Match_Score in #UMCMatchResultsSources'
 		
 			UPDATE #UMCMatchResultsSource
 			SET Rank_Match_Score = RankQ.DenseRank
@@ -455,6 +489,8 @@ AS
 		--  and top level fraction later
 		--
 		--
+		Set @CurrentLocation = 'Step 5f: Populate #UMCMatchResultsByJob'
+		
 		INSERT INTO #UMCMatchResultsByJob
 			(Job,
 			 TopLevelFraction, 
@@ -480,6 +516,8 @@ AS
 			 Rank_Match_Score_Avg,
 			 Match_Score_Avg,
 			 Del_Match_Score_Avg,
+			 Uniqueness_Probability_Avg,
+			 FDR_Threshold_Avg,
 			 NET_Error_Obs_Avg,
 			 NET_Error_Pred_Avg,
 			 ER_WeightedAvg,					-- Weighted average expression ratio for given mass tag with several matching UMCs
@@ -530,6 +568,8 @@ AS
 				AVG(Rank_Match_Score),		-- Rank_Match_Score_Avg: Rank 1 is top hit, rank 2 is 2nd, etc.
 				AVG(Match_Score),			-- Match_Score_Avg: Match_Score holds the likelihood of the match, a value between 0 and 1, or -1 if undefined
 				AVG(Del_Match_Score),		-- Del_Match_Score_Avg: Del_Match_Score holds the distance of the given match to highest scoring match
+				AVG(Uniqueness_Probability),
+				AVG(FDR_Threshold),
 				AVG(ElutionTime - IsNull(MT_Avg_GANET, ElutionTime)),		-- NET_Error_Obs_Avg
 				AVG(ElutionTime - IsNull(MT_PNET, ElutionTime)),			-- NET_Error_Pred_Avg
 				CASE WHEN SUM(MTAbundanceLightPlusHeavy) > 0
@@ -589,6 +629,8 @@ AS
 		--
 		-- Step 5g - Compute ER_Recomputed (Sum of light member of all UMCs for each mass tag divided by sum of heavy member of all UMCs for each mass tag)
 		--
+		Set @CurrentLocation = 'Step 5g: Compute ER_Recomputed'
+		
 		UPDATE #UMCMatchResultsByJob
 		SET ER_Recomputed = MTAbundanceLight / MTAbundanceHeavy
 		WHERE MTAbundanceHeavy > 0
@@ -603,6 +645,8 @@ AS
 		End
 
 		-- Copy the ER value into ER_ToUse
+		Set @CurrentLocation = 'Step 5g: Copy the ER value into ER_ToUse'
+		
 		If @ERMode = 0
 		  Begin
 			UPDATE #UMCMatchResultsByJob
@@ -624,6 +668,8 @@ AS
 		   @MinimumMTPeptideProphetProbability > 0 OR 
 		   @MinimumPMTQualityScore > 0
 		Begin
+			Set @CurrentLocation = 'Step 5h: Delete hits that match mass tags with too low of a High_Normalized_Score'
+			
 			DELETE FROM #UMCMatchResultsByJob
 			WHERE InternalStdMatch = 0 AND 
 				  (
@@ -661,6 +707,8 @@ AS
 		--
 		If @MinimumPeptideLength > 0
 		Begin
+			Set @CurrentLocation = 'Step 5i: Delete hits that match mass tags with peptide sequences that are too short'
+		
 			-- Transact-SQL delete notation
 			DELETE #UMCMatchResultsByJob
 			FROM #UMCMatchResultsByJob INNER JOIN 
@@ -705,6 +753,9 @@ AS
 		--  in the #UMCMatchResultsByJob temporary table, and were already obtained
 		--  in the above Insert Into query.
 		--	
+		
+		Set @CurrentLocation = 'Step 5j: Determine the percent of UMCs that matched just one mass tag'
+		
 		UPDATE #UMCMatchResultsByJob
 		SET FractionScansMatchingSingleMT = 
 			Convert(float, IsNull(UMCIonCountMatchInUMCsWithSingleHit, 0)) / 
@@ -724,6 +775,8 @@ AS
 		FROM T_Process_Step_Control
 		WHERE Processing_Step_Name = 'QR_Check_Results_in_Remote_Peptide_DBs'
 		
+		Set @CurrentLocation = 'Step 5k: Call QuantitationProcessCheckForMSMSPeptideIDs'
+		
 		Exec @myError = QuantitationProcessCheckForMSMSPeptideIDs @CheckResultsInRemotePeptideDBs, 
 									@MinimumMTHighNormalizedScore = @MinimumMTHighNormalizedScore,
 									@MinimumMTHighDiscriminantScore = @MinimumMTHighDiscriminantScore,
@@ -741,7 +794,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepB] TO [MTS_DB_Dev] AS [dbo]

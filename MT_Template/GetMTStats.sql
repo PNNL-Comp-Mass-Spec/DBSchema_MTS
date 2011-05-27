@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[GetMTStats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE dbo.GetMTStats
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.GetMTStats
 **  Auth:	mem
 **	Date:	01/11/2010
 **			01/20/2010 mem - Now returning PMT_Quality_Score
+**			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
 **  
 ****************************************************************/
 (
@@ -26,6 +27,7 @@ CREATE PROCEDURE dbo.GetMTStats
 	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
 	@MinimumPeptideProphetProbability real = 0,	-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
 	@MinimumPMTQualityScore real = 0,			-- The minimum PMT_Quality_Score to allow; 0 to allow all
+	@MaximumMSGFSpecProb float = 0,				-- The maximum MSGF Spectrum Probability value to allow (examines Min_MSGF_SpecProb in T_Mass_Tags); 0 to allow all
 	@infoOnly tinyint = 0						-- When non-zero, then shows the SQL that would be used; also returns the RowCount of the number of filter-passing AMT Tags
 )
 As
@@ -44,6 +46,7 @@ As
 	Set @MinimumHighDiscriminantScore = IsNull(@MinimumHighDiscriminantScore, 0)
 	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
+	Set @MaximumMSGFSpecProb = IsNull(@MaximumMSGFSpecProb, 0)
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	---------------------------------------------------	
@@ -83,6 +86,7 @@ As
 							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
 							@MinimumHighNormalizedScore, @MinimumPMTQualityScore, 
 							@MinimumHighDiscriminantScore, @MinimumPeptideProphetProbability,
+							@MaximumMSGFSpecProb,
 							@DatasetToFilterOn = @DatasetToFilterOn Output,
 							@infoOnly = @infoOnly
 	

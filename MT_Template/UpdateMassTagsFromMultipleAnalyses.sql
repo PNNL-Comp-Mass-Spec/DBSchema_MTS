@@ -31,6 +31,7 @@ CREATE Procedure dbo.UpdateMassTagsFromMultipleAnalyses
 **			11/07/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			07/16/2009 mem - Now populating PeptideEx in T_Mass_Tags
 **			11/11/2009 mem - Now examining state of ValidateSICStatsForImportedMSMSJobs
+**			08/16/2010 mem - Now populating MSGF_SpecProb in T_Score_Discriminant
 **
 *****************************************************/
 (
@@ -1094,10 +1095,10 @@ As
 	set @S = ''
 	set @S = @S + ' INSERT INTO T_Score_Discriminant ('
 	set @S = @S +  ' Peptide_ID, MScore, DiscriminantScore, DiscriminantScoreNorm,'
-	set @S = @S +  ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability'
+	set @S = @S +  ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability, MSGF_SpecProb'
 	set @S = @S + ' )'
 	set @S = @S + ' SELECT IP.Peptide_ID_New, MScore, DiscriminantScore, DiscriminantScoreNorm,'
-	set @S = @S +        ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability'
+	set @S = @S +        ' PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability, MSGF_SpecProb'
 	set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
 	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
 	set @S = @S + ' ORDER BY IP.Peptide_ID_New'

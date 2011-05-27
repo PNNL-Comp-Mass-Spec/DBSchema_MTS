@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE dbo.ObtainSeqOccurrenceStats
+
+CREATE PROCEDURE ObtainSeqOccurrenceStats
 /****************************************************
 **
 **	Desc: 
@@ -12,12 +13,24 @@ create PROCEDURE dbo.ObtainSeqOccurrenceStats
 **
 **		The calling procedure must create table #Tmp_Seq_Occurence_Stats before calling this SP
 **
+**
+**		CREATE TABLE #Tmp_Seq_Occurence_Stats (
+**			Seq_ID int NOT NULL,
+**			Job_Count_Observed int NULL,
+**			Percent_Jobs_Observed real NULL,
+**			Avg_NET real NULL,						-- Populated by ObtainSeqOccurrenceStats, but not returned by this SP
+**			Cnt_NET real NULL,						-- Populated by ObtainSeqOccurrenceStats, but not returned by this SP
+**			StD_NET real NULL						-- Populated by ObtainSeqOccurrenceStats, but not returned by this SP
+**		)
+**
+**
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
 **
 **	Auth:	mem
 **	Date:	03/01/2006
+**			09/22/2010 mem - Added parameters @PeptideProphetMinimum, @MSGFThreshold, @ResultTypeFilter, and @PreviewSql
 **
 *****************************************************/
 (
@@ -37,7 +50,7 @@ create PROCEDURE dbo.ObtainSeqOccurrenceStats
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@DiscriminantScoreMinimum real = 0.75,			-- Ignored if 0
+	@DiscriminantScoreMinimum real = 0,				-- Ignored if 0
 	@CleavageStateMinimum tinyint = 0,				-- Ignored if 0
 	@XCorrMinimum real = 0,							-- Ignored if 0
 	@DeltaCn2Minimum real = 0,						-- Ignored if 0
@@ -46,7 +59,12 @@ create PROCEDURE dbo.ObtainSeqOccurrenceStats
 	@FilterIDFilter int = 117,						-- Ignored if 0; only appropriate for Peptide DBs
 	@PMTQualityScoreMinimum int = 1,				-- Ignored if 0; only appropriate for PMT Tag DBs
 	
-	@maximumRowCount int = 255						-- 0 means to return all rows; defaults to 255 to limit the number of sequences returned
+	@maximumRowCount int = 255,						-- 0 means to return all rows; defaults to 255 to limit the number of sequences returned
+
+	@PeptideProphetMinimum real = 0,				-- Ignored if 0
+	@MSGFThreshold float = 1E-11,					-- Ignored if 0; example threshold is 1E-11 which means to keep peptides with MSGF < 1E-11
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -57,7 +75,7 @@ As
 	set @myRowCount = 0
 	
 	set @message = ''
-	
+
 	---------------------------------------------------
 	-- Validate that DB exists on this server, determine its type,
 	-- and look up its schema version
@@ -103,6 +121,9 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
+	Set @PreviewSql = IsNull(@PreviewSql, 0)
+	
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
 	If @returnRowCount = 'true'
@@ -129,7 +150,9 @@ As
 	Exec @myError = QCMSMSJobsTablePopulate	@DBName, @message output, 
 											@InstrumentFilter, @CampaignFilter, @ExperimentFilter, @DatasetFilter, 
 											@OrganismDBFilter, @DatasetDateMinimum, @DatasetDateMaximum, 
-											@JobMinimum, @JobMaximum, 0
+											@JobMinimum, @JobMaximum, 
+											0, -- @maximumJobCount
+											@ResultTypeFilter, @PreviewSql
 	If @myError <> 0
 	Begin
 		If Len(IsNull(@message, '')) = 0
@@ -197,19 +220,24 @@ As
 		If @PMTQualityScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID'
 			
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0 Or @MSGFThreshold > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
-		
-		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Mass_Tag_to_Protein_Map MTPM ON Pep.Mass_Tag_ID = MTPM.Mass_Tag_ID'
 			
 		Set @sqlFrom = @sqlFrom +  ' WHERE  Pep.Max_Obs_Area_In_Job = 1'
 		
 		-- Add the optional score filters
 		If @DiscriminantScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum) + ')'
+			
+		-- Note: X!Tandem jobs don't have peptide prophet values, so all X!Tandem data will get excluded if @PeptideProphetMinimum is used
+		If @PeptideProphetMinimum > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
+
+		If @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.MSGF_SpecProb, 1) <= ' + Convert(varchar(12), @MSGFThreshold) + ')'			
+		
 		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom + ' AND (MTPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
+			Set @sqlFrom = @sqlFrom + ' AND (MT.Cleavage_State_Max >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SS.XCorr >= ' + Convert(varchar(12), @XCorrMinimum) + ')'
 		If @DeltaCn2Minimum > 0
@@ -239,19 +267,24 @@ As
 		If @FilterIDFilter > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Peptide_Filter_Flags PFF ON Pep.Peptide_ID = PFF.Peptide_ID'
 			
-		If @DiscriminantScoreMinimum > 0
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0 Or @MSGFThreshold > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 		
-		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Peptide_to_Protein_Map PPM ON Pep.Peptide_ID = PPM.Peptide_ID'
-			
 		Set @sqlFrom = @sqlFrom +  ' WHERE  Pep.Max_Obs_Area_In_Job = 1'
 
 		-- Add the optional score filters
 		If @DiscriminantScoreMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SD.DiscriminantScoreNorm >= ' + Convert(varchar(12), @DiscriminantScoreMinimum) + ')'
+			
+		-- Note: X!Tandem jobs don't have peptide prophet values, so all X!Tandem data will get excluded if @PeptideProphetMinimum is used
+		If @PeptideProphetMinimum > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
+
+		If @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.MSGF_SpecProb, 1) <= ' + Convert(varchar(12), @MSGFThreshold) + ')'			
+		
 		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom + ' AND (PPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
+			Set @sqlFrom = @sqlFrom + ' AND (Pep.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SS.XCorr >= ' + Convert(varchar(12), @XCorrMinimum) + ')'
 		If @DeltaCn2Minimum > 0
@@ -288,12 +321,17 @@ As
 		Set @sqlSelect2 = @sqlSelect2 + ' SELECT Count (*) As ResultSet_Row_Count, 0 AS Job_Count_Observed,'
 		Set @sqlSelect2 = @sqlSelect2 + ' 0 AS Percent_Jobs_Observed, 0 AS Avg_NET, 0 AS Cnt_NET, 0 AS StD_NET'
 		
-		Exec (@sqlInsert + @sqlSelect2 + ' FROM (' + @sqlSelect + ' ' + @sqlFrom + ') As CountQ')
+		if @previewSql <> 0
+			print @sqlInsert + @sqlSelect2 + ' FROM (' + @sqlSelect + ' ' + @sqlFrom + ') As CountQ'
+		Else
+			Exec (@sqlInsert + @sqlSelect2 + ' FROM (' + @sqlSelect + ' ' + @sqlFrom + ') As CountQ')
 	end
 	Else
 	begin
-		--print		@sqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlOrderBy
-		Exec (		@sqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlOrderBy)
+		if @previewSql <> 0
+			print		@sqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlOrderBy
+		else
+			Exec (		@sqlInsert + ' ' + @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlOrderBy)
 	end
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount

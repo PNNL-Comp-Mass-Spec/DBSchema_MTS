@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
+CREATE Procedure RefreshAnalysisDescriptionInfo
 /****************************************************
 **
 **	Desc: 
@@ -29,6 +29,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **						   - Now storing old and new values in T_Analysis_Description_Updates when updates are applied
 **			08/14/2008 mem - Now updating Experiment_Organism
 **			12/09/2008 mem - Increased size of @message to varchar(4000)
+**			07/13/2010 mem - Now populating Dataset_Acq_Length in T_Analysis_Description, T_FTICR_Analysis_Description, and T_Analysis_Description_Updates
 **    
 *****************************************************/
 (
@@ -95,6 +96,7 @@ As
 			Job int NOT NULL,
 			Dataset varchar(255) NULL,
 			Dataset_ID int NULL,
+			Dataset_Acq_Length decimal(9,2) NULL,
 			Experiment varchar(255) NULL,
 			Campaign varchar(128) NULL,
 			Experiment_Organism varchar(128) NULL,
@@ -125,7 +127,8 @@ As
 		TRUNCATE TABLE #TmpJobsToUpdate
 		
 		INSERT INTO #TmpJobsToUpdate (
-			Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,
+			Job, Dataset, Dataset_ID, Dataset_Acq_Length, 
+			Experiment, Campaign, Experiment_Organism,
 			Vol_Client, Vol_Server,
 			Storage_Path, Dataset_Folder, Results_Folder,
 			Completed, Parameter_File_Name, Settings_File_Name,
@@ -133,7 +136,8 @@ As
 			Separation_Sys_Type, PreDigest_Internal_Std, 
 			PostDigest_Internal_Std, Dataset_Internal_Std,
 			Enzyme_ID, Labelling )
-		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism,
+		SELECT P.Job, P.Dataset, P.DatasetID, P.Dataset_Acq_Length, 
+		    P.Experiment, P.Campaign, P.Organism,
 		    P.StoragePathClient, P.StoragePathServer,
 			'' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,
 			P.Completed, P.ParameterFileName, P.SettingsFileName,
@@ -142,7 +146,8 @@ As
 			P.[PostDigest Int Std], P.[Dataset Int Std],
 			P.EnzymeID, P.Labelling
 		FROM T_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism,
+			SELECT L.Job, R.Dataset, R.DatasetID, R.DS_Acq_Length AS Dataset_Acq_Length, 
+			    R.Experiment, R.Campaign, R.Organism,
 			    R.StoragePathClient, R.StoragePathServer,
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
@@ -154,6 +159,7 @@ As
 				L.Job = R.Job AND (
 					L.Dataset_ID <> R.DatasetID OR
 					IsNull(L.Dataset, '') <> R.Dataset OR
+					IsNull(L.Dataset_Acq_Length, 0) <> IsNull(R.DS_Acq_Length, 0) OR
 					IsNull(L.Experiment, '') <> R.Experiment OR
 					IsNull(L.Campaign, '') <> R.Campaign OR
 					IsNull(L.Experiment_Organism, '') <> R.Organism OR
@@ -191,12 +197,13 @@ As
 			Begin
 				Set @S = @S + ' INSERT INTO T_Analysis_Description_Updates ('
 				Set @S = @S +     ' Job, Dataset, Dataset_New, Dataset_ID, Dataset_ID_New, '
+				Set @S = @S +     ' Dataset_Acq_Length, Dataset_Acq_Length_New, '
 				Set @S = @S +     ' Experiment, Experiment_New, Campaign, Campaign_New, '
 				Set @S = @S +     ' Vol_Client, Vol_Client_New, Vol_Server, Vol_Server_New, '
 				Set @S = @S +     ' Storage_Path, Storage_Path_New, Dataset_Folder, Dataset_Folder_New, '
 				Set @S = @S +     ' Results_Folder, Results_Folder_New, Completed, Completed_New, '
 				Set @S = @S +     ' Parameter_File_Name, Parameter_File_Name_New, '
-				Set @S = @S + ' Settings_File_Name, Settings_File_Name_New, '
+				Set @S = @S +     ' Settings_File_Name, Settings_File_Name_New, '
 				Set @S = @S +     ' Organism_DB_Name, Organism_DB_Name_New, '
 				Set @S = @S +     ' Protein_Collection_List, Protein_Collection_List_New, '
 				Set @S = @S +     ' Protein_Options_List, Protein_Options_List_New, '
@@ -210,6 +217,7 @@ As
 			
 			Set @S = @S + ' SELECT TAD.Job, TAD.Dataset, U.Dataset AS Dataset_New,'
 			Set @S = @S +        ' TAD.Dataset_ID, U.Dataset_ID AS Dataset_ID_New,'
+			Set @S = @S +        ' TAD.Dataset_Acq_Length, U.Dataset_Acq_Length AS Dataset_Acq_Length_New,'
 			Set @S = @S +        ' TAD.Experiment, U.Experiment AS Experiment_New,'
 			Set @S = @S +        ' TAD.Campaign, U.Campaign AS Campaign_New,'
 			Set @S = @S +        ' TAD.Vol_Client, U.Vol_Client AS Vol_Client_New,'
@@ -279,6 +287,7 @@ As
 				SET 
 					Dataset = U.Dataset,
 					Dataset_ID = U.Dataset_ID,
+					Dataset_Acq_Length = U.Dataset_Acq_Length,
 					Experiment = U.Experiment,
 					Campaign = U.Campaign,
 					Experiment_Organism = U.Experiment_Organism,
@@ -338,6 +347,7 @@ As
 			--------------------------------------------------------------
 			-- Step 2: Update dataset information in T_Analysis_Description
 			--         We're not tracking this in T_Analysis_Description_Updates since it's not critical
+			--         Note that Dataset_Acq_Length should have already been update above
 			--------------------------------------------------------------
 			--
 			UPDATE T_Analysis_Description
@@ -386,14 +396,16 @@ As
 		TRUNCATE TABLE #TmpJobsToUpdate
 		
 		INSERT INTO #TmpJobsToUpdate (
-			Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism,
+			Job, Dataset, Dataset_ID, Dataset_Acq_Length, 
+			Experiment, Campaign, Experiment_Organism,
 			Vol_Client, Vol_Server,
 			Storage_Path, Dataset_Folder, Results_Folder,
 			Completed, Parameter_File_Name, Settings_File_Name,
 			Separation_Sys_Type, PreDigest_Internal_Std, 
 			PostDigest_Internal_Std, Dataset_Internal_Std,
 			Labelling )
-		SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism,
+		SELECT P.Job, P.Dataset, P.DatasetID, P.Dataset_Acq_Length, 
+		    P.Experiment, P.Campaign, P.Organism,
 		    P.StoragePathClient, P.StoragePathServer,
 			'' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,
 			P.Completed, P.ParameterFileName, P.SettingsFileName,
@@ -401,7 +413,8 @@ As
 			P.[PostDigest Int Std], P.[Dataset Int Std],
 			P.Labelling
 		FROM T_FTICR_Analysis_Description AS TAD INNER JOIN (
-			SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism,
+			SELECT L.Job, R.Dataset, R.DatasetID, R.DS_Acq_Length AS Dataset_Acq_Length, 
+			    R.Experiment, R.Campaign, R.Organism,
 			    R.StoragePathClient, R.StoragePathServer,
 				R.DatasetFolder, R.ResultsFolder, R.Completed,
 				R.ParameterFileName, R.SettingsFileName,
@@ -412,6 +425,7 @@ As
 				L.Job = R.Job AND (
 				    L.Dataset_ID <> R.DatasetID OR
 					IsNull(L.Dataset, '') <> R.Dataset OR
+					IsNull(L.Dataset_Acq_Length, 0) <> IsNull(R.DS_Acq_Length, 0) OR
 					IsNull(L.Experiment, '') <> R.Experiment OR
 					IsNull(L.Campaign, '') <> R.Campaign OR
 					IsNull(L.Experiment_Organism, '') <> R.Organism OR
@@ -445,6 +459,7 @@ As
 			Begin
 				Set @S = @S + ' INSERT INTO T_Analysis_Description_Updates ('
 				Set @S = @S +     ' Job, Dataset, Dataset_New, Dataset_ID, Dataset_ID_New, '
+				Set @S = @S +     ' Dataset_Acq_Length, Dataset_Acq_Length_New, '
 				Set @S = @S +     ' Experiment, Experiment_New, Campaign, Campaign_New, '
 				Set @S = @S +     ' Vol_Client, Vol_Client_New, Vol_Server, Vol_Server_New, '
 				Set @S = @S +     ' Storage_Path, Storage_Path_New, Dataset_Folder, Dataset_Folder_New, '
@@ -460,6 +475,7 @@ As
 			
 			Set @S = @S + ' SELECT TAD.Job, TAD.Dataset, U.Dataset AS Dataset_New,'
 			Set @S = @S +        ' TAD.Dataset_ID, U.Dataset_ID AS Dataset_ID_New,'
+			Set @S = @S +        ' TAD.Dataset_Acq_Length, U.Dataset_Acq_Length AS Dataset_Acq_Length_New,'			
 			Set @S = @S +        ' TAD.Experiment, U.Experiment AS Experiment_New,'
 			Set @S = @S +        ' TAD.Campaign, U.Campaign AS Campaign_New,'
 			Set @S = @S +        ' TAD.Vol_Client, U.Vol_Client AS Vol_Client_New,'
@@ -523,6 +539,7 @@ As
 				SET 
 					Dataset = U.Dataset,
 					Dataset_ID = U.Dataset_ID,
+					Dataset_Acq_Length = U.Dataset_Acq_Length,
 					Experiment = U.Experiment,
 					Campaign = U.Campaign,
 					Experiment_Organism = U.Experiment_Organism,
@@ -578,6 +595,7 @@ As
 			--------------------------------------------------------------
 			-- Step 4: Update dataset information in T_FTICR_Analysis_Description
 			--         We're not tracking this in T_Analysis_Description_Updates since it's not critical
+			--         Note that Dataset_Acq_Length should have already been update above
 			--------------------------------------------------------------
 			--
 			UPDATE T_FTICR_Analysis_Description
@@ -642,7 +660,6 @@ As
 Done:
 	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev] AS [dbo]

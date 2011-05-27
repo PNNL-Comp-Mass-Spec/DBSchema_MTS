@@ -20,6 +20,7 @@ CREATE Procedure dbo.SetPeakMatchingTaskComplete
 **			08/06/2003 mem
 **			06/14/2006 mem - Expanded error handling and removed parameter @mtdbName
 **			01/05/2008 mem - Now ignoring @errorCode and/or @warningCode if they are Null
+**			05/24/2011 mem - Now including the job number when logging that @errorCode is non-zero
 **
 *****************************************************/
 (
@@ -101,7 +102,14 @@ As
 	
 	if IsNull(@errorCode, 0) <> 0
 	Begin
-		Set @message = @PMTaskText + ' generated error code ' + convert(varchar(19), @errorCode)
+		-- Lookup the Job number associated with this peak matching task
+		Declare @job int = 0
+		
+		SELECT @job = Job
+		FROM T_Peak_Matching_Task
+		WHERE Task_ID = @taskID
+		 
+		Set @message = @PMTaskText + ' generated error code ' + convert(varchar(19), @errorCode) + ' for job ' + convert(varchar(12), @job)
 		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingTaskComplete'
 		Set @message = ''
 	End

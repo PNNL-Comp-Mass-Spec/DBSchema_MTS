@@ -10,6 +10,8 @@ CREATE TABLE [dbo].[T_Analysis_Description_Updates](
 	[Dataset_New] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Dataset_ID] [int] NULL,
 	[Dataset_ID_New] [int] NULL,
+	[Dataset_Acq_Length] [decimal](9, 2) NULL,
+	[Dataset_Acq_Length_New] [decimal](9, 2) NULL,
 	[Experiment] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Experiment_New] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Campaign] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,

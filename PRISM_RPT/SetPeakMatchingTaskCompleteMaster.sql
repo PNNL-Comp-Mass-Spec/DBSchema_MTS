@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.SetPeakMatchingTaskCompleteMaster
 **			11/23/2005 mem - Added brackets around @mtdbname as needed to allow for DBs with dashes in the name
 **			06/14/2006 mem - Added call to SetPeakMatchingActivityValuesToComplete and updated call to SetPeakMatchingTaskComplete to not pass parameter @mtdbName
 **			01/04/2008 mem - Now using T_Analysis_Job to track assigned tasks
+**			10/14/2010 mem - Moved call to SetPeakMatchingActivityValuesToComplete to occur after call to SetPeakMatchingTaskComplete
 **
 *****************************************************/
 (
@@ -60,14 +61,6 @@ As
 		-- If any of the values are wrong, they will get updated
 		Exec ValidateTaskDetailsForJob @JobID, @taskID output, @serverName output, @mtdbName output, @LogErrors=1
 	End
-	
-	---------------------------------------------------
-	-- Call SetPeakMatchingActivityValuesToComplete to update
-	-- T_Peak_Matching_Activity and T_Analysis_Job for the given task
-	---------------------------------------------------
-	--
-	Exec SetPeakMatchingActivityValuesToComplete @taskID, @serverName, @mtdbName, @JobID, @JobStateID
-
 
 	---------------------------------------------------
 	-- Call SetPeakMatchingTaskComplete in the given database
@@ -86,6 +79,16 @@ As
 								@warningCode, 
 								@MDID,
 								@message = @message Output
+
+	
+	---------------------------------------------------
+	-- Call SetPeakMatchingActivityValuesToComplete to update
+	--   T_Peak_Matching_Activity and T_Analysis_Job for the given task
+	-- This needs to occur after the call to SetPeakMatchingTaskComplete
+	--   so that T_Peak_Matching_Task in @mtdbname will have the MD_ID value defined
+	---------------------------------------------------
+	--
+	Exec SetPeakMatchingActivityValuesToComplete @taskID, @serverName, @mtdbName, @JobID, @JobStateID
 
 	---------------------------------------------------
 	-- Exit

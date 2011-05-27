@@ -14,6 +14,8 @@ CREATE Procedure dbo.UpdateProteinData
 **	Auth:	mem
 **	Date:	10/30/2009 mem - Initial Version (modelled after RefreshLocalProteinTable in MT DBs)
 **			11/01/2009 mem - Now logging the number of jobs in @JobListFilter
+**			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
+**			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_Info
 **    
 *****************************************************/
 (
@@ -224,14 +226,14 @@ As
 		
 		---------------------------------------------------
 		-- Update Protein_Collection_ID in #T_Tmp_Protein_Collection_List
-		--  using MT_Main.dbo.V_DMS_Protein_Collection_List_Import
+		--  using MT_Main.dbo.T_DMS_Protein_Collection_Info
 		---------------------------------------------------
 		--
 		UPDATE #T_Tmp_Protein_Collection_List
-		SET Protein_Collection_ID = PCLI.Protein_Collection_ID
+		SET Protein_Collection_ID =	PCI.Protein_Collection_ID
 		FROM #T_Tmp_Protein_Collection_List PC
-			INNER JOIN MT_Main.dbo.V_DMS_Protein_Collection_List_Import PCLI
-			ON PC.Protein_Collection_Name = PCLI.[Name]
+			INNER JOIN MT_Main.dbo.T_DMS_Protein_Collection_Info PCI
+			ON PC.Protein_Collection_Name = PCI.[Name]
 		WHERE PC.Protein_Collection_ID IS NULL
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -252,11 +254,11 @@ As
 			SELECT SourceQ.[Name],
 			       SourceQ.Protein_Collection_ID,
 			       0 AS Import_All_Proteins
-			FROM ( SELECT DISTINCT PCLI.[Name],
+			FROM ( SELECT DISTINCT PCI.[Name],
 			                       T_Proteins.Protein_Collection_ID
 			       FROM T_Proteins
-			            INNER JOIN MT_Main.dbo.V_DMS_Protein_Collection_List_Import PCLI
-			              ON T_Proteins.Protein_Collection_ID = PCLI.Protein_Collection_ID
+			            INNER JOIN MT_Main.dbo.T_DMS_Protein_Collection_Info PCI
+			              ON T_Proteins.Protein_Collection_ID = PCI.Protein_Collection_ID
 			       WHERE NOT (T_Proteins.Protein_Collection_ID IS NULL) 
 			     ) SourceQ
 			     LEFT OUTER JOIN #T_Tmp_Protein_Collection_List Target
@@ -361,9 +363,11 @@ As
 						     INNER JOIN T_Proteins Prot
 						       ON Prot.Ref_ID = PPM.Ref_ID
 						WHERE Protein_Collection_ID IS NULL AND
-						      NOT (Prot.Reference LIKE 'reversed[_]%' OR
-						           Prot.Reference LIKE 'scrambled[_]%' OR
-						           Prot.Reference LIKE '%[:]reversed')
+						      NOT (	Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+									Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+									Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
+									Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+						           )
 						
 						If @MatchCount = 0
 						Begin

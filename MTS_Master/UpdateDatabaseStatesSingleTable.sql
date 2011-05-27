@@ -21,6 +21,7 @@ CREATE Procedure dbo.UpdateDatabaseStatesSingleTable
 **			08/03/2006 mem - Added parameter @PreviewSql
 **			06/25/2008 mem - Updated to allow @RemoteStateIgnoreList to be blank
 **			02/05/2010 mem - Added parameters @RemoteDescriptionField, @RemoteOrganismField, and @RemoteCampaignField
+**			03/31/2011 mem - Now updating column Last_Online
 **    
 *****************************************************/
 (
@@ -72,7 +73,10 @@ As
 	declare @Server varchar(128)
 	declare @MTMain varchar(164)
 
+	--------------------------------------------------------
 	-- Lookup the ServerName for the given ServerID
+	--------------------------------------------------------
+	--
 	SELECT TOP 1
 		@Server = Server_Name
 	FROM  T_MTS_Servers
@@ -96,7 +100,10 @@ As
 
 	If @UpdateTableNames <> 0
 	Begin
+	
+		--------------------------------------------------------
 		-- First update any names or servers that do not match
+		--------------------------------------------------------
 		
 		Set @sql = ''
 		Set @sql = @sql + ' UPDATE LocalTable'
@@ -130,8 +137,10 @@ As
 				Set @DBCountUpdated = @DBCountUpdated + @myRowCount
 		End
 					
-		
+		--------------------------------------------------------
 		-- Second add any missing names
+		--------------------------------------------------------
+		
 		Set @sql = ''
 		Set @sql = @sql + ' INSERT INTO ' + @LocalTableName + ' (' + @LocalIDField + ', ' + @LocalNameField + ', '
 		Set @sql = @sql + '   Server_ID, ' + @LocalStateField + ', Last_Affected, ' + @LocalSchemaVersionField + ')'
@@ -164,7 +173,10 @@ As
 		End
 	End
 	
+	--------------------------------------------------------
 	-- Now update mis-matched states or DB Schema Versions
+	--------------------------------------------------------
+	
 	Set @sql = ''
 	Set @sql = @sql + ' UPDATE LocalTable'
 	Set @sql = @sql + ' SET '
@@ -219,6 +231,37 @@ As
 		End
 		Else
 			Set @DBCountUpdated = @DBCountUpdated + @myRowCount
+	End
+	
+	--------------------------------------------------------
+	-- Update Last_Online
+	--------------------------------------------------------
+	
+	Set @sql = ''
+	Set @sql = @sql + ' UPDATE LocalTable'
+	Set @sql = @sql + ' SET Last_Online = CONVERT(date, GETDATE())'
+	Set @sql = @sql + ' FROM ' + @LocalTableName + ' AS LocalTable INNER JOIN'
+	Set @sql = @sql + ' ' + @MTMain + @RemoteTableName + ' AS RemoteTable ON'
+	Set @sql = @sql + '   LocalTable.' + @LocalIDField + ' = RemoteTable.' + @RemoteIDField
+	Set @sql = @sql + ' WHERE RemoteTable.' + @RemoteStateField + ' < 15 AND '
+	Set @sql = @sql +       ' IsNull(Last_Online, ''1/1/1990'') <> CONVERT(date, GETDATE())'
+
+	If @PreviewSql <> 0
+		Print @Sql
+	Else
+	Begin
+		EXEC @result = sp_executesql @sql
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+		If @result <> 0
+		Begin
+			Set @message = 'Error updating Last_Online in local table using remote table: ' + @MTMain + @RemoteTableName
+
+			Set @myError = 60004
+			Goto Done
+		End
 	End
 	
 Done:

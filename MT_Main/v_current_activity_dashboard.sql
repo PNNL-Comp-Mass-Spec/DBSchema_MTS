@@ -6,15 +6,15 @@ GO
 
 CREATE VIEW [dbo].[V_Current_Activity_Dashboard]
 AS
-SELECT TOP 100 PERCENT *
+SELECT *
 FROM (
-	SELECT TOP 4 'Albert' AS Server,CA.*, 1*100 + Row_Number() OVER (Order By Began Desc) AS Sort
+	SELECT TOP 4 'Albert' AS Server, CA.*, 1*100 + Row_Number() OVER (Order By Began Desc) AS Sort
 	FROM albert.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
 	UNION
 	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,200 AS Sort
 	UNION
-	SELECT TOP 4 'Elmer' AS Server,CA.*, 3*100 + Row_Number() OVER (Order By Began Desc) AS Sort
+	SELECT TOP 4 'Elmer' AS Server, CA.*, 3*100 + Row_Number() OVER (Order By Began Desc) AS Sort
 	FROM elmer.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
 	UNION
@@ -30,13 +30,18 @@ FROM (
 	FROM roadrunner.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
 	UNION
-	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,800 AS Sort
+	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,750 AS Sort
+	UNION
+	SELECT TOP 4 'Daffy' AS Server, CA.*, 8*100 + Row_Number() OVER (Order By Began Desc) AS Sort
+	FROM daffy.mt_main.dbo.v_current_activity CA
+	ORDER BY Began Desc
+	UNION
+	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,850 AS Sort
 	UNION
 	SELECT TOP 4 'Porky' AS Server, CA.*, 9*100 + Row_Number() OVER (Order By Began Desc) AS Sort
 	FROM Porky.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
  ) LookupQ
-ORDER BY Sort
 
 
 GO

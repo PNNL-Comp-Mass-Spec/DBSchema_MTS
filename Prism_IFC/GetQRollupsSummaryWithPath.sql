@@ -34,6 +34,7 @@ CREATE PROCEDURE dbo.GetQRollupsSummaryWithPath
 **			04/10/2007 mem - Replaced ..V_QR_SummaryList with .dbo.V_QR_SummaryList
 **			06/13/2007 mem - Now returns [Max Matches per UMC]
 **			11/27/2007 mem - Added parameters @QIDMinimum and @QIDMaximum
+**			10/13/2010 mem - Now returns [AMT Count 5% FDR], [AMT Count 10% FDR], [AMT Count 25% FDR], [Min Uniq Prob], and [Max FDR]
 **    
 *****************************************************/
 (
@@ -89,9 +90,12 @@ As
 	set @sql = @sql + ' SELECT '
 	set @sql = @sql + ' QID, 0 as Sel, [Sample Name], Comment, [Results Folder Path],'
 	set @sql = @sql + ' [Unique Mass Tag Count], [Comparison Mass Tag Count], '
+	set @sql = @sql + ' [AMT Count 5% FDR], [AMT Count 10% FDR], [AMT Count 25% FDR], '
 	set @sql = @sql + ' [Threshold % For Inclusion], Normalize, [Std Abu Min], [Std Abu Max],'
 	set @sql = @sql + ' [Force Peak Max Abundance], [Min High MS/MS Score], [Min High Discriminant Score], [Min High Peptide Prophet Prob], [Min PMT Quality Score], '
-	set @sql = @sql + ' [Max Matches per UMC], [Min SLiC Score], [Min Del SLiC Score], [Min Peptide Length], [Min Peptide Rep Count],'
+	set @sql = @sql + ' [Max Matches per UMC], [Min SLiC Score], [Min Del SLiC Score],'
+	set @sql = @sql + ' [Min Uniq Prob], [Max FDR],'
+	set @sql = @sql + ' [Min Peptide Length], [Min Peptide Rep Count],'
 	set @sql = @sql + ' [ORF Coverage Computation Level], [Rep Norm Stats],'
 	set @sql = @sql + ' [Quantitation State ID], State, [Last Affected]'
 	set @sql = @sql + ' FROM DATABASE..V_QR_SummaryList_Ex'

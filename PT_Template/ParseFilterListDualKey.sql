@@ -20,6 +20,8 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 **			11/30/2005 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
 **			06/08/2005 mem - Added parameter @Delimiter
 **			09/25/2006 mem - Now including ORDER BY Process_Config_ID in the SELECT TOP 1 query to ensure that all entries are processed
+**			04/21/2009 mem - Expanded @ValueMatchStr, @Key1Value, and @Key2Value to varchar(800)
+**			08/07/2009 mem - Added parameter @PreviewSql
 **    
 *****************************************************/
 (
@@ -30,7 +32,8 @@ CREATE PROCEDURE dbo.ParseFilterListDualKey
 	@targetValueColumnName varchar(128) = 'Job',					-- Store values from this column
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
 	@filterMatchCount int = 0 OUTPUT,
-	@Delimiter varchar(2) = ','
+	@Delimiter varchar(2) = ',',
+	@PreviewSql tinyint = 0
 )
 As
 	set nocount on
@@ -48,17 +51,18 @@ As
 	declare @ComparisonOperator1 varchar(8)
 	declare @ComparisonOperator2 varchar(8)
 	
-	declare @Key1Value varchar(150)
-	declare @Key2Value varchar(150)
+	declare @Key1Value varchar(800)
+	declare @Key2Value varchar(800)
 
-	declare @ValueMatchStr varchar(250)
+	declare @ValueMatchStr varchar(800)
 
 	declare @S nvarchar(4000)
 
 
+	Set @PreviewSql = IsNull(@PreviewSql, 0)
+
 	TRUNCATE TABLE #TmpFilterList
 	
-
 	---------------------------------------------------
 	-- See if any rows are present in T_Process_Config matching @filterValue
 	---------------------------------------------------
@@ -136,6 +140,9 @@ As
 				If Len(@filterLookupAddnlWhereClause) > 0
 					Set @S = @S + ' AND ' + @filterLookupAddnlWhereClause
 
+				If @PreviewSql <> 0
+					Print @S
+					
 				exec @result = sp_executesql @S
 				--
 				select @myError = @result, @myRowcount = @@rowcount

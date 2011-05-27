@@ -1,31 +1,87 @@
 -- UpdatePMTQSUsingCustomTaoFilters is in these DBs:
---   MT_Human_EIF_NAF_P328
---   MT_Human_Schutzer_CSF_P420
---   MT_Human_Schutzer_CSF_P512
---   MT_D_Melanogaster_NCI_P531
---	 MT_Human_BreastCancer_WRI_P582
+--   MT_Human_EIF_NAF_P328           on Elmer
+--   MT_Human_Schutzer_CSF_P420      on Elmer
+--   MT_Human_Schutzer_CSF_P512      on Elmer
+--   MT_D_Melanogaster_NCI_P531      on Albert
+--	 MT_Human_BreastCancer_WRI_P582  on Elmer
+--   MT_S_cerevisiae_UPS_P641        on Daffy	(filters on Dataset names instead of Experiment names)
 --
--- UpdatePMTQSUsingCustomVladFilters            is in DB MT_Mouse_Voxel_P477
--- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in DB MT_Human_ALZ_P514
+-- UpdatePMTQSUsingCustomVladFilters is in these DBs
+--   MT_Mouse_Voxel_P477 on Pogo (code is in UpdatePMTQSUsingCustomVladFiltersMouseVoxel.sql)
+--   MT_C_Elegans_P618 on Albert
+--	 MT_Human_Sarcopenia_P652 on Elmer
+--	 MT_Human_Sarcopenia_P676 on Elmer
+--	 MT_Human_Sarcopenia_MixedLC_P681 on Elmer
+--   MT_Human_HMEC_EGFR_P706 on Elmer
+--
+-- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
+--
 
 
-ALTER PROCEDURE dbo.UpdatePMTQSUsingVladTolerances
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+SET ANSI_PADDING ON
+GO
+
+CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
+	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
+	ExperimentFilter varchar(128) NOT NULL,
+	ChargeState smallint NOT NULL,
+	DeltaMassPPM real NOT NULL,
+	XCorr real NOT NULL,
+	DeltaCN2 real NOT NULL,
+	CleavageState smallint NOT NULL,
+	PMTQS real NOT NULL
+ CONSTRAINT [PK_T_Custom_PMT_QS_Criteria_VP] PRIMARY KEY CLUSTERED 
+(
+	[Entry_ID] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Custom_PMT_QS_Criteria_VP] ON [dbo].[T_Custom_PMT_QS_Criteria_VP] 
+(
+	ExperimentFilter ASC,
+	ChargeState, 
+	CleavageState,
+	PMTQS
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+
+GO
+
+ALTER PROCEDURE dbo.UpdatePMTQSUsingCustomVladFilters
 /****************************************************
 ** 
 **	Desc:	Updates the PMT Quality Score values for the MTs in this database
 **			using filters provided by Vlad Petyuk.  This procedure uses the
 **			data in T_User_DatasetID_Scan_MH to lookup the Parent ion MH values for
-**			a given scan
+**			a given scan.
+**
+**			This procedure is similar to UpdatePMTQSUsingCustomVladFilters, but it
+**			has new values specific for DB MT_Human_ALZ_P514.  It also includes
+**			experiment filters
 **
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
 **	Date:	11/25/2008
+**			03/20/2009 mem - Expanded the filter criteria to include Experiment and CleavageState
+**			05/06/2010 mem - Updated to read the filter values from table T_Custom_PMT_QS_Criteria_VP
+**						   - Removed dependency on table T_User_DatasetID_Scan_MH
 **    
 *****************************************************/
 (
 	@InfoOnly tinyint = 0,
-	@PreviewSql tinyint = 0,
 	@message varchar(255) = '' output
 )
 As
@@ -36,10 +92,12 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
+	declare @ExperimentFilter varchar(128)
 	declare @ChargeState smallint
 	declare @DeltaMassPPM real
 	declare @XCorr real
 	declare @DeltaCN2 real
+	Declare @CleavageState smallint
 	declare @PMTQS real
 	declare @EntryID int
 	
@@ -55,7 +113,6 @@ As
 	-------------------------------------------------------------
 	
 	Set @InfoOnly = IsNull(@InfoOnly, 0)
-	Set @PreviewSql = IsNull(@PreviewSql, 0)
 	Set @message = ''
 
 	--------------------------------------------------------------
@@ -72,44 +129,42 @@ As
 	
 	
 	CREATE TABLE #TmpFilterScores (
+		Entry_ID int, 
+		ExperimentFilter varchar(128),			-- Like Clause text to match against Experiment name; use '%' to match all experiments
 		ChargeState smallint,
 		DeltaMassPPM real,
 		XCorr real,
 		DeltaCN2 real,
+		CleavageState smallint,					-- Exact cleavage state to match; set to -1 to match all cleavage states
 		PMTQS real,
-		MT_Match_Count int,
-		Entry_ID int Identity(1,1)
+		MT_Match_Count int
 	)
 	
 	--------------------------------------------------------------
 	-- Populate #TmpFilterScores
 	--------------------------------------------------------------
 
-	INSERT INTO #TmpFilterScores VALUES (1, 3.5, 0.8, 0.04, 1  , 0)	-- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES (1, 3,   1.2, 0.09, 1.5, 0)	-- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES (1, 2.5, 1.5, 0.13, 2  , 0)	-- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES (1, 2,   1.7, 0.15, 2.5, 0)	-- 0.316% FDR
-	
-	INSERT INTO #TmpFilterScores VALUES (2, 3.5, 1.4, 0.02, 1  , 0)	-- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES (2, 3,   1.7, 0.06, 1.5, 0)	-- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES (2, 2.5, 1.9, 0.12, 2  , 0)	-- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES (2, 2,   1.9, 0.19, 2.5, 0)	-- 0.316% FDR
-	
-	INSERT INTO #TmpFilterScores VALUES (3, 3.5, 1.6, 0.1,  1  , 0)	-- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES (3, 3,   2,   0.14, 1.5, 0)	-- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES (3, 2.5, 2.2, 0.19, 2  , 0)	-- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES (3, 2,   2.6, 0.18, 2.5, 0)	-- 0.316% FDR
-	
-	INSERT INTO #TmpFilterScores VALUES (4, 3.5, 1.5, 0.11, 1  , 0)	-- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES (4, 3,   2.1, 0.18, 1.5, 0)	-- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES (4, 2.5, 2.2, 0.22, 2  , 0)	-- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES (4, 2,   1.5, 0.3,  2.5, 0)	-- 0.316% FDR
-	
-	INSERT INTO #TmpFilterScores VALUES (5, 3.5, 1.4, 0.14, 1  , 0)	-- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES (5, 3,   1.4, 0.18, 1.5, 0)	-- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES (5, 2.5, 2.6, 0.22, 2  , 0)	-- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES (5, 2,   2.6, 0.17, 2.5, 0)	-- 0.316% FDR
-
+	INSERT INTO #TmpFilterScores( Entry_ID,
+	                              ExperimentFilter,
+	                              ChargeState,
+	                              DeltaMassPPM,
+	                              XCorr,
+	                              DeltaCN2,
+	                              CleavageState,
+	                              PMTQS,
+	                              MT_Match_Count)
+	SELECT Entry_ID,
+	       ExperimentFilter,
+	       ChargeState,
+	       DeltaMassPPM,
+	       XCorr,
+	       DeltaCN2,
+	       CleavageState,
+	       PMTQS,
+	       0 AS MT_Match_Count
+	FROM T_Custom_PMT_QS_Criteria_VP
+    ORDER BY Entry_ID
+    
 	--------------------------------------------------------------
 	-- Populate #TmpNewMassTagScores
 	--------------------------------------------------------------
@@ -130,10 +185,12 @@ As
 	Set @Continue = 1
 	While @Continue = 1
 	Begin -- <a>
-		SELECT TOP 1	@ChargeState = ChargeState,
+		SELECT TOP 1	@ExperimentFilter = ExperimentFilter,
+						@ChargeState = ChargeState,
 						@DeltaMassPPM = DeltaMassPPM,
 						@XCorr = XCorr,
 						@DeltaCN2 = DeltaCN2,
+						@CleavageState = CleavageState,
 						@PMTQS = PMTQS,
 						@EntryID = Entry_ID 
 		FROM #TmpFilterScores
@@ -153,25 +210,21 @@ As
 			FROM #TmpNewMassTagScores NMTS INNER JOIN
 				(   SELECT DISTINCT Mass_Tag_ID
 					FROM ( SELECT	Pep.Mass_Tag_ID,
-									DSMH.Parent_MH,
-									MT.Monoisotopic_Mass + @ProtonMass AS Peptide_MH
-							FROM T_User_DatasetID_Scan_MH DSMH
-								INNER JOIN T_Peptides Pep
-									ON DSMH.Scan_Number = Pep.Scan_Number 
-										AND
-										DSMH.Charge_State = Pep.Charge_State
+					                SS.DelM / (MT.Monoisotopic_Mass / 1e6) AS DelM_PPM
+							FROM T_Peptides Pep
 								INNER JOIN T_Analysis_Description TAD
-									ON Pep.Analysis_ID = TAD.Job AND
-										DSMH.Dataset_ID = TAD.Dataset_ID
+									ON Pep.Analysis_ID = TAD.Job
 								INNER JOIN T_Mass_Tags MT
 									ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 								INNER JOIN T_Score_Sequest SS
 									ON Pep.Peptide_ID = SS.Peptide_ID
-							WHERE Pep.Charge_State = @ChargeState AND
+							WHERE TAD.Experiment LIKE @ExperimentFilter AND
+							      Pep.Charge_State = @ChargeState AND
 								  SS.XCorr >= @XCorr AND
-								  SS.DeltaCN2 >= @DeltaCN2 
+								  SS.DeltaCN2 >= @DeltaCN2 AND
+								  (@CleavageState < 0 Or MT.Cleavage_State_Max = @CleavageState)
 						  ) LookupQ
-					WHERE (ABS((Parent_MH - Peptide_MH) / Peptide_MH * 1e6) <= @DeltaMassPPM ) 
+					WHERE (ABS(DelM_PPM) <= @DeltaMassPPM ) 
 				) FilterQ ON NMTS.Mass_Tag_ID = FilterQ.Mass_Tag_ID			
           	--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -182,7 +235,7 @@ As
 			WHERE Entry_ID = @EntryID			
 		
 		End -- </b>
-		
+
 	End -- </a>
 	
 	If @InfoOnly <> 0
@@ -190,10 +243,12 @@ As
 		-- Display the contents of #TmpFilterScores
 		--
 		SELECT Entry_ID,
+		       ExperimentFilter,
 		       ChargeState,
 		       DeltaMassPPM,
 		       XCorr,
 		       DeltaCN2,
+		       CleavageState,
 		       PMTQS,
 		       MT_Match_Count
 		FROM #TmpFilterScores
@@ -224,9 +279,9 @@ As
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
 		-- Log the change
-		Set @message = 'Updated the PMT_Quality_Score values in T_Mass_Tags using custom tolerances based on Charge State, DeltaMass (ppm), XCorr, and DeltaCN2; Updated scores for ' + Convert(varchar(12), @myRowCount) + ' AMTs'
+		Set @message = 'Updated the PMT_Quality_Score values in T_Mass_Tags using custom tolerances based on Experiment, Charge State, DeltaMass (ppm), XCorr, DeltaCN2, and Cleavage State; Updated scores for ' + Convert(varchar(12), @myRowCount) + ' AMTs'
 		
-		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingVladTolerances'
+		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
 
 	End
 		
@@ -234,3 +289,4 @@ As
 Done:
 	return @myError
 
+GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
+CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
 /****************************************************
 **
 **	Desc: 
@@ -17,6 +17,9 @@ CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
 **	Auth:	mem
 **	Date:	05/09/2007 - See Ticket:422
 **			09/18/2008 - Added parameters @DynamicMinimumCountThreshold and @UpdateIntervalAllItems
+**			08/02/2010 - Now calling RefreshCachedDMSFilterSetInfo, RefreshCachedDMSResidues, and RefreshCachedDMSEnzymes
+**			12/13/2010 - Now calling RefreshCachedProteinCollectionInfo
+**			12/14/2010 - Now calling RefreshCachedOrganismDBInfo
 **    
 *****************************************************/
 (
@@ -39,12 +42,16 @@ As
 	Declare @CurrentTime datetime
 	Set @CurrentTime = GetDate()
 
+	Declare @EntryID int
+	Declare @Continue tinyint
+	
 	Declare @LastRefreshed datetime
 	Declare @LastFullRefresh datetime
 
 	Declare @CacheTable varchar(256)
 	Declare @IDColumnName varchar(64)
 	Declare @SP varchar(128)
+	Declare @AlwaysFullRefresh tinyint
 
 	Declare @S nvarchar(2048)
 	Declare @Params nvarchar(256)
@@ -54,8 +61,6 @@ As
 	Declare @HoursSinceLastRefresh decimal(9,3)
 	Declare @HoursSinceLastFullRefresh decimal(9,3)
 	
-	Declare @Iteration int
-		
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -69,59 +74,100 @@ As
 		Set @InfoOnly = IsNull(@InfoOnly, 0)
 		
 		Set @message = ''
+	
+		-- Create and populate the table that lists the tables to update
+		--
+		CREATE TABLE #Tmp_CachedDMSInfoToUpdate (
+			EntryID int Identity(1,1),
+			CacheTable varchar(128),
+			IDColumnName varchar(128),
+			SP varchar(128),
+			AlwaysFullRefresh tinyint
+		)
 		
-		Set @Iteration = 1
-		While @Iteration <= 3
+		-- Jobs and Datasets 
+		--
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Analysis_Job_Info_Cached', 'Job', 'RefreshCachedDMSAnalysisJobInfo', 0)
+
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0)
+		
+		-- Mass correction factors and filter sets
+		--
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Mass_Correction_Factors_Cached', 'Mass_Correction_ID', 'RefreshCachedDMSMassCorrectionFactors', 1)
+		
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Filter_Set_Overview_Cached', 'Filter_Set_ID', 'RefreshCachedDMSFilterSetInfo', 1)
+
+		-- Residues and enzymes
+		--
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Residues_Cached', 'Residue_ID', 'RefreshCachedDMSResidues', 1)
+
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Enzymes_Cached', 'Enzyme_ID', 'RefreshCachedDMSEnzymes', 1)
+
+		-- Fasta Files and Protein Collections
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Organism_DB_Info', 'ID', 'RefreshCachedOrganismDBInfo', 1)
+
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
+		VALUES ('T_DMS_Protein_Collection_Info', 'Protein_Collection_ID', 'RefreshCachedProteinCollectionInfo', 1)
+
+		-- Call each stored procedure to perform the update
+		--
+		Set @EntryID = 0
+		Set @Continue = 1
+		
+		While @Continue = 1
 		Begin -- <a>
-			Set @CacheTable = ''
-			If @Iteration = 1
-			Begin
-				Set @CacheTable= 'T_DMS_Analysis_Job_Info_Cached'
-				Set @IDColumnName = 'Job'
-				Set @SP = 'RefreshCachedDMSAnalysisJobInfo'
-			End
-			
-			If @Iteration = 2
-			Begin
-				Set @CacheTable= 'T_DMS_Dataset_Info_Cached'
-				Set @IDColumnName = 'ID'
-				Set @SP = 'RefreshCachedDMSDatasetInfo'
-			End
-			
-			If @Iteration = 3
-			Begin
-				Set @CacheTable= 'T_DMS_Mass_Correction_Factors_Cached'
-				Set @IDColumnName = 'Mass_Correction_ID'
-				Set @SP = 'RefreshCachedDMSMassCorrectionFactors'
-			End
-			
-			If Len(@CacheTable) > 0
+		
+			SELECT TOP 1 @EntryID = EntryID,
+			             @CacheTable = CacheTable,
+			             @IDColumnName = IDColumnName,
+			             @SP = SP,
+			             @AlwaysFullRefresh = AlwaysFullRefresh
+			FROM #Tmp_CachedDMSInfoToUpdate
+			WHERE  EntryID > @EntryID
+			ORDER BY EntryID
+			--
+			SELECT @myRowCount = @@RowCount, @myError = @@Error
+
+
+			If @myRowCount = 0
+				Set @Continue = 0
+			Else
 			Begin -- <b>
 				Set @CurrentLocation = 'Check refresh time for ' + @CacheTable
-				--
+
 				Set @LastRefreshed = '1/1/2000'
 				Set @LastFullRefresh = '1/1/2000'
-				--
-				SELECT  @LastRefreshed = Last_Refreshed,
-						@LastFullRefresh = Last_Full_Refresh
-				FROM T_DMS_Cached_Data_Status
-				WHERE Table_Name = @CacheTable
-				--
-				SELECT @myRowCount = @@RowCount, @myError = @@Error
+				
+				If @AlwaysFullRefresh = 0
+				Begin
+					SELECT  @LastRefreshed = Last_Refreshed,
+							@LastFullRefresh = Last_Full_Refresh
+					FROM T_DMS_Cached_Data_Status
+					WHERE Table_Name = @CacheTable
+					--
+					SELECT @myRowCount = @@RowCount, @myError = @@Error
 
-				Set @HoursSinceLastRefresh = DateDiff(minute, IsNull(@LastRefreshed, '1/1/2000'), @CurrentTime) / 60.0
-				If @infoOnly <> 0
-					Print 'Hours since last refresh: ' + Convert(varchar(12), @HoursSinceLastRefresh) + Case When @HoursSinceLastRefresh >= @UpdateInterval Then ' -> Partial refresh required' Else '' End
+					Set @HoursSinceLastRefresh = DateDiff(minute, IsNull(@LastRefreshed, '1/1/2000'), @CurrentTime) / 60.0
+					If @infoOnly <> 0
+						Print 'Hours since last refresh: ' + Convert(varchar(12), @HoursSinceLastRefresh) + Case When @HoursSinceLastRefresh >= @UpdateInterval Then ' -> Partial refresh required' Else '' End
 
-				Set @HoursSinceLastFullRefresh = DateDiff(minute, IsNull(@LastFullRefresh, '1/1/2000'), @CurrentTime) / 60.0
-				If @infoOnly <> 0
-					Print 'Hours since last full refresh: ' + Convert(varchar(12), @HoursSinceLastFullRefresh) + Case When @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems Then ' -> Full refresh required' Else '' End
-					
-				If @HoursSinceLastRefresh >= @UpdateInterval OR @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems
+					Set @HoursSinceLastFullRefresh = DateDiff(minute, IsNull(@LastFullRefresh, '1/1/2000'), @CurrentTime) / 60.0
+					If @infoOnly <> 0
+						Print 'Hours since last full refresh: ' + Convert(varchar(12), @HoursSinceLastFullRefresh) + Case When @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems Then ' -> Full refresh required' Else '' End
+				End
+				
+				If @AlwaysFullRefresh <> 0 OR @HoursSinceLastRefresh >= @UpdateInterval OR @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems
 				Begin -- <c>
 				
 					Set @IDMinimum = 0
-					If @HoursSinceLastFullRefresh < @UpdateIntervalAllItems
+					If @AlwaysFullRefresh = 0 AND @HoursSinceLastFullRefresh < @UpdateIntervalAllItems
 					Begin
 						-- Less than @UpdateIntervalAllItems hours has elapsed since the last full update
 						-- Bump up @IDMinimum to @DynamicMinimumCountThreshold less than the max ID in the target table
@@ -154,7 +200,12 @@ As
 					If @InfoOnly = 0
 						Exec (@S)
 					Else
-						Print 'Need to call ' + @SP + ' since last refreshed ' + Convert(varchar(32), @LastRefreshed) + '; ' + @S
+					Begin
+						If @AlwaysFullRefresh = 0
+							Print 'Need to call ' + @SP + ' since last refreshed ' + Convert(varchar(32), @LastRefreshed) + '; ' + @S
+						Else
+							Print 'Need to call ' + @SP + ' since @AlwaysFullRefresh = 1; ' + @S
+					End
 						
 				End -- </c>
 			End -- </b>
@@ -162,7 +213,6 @@ As
 			If @infoOnly <> 0
 				Print ''
 				
-			Set @Iteration = @Iteration + 1
 		End -- </a>
 				
 	End Try
@@ -176,7 +226,6 @@ As
 			
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSInfoIfRequired] TO [MTS_DB_Dev] AS [dbo]

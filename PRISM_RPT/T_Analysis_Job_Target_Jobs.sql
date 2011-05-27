@@ -23,6 +23,7 @@ CREATE NONCLUSTERED INDEX [IX_T_Analysis_Job_Target_Jobs] ON [dbo].[T_Analysis_J
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_Target_Jobs]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_Target_Jobs_T_Analysis_Job] FOREIGN KEY([Job_ID])
 REFERENCES [T_Analysis_Job] ([Job_ID])
+ON DELETE CASCADE
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_Target_Jobs] CHECK CONSTRAINT [FK_T_Analysis_Job_Target_Jobs_T_Analysis_Job]
 GO

@@ -49,6 +49,8 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 **			01/08/2008 mem - Updated to store the settings in T_Peak_Matching_Params_Cached if @CacheSettingsForAnalysisManager = 1
 **			02/02/2010 mem - Now updating Results_URL in T_Analysis_Job
 **						   - Now populating T_Analysis_Job_Target_Jobs
+**			10/12/2010 mem - Changed required tool version to %3.48.43%
+**			01/31/2011 mem - Changed required tool version to %3.48.44[1-9]%
 **
 *****************************************************/
 (
@@ -297,14 +299,16 @@ As
 		Begin
 			Set @message = 'This version of Viper is out of date for automated peak matching; no tasks will be returned'
 			Set @toolVersion = @toolVersion + ' - Unsupported version'
+			print @message
 			set @Continue = 0
 		End
 		Else
 		Begin
-			If Not (@toolVersion LIKE '%3.46.42%')
+			If Not (@toolVersion LIKE '%3.48.44[1-9]%')
 			Begin
-				Set @message = 'This version of Viper is not presently allowed to perform peak matching'
+				Set @message = 'This version of Viper is not presently allowed to perform peak matching; tool version must be "3.48.441" or newer; @toolVersion = ' + @toolVersion
 				Set @toolVersion = @toolVersion + ' - Version not new enough'
+				print @message
 				set @Continue = 0
 			End
 			Else

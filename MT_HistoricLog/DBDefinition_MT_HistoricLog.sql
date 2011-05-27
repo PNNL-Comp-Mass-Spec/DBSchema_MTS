@@ -1,15 +1,15 @@
 /****** Object:  Database [MT_HistoricLog] ******/
 CREATE DATABASE [MT_HistoricLog] ON  PRIMARY 
-( NAME = N'MT_HistoricLog_dat', FILENAME = N'F:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 373504KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
+( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 347392KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'MT_HistoricLog_log', FILENAME = N'D:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 1536KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 2560KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
-EXEC dbo.sp_dbcmptlevel @dbname=N'MT_HistoricLog', @new_cmptlevel=90
+ALTER DATABASE [MT_HistoricLog] SET COMPATIBILITY_LEVEL = 100
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin
-EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'disable'
+EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'enable'
 end
 GO
 ALTER DATABASE [MT_HistoricLog] SET ANSI_NULL_DEFAULT OFF 
@@ -54,6 +54,10 @@ ALTER DATABASE [MT_HistoricLog] SET ALLOW_SNAPSHOT_ISOLATION OFF
 GO
 ALTER DATABASE [MT_HistoricLog] SET PARAMETERIZATION SIMPLE 
 GO
+ALTER DATABASE [MT_HistoricLog] SET READ_COMMITTED_SNAPSHOT OFF 
+GO
+ALTER DATABASE [MT_HistoricLog] SET HONOR_BROKER_PRIORITY OFF 
+GO
 ALTER DATABASE [MT_HistoricLog] SET  READ_WRITE 
 GO
 ALTER DATABASE [MT_HistoricLog] SET RECOVERY FULL 
@@ -64,19 +68,11 @@ ALTER DATABASE [MT_HistoricLog] SET PAGE_VERIFY TORN_PAGE_DETECTION
 GO
 ALTER DATABASE [MT_HistoricLog] SET DB_CHAINING OFF 
 GO
-GRANT CONNECT TO [d3m578]
+GRANT CONNECT TO [MTAdmin] AS [dbo]
 GO
-GRANT CONNECT TO [DMSWebUser]
+GRANT CONNECT TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT CONNECT TO [h0693075]
+GRANT CONNECT TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT CONNECT TO [msdadmin]
-GO
-GRANT CONNECT TO [MTAdmin]
-GO
-GRANT CONNECT TO [MTS_DB_DEV]
-GO
-GRANT CONNECT TO [MTS_DB_Lite]
-GO
-GRANT CONNECT TO [MTUser]
+GRANT CONNECT TO [MTUser] AS [dbo]
 GO

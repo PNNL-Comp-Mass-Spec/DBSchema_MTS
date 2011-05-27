@@ -26,6 +26,8 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **						   - Updated to cache the criteria for the given filter set group locally to remove the need to repeatedly query MT_Main.dbo.V_DMS_Filter_Sets_Import
 **			10/30/2008 mem - Added @InspectMQScore, @InspectTotalPRMScore, and @InspectFScore criteria
 **			07/21/2009 mem - Added @InspectPValue
+**			08/02/2010 mem - Added @MSGFSpecProb
+**						   - Switched to using V_DMS_Filter_Set_Details (which queries a table in MT_Main) rather than querying V_DMS_Filter_Sets_Import
 **    
 *****************************************************/
 (
@@ -96,7 +98,10 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@InspectFScoreThreshold real=-10000 output,
 	
 	@InspectPValueComparison varchar(2)='<=' output,
-	@InspectPValueThreshold real=1 output
+	@InspectPValueThreshold real=1 output,
+
+	@MSGFSpecProbComparison varchar(2)='<=' output,
+	@MSGFSpecProbThreshold real=1 output
 )
 As
 	Set nocount on
@@ -176,8 +181,11 @@ As
 	Set @InspectFScoreComparison = '>='
 	Set @InspectFScoreThreshold  = -10000			-- FScore can be negative, so defaulting to >= -10000
 	
-	SEt @InspectPValueComparison = '<='
+	Set @InspectPValueComparison = '<='
 	Set @InspectPValueThreshold = 1
+	
+	Set @MSGFSpecProbComparison = '<='
+	Set @MSGFSpecProbThreshold = 1
 
 	-------------------------------------------------
 	-- Validate @FilterSetID
@@ -205,7 +213,7 @@ As
 	-------------------------------------------------
 	-- Populate a temporary table with the criteria defined for this filter Set
 	-- Using a temporary table to avoid having to re-query 
-	-- MT_Main.dbo.V_DMS_Filter_Sets_Import repeatedly
+	-- MT_Main.dbo.V_DMS_Filter_Set_Details repeatedly
 	-------------------------------------------------
 	-- 
 
@@ -223,7 +231,7 @@ As
 
 	INSERT INTO #T_TmpFilterSetCriteria (Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value)
 	SELECT Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value
-	FROM MT_Main.dbo.V_DMS_Filter_Sets_Import
+	FROM MT_Main.dbo.V_DMS_Filter_Set_Details
 	WHERE Filter_Set_ID = @FilterSetID AND Filter_Criteria_Group_ID >= @CriteriaGroupStart
 	ORDER BY Filter_Criteria_Group_ID
 	--
@@ -260,7 +268,7 @@ As
 		
 		If @myError <> 0
 		Begin
-			Set @message = 'Error looking up Spectrum Count threshold for Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' and Filter_Criteria_Group_ID ' + convert(varchar(11), @CriteriaGroupMatch) + ' in MT_Main.dbo.V_DMS_Filter_Sets_Import'
+			Set @message = 'Error looking up Spectrum Count threshold for Filter Set ID ' + Convert(varchar(11), @FilterSetID) + ' and Filter_Criteria_Group_ID ' + convert(varchar(11), @CriteriaGroupMatch) + ' in MT_Main.dbo.V_DMS_Filter_Set_Details'
 			Goto DoneDropTable
 		End
 
@@ -363,6 +371,11 @@ As
 					 @InspectPValueThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 21	-- Inspect PValue
+
+		SELECT TOP 1 @MSGFSpecProbComparison = Criterion_Comparison,
+					 @MSGFSpecProbThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 22	-- MSGF SpecProb
 
 	End
 

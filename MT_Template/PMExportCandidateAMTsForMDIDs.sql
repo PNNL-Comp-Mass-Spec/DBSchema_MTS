@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure PMExportCandidateAMTsForMDIDs
+CREATE PROCEDURE dbo.PMExportCandidateAMTsForMDIDs
 /****************************************************	
 **  Desc:	
 **		Exports a list of Mass_Tag_ID values that pass the threshold values
@@ -18,6 +18,7 @@ CREATE Procedure PMExportCandidateAMTsForMDIDs
 **  Auth:	mem
 **	Date:	07/17/2009
 **			10/27/2009 mem - Added support for Minimum_Cleavage_State
+**			02/21/2011 mem - Added parameter @ReturnIMSConformersTable
 **
 ****************************************************/
 (
@@ -26,6 +27,7 @@ CREATE Procedure PMExportCandidateAMTsForMDIDs
 	@ReturnMTTable tinyint = 1,						-- When 1, then returns a table of Mass Tag IDs and various information
 	@ReturnProteinTable tinyint = 1,				-- When 1, then also returns a table of Proteins that the Mass Tag IDs map to
 	@ReturnProteinMapTable tinyint = 1,				-- When 1, then also returns the mapping information of Mass_Tag_ID to Protein
+	@ReturnIMSConformersTable tinyint = 1,			-- When 1, then also returns T_Mass_Tag_Conformers_Observed	
 	@AMTCount int = 0 output,						-- The number of AMT tags that pass the thresholds
 	@AMTLastAffectedMax datetime = null output,		-- The maximum Last_Affected value for the AMT tags that pass the thresholds
 	@PreviewSql tinyint=0,
@@ -61,6 +63,7 @@ AS
 		Set @ReturnMTTable = IsNull(@ReturnMTTable, 1)
 		Set @ReturnProteinTable = IsNull(@ReturnProteinTable, 1)
 		Set @ReturnProteinMapTable = IsNull(@ReturnProteinMapTable, 1)
+		Set @ReturnIMSConformersTable = IsNull(@ReturnIMSConformersTable, 1)
 
 		Set @AMTCount = 0
 		Set @message = ''
@@ -107,6 +110,7 @@ AS
 				@ReturnMTTable = @ReturnMTTable,
 				@ReturnProteinTable = @ReturnProteinTable,
 				@ReturnProteinMapTable = @ReturnProteinMapTable,
+				@ReturnIMSConformersTable = @ReturnIMSConformersTable,
 				@AMTCount = @AMTCount output,
 				@AMTLastAffectedMax = @AMTLastAffectedMax output,
 				@PreviewSql = @PreviewSql,
@@ -140,6 +144,7 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[PMExportCandidateAMTsForMDIDs] TO [DMS_SP_User] AS [dbo]

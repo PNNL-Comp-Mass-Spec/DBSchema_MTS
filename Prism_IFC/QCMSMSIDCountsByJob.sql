@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
+CREATE PROCEDURE QCMSMSIDCountsByJob
 /****************************************************
 **
 **	Desc: 
@@ -25,6 +25,8 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 **		    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **			07/29/2008 mem - Added parameters @PeptideProphetMinimum and @PreviewSql
 **			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
+**			09/22/2010 mem - Added parameters @MSGFThreshold, @ResultTypeFilter, and @PreviewSql
+**			10/06/2010 mem - Now returning column Dataset_Rating
 **
 *****************************************************/
 (
@@ -43,7 +45,7 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@DiscriminantScoreMinimum real = 0.95,			-- Ignored if 0
+	@DiscriminantScoreMinimum real = 0,				-- Ignored if 0
 	@CleavageStateMinimum tinyint = 0,				-- Ignored if 0
 	@XCorrMinimum real = 0,							-- Ignored if 0
 	@DeltaCn2Minimum real = 0,						-- Ignored if 0
@@ -54,7 +56,10 @@ CREATE PROCEDURE dbo.QCMSMSIDCountsByJob
 	
 	@maximumRowCount int = 0,						-- 0 means to return all rows
 
-	@PeptideProphetMinimum real = 0.9,				-- Ignored if 0
+	@PeptideProphetMinimum real = 0,				-- Ignored if 0
+	@MSGFThreshold float = 1E-11,					-- Ignored if 0; example threshold is 1E-11 which means to keep peptides with MSGF < 1E-11
+	
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
 	@PreviewSql tinyint = 0
 )
 As
@@ -112,6 +117,7 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
 	Set @previewSql = IsNull(@previewSql, 0)
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
@@ -137,6 +143,7 @@ As
 		Job int NOT NULL,
 		Instrument varchar(64) NULL,
 		Dataset_Name varchar(128) NOT NULL,
+		Dataset_Rating varchar(64) NOT NULL,
 		Job_Date datetime NULL,
 		Value int NULL
 	)
@@ -150,7 +157,8 @@ As
 	Exec @myError = QCMSMSJobsTablePopulate	@DBName, @message output, 
 											@InstrumentFilter, @CampaignFilter, @ExperimentFilter, @DatasetFilter, 
 											@OrganismDBFilter, @DatasetDateMinimum, @DatasetDateMaximum, 
-											@JobMinimum, @JobMaximum, @maximumRowCount
+											@JobMinimum, @JobMaximum, @maximumRowCount,
+											@ResultTypeFilter, @PreviewSql
 	If @myError <> 0
 	Begin
 		If Len(IsNull(@message, '')) = 0
@@ -179,6 +187,7 @@ As
 	Set @sqlSelect = @sqlSelect + ', Job'
 	Set @sqlSelect = @sqlSelect + ', Instrument'
 	Set @sqlSelect = @sqlSelect + ', Dataset_Name'
+	Set @sqlSelect = @sqlSelect + ', Dataset_Rating'
 	Set @sqlSelect = @sqlSelect + ', Job_Date'
 	
 	-- Return a distinct peptide sequence count (passing filters) for each job
@@ -196,31 +205,32 @@ As
 
 		Set @JobQuery = @JobQuery + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
 		Set @JobQuery = @JobQuery +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Completed AS Job_Date'
+		Set @JobQuery = @JobQuery +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @JobQuery = @JobQuery +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 		Set @JobQuery = @JobQuery + ') AS JobLookupQ'
 		
 		
 		Set @sqlFrom = @sqlFrom + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, Pep.Mass_Tag_ID AS Seq_ID'
-		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'
+		Set @sqlFrom = @sqlFrom +         ' JobTable.Completed AS Job_Date, Pep.Mass_Tag_ID AS Seq_ID'
+		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'
+			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'
 		
 		If @PMTQualityScoreMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID'
+			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE.dbo.T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID'
 			
-		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
-		
-		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Mass_Tag_to_Protein_Map MTPM ON Pep.Mass_Tag_ID = MTPM.Mass_Tag_ID'
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0 Or @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 			
 		Set @sqlFrom = @sqlFrom +  ' WHERE  JobTable.Job = #TmpQCJobList.Job'		-- This is always true, but is included to guarantee we have a where clause
 
@@ -232,8 +242,11 @@ As
 		If @PeptideProphetMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
 
+		If @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.MSGF_SpecProb, 1) <= ' + Convert(varchar(12), @MSGFThreshold) + ')'			
+			
 		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom + ' AND (MTPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
+			Set @sqlFrom = @sqlFrom + ' AND MT.Cleavage_State_Max >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SS.XCorr >= ' + Convert(varchar(12), @XCorrMinimum) + ')'
 		If @DeltaCn2Minimum > 0
@@ -253,32 +266,32 @@ As
 
 		Set @JobQuery = @JobQuery + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 		Set @JobQuery = @JobQuery +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @JobQuery = @JobQuery +         ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'
+		Set @JobQuery = @JobQuery +         ' JobTable.Completed AS Job_Date'
+		Set @JobQuery = @JobQuery +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		Set @JobQuery = @JobQuery +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 		Set @JobQuery = @JobQuery + ') AS JobLookupQ'
 		
 		Set @sqlFrom = @sqlFrom + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, Pep.Seq_ID'
-		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @sqlFrom = @sqlFrom +         ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'
+		Set @sqlFrom = @sqlFrom +         ' JobTable.Completed AS Job_Date, Pep.Seq_ID'
+		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-		
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'		
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'
+			Set @sqlFrom = @sqlFrom +  ' INNER JOIN DATABASE.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'
 		
 		If @FilterIDFilter > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Peptide_Filter_Flags PFF ON Pep.Peptide_ID = PFF.Peptide_ID'
+			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE.dbo.T_Peptide_Filter_Flags PFF ON Pep.Peptide_ID = PFF.Peptide_ID'
 			
-		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
-		
-		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Peptide_to_Protein_Map PPM ON Pep.Peptide_ID = PPM.Peptide_ID'
+		If @DiscriminantScoreMinimum > 0 Or @PeptideProphetMinimum > 0 Or @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 			
 		Set @sqlFrom = @sqlFrom +  ' WHERE  JobTable.Job = #TmpQCJobList.Job'		-- This is always true, but is included to guarantee we have a where clause
 
@@ -289,9 +302,12 @@ As
 		-- Note: X!Tandem jobs don't have peptide prophet values, so all X!Tandem data will get excluded if @PeptideProphetMinimum is used
 		If @PeptideProphetMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.Peptide_Prophet_Probability, 0)  >= ' + Convert(varchar(12), @PeptideProphetMinimum) + ')'
+
+		If @MSGFThreshold > 0
+			Set @sqlFrom = @sqlFrom + ' AND (IsNull(SD.MSGF_SpecProb, 1) <= ' + Convert(varchar(12), @MSGFThreshold) + ')'			
 			
 		If @CleavageStateMinimum > 0
-			Set @sqlFrom = @sqlFrom + ' AND (PPM.Cleavage_State >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
+			Set @sqlFrom = @sqlFrom + ' AND (Pep.Cleavage_State_Max >= ' + Convert(varchar(6), @CleavageStateMinimum) + ')'
 		If @XCorrMinimum > 0
 			Set @sqlFrom = @sqlFrom + ' AND (SS.XCorr >= ' + Convert(varchar(12), @XCorrMinimum) + ')'
 		If @DeltaCn2Minimum > 0
@@ -317,6 +333,7 @@ As
 	Set @sqlGroupBy = @sqlGroupBy + ', Job'
 	Set @sqlGroupBy = @sqlGroupBy + ', Instrument'
 	Set @sqlGroupBy = @sqlGroupBy + ', Dataset_Name'
+	Set @sqlGroupBy = @sqlGroupBy + ', Dataset_Rating'
 	Set @sqlGroupBy = @sqlGroupBy + ', Job_Date'
 
 	-- Define the Order By clause
@@ -327,14 +344,14 @@ As
 	-- Customize the columns for the given database
 	---------------------------------------------------
 
-	set @JobQuery = replace(@JobQuery, 'DATABASE..', '[' + @DBName + ']..')
-	set @sqlFrom = replace(@sqlFrom, 'DATABASE..', '[' + @DBName + ']..')
+	set @JobQuery = replace(@JobQuery, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
+	set @sqlFrom = replace(@sqlFrom, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
 	
 
-	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value) '
+	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Dataset_Rating, Job_Date, Value) '
 
 	Set @sqlAddMissingJobs = @SqlInsert
-	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, 0 AS Value '
+	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' SELECT DISTINCT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Dataset_Rating, Job_Date, 0 AS Value '
 	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' FROM ' + @JobQuery
 	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' WHERE NOT Job IN ( SELECT Job FROM #TmpQueryResults )'
 
@@ -370,7 +387,7 @@ As
 			-- Old method:
 			--Exec (					 @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
 
-			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value 
+			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Dataset_Rating, Job_Date, Value 
 			FROM #TmpQueryResults
 			ORDER BY Dataset_Date, Dataset_ID
 		end
@@ -384,7 +401,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QCMSMSIDCountsByJob] TO [DMS_SP_User] AS [dbo]

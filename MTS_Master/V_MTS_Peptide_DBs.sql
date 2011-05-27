@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE VIEW [dbo].[V_MTS_Peptide_DBs]
 AS
 SELECT P.Peptide_DB_ID,
@@ -12,6 +13,7 @@ SELECT P.Peptide_DB_ID,
        P.State_ID,
        DBStates.Name AS State,
        P.Last_Affected,
+       P.Last_Online,
        P.[Description],
        P.Organism,
        P.DB_Schema_Version,
@@ -23,6 +25,7 @@ FROM dbo.T_MTS_Peptide_DBs AS P
        ON P.State_ID = DBStates.ID
      INNER JOIN dbo.T_MTS_Servers AS S
        ON P.Server_ID = S.Server_ID
+
 
 
 GO

@@ -57,6 +57,8 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			07/23/2009 mem - Now auto-adding SIC jobs for any datasets that are defined in T_Analysis_Description (regardless of organism or other extended metadata filters)
+**			07/13/2010 mem - Now populating Acq_Length in T_Datasets
+**			10/12/2010 mem - Now calling UpdateNETRegressionParamFileName if any new jobs are imported
 **    
 *****************************************************/
 (
@@ -782,10 +784,11 @@ As
 				Set @S = ''
 				Set @S = @S + ' UPDATE T_Datasets'
 				Set @S = @S + ' SET Type = DDI.Type,'
-				Set @S = @S +      ' Created_DMS = DDI.Created,'
-				Set @S = @S +      ' Acq_Time_Start = DDI.[Acquisition Start],'
-				Set @S = @S +      ' Acq_Time_End = DDI.[Acquisition End],'
-				Set @S = @S +      ' Scan_Count = DDI.[Scan Count]'
+				Set @S = @S +     ' Created_DMS = DDI.Created,'
+				Set @S = @S +     ' Acq_Time_Start = DDI.[Acquisition Start],'
+				Set @S = @S +     ' Acq_Time_End = DDI.[Acquisition End],'
+				Set @S = @S +     ' Acq_Length = DATEDIFF(second, DDI.[Acquisition Start], DDI.[Acquisition End]) / 60.0,'
+				Set @S = @S +     ' Scan_Count = DDI.[Scan Count]'
 				Set @S = @S + ' FROM ' + @DatasetInfoTable + ' AS DDI INNER JOIN '
 				Set @S = @S +        ' T_Datasets ON T_Datasets.Dataset_ID = DDI.ID'
 				Set @S = @S + ' WHERE T_Datasets.Created_DMS Is Null'
@@ -891,6 +894,10 @@ As
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			
 			Set @MissingParamFileCount = @myRowCount
+			
+	
+			-- See if the NET Regression param file name needs to be updated for any of the jobs
+			exec UpdateNETRegressionParamFileName @ProcessStateMin=10, @ProcessStateMax=39
 		end
 
 	

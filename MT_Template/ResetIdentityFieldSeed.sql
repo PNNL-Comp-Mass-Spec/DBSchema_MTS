@@ -21,6 +21,8 @@ CREATE PROCEDURE dbo.ResetIdentityFieldSeed
 **			09/12/2006 mem - Added table T_Event_Log
 **			09/13/2006 mem - Added table T_Peptide_Load_Stats
 **			01/13/2010 mem - Added table T_FTICR_UMC_CS_Stats
+**			10/08/2010 mem - Added table T_Match_Making_FDR
+**			02/22/2011 mem - Added table T_Mass_Tag_Conformers_Observed
 **
 *****************************************************/
 (
@@ -87,7 +89,10 @@ AS
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Peak_Matching_Defaults',	'Default_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Peak_Matching_Task',		'Task_ID')
 
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Mass_Tag_Conformers_Observed',	'Conformer_ID')
+
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Match_Making_Description',	'MD_ID')
+	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_Match_Making_FDR',          'Entry_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_Results',			'UMC_Results_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_ResultDetails',	'UMC_ResultDetails_ID')
 	INSERT INTO #Tmp_TablesToUpdate (Table_Name, Field_Name) VALUES ('T_FTICR_UMC_InternalStdDetails', 'UMC_InternalStdDetails_ID')

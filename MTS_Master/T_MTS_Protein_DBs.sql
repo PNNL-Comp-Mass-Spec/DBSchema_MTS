@@ -11,6 +11,7 @@ CREATE TABLE [dbo].[T_MTS_Protein_DBs](
 	[Last_Affected] [datetime] NOT NULL,
 	[DB_Schema_Version] [real] NOT NULL,
 	[Comment] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Last_Online] [date] NULL,
  CONSTRAINT [PK_T_MTS_Protein_DBs] PRIMARY KEY CLUSTERED 
 (
 	[Protein_DB_ID] ASC
@@ -32,7 +33,7 @@ ALTER TABLE [dbo].[T_MTS_Protein_DBs] CHECK CONSTRAINT [FK_T_MTS_Protein_DBs_T_M
 GO
 ALTER TABLE [dbo].[T_MTS_Protein_DBs] ADD  CONSTRAINT [DF_T_MTS_Protein_DBs_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO
-ALTER TABLE [dbo].[T_MTS_Protein_DBs] ADD  CONSTRAINT [DF_T_MTS_Protein_DBs_DB_Schema_Version]  DEFAULT (1) FOR [DB_Schema_Version]
+ALTER TABLE [dbo].[T_MTS_Protein_DBs] ADD  CONSTRAINT [DF_T_MTS_Protein_DBs_DB_Schema_Version]  DEFAULT ((1)) FOR [DB_Schema_Version]
 GO
 ALTER TABLE [dbo].[T_MTS_Protein_DBs] ADD  CONSTRAINT [DF_T_MTS_Protein_DBs_Comment]  DEFAULT ('') FOR [Comment]
 GO

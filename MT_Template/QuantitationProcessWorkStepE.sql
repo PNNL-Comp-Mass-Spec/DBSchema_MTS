@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QuantitationProcessWorkStepE
+CREATE PROCEDURE QuantitationProcessWorkStepE
 /****************************************************	
 **  Desc: 
 **
@@ -14,6 +14,8 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepE
 **	Date:	09/07/2006
 **			05/25/2007 mem - Now populating column JobCount_Observed_Both_MS_and_MSMS
 **			06/06/2007 mem - Now populating column Rank_Match_Score_Avg
+**			09/13/2010 mem - Changed Charge_State_Min and Charge_State_Max to smallint
+**			10/13/2010 mem - Added support for Uniqueness_Probability and FDR_Threshold
 **
 ****************************************************/
 (
@@ -82,6 +84,8 @@ AS
 		[Rank_Match_Score_Avg] float NULL ,
 		[Match_Score_Avg] float NULL ,
 		[Del_Match_Score_Avg] float NULL ,
+		[Uniqueness_Probability_Avg] float NULL ,
+		[FDR_Threshold_Avg] float NULL ,
 		[NET_Error_Obs_Avg] float NULL ,
 		[NET_Error_Pred_Avg] float null ,
 		[ERAvg] float NULL ,
@@ -92,8 +96,8 @@ AS
 		[NET_Minimum] real NOT NULL ,
 		[NET_Maximum] real NOT NULL ,
 		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-		[Charge_State_Min] tinyint NOT NULL ,
-		[Charge_State_Max] tinyint NOT NULL ,
+		[Charge_State_Min] smallint NOT NULL ,
+		[Charge_State_Max] smallint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
 		[UMCMatchCountAvg] real NULL ,
 		[UMCIonCountTotalAvg] real NULL ,
@@ -127,6 +131,8 @@ AS
 		Rank_Match_Score_Avg,
 		Match_Score_Avg,
 		Del_Match_Score_Avg,
+		Uniqueness_Probability_Avg,
+		FDR_Threshold_Avg,
 		NET_Error_Obs_Avg,
 		NET_Error_Pred_Avg,
 		ERAvg, ER_StDev,
@@ -157,6 +163,10 @@ AS
 			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
+			
+			AVG(Uniqueness_Probability_Avg),
+			AVG(FDR_Threshold_Avg),
+			
 			AVG(NET_Error_Obs_Avg),
 			AVG(NET_Error_Pred_Avg),
 			
@@ -235,6 +245,8 @@ AS
 		[Rank_Match_Score_Avg] float NULL ,
 		[Match_Score_Avg] float NULL ,
 		[Del_Match_Score_Avg] float NULL ,
+		[Uniqueness_Probability_Avg] float NULL ,
+		[FDR_Threshold_Avg] float NULL ,
 		[NET_Error_Obs_Avg] float NULL ,
 		[NET_Error_Pred_Avg] float null ,
 		[ERAvg] float NULL ,
@@ -245,8 +257,8 @@ AS
 		[NET_Minimum] real NOT NULL ,
 		[NET_Maximum] real NOT NULL ,
 		[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-		[Charge_State_Min] tinyint NOT NULL ,
-		[Charge_State_Max] tinyint NOT NULL ,
+		[Charge_State_Min] smallint NOT NULL ,
+		[Charge_State_Max] smallint NOT NULL ,
 		[MassErrorPPMAvg] float NOT NULL ,
 		[UMCMatchCountAvg] real NULL ,
 		[UMCMatchCountStDev] real NULL ,
@@ -283,6 +295,8 @@ AS
 		 Rank_Match_Score_Avg,
 		 Match_Score_Avg,
 		 Del_Match_Score_Avg,
+		 Uniqueness_Probability_Avg,
+		 FDR_Threshold_Avg,
 		 NET_Error_Obs_Avg,
 		 NET_Error_Pred_Avg,
 		 ERAvg, ER_StDev,
@@ -315,6 +329,10 @@ AS
 			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
+			
+			AVG(Uniqueness_Probability_Avg),
+			AVG(FDR_Threshold_Avg),
+
 			AVG(NET_Error_Obs_Avg),
 			AVG(NET_Error_Pred_Avg),
 
@@ -389,6 +407,8 @@ AS
 		 Rank_Match_Score_Avg,
 		 Match_Score_Avg,
 		 Del_Match_Score_Avg,
+		 Uniqueness_Probability_Avg,
+		 FDR_Threshold_Avg,
 		 NET_Error_Obs_Avg,
 		 NET_Error_Pred_Avg,
 		 ERAvg, ER_StDev,
@@ -425,6 +445,10 @@ AS
 			AVG(Rank_Match_Score_Avg),
 			AVG(Match_Score_Avg),
 			AVG(Del_Match_Score_Avg),
+
+			AVG(Uniqueness_Probability_Avg),
+			AVG(FDR_Threshold_Avg),
+
 			AVG(NET_Error_Obs_Avg),
 			AVG(NET_Error_Pred_Avg),
 			
@@ -499,7 +523,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepE] TO [MTS_DB_Dev] AS [dbo]

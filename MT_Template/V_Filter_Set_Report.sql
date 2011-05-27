@@ -16,7 +16,9 @@ SELECT OuterQ.Filter_Set_ID,
     FSR.NET_Difference_Absolute, FSR.Discriminant_Initial_Filter, 
     FSR.Protein_Count, FSR.XTandem_Hyperscore, 
     FSR.XTandem_LogEValue, FSR.Peptide_Prophet_Probability, 
-    FSR.RankScore, FSR.Inspect_MQScore, FSR.Inspect_TotalPRMScore, FSR.Inspect_FScore, FSR.Inspect_PValue
+    FSR.RankScore, FSR.Inspect_MQScore, FSR.Inspect_TotalPRMScore, 
+    FSR.Inspect_FScore, FSR.Inspect_PValue,
+    FSR.MSGF_SpecProb
 FROM (SELECT CONVERT(int, LTRIM(RTRIM(SUBSTRING(Value, 1, CommaLoc - 1)))) AS Filter_Set_ID, 
           CASE WHEN CommaLoc2 > 0 
           THEN LTRIM(RTRIM(SUBSTRING(Value, CommaLoc + 1, CommaLoc2 - CommaLoc - 1))) 

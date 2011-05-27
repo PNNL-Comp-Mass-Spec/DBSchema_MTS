@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[GetMTStatsAndPepProphetStats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE dbo.GetMTStatsAndPepProphetStats
@@ -11,14 +11,15 @@ CREATE PROCEDURE dbo.GetMTStatsAndPepProphetStats
 **		  Unlike GetMassTagsGANETParam and GetMassTagsPlusPepProphetStats, this procedure does not return peptide sequence information
 **
 **		Note: This procedure was used by the 2008 version of SMART and is no longer used
-**		      The 2010 version of SMART uses GetMTStats
+**		      The 2010 version of SMART (now named STAC) uses GetMTStats
 **
 **  Return values: 0 if success, otherwise, error code 
 **
 **  Parameters: See comments below
 **
 **  Auth:	mem
-**	Date:	04/07/2008
+**	Date:	04/07/2008 mem - Initial version
+**			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
 **  
 ****************************************************************/
 (
@@ -27,7 +28,8 @@ CREATE PROCEDURE dbo.GetMTStatsAndPepProphetStats
 	@MinimumHighNormalizedScore real = 0,		-- The minimum value required for High_Normalized_Score; 0 to allow all
 	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
 	@MinimumPeptideProphetProbability real = 0,	-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
-	@MinimumPMTQualityScore real = 0,	-- The minimum PMT_Quality_Score to allow; 0 to allow all
+	@MinimumPMTQualityScore real = 0,			-- The minimum PMT_Quality_Score to allow; 0 to allow all
+	@MaximumMSGFSpecProb float = 0,				-- The maximum MSGF Spectrum Probability value to allow (examines Min_MSGF_SpecProb in T_Mass_Tags); 0 to allow all
 	@ShowDebugInfo tinyint = 0
 )
 As
@@ -52,6 +54,7 @@ As
 	Set @MinimumHighDiscriminantScore = IsNull(@MinimumHighDiscriminantScore, 0)
 	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
+	Set @MaximumMSGFSpecProb = IsNull(@MaximumMSGFSpecProb, 0)
 	Set @ShowDebugInfo = IsNull(@ShowDebugInfo, 0)
 	
 	---------------------------------------------------	
@@ -98,6 +101,7 @@ As
 							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
 							@MinimumHighNormalizedScore, @MinimumPMTQualityScore, 
 							@MinimumHighDiscriminantScore, @MinimumPeptideProphetProbability,
+							@MaximumMSGFSpecProb,
 							@DatasetToFilterOn = @DatasetToFilterOn Output
 	
 	If @myError <> 0

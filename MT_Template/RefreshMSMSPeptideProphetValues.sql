@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER OFF
 GO
 
+
 CREATE Procedure RefreshMSMSPeptideProphetValues
 /****************************************************
 **
@@ -22,6 +23,7 @@ CREATE Procedure RefreshMSMSPeptideProphetValues
 **			07/20/2006 mem - Expanded size of @JobFilterList from 1024 to 4000
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			04/23/2008 mem - Now explicitly dropping the temporary table created by this procedure; in addition, uniquified the JobsToUpdate temporary table
+**			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
 **    
 *****************************************************/
 (
@@ -278,7 +280,7 @@ As
 		-- so that Peptide_Prophet_Max will get updated in T_Mass_Tags
 		UPDATE T_Process_Step_Control
 		Set Enabled = 1
-		WHERE Processing_Step_Name = 'ForceLCQProcessingOnNextUpdate'
+		WHERE Processing_Step_Name = 'ForceMSMSProcessingOnNextUpdate'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
@@ -317,6 +319,7 @@ Done:
 	DROP TABLE #T_Tmp_JobsToUpdatePepProphet
 			
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSPeptideProphetValues] TO [MTS_DB_Dev] AS [dbo]

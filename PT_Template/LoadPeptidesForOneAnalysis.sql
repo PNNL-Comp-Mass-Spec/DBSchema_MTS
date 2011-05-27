@@ -46,6 +46,8 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			01/06/2009 mem - Increased @ColumnCountExpected to 25 for Inspect results (inspect Syn files should have 25 or 27 columns)
 **			07/22/2009 mem - Added Try/Catch error handling
+**			07/23/2010 mem - Added support for MSGF results
+**			10/12/2010 mem - Now setting @completionCode to 9 when ValidateDelimitedFile returns a result code = 63 or when LoadSequestPeptidesBulk, LoadXTandemPeptidesBulk, or LoadInspectPeptidesBulk return 52099
 **
 *****************************************************/
 (
@@ -82,6 +84,7 @@ AS
 	declare @SeqModDetailsFileExtension varchar(48)
 	declare @SeqToProteinMapFileExtension varchar(48)
 	declare @PeptideProphetFileExtension varchar(48)
+	declare @MSGFFileExtension varchar(48)
         
 	declare @ColumnCountExpected int
 	declare @LineCountToSkip int
@@ -193,6 +196,7 @@ AS
 			set @SeqModDetailsFileExtension = '_syn_ModDetails.txt'
 			set @SeqToProteinMapFileExtension = '_syn_SeqToProteinMap.txt'
 			set @PeptideProphetFileExtension = '_syn_PepProphet.txt'
+			set @MSGFFileExtension = '_syn_MSGF.txt'
 		End
 		
 		If @ResultType = 'XT_Peptide_Hit'
@@ -205,6 +209,7 @@ AS
 			set @SeqModDetailsFileExtension = '_xt_ModDetails.txt'
 			set @SeqToProteinMapFileExtension = '_xt_SeqToProteinMap.txt'
 			set @PeptideProphetFileExtension = '_xt_PepProphet.txt'
+			set @MSGFFileExtension = '_xt_MSGF.txt'
 		End
 
 		If @ResultType = 'IN_Peptide_Hit'
@@ -217,6 +222,7 @@ AS
 			set @SeqModDetailsFileExtension = '_inspect_syn_ModDetails.txt'
 			set @SeqToProteinMapFileExtension = '_inspect_syn_SeqToProteinMap.txt'
 			set @PeptideProphetFileExtension = ''
+			set @MSGFFileExtension = '_inspect_syn_MSGF.txt'
 		End
 		
 		If @ColumnCountExpected = 0
@@ -283,6 +289,7 @@ AS
 		declare @PeptideSeqModDetailsFilePath varchar(512)
 		declare @PeptideSeqToProteinMapFilePath varchar(512)
 		declare @PeptideProphetResultsFilePath varchar(512)
+		declare @MSGFResultsFilePath varchar(512)
 
 		set @RootFileName = @Dataset
 		set @PeptideSynFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SynFileExtension)
@@ -292,6 +299,7 @@ AS
 		set @PeptideSeqModDetailsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqModDetailsFileExtension)
 		set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqToProteinMapFileExtension)
 		set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @PeptideProphetFileExtension)
+		set @MSGFResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @MSGFFileExtension)
 
 		Declare @fileExists tinyint
 		Declare @SynFileColumnCount int
@@ -312,7 +320,12 @@ AS
 		Begin
 			If Len(@message) = 0
 				Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSynFilePath + ' (Code ' + Convert(varchar(12), @result) + ')'
-			
+
+			if @result = 63
+				-- OpenTextFile was unable to open the file
+				-- Set the completion code to 9, meaning we want to retry the load
+				set @completionCode = 9
+
 			Set @myError = 60003		
 		End
 		else
@@ -350,12 +363,14 @@ AS
 		declare @loaded int,
 				@peptideCountSkipped int,
 				@SeqCandidateFilesFound tinyint,
-				@PepProphetFileFound tinyint
+				@PepProphetFileFound tinyint,
+				@MSGFFileFound tinyint
 				
 		set @loaded = 0
 		set @peptideCountSkipped = 0
 		set @SeqCandidateFilesFound = 0
 		set @PepProphetFileFound = 0
+		set @MSGFFileFound = 0
 
 		If @infoOnly <> 0
 		Begin
@@ -364,7 +379,8 @@ AS
 					@PeptideSeqInfoFilePath AS PeptideSeqInfoFilePath,
 					@PeptideSeqModDetailsFilePath AS PeptideSeqModDetailsFilePath,
 					@PeptideSeqToProteinMapFilePath AS PeptideSeqToProteinMapFilePath,
-					@PeptideProphetResultsFilePath AS PeptideProphetResultsFilePath
+					@PeptideProphetResultsFilePath AS PeptideProphetResultsFilePath,
+					@MSGFResultsFilePath AS MSGFResultsFilePath
 
 					
 			Goto Done
@@ -385,6 +401,7 @@ AS
 								@PeptideSeqModDetailsFilePath,
 								@PeptideSeqToProteinMapFilePath,
 								@PeptideProphetResultsFilePath,
+								@MSGFResultsFilePath,
 								@job, 
 								@FilterSetID,
 								@LineCountToSkip,
@@ -392,6 +409,7 @@ AS
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
 								@PepProphetFileFound output,
+								@MSGFFileFound output,
 								@message output
 			End
 
@@ -405,6 +423,7 @@ AS
 								@PeptideSeqModDetailsFilePath,
 								@PeptideSeqToProteinMapFilePath,
 								@PeptideProphetResultsFilePath,
+								@MSGFResultsFilePath,
 								@job, 
 								@FilterSetID,
 								@LineCountToSkip,
@@ -412,6 +431,7 @@ AS
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
 								@PepProphetFileFound output,
+								@MSGFFileFound output,
 								@message output
 			End
 
@@ -425,6 +445,7 @@ AS
 								@PeptideSeqInfoFilePath,
 								@PeptideSeqModDetailsFilePath,
 								@PeptideSeqToProteinMapFilePath,
+								@MSGFResultsFilePath,
 								@job, 
 								@FilterSetID,
 								@SynFileColumnCount,
@@ -432,6 +453,7 @@ AS
 								@loaded output,
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
+								@MSGFFileFound output,
 								@message output
 
 				Set @PepProphetFileFound = 0
@@ -441,6 +463,11 @@ AS
 		
 		Set @CurrentLocation = 'Evalute return code'
 		
+		If @result = 52099
+			-- OpenTextFile was unable to open the file
+			-- Set the completion code to 9, meaning we want to retry the load
+			Set @completioncode = 9
+
 		--
 		set @myError = @result
 		if @result = 0
@@ -459,6 +486,9 @@ AS
 			
 			if @PepProphetFileFound <> 0
 				set @message = @message + '; loaded Peptide Prophet data'
+				
+			if @MSGFFileFound <> 0
+				set @message = @message + '; loaded MSGF data'
 
 			-- Append the name of the server where the data was loaded from
 			set @message = @message + '; Server: ' + IsNull(@SourceServer, '??')

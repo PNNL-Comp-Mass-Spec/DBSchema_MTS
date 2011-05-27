@@ -36,6 +36,7 @@ CREATE Procedure dbo.AddQuantitationDescription
 **						   - Added back the processing option parameters since they are needed by Q Rollup
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **			06/06/2007 mem - Added parameter @MaximumMatchesPerUMCToKeep; switched to Try/Catch error handling
+**			10/14/2010 mem - Added parameters @MinimumUniquenessProbability and @MaximumFDRThreshold
 **
 ****************************************************/
 (
@@ -79,7 +80,10 @@ CREATE Procedure dbo.AddQuantitationDescription
 	@InternalStdInclusionMode tinyint = 0,			-- Ignored if @LookupDefaultOptions <> 0
 
 	@MinimumPeptideProphetProbability real = 0,		-- Ignored if @LookupDefaultOptions <> 0
-	@MaximumMatchesPerUMCToKeep smallint = 1		-- Ignored if @LookupDefaultOptions <> 0
+	@MaximumMatchesPerUMCToKeep smallint = 1,		-- Ignored if @LookupDefaultOptions <> 0
+	
+	@MinimumUniquenessProbability real = 0,			-- Ignored if @LookupDefaultOptions <> 0
+	@MaximumFDRThreshold real = 1					-- Ignored if @LookupDefaultOptions <> 0
 )
 As
 	Set NoCount On
@@ -123,7 +127,9 @@ As
 											@MinimumMatchScore output, @MinimumDelMatchScore output, 
 											@MinimumPeptideReplicateCount output, @ORFCoverageComputationLevel output, 
 											@InternalStdInclusionMode output, @MinimumPeptideProphetProbability output,
-											@MaximumMatchesPerUMCToKeep output
+											@MaximumMatchesPerUMCToKeep output,
+											@MinimumUniquenessProbability output,
+											@MaximumFDRThreshold output
 		End	
 
 		Set @TransAddQuantitationDescription = 'TransAddQuantitation'
@@ -174,6 +180,8 @@ As
 				Maximum_Matches_per_UMC_to_Keep,
 				Minimum_Match_Score,
 				Minimum_Del_Match_Score,
+				Minimum_Uniqueness_Probability,
+				Maximum_FDR_Threshold,				
 				Minimum_Peptide_Replicate_Count,
 				ORF_Coverage_Computation_Level,
 				Internal_Std_Inclusion_Mode
@@ -191,6 +199,8 @@ As
 				@MaximumMatchesPerUMCToKeep,
 				@MinimumMatchScore,
 				@MinimumDelMatchScore,
+				@MinimumUniquenessProbability,
+				@MaximumFDRThreshold,
 				@MinimumPeptideReplicateCount,
 				@ORFCoverageComputationLevel,
 				@InternalStdInclusionMode

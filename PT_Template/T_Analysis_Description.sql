@@ -49,6 +49,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Regression_Equation] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Regression_Equation_XML] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Regression_Param_File] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Retry_Load_Count] [tinyint] NOT NULL,
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
@@ -143,4 +144,6 @@ GO
 ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)) FOR [Import_Priority]
 GO
 ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Param_File]  DEFAULT ('') FOR [Regression_Param_File]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Retry_Load_Count]  DEFAULT ((0)) FOR [Retry_Load_Count]
 GO

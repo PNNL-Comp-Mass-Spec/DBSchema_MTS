@@ -10,6 +10,7 @@ CREATE TABLE [dbo].[T_Datasets](
 	[Created_DMS] [datetime] NULL,
 	[Acq_Time_Start] [datetime] NULL,
 	[Acq_Time_End] [datetime] NULL,
+	[Acq_Length] [decimal](9, 2) NULL,
 	[Scan_Count] [int] NULL,
 	[Created] [datetime] NOT NULL,
 	[Dataset_Process_State] [int] NOT NULL,
@@ -26,7 +27,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_d_Datasets] on [dbo].[T_Datasets]
 For Delete
 AS
@@ -38,14 +38,12 @@ AS
 	FROM deleted
 	order by deleted.Dataset_ID
 
-
 GO
 /****** Object:  Trigger [dbo].[trig_i_Datasets] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_i_Datasets] on [dbo].[T_Datasets]
 For Insert
 AS
@@ -56,7 +54,6 @@ AS
 	SELECT 2, inserted.Dataset_ID, inserted.Dataset_Process_State, 0, GetDate()
 	FROM inserted
 	ORDER BY inserted.Dataset_ID
-
 
 GO
 /****** Object:  Trigger [dbo].[trig_iu_T_Datasets] ******/
@@ -116,7 +113,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_u_Datasets] on [dbo].[T_Datasets]
 For Update
 AS
@@ -128,7 +124,6 @@ AS
 		SELECT 2, inserted.Dataset_ID, inserted.Dataset_Process_State, deleted.Dataset_Process_State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.Dataset_ID = inserted.Dataset_ID
 		ORDER BY inserted.Dataset_ID
-
 
 GO
 ALTER TABLE [dbo].[T_Datasets]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
@@ -143,5 +138,5 @@ ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Dataset_Process
 GO
 ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Created]  DEFAULT (getdate()) FOR [Created]
 GO
-ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Dataset_Process_State]  DEFAULT (0) FOR [Dataset_Process_State]
+ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Dataset_Process_State]  DEFAULT ((0)) FOR [Dataset_Process_State]
 GO

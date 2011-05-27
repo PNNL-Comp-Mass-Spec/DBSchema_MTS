@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.QCMSMSSeqOccurrenceStats
+
+CREATE PROCEDURE QCMSMSSeqOccurrenceStats
 /****************************************************
 **
 **	Desc: 
@@ -20,6 +21,7 @@ CREATE PROCEDURE dbo.QCMSMSSeqOccurrenceStats
 **	Date:	08/28/2005
 **			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **			03/01/2006 mem - Now calling ObtainSeqOccurrenceStats to populate #Tmp_Seq_Occurence_Stats, then returning the contents of #Tmp_Seq_Occurence_Stats
+**			09/22/2010 mem - Added parameters @PeptideProphetMinimum, @MSGFThreshold, @ResultTypeFilter, and @PreviewSql
 **
 *****************************************************/
 (
@@ -39,7 +41,7 @@ CREATE PROCEDURE dbo.QCMSMSSeqOccurrenceStats
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@DiscriminantScoreMinimum real = 0.75,			-- Ignored if 0
+	@DiscriminantScoreMinimum real = 0,				-- Ignored if 0
 	@CleavageStateMinimum tinyint = 0,				-- Ignored if 0
 	@XCorrMinimum real = 0,							-- Ignored if 0
 	@DeltaCn2Minimum real = 0,						-- Ignored if 0
@@ -48,7 +50,14 @@ CREATE PROCEDURE dbo.QCMSMSSeqOccurrenceStats
 	@FilterIDFilter int = 117,						-- Ignored if 0; only appropriate for Peptide DBs
 	@PMTQualityScoreMinimum int = 1,				-- Ignored if 0; only appropriate for PMT Tag DBs
 	
-	@maximumRowCount int = 255						-- 0 means to return all rows; defaults to 255 to limit the number of sequences returned
+	@maximumRowCount int = 255,						-- 0 means to return all rows; defaults to 255 to limit the number of sequences returned
+
+	@PeptideProphetMinimum real = 0,				-- Ignored if 0
+	@MSGFThreshold float = 1E-11,					-- Ignored if 0; example threshold is 1E-11 which means to keep peptides with MSGF < 1E-11
+
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
+	@PreviewSql tinyint = 0
+	
 )
 As
 	set nocount on
@@ -67,6 +76,8 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
+	Set @previewSql = IsNull(@previewSql, 0)
 	
 	---------------------------------------------------
 	-- Create temporary table #Tmp_Seq_Occurence_Stats
@@ -103,7 +114,11 @@ As
 									@RankXcMaximum = @RankXcMaximum,
 									@FilterIDFilter = @FilterIDFilter,
 									@PMTQualityScoreMinimum = @PMTQualityScoreMinimum,
-									@maximumRowCount = @maximumRowCount
+									@maximumRowCount = @maximumRowCount,
+									@PeptideProphetMinimum = @PeptideProphetMinimum,
+									@MSGFThreshold = @MSGFThreshold,									
+									@ResultTypeFilter = @ResultTypeFilter, 
+									@PreviewSql = @PreviewSql
 
 	
 	---------------------------------------------------

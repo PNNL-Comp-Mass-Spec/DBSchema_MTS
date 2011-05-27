@@ -42,10 +42,11 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
 **			05/31/2007 mem - Now setting @duplicateEntryHoldoffHours to 4 when calling PostLogEntry for various errors
 **			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
+**			01/25/2011 mem - Decreased @JobMapUpdateHoldoff to 0.9 hours
 **    
 *****************************************************/
 (
-	@JobMapUpdateHoldoff int = 4		-- Hours between call to UpdateAnalysisJobToMTDBMap
+	@JobMapUpdateHoldoff real = 0.9		-- Hours between call to UpdateAnalysisJobToMTDBMap
 )
 As
 	set nocount on
@@ -577,7 +578,7 @@ As
 		Declare @PostingTime datetime
 		Set @PostingTime = '1/1/2000'
 	
-		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 4)
+		Set @JobMapUpdateHoldoff = IsNull(@JobMapUpdateHoldoff, 1)
 				
 		SELECT TOP 1 @PostingTime = Posting_Time
 		FROM T_Log_Entries
@@ -586,7 +587,7 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		
-		If @JobMapUpdateHoldoff <=0 Or DateDiff(hour, @PostingTime, GetDate()) >= @JobMapUpdateHoldoff OR @myRowCount = 0
+		If @JobMapUpdateHoldoff <=0 Or DateDiff(minute, @PostingTime, GetDate()) / 60.0 >= @JobMapUpdateHoldoff OR @myRowCount = 0
 		Begin
 			Set @CurrentLocation = 'Call UpdateAnalysisJobToMTDBMap'
 			

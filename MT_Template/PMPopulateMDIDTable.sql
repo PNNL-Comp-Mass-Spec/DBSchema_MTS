@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.PMPopulateMDIDTable
 **	Auth:	mem
 **	Date:	07/16/2009 mem - Initial version
 **			08/26/2009 mem - Now using SELECT DISTINCT when populating #Tmp_MDIDList
+**			02/15/2011 mem - Now populating Match_Score_Mode in #Tmp_MDIDList
 **    
 *****************************************************/
 (
@@ -34,8 +35,8 @@ AS
 	-- Populate #Tmp_MDIDList
 	-------------------------------------------------
 	
-	INSERT INTO #Tmp_MDIDList (MD_ID)
-	SELECT DISTINCT Value
+	INSERT INTO #Tmp_MDIDList (MD_ID, Match_Score_Mode)
+	SELECT DISTINCT Value, 0
 	FROM dbo.udfParseDelimitedIntegerList(@MDIDs, ',')
 	--
 	Select @myError = @@Error, @myRowCount = @@RowCount

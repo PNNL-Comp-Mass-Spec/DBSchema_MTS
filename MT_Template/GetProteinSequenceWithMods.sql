@@ -16,12 +16,14 @@ CREATE PROCEDURE dbo.GetProteinSequenceWithMods
 **	Auth:	mem
 **	Date:	02/24/2010 mem - Initial Version
 **			02/26/2010 mem - Added parameter @MinimumPMTQualityScore
+**			07/12/2010 mem - Added parameter @MinObsCountPassingFilter
 **
 *****************************************************/
 (
 	@RefID int,
 	@MinimumPMTQualityScore real = 1,			-- Used to filter the entries in T_Mass_Tags
 	@ModNamesAndSymbols varchar(2048) = 'Hexose=#, Plus1Oxy=*',
+	@MinObsCountPassingFilter int = 0,			-- When non-zero, then filters out peptides with T_Mass_Tags.dbo.Peptide_Obs_Count_Passing_Filter less than this value
 	@ProteinResiduesWithMods varchar(max) = '' output,
 	@message varchar(512) = '' output,
 	@DebugMode tinyint = 0
@@ -61,6 +63,7 @@ AS
 	
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 1)
 	Set @ModNamesAndSymbols = IsNull(@ModNamesAndSymbols, '')
+	Set @MinObsCountPassingFilter = IsNull(@MinObsCountPassingFilter, 0)
 	Set @ProteinResiduesWithMods = ''
 	Set @message = ''
 	
@@ -119,7 +122,8 @@ AS
 	     INNER JOIN T_Mass_Tag_to_Protein_Map MTPM
 	       ON MTM.Mass_Tag_ID = MTPM.Mass_Tag_ID
 	WHERE (MTPM.Ref_ID = @RefID) AND
-	      (MT.PMT_Quality_Score >= @MinimumPMTQualityScore)
+	      (MT.PMT_Quality_Score >= @MinimumPMTQualityScore) AND
+	      (IsNull(MT.Peptide_Obs_Count_Passing_Filter, 0) >= @MinObsCountPassingFilter)
 	GROUP BY MTPM.Residue_Start + MTM.Mod_Position - 1, #TmpModsToProcess.ModSymbol
 	ORDER BY Residue_Num Desc
 

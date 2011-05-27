@@ -11,8 +11,9 @@ CREATE Procedure dbo.ExcludePeptidesByProteinCollection
 **
 **  Return values: 0 if success, otherwise, error code 
 **
-**  Auth: mem
-**	Date: 02/13/2008
+**  Auth:	mem
+**	Date:	02/13/2008
+**			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_Info
 **
 ****************************************************/
 (
@@ -34,7 +35,7 @@ AS
 	Declare @ProteinCollectionName varchar(128)
 		
 	SELECT @ProteinCollectionName = [Name]
-	FROM MT_Main.dbo.V_DMS_Protein_Collection_List_Import
+	FROM MT_Main.dbo.T_DMS_Protein_Collection_Info
 	WHERE (Protein_Collection_ID = @ProteinCollectionID)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount

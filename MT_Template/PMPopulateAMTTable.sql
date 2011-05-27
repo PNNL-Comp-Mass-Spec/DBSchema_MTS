@@ -30,16 +30,18 @@ CREATE PROCEDURE PMPopulateAMTTable
 **	Auth:	mem
 **	Date:	07/16/2009 mem - Initial version
 **			10/27/2009 mem - Added parameter @MinimumCleavageState
+**			10/12/2010 mem - Added parameter @FDRThreshold
 **    
 *****************************************************/
 (
 	@FilterByMDID tinyint = 0,						-- When 1, then only returns Mass Tag IDs identified by the MDIDs in #Tmp_MDIDList; otherwise, ignores #Tmp_MDIDList
-	@UseScoreThresholds tinyint = 0,				-- When 1, then filters the data using the following score thresholds; otherwise, does not filter by threshold
-	@MinimumHighNormalizedScore real = 0,			-- The minimum value required for High_Normalized_Score; 0 to allow all
-	@MinimumHighDiscriminantScore real = 0,			-- The minimum High_Discriminant_Score to allow; 0 to allow all
-	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
-	@MinimumPMTQualityScore real = 0,				-- The minimum PMT_Quality_Score to allow; 0 to allow all
-	@MinimumCleavageState smallint = 0,				-- The minimum Max_Cleavage_State to allow; 0 to allow all
+	@UseScoreThresholds tinyint = 0,				-- If @FilterByMDID = 0, then this should be 1; when 1, then filters the data using the following score thresholds; otherwise, the following score thresholds are ignored
+	@MinimumHighNormalizedScore real = 0,			-- Only used if @UseScoreThresholds=1; the minimum value required for High_Normalized_Score; 0 to allow all
+	@MinimumHighDiscriminantScore real = 0,			-- Only used if @UseScoreThresholds=1; the minimum High_Discriminant_Score to allow; 0 to allow all
+	@MinimumPeptideProphetProbability real = 0,		-- Only used if @UseScoreThresholds=1; the minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MinimumPMTQualityScore real = 0,				-- Only used if @UseScoreThresholds=1; the minimum PMT_Quality_Score to allow; 0 to allow all
+	@MinimumCleavageState smallint = 0,				-- Only used if @UseScoreThresholds=1; the minimum Max_Cleavage_State to allow; 0 to allow all
+	@FDRThreshold real = 0,							-- Only used if @FilterByMDID=1; if non-zero, then will filter on FDR_Threshold in T_FTICR_UMC_ResultDetails and T_FTICR_UMC_InternalStdDetails
 	@CountRowsOnly tinyint = 0,						-- When 1, then populates @AMTCount but does not populate #Tmp_FilteredMTs
 	@AMTCount int = 0 output,						-- The number of AMT tags that pass the thresholds
 	@AMTLastAffectedMax datetime = null output,		-- The maximum Last_Affected value for the AMT tags that pass the thresholds
@@ -121,6 +123,7 @@ AS
 	Set @S = ''
 	If @FilterByMDID = 0
 	Begin
+		-- Note filtering by MD_ID
 		If @CountRowsOnly = 0
 			Set @S = @S + ' SELECT Mass_Tag_ID '
 		Else
@@ -132,6 +135,8 @@ AS
 	End
 	Else
 	Begin
+		-- Filtering based on the AMT Tags identified in the specified MD_IDs
+		
 		If @CountRowsOnly = 0
 			Set @S = @S + ' SELECT DISTINCT UnionQ.Mass_Tag_ID'
 		Else
@@ -144,6 +149,8 @@ AS
 		Set @S = @S +            ' INNER JOIN T_FTICR_UMC_ResultDetails FURD ON FUR.UMC_Results_ID = FURD.UMC_Results_ID'
 		Set @S = @S +            ' INNER JOIN T_Mass_Tags MT ON FURD.Mass_Tag_ID = MT.Mass_Tag_ID'
 		Set @S = @S +            ' INNER JOIN #Tmp_MDIDList ML ON MMD.MD_ID = ML.MD_ID'
+		If @FDRThreshold > 0
+			Set @S = @S +  ' WHERE MMD.Match_Score_Mode = 0 OR IsNull(FURD.FDR_Threshold, 1) <= ' + Convert(varchar(12), @FDRThreshold)	
 		Set @S = @S +      ' UNION'
 		Set @S = @S +      ' SELECT DISTINCT FURD.Seq_ID AS Mass_Tag_ID'
 		Set @S = @S +      ' FROM T_Match_Making_Description MMD'
@@ -151,6 +158,8 @@ AS
 		Set @S = @S +            ' INNER JOIN T_FTICR_UMC_InternalStdDetails FURD ON FUR.UMC_Results_ID = FURD.UMC_Results_ID'
 		Set @S = @S +            ' INNER JOIN T_Mass_Tags MT ON FURD.Seq_ID = MT.Mass_Tag_ID'
 		Set @S = @S +            ' INNER JOIN #Tmp_MDIDList ML ON MMD.MD_ID = ML.MD_ID'
+		If @FDRThreshold > 0
+			Set @S = @S +  ' WHERE MMD.Match_Score_Mode = 0 OR IsNull(FURD.FDR_Threshold, 1) <= ' + Convert(varchar(12), @FDRThreshold)	
 		Set @S = @S +      ') UnionQ'
 		Set @S = @S +      ' INNER JOIN T_Mass_Tags MT ON UnionQ.Mass_Tag_ID = MT.Mass_Tag_ID'
 		

@@ -6,9 +6,11 @@ GO
 
 CREATE Procedure dbo.AddMatchMaking
 /******************************************************* 	
-**	adds row to the T_Match_Making table
-**  returns ID assigned to new rec. in output par.
-**	returns 0 if success; error number on failure
+**	Adds row to the T_Match_Making table
+**
+**  Returns ID assigned to new record in output pararameter @MatchMakingID
+**
+**	Returns 0 if success; error number on failure
 **
 **	Date:	12/14/2001 
 **	Author: nt
@@ -28,6 +30,11 @@ CREATE Procedure dbo.AddMatchMaking
 **			05/06/2005 mem - Added parameters @RefineMassCalPeakWidthPPM, @RefineMassCalPeakCenterPPM, @RefineNETTolPeakHeightCounts, @RefineNETTolPeakWidthNET, & @RefineNETTolPeakCenterNET
 **			12/20/2005 mem - Added parameter @LimitToPMTsFromDataset
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**			10/07/2010 mem - Added parameter @MatchScoreMode
+**			10/08/2010 mem - Added parameter @STACUsedPriorProbability
+**			10/12/2010 mem - Added parameters @AMTCount1pctFDR, @AMTCount5pctFDR, and @AMTCount10pctFDR
+**			10/13/2010 mem - Added parameters @AMTCount25pctFDR and @AMTCount50pctFDR
+**			05/04/2011 mem - Now calling AutoAddFTICRJob to make sure @Reference_Job is present in T_FTICR_Analysis_Description
 **
 *******************************************************/
 (
@@ -55,21 +62,28 @@ CREATE Procedure dbo.AddMatchMaking
 	@NetAdjNetMax			numeric(9,5)=NULL,
 	@RefineMassCalPPMShift	numeric(9,4)=NULL,
 	@RefineMassCalPeakHeightCounts	int=NULL,
-	@RefineMassTolUsed				tinyint=0,
-	@RefineNETTolUsed				tinyint=0,
+	@RefineMassTolUsed			tinyint=0,
+	@RefineNETTolUsed			tinyint=0,
 	@MinimumHighNormalizedScore decimal(9,5)=NULL,
 	@MinimumPMTQualityScore		decimal(9,5)=NULL,
-	@IniFileName			 varchar(255)=NULL,
+	@IniFileName			    varchar(255)=NULL,
 	@MinimumHighDiscriminantScore real=0, 
-	@ExperimentFilter varchar(64)='',
-	@ExperimentExclusionFilter varchar(64)='',
-	@RefineMassCalPeakWidthPPM real=NULL,
+	@ExperimentFilter           varchar(64)='',
+	@ExperimentExclusionFilter  varchar(64)='',
+	@RefineMassCalPeakWidthPPM  real=NULL,
 	@RefineMassCalPeakCenterPPM real = NULL,
 	@RefineNETTolPeakHeightCounts int=NULL,
-	@RefineNETTolPeakWidthNET real=NULL,
+	@RefineNETTolPeakWidthNET  real=NULL,
 	@RefineNETTolPeakCenterNET real = NULL,
-	@LimitToPMTsFromDataset tinyint = 0,
-	@MinimumPeptideProphetProbability real = 0
+	@LimitToPMTsFromDataset   tinyint = 0,
+	@MinimumPeptideProphetProbability real = 0,
+	@MatchScoreMode           tinyint = 0,			-- Pointer to table T_MMD_Match_Score_Mode; 0 = SLiC Score, 1 = STAC Score
+	@STACUsedPriorProbability tinyint = 0,
+	@AMTCount1pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.01
+	@AMTCount5pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.05
+	@AMTCount10pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.10
+	@AMTCount25pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.25
+	@AMTCount50pctFDR int = 0						-- Unique count of AMT tags with FDR <= 0.50
 )
 As
 	Set NoCount On
@@ -91,6 +105,9 @@ As
 			Set @IniFileName = SubString(@Parameters, 9, @charLoc - 5)
 	End
 
+	-- Make sure @Reference_Job is present in T_FTICR_Analysis_Description
+	exec AutoAddFTICRJob @Reference_Job
+	
 	-- Start a transaction
 	BEGIN TRANSACTION FullTrans
 		
@@ -127,7 +144,15 @@ As
 		Refine_NET_Tol_PeakCenter, Refine_NET_Tol_Used,
 		Minimum_High_Normalized_Score, Minimum_High_Discriminant_Score, 
 		Minimum_Peptide_Prophet_Probability, Minimum_PMT_Quality_Score,
-		Ini_File_Name, Experiment_Filter, Experiment_Exclusion_Filter, Limit_To_PMTs_From_Dataset
+		Ini_File_Name, Experiment_Filter, Experiment_Exclusion_Filter, 
+		Limit_To_PMTs_From_Dataset,
+		Match_Score_Mode,
+		STAC_Used_Prior_Probability,
+		AMT_Count_1pct_FDR,
+		AMT_Count_5pct_FDR,
+		AMT_Count_10pct_FDR,
+		AMT_Count_25pct_FDR,
+		AMT_Count_50pct_FDR
 		)
 	VALUES (@Reference_Job, @File, @Type, @Parameters, 
 			GetDate(), @State, @PeaksCount, 
@@ -145,7 +170,15 @@ As
 			@RefineNETTolPeakCenterNET, @RefineNETTolUsed,
 			@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
 			@MinimumPeptideProphetProbability, @MinimumPMTQualityScore,
-			@IniFileName, @ExperimentFilter, @ExperimentExclusionFilter, @LimitToPMTsFromDataset
+			@IniFileName, @ExperimentFilter, @ExperimentExclusionFilter, 
+			@LimitToPMTsFromDataset,
+			@MatchScoreMode,
+			@STACUsedPriorProbability,
+			@AMTCount1pctFDR,
+			@AMTCount5pctFDR,
+			@AMTCount10pctFDR,
+			@AMTCount25pctFDR,
+			@AMTCount50pctFDR
 			)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount, @MatchMakingID = SCOPE_IDENTITY()

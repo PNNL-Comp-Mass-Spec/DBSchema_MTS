@@ -45,6 +45,7 @@ CREATE Procedure dbo.QRRetrievePeptides
 **			09/07/2006 mem - Now returning column High_Peptide_Prophet_Probability
 **			05/28/2007 mem - Now returning column JobCount_Observed_Both_MS_and_MSMS
 **			06/05/2007 mem - Added parameters @message and @PreviewSql; switched to Try/Catch error handling
+**			10/14/2010 mem - Now using Match_Score_Mode to determine the name given to values in columns MT_Match_Score_Avg and MT_Del_Match_Score_Avg
 **
 ****************************************************/
 (
@@ -77,12 +78,20 @@ AS
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint
 
+	Declare @MatchScoreMode tinyint
+	Set @MatchScoreMode = 0
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
 
 	Begin Try
 
+		-- Lookup Match_Score_Mode for this QuantitationID
+		SELECT @MatchScoreMode = IsNull(Match_Score_Mode, 0)
+		FROM T_Quantitation_Description
+		WHERE Quantitation_ID = @QuantitationID
+		
 		-- Determine if this QuantitationID has any nonzero ER values or modified mass tags
 		Set @ERValuesPresent = 0
 		Set @ModsPresent = 0
@@ -132,10 +141,27 @@ AS
 		If @VerboseColumnOutput <> 0
 			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
 
-		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) AS MT_SLiC_Score_Avg, '
+		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) '
+		If @MatchScoreMode = 0
+			Set @QRDsql = @QRDsql + 'AS MT_SLiC_Score, '
+		Else
+			Set @QRDsql = @QRDsql + 'AS MT_STAC_Score, '
+			
 		If @VerboseColumnOutput <> 0
-			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Del_Match_Score_Avg,3) AS MT_Del_SLiC_Avg,'
-
+		Begin
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Del_Match_Score_Avg,3) '
+			If @MatchScoreMode = 0
+				Set @QRDsql = @QRDsql + 'AS MT_Del_SLiC,'
+			Else
+				Set @QRDsql = @QRDsql + 'AS MT_Del_STAC,'
+		End
+		
+		If @MatchScoreMode > 0
+		Begin
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Uniqueness_Probability_Avg, 3) AS MT_Uniqueness_Probability,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_FDR_Threshold_Avg, 4) AS MT_FDR_Threshold,'
+		End
+		
 		If @ERValuesPresent > 0
 		Begin
 			Set @QRDsql = @QRDsql + ' QRD.ER AS MT_ER,'
@@ -162,13 +188,13 @@ AS
 
 		If @VerboseColumnOutput <> 0
 		Begin
-			Set @QRDsql = @QRDsql + ' QRD.UMC_MatchCount_Avg,'
+			Set @QRDsql = @QRDsql + ' QRD.UMC_MatchCount_Avg AS UMC_MatchCount,'
 			Set @QRDsql = @QRDsql + ' QRD.Scan_Minimum, QRD.Scan_Maximum,'
 			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Minimum,3) As NET_Minimum, Round(QRD.NET_Maximum,3) As NET_Maximum,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.Class_Stats_Charge_Basis_Avg, 2) As Charge_Basis_Avg,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.Class_Stats_Charge_Basis_Avg, 2) As Charge_Basis,'
 			Set @QRDsql = @QRDsql + ' QRD.Charge_State_Min, QRD.Charge_State_Max,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.Mass_Error_PPM_Avg,2) AS MT_Mass_Error_PPM_Avg,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Error_Obs_Avg,3) AS NET_Error_Obs_Avg, Round(QRD.NET_Error_Pred_Avg,3) AS NET_Error_Pred_Avg,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.Mass_Error_PPM_Avg,2) AS MT_Mass_Error_PPM,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Error_Obs_Avg,3) AS NET_Error_Obs, Round(QRD.NET_Error_Pred_Avg,3) AS NET_Error_Pred,'
 		End
 		
 		Set @QRDsql = @QRDsql + ' ' + @ReplicateAndFractionSql					-- Note, if this variable has text, it will end in a comma
@@ -206,7 +232,9 @@ AS
 		If @IncludeRefColumn <> 0
 		Begin	
 			-- Generate the sql for the ORF columns in T_Quantitation_Results
-			Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT
+			Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT,
+					                    @MatchScoreModeMin=@MatchScoreMode,
+		                                @MatchScoreModeMax=@MatchScoreMode
 
 			Set @sql = @OrfColumnSql 
 

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure PMExportAMTTables
+CREATE Procedure dbo.PMExportAMTTables
 /****************************************************	
 **  Desc:	
 **		Exports the details for the AMT tags defined in #Tmp_MTs_ToExport
@@ -16,12 +16,15 @@ CREATE Procedure PMExportAMTTables
 **
 **  Auth:	mem
 **	Date:	10/30/2009 mem - Initial Version
+**			01/26/2011 mem - Now returning Min_MSGF_SpecProb from T_Mass_Tags
+**			02/22/2011 mem - Added parameter @ReturnIMSConformersTable
 **
 ****************************************************/
 (
-	@ReturnMTTable tinyint = 1,						-- When 1, then returns a table of Mass Tag IDs and various infor
+	@ReturnMTTable tinyint = 1,						-- When 1, then returns a table of Mass Tag IDs and various information
 	@ReturnProteinTable tinyint = 1,				-- When 1, then also returns a table of Proteins that the Mass Tag IDs map to
 	@ReturnProteinMapTable tinyint = 1,				-- When 1, then also returns the mapping information of Mass_Tag_ID to Protein
+	@ReturnIMSConformersTable tinyint = 1,			-- When 1, then also returns T_Mass_Tag_Conformers_Observed	
 	@message varchar(512)='' output
 )
 AS
@@ -45,7 +48,8 @@ AS
 		Set @ReturnMTTable = IsNull(@ReturnMTTable, 1)
 		Set @ReturnProteinTable = IsNull(@ReturnProteinTable, 1)
 		Set @ReturnProteinMapTable = IsNull(@ReturnProteinMapTable, 1)
-
+		Set @ReturnIMSConformersTable = IsNull(@ReturnIMSConformersTable, 1)
+		
 		Set @message = ''
 
 		-------------------------------------------------	
@@ -64,6 +68,7 @@ AS
 				    MT.High_Discriminant_Score,
 				    MT.High_Peptide_Prophet_Probability,
 				    MT.Min_Log_EValue,
+				    MT.Min_MSGF_SpecProb,
 				    MT.Mod_Count,
 				    MT.Mod_Description,
 				    ISNULL(MT.PMT_Quality_Score, 0) AS PMT_Quality_Score,
@@ -158,6 +163,22 @@ AS
 
 		End
 		
+		If @ReturnIMSConformersTable <> 0
+		Begin
+			SELECT Conf.Conformer_ID,
+				    Conf.Mass_Tag_ID,
+				    Conf.Charge,
+				    Conf.Conformer,
+				    Conf.Drift_Time_Avg,
+				    Conf.Drift_Time_StDev,
+				    Conf.Obs_Count
+			FROM T_Mass_Tag_Conformers_Observed Conf
+				    INNER JOIN #Tmp_MTs_ToExport F
+				    ON Conf.Mass_Tag_ID = F.Mass_Tag_ID
+			ORDER BY Conf.Conformer_ID
+			--
+			SELECT @myError = @@Error, @myRowCount = @@RowCount
+		End
 		
 	End Try
 	Begin Catch

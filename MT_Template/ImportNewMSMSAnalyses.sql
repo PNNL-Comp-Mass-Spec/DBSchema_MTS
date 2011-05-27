@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ImportNewMSMSAnalyses
+CREATE Procedure ImportNewMSMSAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -56,6 +56,9 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Description
 **			12/08/2008 mem - Added support for a Valid code of 252 from ValidateNewAnalysesUsingProteinCollectionFilters
 **			03/25/2010 mem - Added new NET Regression fields
+**			07/09/2010 mem - Now showing the dataset name, tool name, and result type when @InfoOnly = 1
+**			07/13/2010 mem - Now validating the dataset acquisition length against the ranges defined in T_Process_Config
+**						   - Now populating DS_Acq_Length in T_Analysis_Description
 **
 *****************************************************/
 (
@@ -214,9 +217,21 @@ As
 		Set @UsingJobListOverride = 1
 		
 		If @InfoOnly <> 0
-			SELECT JobOverride
-			FROM #T_Tmp_JobListOverride
-			ORDER BY JobOverride
+		Begin
+			set @S = ''
+			set @S = @S + ' SELECT JobListQ.JobOverride, DAJI.Dataset, DAJI.AnalysisTool, DAJI.ResultType, DAJI.Completed' + @Lf
+			set @S = @S + ' FROM #T_Tmp_JobListOverride JobListQ LEFT OUTER JOIN ' + @Lf
+			set @S = @S + '      MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON DAJI.Job = JobListQ.JobOverride' + @Lf
+			set @S = @S + ' ORDER BY JobListQ.JobOverride' + @Lf
+			
+			If @PreviewSql <> 0
+			Begin
+				Print '-- SQL used to show Datasets and Tool Names for jobs in #T_Tmp_JobListOverride'
+				Print @S
+			End
+				
+			Exec (@S)
+		End
 	End
 	
 	---------------------------------------------------
@@ -319,6 +334,30 @@ As
 		goto Done
 	End
 
+
+	---------------------------------------------------
+	-- Lookup the dataset acquisition length range defined in T_Process_Config
+	-- If no entry is present, then @AcqLengthFilterEnabled will be 0
+	---------------------------------------------------
+		
+	Declare @AcqLengthFilterEnabled tinyint
+	Declare @AcqLengthMinimum real
+	Declare @AcqLengthMaximum real
+	
+	Set @AcqLengthFilterEnabled = 0
+	
+	Exec @result = GetAllowedDatasetAcqLength @AcqLengthMinimum OUTPUT, 
+											  @AcqLengthMaximum OUTPUT,
+											  @AcqLengthFilterEnabled OUTPUT,
+											  @LogErrors=1
+  
+	If @result <> 0
+	Begin
+		Set @message = 'GetAllowedDatasetAcqLength returned a non-zero value (' + Convert(varchar(12), @result) + '); aborting import'
+		Goto Done
+	End
+	
+	
 	---------------------------------------------------
 	-- Construct the Campaign Sql, plus the Process_State, Organism_DB_Name, Parameter_File_Name, Separation_Sys_Type, and Result_Type Sql
 	---------------------------------------------------
@@ -376,6 +415,7 @@ As
 		[Dataset_Created_DMS] datetime NULL,
 		[Dataset_Acq_Time_Start] datetime NULL,
 		[Dataset_Acq_Time_End] datetime NULL,
+		[Dataset_Acq_Length] decimal(9,2) NULL,
 		[Dataset_Scan_Count] int NULL,
 		[Experiment] varchar(64) NULL,
 		[Campaign] varchar(64) NULL,
@@ -646,7 +686,7 @@ As
 
 			set @S = @S + 'INSERT INTO #TmpNewAnalysisJobs ('
 			set @S = @S + ' Job, Dataset, Dataset_ID,'
-			set @S = @S + ' Dataset_Created_DMS, Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count,'
+			set @S = @S + ' Dataset_Created_DMS, Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Acq_Length, Dataset_Scan_Count,'
 			set @S = @S + ' Experiment, Campaign, PDB_ID,'
 			set @S = @S + ' Dataset_SIC_Job, Experiment_Organism, Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + ' Parameter_File_Name, Settings_File_Name,'
@@ -663,7 +703,8 @@ As
 			set @S = @S + 'FROM (' + @Lf
 			set @S = @S + 'SELECT'
 			set @S = @S + '	 PT.Job, PT.Dataset, PT.Dataset_ID,' + @Lf
-			set @S = @S + '  DS.Created_DMS, DS.Acq_Time_Start, DS.Acq_Time_End, DS.Scan_Count,' + @Lf
+			set @S = @S + '  DS.Created_DMS, DS.Acq_Time_Start, DS.Acq_Time_End,' + @Lf
+			set @S = @S + '  IsNull(DS.Acq_Length, 0) AS Dataset_Acq_Length, DS.Scan_Count,' + @Lf
 			set @S = @S + '  PT.Experiment, PT.Campaign, ' + Convert(varchar(11), @peptideDBID) + ' AS PDB_ID,' + @Lf
 			set @S = @S + '  DS.SIC_Job, PT.Experiment_Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,' + @Lf
 			set @S = @S + '  PT.Parameter_File_Name,	PT.Settings_File_Name,' + @Lf
@@ -690,7 +731,7 @@ As
 					
 					if @expListCount > 0
 					begin
-						set @S = @S + 'AND PT.Experiment IN '
+						set @S = @S + ' AND PT.Experiment IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
 						set @S = @S + ') ' + @Lf
@@ -698,7 +739,7 @@ As
 					
 					if @expListCountExcluded > 0
 					begin
-						set @S = @S + 'AND NOT PT.Experiment IN '
+						set @S = @S + ' AND NOT PT.Experiment IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
 						set @S = @S + ') ' + @Lf
@@ -706,7 +747,7 @@ As
 
 					if @datasetListCount > 0
 					begin
-						set @S = @S + 'AND PT.Dataset IN '
+						set @S = @S + ' AND PT.Dataset IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
 						set @S = @S + ') ' + @Lf
@@ -714,11 +755,19 @@ As
 
 					if @datasetListCountExcluded > 0
 					begin
-						set @S = @S + 'AND NOT PT.Dataset IN '
+						set @S = @S + ' AND NOT PT.Dataset IN '
 						set @S = @S + '( '
 						set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
 						set @S = @S + ') ' + @Lf
 					end
+					
+					if @AcqLengthFilterEnabled > 0
+					begin
+						Set @S = @S + ' AND IsNull(DS.Acq_Length, 0) BETWEEN '
+						Set @S = @S +     Convert(varchar(12), @AcqLengthMinimum) + ' AND '
+						Set @S = @S +     Convert(varchar(12), @AcqLengthMaximum) + @Lf
+					end
+					
 				set @S = @S + ')'
 					
 				-- Now add jobs found using the alternate job selection method
@@ -806,7 +855,7 @@ As
 					-- Copy the new jobs from #TmpNewAnalysisJobs to T_Analysis_Description
 					INSERT INTO T_Analysis_Description (
 						Job, Dataset, Dataset_ID, Dataset_Created_DMS, 
-						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count, 
+						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Acq_Length, Dataset_Scan_Count, 
 						Experiment, Campaign, PDB_ID, Dataset_SIC_Job, 
 						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
@@ -821,7 +870,7 @@ As
 						)				
 					SELECT 
 						Job, Dataset, Dataset_ID, Dataset_Created_DMS, 
-						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Scan_Count, 
+						Dataset_Acq_Time_Start, Dataset_Acq_Time_End, Dataset_Acq_Length, Dataset_Scan_Count, 
 						Experiment, Campaign, PDB_ID, Dataset_SIC_Job, 
 						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
@@ -892,7 +941,6 @@ Done:
 
 
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User] AS [dbo]

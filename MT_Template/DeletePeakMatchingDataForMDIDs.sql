@@ -29,6 +29,7 @@ CREATE PROCEDURE dbo.DeletePeakMatchingDataForMDIDs
 **			12/20/2005 mem - Renamed T_FTICR_UMC_NETLockerDetails to T_FTICR_UMC_InternalStdDetails
 **			01/19/2006 mem - Added parameter @ResetIdentityFieldSeed
 **			01/13/2010 mem - Added reference to T_FTICR_UMC_CS_Stats
+**			10/08/2010 mem - Added reference to T_Match_Making_FDR
 **
 *****************************************************/
 (
@@ -123,6 +124,11 @@ AS
 
 
 	DELETE FROM T_FTICR_UMC_Results
+	WHERE MD_ID BETWEEN @MDIDStart AND @MDIDEnd
+	--
+	SELECT @myError = @myError + @@Error
+
+	DELETE FROM T_Match_Making_FDR
 	WHERE MD_ID BETWEEN @MDIDStart AND @MDIDEnd
 	--
 	SELECT @myError = @myError + @@Error

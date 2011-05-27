@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ImportNewMSAnalyses
+CREATE Procedure dbo.ImportNewMSAnalyses
 /****************************************************
 **
 **	Desc: Imports LC-MS job entries from the analysis job table
@@ -45,6 +45,11 @@ CREATE Procedure ImportNewMSAnalyses
 **						   - Switched to Try/Catch error handling
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_FTICR_Analysis_Description
 **			08/07/2009 mem - Now sending @PreviewSql to ParseFilterListDualKey
+**			07/09/2010 mem - Now excluding Peptide_Hit jobs when @JobListOverride is used (to avoid adding MS/MS search jobs to T_FTICR_Analysis_Description)
+**						   - Now showing the dataset name, tool name, and result type when @InfoOnly = 1 
+**			07/13/2010 mem - Now validating the dataset acquisition length against the ranges defined in T_Process_Config
+**						   - Now populating DS_Acq_Length in T_FTICR_Analysis_Description
+**			05/04/2011 mem - Now skipping several filter lookup steps when @JobListOverride has jobs listed
 **    
 *****************************************************/
 (
@@ -183,7 +188,7 @@ As
 			)
 		
 		If Len(@JobListOverride) > 0
-		Begin
+		Begin -- <a1>
 			---------------------------------------------------
 			-- Populate a temporary table with the jobs in @JobListOverride
 			---------------------------------------------------
@@ -206,11 +211,6 @@ As
 
 			Set @UsingJobListOverride = 1
 			
-			If @InfoOnly <> 0
-				SELECT JobOverride
-				FROM #T_Tmp_JobListOverride
-				ORDER BY JobOverride
-
 			If @UseCachedDMSDataTables = 1
 			Begin
 				-- Make sure all of the jobs defined in #T_Tmp_JobListOverride are present in T_DMS_Analysis_Job_Info_Cached
@@ -240,7 +240,7 @@ As
 					End
 				End
 			End
-		End
+		End -- </a1>
 
 		---------------------------------------------------
 		-- Define the job and dataset info table names
@@ -256,248 +256,294 @@ As
 			Set @DatasetInfoTable= 'MT_Main.dbo.T_DMS_Dataset_Info_Cached'
 		End
 
+		If @UsingJobListOverride <> 0 And @InfoOnly <> 0
+		Begin
+			set @S = ''
+			set @S = @S + ' SELECT JobListQ.JobOverride, DAJI.Dataset, DAJI.AnalysisTool, DAJI.ResultType, DAJI.Completed' + @Lf
+			set @S = @S + ' FROM #T_Tmp_JobListOverride JobListQ LEFT OUTER JOIN ' + @Lf
+			set @S = @S + '      ' + @JobInfoTable + ' DAJI ON DAJI.Job = JobListQ.JobOverride' + @Lf
+			set @S = @S + ' ORDER BY JobListQ.JobOverride' + @Lf
+			
+			If @PreviewSql <> 0
+			Begin
+				Print '-- SQL used to show Datasets and Tool Names for jobs in #T_Tmp_JobListOverride'
+				Print @S
+			End
+				
+			Exec (@S)
+		End
+
+
 		-- Define the table where we will look up jobs from when calling ParseFilterListDualKey and ParseFilterList
 		set @filterValueLookupTableName = @JobInfoTable
 		
 		Set @CurrentLocation = 'Determine import options'
 		
-		---------------------------------------------------
-		-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
-		---------------------------------------------------
-		--
-		declare @DatasetDMSCreationDateMinimum datetime
-		declare @DateText varchar(64)
+		If @UsingJobListOverride = 0
+		Begin -- <a2>
 		
-		Set @DateText = ''
-		SELECT @DateText = Value
-		FROM T_Process_Config
-		WHERE [Name] = 'Dataset_DMS_Creation_Date_Minimum' AND Len(Value) > 0
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up Dataset_DMS_Creation_Date_Minimum parameter'
-			set @myError = 40006
-			goto Done
-		end
-		--
-		if @myRowCount = 0 OR IsDate(@DateText) = 0
+			---------------------------------------------------
+			-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
+			---------------------------------------------------
+			--
+			declare @DatasetDMSCreationDateMinimum datetime
+			declare @DateText varchar(64)
+			
 			Set @DateText = ''
-
-		---------------------------------------------------
-		-- See if any experiment or dataset inclusion/exclusion filters are defined in T_Process_Config
-		-- Populate the various temporary tables as needed
-		---------------------------------------------------
-		
-		-- First, construct the Campaign Sql and the InstrumentClass, SeparationSysType, and ResultType Sql
-
-		set @SCampaign = ''
-		set @SCampaign = @SCampaign + ' Campaign IN '
-		set @SCampaign = @SCampaign + '( '
-		set @SCampaign = @SCampaign + ' SELECT Value '
-		set @SCampaign = @SCampaign + ' FROM T_Process_Config '
-		set @SCampaign = @SCampaign + ' WHERE [Name] = ''Campaign'' AND Len(Value) > 0'
-		set @SCampaign = @SCampaign + ')' + @Lf
-		
-		set @SAddnl = ''
-		set @SAddnl = @SAddnl + ' InstrumentClass IN '
-		set @SAddnl = @SAddnl + '( '
-		set @SAddnl = @SAddnl + ' SELECT Value '
-		set @SAddnl = @SAddnl + ' FROM T_Process_Config '
-		set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Instrument_Class'' AND Len(Value) > 0'
-		set @SAddnl = @SAddnl + ') ' + @Lf
-		set @SAddnl = @SAddnl + ' AND SeparationSysType IN '
-		set @SAddnl = @SAddnl + '( '
-		set @SAddnl = @SAddnl + ' SELECT Value '
-		set @SAddnl = @SAddnl + ' FROM T_Process_Config '
-		set @SAddnl = @SAddnl + ' WHERE [Name] = ''Separation_Type'' AND Len(Value) > 0'
-		set @SAddnl = @SAddnl + ') ' + @Lf
-		set @SAddnl = @SAddnl + ' AND ResultType IN '
-		set @SAddnl = @SAddnl + '( '
-		set @SAddnl = @SAddnl + ' SELECT Value '
-		set @SAddnl = @SAddnl + ' FROM T_Process_Config '
-		set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Result_Type'' AND Len(Value) > 0'
-		set @SAddnl = @SAddnl + ') ' + @Lf
-
-		if Len(@DateText) > 0
-			set @SAddnl = @SAddnl + ' AND DS_Created >= ''' + @DateText + ''' ' + @Lf
-			
-
-		-- Combine the Campaign fitler with the additional filters
-		set @SCampaignAndAddnl = @SCampaign + ' AND' + @SAddnl
-		
-
-		---------------------------------------------------
-		-- Populate #TmpJobsByDualKeyFilters using jobs that match
-		-- experiments specified by Campaign_and_Experiment entries
-		-- in T_Process_Config
-		---------------------------------------------------
-
-		set @JobsByDualKeyFilters = 0
-		
-		set @filterMatchCount = 0
-		Exec @myError = ParseFilterListDualKey 'Campaign_and_Experiment', @filterValueLookupTableName, 'Campaign', 'Experiment', 'Job', @SAddnl, @filterMatchCount OUTPUT, @PreviewSql=@PreviewSql
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up matching jobs by Campaign and Experiment'
-			set @myError = 40002
-			goto Done
-		end
-		Else
-		begin
-			INSERT INTO #TmpJobsByDualKeyFilters (Job)
-			SELECT Convert(int, Value) FROM #TmpFilterList
+			SELECT @DateText = Value
+			FROM T_Process_Config
+			WHERE [Name] = 'Dataset_DMS_Creation_Date_Minimum' AND Len(Value) > 0
 			--
-			select @myError = @@error, @myRowCount = @@rowcount
-			
-			Set @JobsByDualKeyFilters = @JobsByDualKeyFilters + @myRowCount
-
-			If @PreviewSql <> 0
-				INSERT INTO #PreviewSqlData (Filter_Type, Value)
-				SELECT 'Jobs matching Campaign/Experiment dual filter', Convert(varchar(18), Job)
-				FROM #TmpJobsByDualKeyFilters
-		End
-		
-
-		---------------------------------------------------
-		-- See if any experiments are defined in T_Process_Config
-		-- Populate #TmpExperiments with list of experiment names
-		-- If any contain a percent sign, then use that as a matching
-		--  parameter to populate #TmpExperiments
-		---------------------------------------------------
-		--
-
-		set @expListCount = 0
-		set @filterMatchCount = 0
-		Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up experiment inclusion filter names'
-			set @myError = 40002
-			goto Done
-		end
-		Else
-		begin
-			INSERT INTO #TmpExperiments (Experiment)
-			SELECT Value FROM #TmpFilterList
+			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--
-			select @myError = @@error, @expListCount = @@rowcount
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up Dataset_DMS_Creation_Date_Minimum parameter'
+				set @myError = 40006
+				goto Done
+			end
+			--
+			if @myRowCount = 0 OR IsDate(@DateText) = 0
+				Set @DateText = ''
+
+
+			---------------------------------------------------
+			-- Lookup the dataset acquisition length range defined in T_Process_Config
+			-- If no entry is present, then @AcqLengthFilterEnabled will be 0
+			---------------------------------------------------
+				
+			Declare @AcqLengthFilterEnabled tinyint
+			Declare @AcqLengthMinimum real
+			Declare @AcqLengthMaximum real
 			
-			If @expListCount = 0 And @filterMatchCount > 0
+			Set @AcqLengthFilterEnabled = 0
+			
+			Exec @result = GetAllowedDatasetAcqLength @AcqLengthMinimum OUTPUT, 
+													@AcqLengthMaximum OUTPUT,
+													@AcqLengthFilterEnabled OUTPUT,
+													@LogErrors=1
+			
+			If @result <> 0
 			Begin
-				-- The user defined an experiment inclusion filter containing a %, but none matched
-				-- Add a bogus entry to #TmpExperiments to guarantee that no jobs will match
+				Set @message = 'GetAllowedDatasetAcqLength returned a non-zero value (' + Convert(varchar(12), @result) + '); aborting import'
+				Goto Done
+			End
+
+
+			---------------------------------------------------
+			-- See if any experiment or dataset inclusion/exclusion filters are defined in T_Process_Config
+			-- Populate the various temporary tables as needed
+			---------------------------------------------------
+			
+			-- First, construct the Campaign Sql and the InstrumentClass, SeparationSysType, and ResultType Sql
+
+			set @SCampaign = ''
+			set @SCampaign = @SCampaign + ' Campaign IN '
+			set @SCampaign = @SCampaign + '( '
+			set @SCampaign = @SCampaign + ' SELECT Value '
+			set @SCampaign = @SCampaign + ' FROM T_Process_Config '
+			set @SCampaign = @SCampaign + ' WHERE [Name] = ''Campaign'' AND Len(Value) > 0'
+			set @SCampaign = @SCampaign + ')' + @Lf
+			
+			set @SAddnl = ''
+			set @SAddnl = @SAddnl + ' InstrumentClass IN '
+			set @SAddnl = @SAddnl + '( '
+			set @SAddnl = @SAddnl + ' SELECT Value '
+			set @SAddnl = @SAddnl + ' FROM T_Process_Config '
+			set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Instrument_Class'' AND Len(Value) > 0'
+			set @SAddnl = @SAddnl + ') ' + @Lf
+			set @SAddnl = @SAddnl + ' AND SeparationSysType IN '
+			set @SAddnl = @SAddnl + '( '
+			set @SAddnl = @SAddnl + ' SELECT Value '
+			set @SAddnl = @SAddnl + ' FROM T_Process_Config '
+			set @SAddnl = @SAddnl + ' WHERE [Name] = ''Separation_Type'' AND Len(Value) > 0'
+			set @SAddnl = @SAddnl + ') ' + @Lf
+			set @SAddnl = @SAddnl + ' AND ResultType IN '
+			set @SAddnl = @SAddnl + '( '
+			set @SAddnl = @SAddnl + ' SELECT Value '
+			set @SAddnl = @SAddnl + ' FROM T_Process_Config '
+			set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Result_Type'' AND Len(Value) > 0'
+			set @SAddnl = @SAddnl + ') ' + @Lf
+
+			if Len(@DateText) > 0
+				set @SAddnl = @SAddnl + ' AND DS_Created >= ''' + @DateText + ''' ' + @Lf
+				
+
+			-- Combine the Campaign filter with the additional filters
+			set @SCampaignAndAddnl = @SCampaign + ' AND' + @SAddnl
+			
+
+			---------------------------------------------------
+			-- Populate #TmpJobsByDualKeyFilters using jobs that match
+			-- experiments specified by Campaign_and_Experiment entries
+			-- in T_Process_Config
+			---------------------------------------------------
+
+			set @JobsByDualKeyFilters = 0
+			
+			set @filterMatchCount = 0
+			Exec @myError = ParseFilterListDualKey 'Campaign_and_Experiment', @filterValueLookupTableName, 'Campaign', 'Experiment', 'Job', @SAddnl, @filterMatchCount OUTPUT, @PreviewSql=@PreviewSql
+			--
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up matching jobs by Campaign and Experiment'
+				set @myError = 40002
+				goto Done
+			end
+			Else
+			begin
+				INSERT INTO #TmpJobsByDualKeyFilters (Job)
+				SELECT Convert(int, Value) FROM #TmpFilterList
+				--
+				select @myError = @@error, @myRowCount = @@rowcount
+				
+				Set @JobsByDualKeyFilters = @JobsByDualKeyFilters + @myRowCount
+
+				If @PreviewSql <> 0
+					INSERT INTO #PreviewSqlData (Filter_Type, Value)
+					SELECT 'Jobs matching Campaign/Experiment dual filter', Convert(varchar(18), Job)
+					FROM #TmpJobsByDualKeyFilters
+			End
+			
+
+			---------------------------------------------------
+			-- See if any experiments are defined in T_Process_Config
+			-- Populate #TmpExperiments with list of experiment names
+			-- If any contain a percent sign, then use that as a matching
+			--  parameter to populate #TmpExperiments
+			---------------------------------------------------
+			--
+
+			set @expListCount = 0
+			set @filterMatchCount = 0
+			Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			--
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up experiment inclusion filter names'
+				set @myError = 40002
+				goto Done
+			end
+			Else
+			begin
 				INSERT INTO #TmpExperiments (Experiment)
-				VALUES ('FakeExperiment_' + Convert(varchar(64), NewId()))
+				SELECT Value FROM #TmpFilterList
 				--
-				select @myError = @@error, @expListCount = @@rowcount			
+				select @myError = @@error, @expListCount = @@rowcount
+				
+				If @expListCount = 0 And @filterMatchCount > 0
+				Begin
+					-- The user defined an experiment inclusion filter containing a %, but none matched
+					-- Add a bogus entry to #TmpExperiments to guarantee that no jobs will match
+					INSERT INTO #TmpExperiments (Experiment)
+					VALUES ('FakeExperiment_' + Convert(varchar(64), NewId()))
+					--
+					select @myError = @@error, @expListCount = @@rowcount			
+				End
+
+				If @PreviewSql <> 0
+					INSERT INTO #PreviewSqlData (Filter_Type, Value)
+					SELECT 'Experiment Inclusion', Experiment 
+					FROM #TmpExperiments
 			End
 
-			If @PreviewSql <> 0
-				INSERT INTO #PreviewSqlData (Filter_Type, Value)
-				SELECT 'Experiment Inclusion', Experiment 
-				FROM #TmpExperiments
-		End
 
-
-		---------------------------------------------------
-		-- See if any excluded experiments are defined in T_Process_Config
-		-- Populate #TmpExperimentsExcluded with list of experiment names
-		---------------------------------------------------
-		--
-		set @expListCountExcluded = 0
-		Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up experiment exclusion filter names'
-			set @myError = 40003
-			goto Done
-		end
-		Else
-		begin
-			INSERT INTO #TmpExperimentsExcluded (Experiment)
-			SELECT Value FROM #TmpFilterList
+			---------------------------------------------------
+			-- See if any excluded experiments are defined in T_Process_Config
+			-- Populate #TmpExperimentsExcluded with list of experiment names
+			---------------------------------------------------
 			--
-			select @myError = @@error, @expListCountExcluded = @@rowcount
-
-			If @PreviewSql <> 0
-				INSERT INTO #PreviewSqlData (Filter_Type, Value)
-				SELECT 'Experiment Exclusion', Experiment 
-				FROM #TmpExperimentsExcluded
-		End
-
-
-		---------------------------------------------------
-		-- See if any datasets are defined in T_Process_Config
-		-- Populate #TmpDatasets with list of dataset names
-		---------------------------------------------------
-		--
-		set @datasetListCount = 0
-		set @filterMatchCount = 0
-		Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up dataset inclusion filter names'
-			set @myError = 40004
-			goto Done
-		end
-		Else
-		begin
-			INSERT INTO #TmpDatasets (Dataset)
-			SELECT Value FROM #TmpFilterList
+			set @expListCountExcluded = 0
+			Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl
 			--
-			select @myError = @@error, @datasetListCount = @@rowcount
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up experiment exclusion filter names'
+				set @myError = 40003
+				goto Done
+			end
+			Else
+			begin
+				INSERT INTO #TmpExperimentsExcluded (Experiment)
+				SELECT Value FROM #TmpFilterList
+				--
+				select @myError = @@error, @expListCountExcluded = @@rowcount
 
-			If @datasetListCount = 0 And @filterMatchCount > 0
-			Begin
-				-- The user defined a dataset inclusion filter containing a %, but none matched
-				-- Add a bogus entry to #TmpDatasets to guarantee that no jobs will match
+				If @PreviewSql <> 0
+					INSERT INTO #PreviewSqlData (Filter_Type, Value)
+					SELECT 'Experiment Exclusion', Experiment 
+					FROM #TmpExperimentsExcluded
+			End
+
+
+			---------------------------------------------------
+			-- See if any datasets are defined in T_Process_Config
+			-- Populate #TmpDatasets with list of dataset names
+			---------------------------------------------------
+			--
+			set @datasetListCount = 0
+			set @filterMatchCount = 0
+			Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			--
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up dataset inclusion filter names'
+				set @myError = 40004
+				goto Done
+			end
+			Else
+			begin
 				INSERT INTO #TmpDatasets (Dataset)
-				VALUES ('FakeDataset_' + Convert(varchar(64), NewId()))
+				SELECT Value FROM #TmpFilterList
 				--
-				select @myError = @@error, @datasetListCount = @@rowcount			
+				select @myError = @@error, @datasetListCount = @@rowcount
+
+				If @datasetListCount = 0 And @filterMatchCount > 0
+				Begin
+					-- The user defined a dataset inclusion filter containing a %, but none matched
+					-- Add a bogus entry to #TmpDatasets to guarantee that no jobs will match
+					INSERT INTO #TmpDatasets (Dataset)
+					VALUES ('FakeDataset_' + Convert(varchar(64), NewId()))
+					--
+					select @myError = @@error, @datasetListCount = @@rowcount			
+				End
+
+				If @PreviewSql <> 0
+					INSERT INTO #PreviewSqlData (Filter_Type, Value)
+					SELECT 'Dataset Inclusion', Dataset 
+					FROM #TmpDatasets
 			End
 
-			If @PreviewSql <> 0
-				INSERT INTO #PreviewSqlData (Filter_Type, Value)
-				SELECT 'Dataset Inclusion', Dataset 
-				FROM #TmpDatasets
-		End
 
-
-		---------------------------------------------------
-		-- See if any excluded datasets are defined in T_Process_Config
-		-- Populate #TmpDatasetsExcluded with list of dataset names
-		---------------------------------------------------
-		--
-		set @datasetListCountExcluded = 0
-		Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl
-		--
-		if @myError <> 0
-		begin
-			set @message = 'Error looking up dataset exclusion filter names'
-			set @myError = 40005
-			goto Done
-		end
-		Else
-		begin
-			INSERT INTO #TmpDatasetsExcluded (Dataset)
-			SELECT Value FROM #TmpFilterList
+			---------------------------------------------------
+			-- See if any excluded datasets are defined in T_Process_Config
+			-- Populate #TmpDatasetsExcluded with list of dataset names
+			---------------------------------------------------
 			--
-			select @myError = @@error, @datasetListCountExcluded = @@rowcount
+			set @datasetListCountExcluded = 0
+			Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl
+			--
+			if @myError <> 0
+			begin
+				set @message = 'Error looking up dataset exclusion filter names'
+				set @myError = 40005
+				goto Done
+			end
+			Else
+			begin
+				INSERT INTO #TmpDatasetsExcluded (Dataset)
+				SELECT Value FROM #TmpFilterList
+				--
+				select @myError = @@error, @datasetListCountExcluded = @@rowcount
 
-			If @PreviewSql <> 0
-				INSERT INTO #PreviewSqlData (Filter_Type, Value)
-				SELECT 'Dataset Exclusion', Dataset 
-				FROM #TmpDatasetsExcluded
-		End
+				If @PreviewSql <> 0
+					INSERT INTO #PreviewSqlData (Filter_Type, Value)
+					SELECT 'Dataset Exclusion', Dataset 
+					FROM #TmpDatasetsExcluded
+			End
 
-
+		End -- </a2>
+	
 		---------------------------------------------------
 		-- Import analyses for valid MS instrument classes
 		---------------------------------------------------
@@ -518,7 +564,7 @@ As
 		if @infoOnly = 0
 		Begin
 			set @S = @S + 'INSERT INTO T_FTICR_Analysis_Description ('
-			set @S = @S + '	Job, Dataset, Dataset_ID, Dataset_Created_DMS,'
+			set @S = @S + '	Job, Dataset, Dataset_ID, Dataset_Created_DMS, Dataset_Acq_Length,'
 			set @S = @S + ' Experiment, Campaign, Experiment_Organism,'
 			set @S = @S + '	Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + '	Parameter_File_Name, Settings_File_Name,'
@@ -532,7 +578,7 @@ As
 		set @S = @S + 'SELECT DISTINCT * '
 		set @S = @S + 'FROM (' + @Lf
 		set @S = @S +   'SELECT '
-		set @S = @S +   ' Job, Dataset, DatasetID, DS_Created,' + @Lf
+		set @S = @S +   ' Job, Dataset, DatasetID, DS_Created, IsNull(DS_Acq_Length, 0) AS Dataset_Acq_Length,' + @Lf
 		set @S = @S +   ' Experiment, Campaign, Organism,' + @Lf
 		set @S = @S +   ' InstrumentClass, InstrumentName, AnalysisTool,' + @Lf
 		set @S = @S +   ' ParameterFileName, SettingsFileName,' + @Lf
@@ -546,43 +592,53 @@ As
 		If @UsingJobListOverride = 1
 		Begin
 			set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride' + @Lf
+			set @S = @S + ' WHERE NOT (ResultType Like ''%Peptide_Hit'' OR ResultType = ''SIC'')'
 		End
 		Else			
 		Begin
+						
 			set @S = @S +   ' WHERE (' + @Lf
-				set @S = @S + @SCampaignAndAddnl
-				
-				if @expListCount > 0
-				begin
-					set @S = @S + 'AND Experiment IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
-					set @S = @S + ') ' + @Lf
-				end
-				
-				if @expListCountExcluded > 0
-				begin
-					set @S = @S + 'AND NOT Experiment IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
-					set @S = @S + ') ' + @Lf
-				End
+			set @S = @S + @SCampaignAndAddnl
+			
+			if @expListCount > 0
+			begin
+				set @S = @S + 'AND Experiment IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Experiment FROM #TmpExperiments '
+				set @S = @S + ') ' + @Lf
+			end
+			
+			if @expListCountExcluded > 0
+			begin
+				set @S = @S + 'AND NOT Experiment IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Experiment FROM #TmpExperimentsExcluded '
+				set @S = @S + ') ' + @Lf
+			End
 
-				if @datasetListCount > 0
-				begin
-					set @S = @S + 'AND Dataset IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
-					set @S = @S + ') ' + @Lf
-				end
+			if @datasetListCount > 0
+			begin
+				set @S = @S + 'AND Dataset IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Dataset FROM #TmpDatasets '
+				set @S = @S + ') ' + @Lf
+			end
 
-				if @datasetListCountExcluded > 0
-				begin
-					set @S = @S + 'AND NOT Dataset IN '
-					set @S = @S + '( '
-					set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
-					set @S = @S + ') ' + @Lf
-				end
+			if @datasetListCountExcluded > 0
+			begin
+				set @S = @S + 'AND NOT Dataset IN '
+				set @S = @S + '( '
+				set @S = @S + '	SELECT Dataset FROM #TmpDatasetsExcluded '
+				set @S = @S + ') ' + @Lf
+			end
+
+			if @AcqLengthFilterEnabled > 0
+			begin
+				Set @S = @S + ' AND IsNull(DS_Acq_Length, 0) BETWEEN '
+				Set @S = @S +     Convert(varchar(12), @AcqLengthMinimum) + ' AND '
+				Set @S = @S +     Convert(varchar(12), @AcqLengthMaximum) + @Lf
+			end
+
 			set @S = @S + ')'
 			
 			-- Now add jobs found using the alternate job selection method
@@ -639,6 +695,8 @@ As
 			Begin
 				---------------------------------------------------
 				-- Also update the Dataset stat columns using V_DMS_Dataset_Import_Ex
+				-- Note that Dataset_Acq_Length should have already been populated 
+				--  using V_DMS_Analysis_Job_Import_Ex or T_DMS_Analysis_Job_Info_Cached in MT_Main
 				---------------------------------------------------
 				--
 				Set @CurrentLocation = 'Update Dataset stat columns'
@@ -652,9 +710,9 @@ As
 				Set @S = @S + ' FROM T_FTICR_Analysis_Description AS TAD INNER JOIN ('
 				Set @S = @S +     ' SELECT L.Dataset_ID, R.Created, R.[Acquisition Start], R.[Acquisition End], R.[Scan Count]'
 				Set @S = @S +     ' FROM T_FTICR_Analysis_Description AS L INNER JOIN '
-				Set @S = @S +            @DatasetInfoTable + ' AS R ON '
+				Set @S = @S +      @DatasetInfoTable + ' AS R ON '
 				Set @S = @S +          ' L.Dataset_ID = R.ID AND ('
-				Set @S = @S +          ' L.Dataset_Created_DMS <> R.Created OR '
+				Set @S = @S +    ' L.Dataset_Created_DMS <> R.Created OR '
 				Set @S = @S +          ' IsNull(L.Dataset_Acq_Time_Start,0) <> IsNull(R.[Acquisition Start],0) OR'
 				Set @S = @S +          ' IsNull(L.Dataset_Acq_Time_End,0) <> IsNull(R.[Acquisition End],0) OR'
 				Set @S = @S +          ' IsNull(L.Dataset_Scan_Count,0) <> IsNull(R.[Scan Count],0))'
@@ -697,6 +755,7 @@ As
 	
 Done:
 	return @myError
+
 
 
 GO

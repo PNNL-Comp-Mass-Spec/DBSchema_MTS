@@ -46,6 +46,7 @@ CREATE Procedure QRRetrieveProteinsMultiQID
 **			07/05/2007 mem - Shortened @QuantitationIDList when appending to @Description
 **			01/24/2008 mem - Added @IncludeProteinDescription and @MinimumPeptidesPerProtein
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
+**			10/14/2010 mem - Now passing @MatchScoreModeMin and @MatchScoreModeMax to QRGenerateORFColumnSql
 **
 ****************************************************/
 (
@@ -91,6 +92,9 @@ AS
 			@AggregateColName varchar(128),
 			@AverageAcrossColumnsEnabled tinyint
 
+	Declare @MatchScoreModeMin tinyint = 0,
+	        @MatchScoreModeMax tinyint = 0
+	
 	Set @HighestMDIDCount = 0
 	Set @HighestReplicateCount = 0
 	Set @HighestFractionCount = 0
@@ -159,6 +163,20 @@ AS
 			print 'Error calling QRGenerateCrosstabSql: ' + Convert(varchar(12), @myError)
 			Goto Done
 		End
+
+		
+		--------------------------------------------------------------
+		-- Examine the Match_Score_Mode values for the specified QuantitationIDs
+		--------------------------------------------------------------
+		--
+		SELECT @MatchScoreModeMin = MIN(IsNull(Match_Score_Mode, 0)),
+		       @MatchScoreModeMax = MAX(IsNull(Match_Score_Mode, 0))
+		FROM T_Quantitation_Description QD
+		     INNER JOIN #TmpQIDSortInfo
+		       ON QD.Quantitation_ID = #TmpQIDSortInfo.QID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
 
 		--------------------------------------------------------------
 		-- Determine if any of the QID's have multiple replicates, fractions, or TopLevelFractions
@@ -268,7 +286,9 @@ AS
 									@ORFColumnSql = @OrfColumnSql OUTPUT, 
 									@IncludeProteinDescription=@IncludeProteinDescription, 
 									@IncludeQID=@IncludeQID,
-									@ChangeCommasToSemicolons = @ChangeCommasToSemicolons
+									@ChangeCommasToSemicolons = @ChangeCommasToSemicolons,
+									@MatchScoreModeMin=@MatchScoreModeMin,
+									@MatchScoreModeMax=@MatchScoreModeMax
 									
 		Set @Sql = @ORFColumnSql
 		

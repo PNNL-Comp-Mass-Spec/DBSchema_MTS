@@ -12,6 +12,8 @@ CREATE TABLE [dbo].[T_FTICR_UMC_InternalStdDetails](
 	[Expected_NET] [real] NOT NULL,
 	[Matching_Member_Count] [int] NOT NULL,
 	[Del_Match_Score] [decimal](9, 5) NOT NULL,
+	[Uniqueness_Probability] [real] NULL,
+	[FDR_Threshold] [real] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_InternalStdDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_InternalStdDetails_ID] ASC

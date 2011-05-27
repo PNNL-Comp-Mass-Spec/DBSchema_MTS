@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.QuantitationProcessWork
+CREATE Procedure QuantitationProcessWork
 /****************************************************	
 **  Desc: Processes a single Quantitation ID entry 
 **		Quantitation results are written to T_Quantitation_Results,
@@ -69,6 +69,9 @@ CREATE Procedure dbo.QuantitationProcessWork
 **			05/25/2007 mem - Added columns Job and Observed_By_MSMS_in_This_Dataset to #UMCMatchResultsByJob
 **			06/05/2007 mem - Switched to Try/Catch error handling
 **			06/06/2007 mem - Added [Rank_Match_Score_Avg] to #UMCMatchResultsByJob and #UMCMatchResultsSummary
+**			09/13/2010 mem - Changed Charge_State_Min and Charge_State_Max to smallint
+**			10/13/2010 mem - Now validating that peak matching results being rolled up all have the same value for Match_Score_Mode
+**						   - Added support for Minimum_Uniqueness_Probability and Maximum_FDR_Threshold; these are only used when Match_Score_Mode <> 0
 **
 ****************************************************/
 (
@@ -83,14 +86,15 @@ AS
 	set @myError = 0
 
 	
-	Declare	@ReplicateCountEstimate int
-	Set @ReplicateCountEstimate = 0
-	
+	Declare	@ReplicateCountEstimate int,
+			@MatchScoreModeMin int, 
+			@MatchScoreModeMax int
+			
 	Declare @message varchar(512)
 	
 	Declare	@RemoveOutlierAbundancesForReplicates tinyint,		-- If 1, use a filter to remove outliers (only possible with replicate data)
 			@FractionCrossReplicateAvgInRange real,			-- Fraction plus or minus the average abundance across replicates for filtering out UMC's matching a given mass tag; it is allowable for this value to be greater than 1
-			@AddBackExcludedMassTags tinyint,				-- If 1, means to not allow mass tags to be completely filtered out using the outlier filter
+			@AddBackExcludedMassTags tinyint,				-- If 1, means to not allow matching AMTs to be completely filtered out using the outlier filter
 															-- As an example, if a mass tag was seen in 2 replicates, with an abundance of 10 and 500,
 															--  then the average across replicates is 255, now if @FractionCrossReplicateAvgInRange = 0.8,
 															--  the cutoff values are 51 and 459 (+-80% of 250).  These cutoff values will exlude both the
@@ -103,14 +107,16 @@ AS
 			@StandardAbundanceRange float,
 			@UMCAbundanceMode tinyint,					-- 0 to use the value in T_FTICR_UMC_Results (typically peak area); 1 to use the peak maximum
 			@ERMode tinyint,							-- 0 to use Expression_Ratio_Recomputed (treat multiple UMCs matching same same mass tag in same job as essentially one large UMC), 1 to use Expression_Ratio_WeightedAvg (weight multiple ER values for same mass tag by UMC member counts)
-			@MinimumMTHighNormalizedScore real,			-- 0 to use all mass tags, > 0 to filter by XCorr
-			@MinimumMTHighDiscriminantScore real,		-- 0 to use all mass tags, > 0 to filter by Discriminant Score
-			@MinimumMTPeptideProphetProbability real,	-- 0 to use all mass tags, > 0 to filter by Peptide_Prophet_Probability
-			@MinimumPMTQualityScore real,				-- 0 to use all mass tags, > 0 to filter by PMT Quality Score (as currently set in T_Mass_Tags)
-			@MinimumPeptideLength tinyint,				-- 0 to use all mass tags, > 0 to filter by peptide length
+			@MinimumMTHighNormalizedScore real,			-- 0 to use all matching AMTs, > 0 to filter by XCorr
+			@MinimumMTHighDiscriminantScore real,		-- 0 to use all matching AMTs, > 0 to filter by Discriminant Score
+			@MinimumMTPeptideProphetProbability real,	-- 0 to use all matching AMTs, > 0 to filter by Peptide_Prophet_Probability
+			@MinimumPMTQualityScore real,				-- 0 to use all matching AMTs, > 0 to filter by PMT Quality Score (as currently set in T_Mass_Tags)
+			@MinimumPeptideLength tinyint,				-- 0 to use all matching AMTs, > 0 to filter by peptide length
 			@MaximumMatchesPerUMCToKeep smallint,		-- 0 to use all matches for each UMC, > 0 to only use the top @MaximumMatchesPerUMCToKeep matches to each UMC (favoring the ones with the closest SLiC score first); matches with identical SLiC scores will all be used
-			@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (aka SLiC Score, which indicates the uniqueness of a given mass tag matching a given UMC)
-			@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score (aka Del SLiC Score); only used if @MinimumMatchScore is > 0
+			@MinimumMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Match Score (STAC Score or SLiC Score); if Match_Score_Mode = 1 and 
+			@MinimumDelMatchScore real,					-- 0 to use all mass tag matches, > 0 to filter by Del Match Score; only used if @MinimumMatchScore is > 0
+			@MinimumUniquenessProbability real,			-- 0 to use all matching AMTs, > 0 to filter by Uniqueness_Probability; Ignored if T_Match_Making_Description.Match_Score_Mode = 0 and @MaximumFDRThreshold is > 0 (but less than 1), then this is auto-changed to 0
+ 			@MaximumFDRThreshold real,					-- 1 to use all matching AMTs, < 1 to filter by FDR_Threshold; Ignored if T_Match_Making_Description.Match_Score_Mode = 0
 			@MinimumPeptideReplicateCount tinyint,		-- 0 or 1 to filter out nothing; 2 or higher to filter out peptides not seen in the given number of replicates
 			@ORFCoverageComputationLevel tinyint,		-- 0 for no ORF coverage, 1 for observed ORF coverage, 2 for observed and potential ORF coverage; option 2 is very CPU intensive for large databases
 			@InternalStdInclusionMode tinyint			-- 0 for no NET lockers, 1 for PMT tags and NET Lockers, 2 for NET lockers only
@@ -136,6 +142,8 @@ AS
 		Set @MaximumMatchesPerUMCToKeep = 0
  		Set @MinimumMatchScore = 0
  		Set @MinimumDelMatchScore = 0
+ 		Set @MinimumUniquenessProbability = 0
+ 		Set @MaximumFDRThreshold = 1
  		Set @MinimumPeptideReplicateCount = 0
  		Set @ORFCoverageComputationLevel = 1
 		Set @InternalStdInclusionMode = 1
@@ -177,16 +185,24 @@ AS
 		
 		
 		-----------------------------------------------------------
-		-- Step 2
+		-- Step 2a
 		--
 		-- Make sure one or more MD_ID values is present in T_Quantitation_MDIDs
+		-- In addition, make sure all of the MD_IDs has the same value for Match_Score_Mode in T_Quantitation_Description
 		-----------------------------------------------------------
 		--
 		Set @CurrentLocation = 'Look for MDIDs for ' + @QuantitationIDText
+		Set @ReplicateCountEstimate = 0
+		Set @MatchScoreModeMin = 0
+		Set @MatchScoreModeMax = 0
 		--
-		SELECT	@ReplicateCountEstimate = Count (Distinct [Replicate])
-		FROM	T_Quantitation_MDIDs
-		WHERE	Quantitation_ID = @QuantitationID
+		SELECT @ReplicateCountEstimate = Count(DISTINCT QMDID.[Replicate]),
+		       @MatchScoreModeMin = MIN(MMD.Match_Score_Mode),
+		       @MatchScoreModeMax = MIN(MMD.Match_Score_Mode)
+		FROM T_Quantitation_MDIDs QMDID
+		     INNER JOIN T_Match_Making_Description MMD
+		       ON MMD.MD_ID = QMDID.MD_ID
+		WHERE Quantitation_ID = @QuantitationID
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 		--
@@ -204,7 +220,18 @@ AS
 			Goto Done
 		End
 
+		If @MatchScoreModeMin <> @MatchScoreModeMax
+		Begin
+			Set @message = 'Peak matching results for Quantitation_ID ' + @QuantitationIDText + ' use both SLiC scores and STAC Scores; you can only rollup results that have the same match score mode'
+			Set @myError = 114
+			Goto Done
+		End
 
+		UPDATE T_Quantitation_Description
+		SET Match_Score_Mode = @MatchScoreModeMin
+		WHERE Quantitation_ID = @QuantitationID
+		
+		
 		-----------------------------------------------------------
 		-- Step 3
 		--
@@ -231,6 +258,8 @@ AS
 				@MaximumMatchesPerUMCToKeep = Maximum_Matches_per_UMC_to_Keep,
 				@MinimumMatchScore = Minimum_Match_Score,
 				@MinimumDelMatchScore = Minimum_Del_Match_Score,
+				@MinimumUniquenessProbability = Minimum_Uniqueness_Probability,
+ 				@MaximumFDRThreshold = Maximum_FDR_Threshold,
 				@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count,
 				@ORFCoverageComputationLevel = ORF_Coverage_Computation_Level,
 				@PctSmallDataToDiscard = RepNormalization_PctSmallDataToDiscard, 
@@ -245,7 +274,7 @@ AS
 		If @myError <> 0 
 		Begin
 			Set @message = 'Error while looking up parameters for Quantitation_ID = ' + @QuantitationIDText + ' in table T_Quantitation_Description'
-			Set @myError = 114
+			Set @myError = 115
 			Goto Done
 		End
 
@@ -254,6 +283,25 @@ AS
 		If @InternalStdInclusionMode < 0 Or @InternalStdInclusionMode > 2
 			Set @InternalStdInclusionMode = 1
 
+		If @MatchScoreModeMin = 0
+		Begin
+			-- The Match_Score column contains SLiC Score values
+			-- Override the settings for Uniqueness Probability and FDR Threshold (since these don't apply when using SLiC Score values)
+			Set @MinimumUniquenessProbability = 0
+			Set @MaximumFDRThreshold = 1
+		End
+		Else
+		Begin
+			-- The Match_Score column contains STAC Score values
+				
+			-- If @MaximumFDRThreshold is non-zero (but less than 1), then change @MinimumMatchScore to 0 so that we only filter on FDR
+			If @MaximumFDRThreshold > 0 AND @MaximumFDRThreshold < 1
+				Set @MinimumMatchScore = 0
+			Else
+				-- @MaximumFDRThreshold is 0; change it to 1
+				Set @MaximumFDRThreshold = 1
+
+		End
 
 		-----------------------------------------------------------
 		-- Step 3b
@@ -297,6 +345,8 @@ AS
 			[Rank_Match_Score_Avg] float NULL ,
 			[Match_Score_Avg] float NULL ,
 			[Del_Match_Score_Avg] float NULL ,
+			[Uniqueness_Probability_Avg] float NULL ,
+			[FDR_Threshold_Avg] float NULL ,
 			[NET_Error_Obs_Avg] float NULL ,
 			[NET_Error_Pred_Avg] float null ,
 			[ER_WeightedAvg] float NULL ,
@@ -311,8 +361,8 @@ AS
 			[NET_Minimum] real NOT NULL ,
 			[NET_Maximum] real NOT NULL ,
 			[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-			[Charge_State_Min] tinyint NOT NULL ,
-			[Charge_State_Max] tinyint NOT NULL ,
+			[Charge_State_Min] smallint NOT NULL ,
+			[Charge_State_Max] smallint NOT NULL ,
 			[MassErrorPPMAvg] float NOT NULL ,
 			[UseValue] tinyint NOT NULL 
 		) ON [PRIMARY]
@@ -342,6 +392,8 @@ AS
 			[Rank_Match_Score_Avg] float NULL ,
 			[Match_Score_Avg] float NULL ,
 			[Del_Match_Score_Avg] float NULL ,
+			[Uniqueness_Probability_Avg] float NULL ,
+			[FDR_Threshold_Avg] float NULL ,
 			[NET_Error_Obs_Avg] float NULL ,
 			[NET_Error_Pred_Avg] float null ,
 			[ERAvg] float NULL ,
@@ -352,8 +404,8 @@ AS
 			[NET_Minimum] real NOT NULL ,
 			[NET_Maximum] real NOT NULL ,
 			[Class_Stats_Charge_Basis_Avg] real NOT NULL ,
-			[Charge_State_Min] tinyint NOT NULL ,
-			[Charge_State_Max] tinyint NOT NULL ,
+			[Charge_State_Min] smallint NOT NULL ,
+			[Charge_State_Max] smallint NOT NULL ,
 			[MassErrorPPMAvg] float NOT NULL ,
 			[UMCMatchCountAvg] real NULL ,
 			[UMCMatchCountStDev] real NULL ,
@@ -441,7 +493,7 @@ AS
 		--
 		-- Determine the number of UMCs that have one or more matches that pass the various filters
 		-- This value is reported as an overall quality statistic
-		-- This value does not account for any outlier filtering that may occur later on in this procedure
+		-- This value does not account for any outlier filtering that may occur later on
 		-----------------------------------------------------------
 
 		Set @CurrentLocation = 'Call QuantitationProcessWorkStepA for ' + @QuantitationIDText
@@ -451,6 +503,7 @@ AS
 							@MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore,
  							@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
 							@MinimumPeptideLength, @MinimumMatchScore, @MinimumDelMatchScore,
+							@MinimumUniquenessProbability, @MaximumFDRThreshold,
 							@message output
 		If @myError <> 0
 			Goto Done
@@ -476,6 +529,7 @@ AS
 							@MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore,
 							@MinimumPeptideLength, @MaximumMatchesPerUMCToKeep,
 							@MinimumMatchScore, @MinimumDelMatchScore,
+							@MinimumUniquenessProbability, @MaximumFDRThreshold,
 							@message output
 		If @myError <> 0
 			Goto Done
@@ -641,7 +695,6 @@ Done:
 DoneSkipLog:			
 
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QuantitationProcessWork] TO [DMS_SP_User] AS [dbo]

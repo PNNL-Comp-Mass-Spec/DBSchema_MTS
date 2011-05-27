@@ -11,9 +11,13 @@ CREATE TABLE [dbo].[T_FTICR_UMC_ResultDetails](
 	[Match_State] [tinyint] NOT NULL,
 	[Expected_NET] [real] NULL,
 	[Mass_Tag_Mods] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Mass_Tag_Mod_Mass] [float] NOT NULL,
+	[Mass_Tag_Mod_Mass] [real] NOT NULL,
 	[Matching_Member_Count] [int] NOT NULL,
 	[Del_Match_Score] [decimal](9, 5) NOT NULL,
+	[Uniqueness_Probability] [real] NULL,
+	[FDR_Threshold] [real] NULL,
+	[Conformer_ID] [int] NULL,
+	[Conformer_Max_Abundance] [tinyint] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_ResultDetails_ID] ASC
@@ -26,6 +30,13 @@ GO
 CREATE CLUSTERED INDEX [IX_T_FTICR_UMC_ResultDetails] ON [dbo].[T_FTICR_UMC_ResultDetails] 
 (
 	[UMC_Results_ID] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_FTICR_UMC_ResultDetails_Conformer_ID] ******/
+CREATE NONCLUSTERED INDEX [IX_T_FTICR_UMC_ResultDetails_Conformer_ID] ON [dbo].[T_FTICR_UMC_ResultDetails] 
+(
+	[Conformer_ID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
@@ -52,6 +63,11 @@ ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_
 REFERENCES [T_FTICR_UMC_Results] ([UMC_Results_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails] CHECK CONSTRAINT [FK_T_FTICR_UMC_ResultDetails_T_FTICR_UMC_Results]
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_ResultDetails_T_Mass_Tag_Conformers_Observed] FOREIGN KEY([Conformer_ID])
+REFERENCES [T_Mass_Tag_Conformers_Observed] ([Conformer_ID])
+GO
+ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails] CHECK CONSTRAINT [FK_T_FTICR_UMC_ResultDetails_T_Mass_Tag_Conformers_Observed]
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_ResultDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_ResultDetails_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])

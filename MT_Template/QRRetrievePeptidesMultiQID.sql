@@ -95,6 +95,9 @@ AS
 			@AggregateColName varchar(128),
 			@AverageAcrossColumnsEnabled tinyint
 
+	Declare @MatchScoreModeMin tinyint = 0,
+	        @MatchScoreModeMax tinyint = 0
+
 	Set @HighestReplicateCount = 0
 	Set @HighestFractionCount = 0
 	Set @HighestTopLevelFractionCount = 0
@@ -165,6 +168,18 @@ AS
 			print 'Error calling QRGenerateCrosstabSql: ' + Convert(varchar(12), @myError)
 			Goto Done
 		End
+
+		--------------------------------------------------------------
+		-- Examine the Match_Score_Mode values for the specified QuantitationIDs
+		--------------------------------------------------------------
+		--
+		SELECT @MatchScoreModeMin = MIN(IsNull(Match_Score_Mode, 0)),
+		       @MatchScoreModeMax = MAX(IsNull(Match_Score_Mode, 0))
+		FROM T_Quantitation_Description QD
+		     INNER JOIN #TmpQIDSortInfo
+		       ON QD.Quantitation_ID = #TmpQIDSortInfo.QID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
 		--------------------------------------------------------------
 		-- Determine if any of the QID's have multiple replicates, fractions, or TopLevelFractions
@@ -265,10 +280,38 @@ AS
 		If @VerboseColumnOutput <> 0
 			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
 
-		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) AS MT_SLiC_Score_Avg, '
-		If @VerboseColumnOutput <> 0
-			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Del_Match_Score_Avg,3) AS MT_Del_SLiC_Avg,'
 
+		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) '
+		If @MatchScoreModeMin = 0 And @MatchScoreModeMax = 0
+			Set @QRDsql = @QRDsql + 'AS MT_SLiC_Score, '
+		Else
+		Begin
+			If @MatchScoreModeMin >= 1 And @MatchScoreModeMax >= 1
+				Set @QRDsql = @QRDsql + 'AS MT_STAC_Score, '
+			Else
+				Set @QRDsql = @QRDsql + 'AS MT_STAC_or_SLiC_Score, '
+		End
+		
+		If @VerboseColumnOutput <> 0
+		Begin
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Del_Match_Score_Avg,3) '
+			If @MatchScoreModeMin = 0 And @MatchScoreModeMax = 0
+				Set @QRDsql = @QRDsql + 'AS MT_Del_SLiC,'
+			Else
+			Begin
+				If @MatchScoreModeMin >= 1 And @MatchScoreModeMax >= 1
+					Set @QRDsql = @QRDsql + 'AS MT_Del_STAC,'
+				Else
+					Set @QRDsql = @QRDsql + 'AS MT_Del_STAC_or_SLiC,'
+			End
+		End
+	
+		If @MatchScoreModeMin > 0 Or @MatchScoreModeMax > 0
+		Begin
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_Uniqueness_Probability_Avg, 3) AS MT_Uniqueness_Probability,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.MT_FDR_Threshold_Avg, 4) AS MT_FDR_Threshold,'
+		End
+		
 		If @ERValuesPresent > 0
 		Begin
 			Set @QRDsql = @QRDsql + ' QRD.ER AS MT_ER,'
@@ -304,13 +347,13 @@ AS
 
 		If @VerboseColumnOutput <> 0
 		Begin
-			Set @QRDsql = @QRDsql + ' QRD.UMC_MatchCount_Avg,'
+			Set @QRDsql = @QRDsql + ' QRD.UMC_MatchCount_Avg AS UMC_MatchCount,'
 			Set @QRDsql = @QRDsql + ' QRD.Scan_Minimum, QRD.Scan_Maximum,'
 			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Minimum,3) As NET_Minimum, Round(QRD.NET_Maximum,3) As NET_Maximum,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.Class_Stats_Charge_Basis_Avg, 2) As Charge_Basis_Avg,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.Class_Stats_Charge_Basis_Avg, 2) As Charge_Basis,'
 			Set @QRDsql = @QRDsql + ' QRD.Charge_State_Min, QRD.Charge_State_Max,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.Mass_Error_PPM_Avg,2) AS MT_Mass_Error_PPM_Avg,'
-			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Error_Obs_Avg,3) AS NET_Error_Obs_Avg, Round(QRD.NET_Error_Pred_Avg,3) AS NET_Error_Pred_Avg,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.Mass_Error_PPM_Avg,2) AS MT_Mass_Error_PPM,'
+			Set @QRDsql = @QRDsql + ' Round(QRD.NET_Error_Obs_Avg,3) AS NET_Error_Obs, Round(QRD.NET_Error_Pred_Avg,3) AS NET_Error_Pred,'
 		End
 		
 		Set @QRDsql = @QRDsql + ' ' + @ReplicateAndFractionSql					-- Note, if this variable has text, it will end in a comma
@@ -356,7 +399,9 @@ AS
 			Exec QRGenerateORFColumnSql @ORFColumnSql = @OrfColumnSql OUTPUT,
 										@IncludeProteinDescription = @IncludeProteinDescription,
                                         @IncludeQID=@IncludeQID,
-										@ChangeCommasToSemicolons = @ChangeCommasToSemicolons
+										@ChangeCommasToSemicolons = @ChangeCommasToSemicolons,
+										@MatchScoreModeMin=@MatchScoreModeMin,
+										@MatchScoreModeMax=@MatchScoreModeMax
 
 			Set @Sql = @OrfColumnSql 
 

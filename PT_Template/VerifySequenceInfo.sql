@@ -37,6 +37,7 @@ CREATE Procedure dbo.VerifySequenceInfo
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
 **			11/05/2009 mem - Changed default value for @NextProcessState to 31
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
+**			11/11/2010 mem - Now calling CalculateMonoisotopicMass when SkipPeptidesFromReversedProteins is 0 in T_Process_Step_Control
 **    
 *****************************************************/
 (
@@ -66,6 +67,8 @@ AS
 	declare @UpdateEnabled tinyint	
 	declare @message varchar(255)
 	set @message = ''
+	
+	declare @SkipPeptidesFromReversedProteins tinyint
 	
 	----------------------------------------------
 	-- Determine the number of jobs in state @ProcessStateMatch
@@ -141,6 +144,27 @@ AS
 	If @UpdateEnabled = 0
 		Goto Done
 	
+	
+	--------------------------------------------------------------
+	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
+	-- Assume skipping is enabled if the value is not present
+	--------------------------------------------------------------
+	--
+	SELECT @SkipPeptidesFromReversedProteins = Enabled
+	FROM T_Process_Step_Control
+	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
+	--
+	SELECT @myRowcount = @@rowcount, @myError = @@error
+	
+	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
+	
+	If @SkipPeptidesFromReversedProteins = 0
+	Begin
+		-- Calculate monoisotopic mass values for any entries in T_Sequence with null mass values
+		exec CalculateMonoisotopicMass @message=@message output, @RecomputeAll=0, @VerifyUpdateEnabled=1
+	End
+
+
 	----------------------------------------------
 	-- Verify non-null monoisotopic mass for all peptides
 	--  for jobs with Process_State = @ProcessStatematch

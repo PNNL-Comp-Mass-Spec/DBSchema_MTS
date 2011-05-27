@@ -42,6 +42,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			06/16/2009 mem - Updated to allow Instrument_Name, Dataset_Name_Filter, and Labelling_Filter to contain % wildcards in T_Peak_Matching_Defaults
 **			06/16/2009 mem - Added parameter @InfoOnly
 **			12/07/2009 mem - Changed the "Added job" display to be a Print instead of a Select
+**			03/21/2011 mem - Changed default score filters to Discriminant >= 0, Peptide Prophet >= 0, and PMT Quality Score >= 2
 **     
 *****************************************************/
 (
@@ -419,9 +420,9 @@ AS
 			Set @confirmedOnly = 0
 			Set @modList = ''
 			Set @MinimumHighNormalizedScore = 1
-			Set @MinimumHighDiscriminantScore = 0.2
-			Set @MinimumPeptideProphetProbability = 0.2
-			Set @MinimumPMTQualityScore = 1
+			Set @MinimumHighDiscriminantScore = 0
+			Set @MinimumPeptideProphetProbability = 0
+			Set @MinimumPMTQualityScore = 2
 			Set @priority = 6
 			Set @SetStateToHoldingThisJob = @SetStateToHolding
 
@@ -450,7 +451,7 @@ AS
 			Else
 			Begin
 				If @JobListFilter <> '' OR @InfoOnly <> 0
-					Select 'Added job ' + Convert(varchar(19), @job)
+					Print 'Added job ' + Convert(varchar(19), @job) + ' (did not match a default ID in T_Peak_Matching_Defaults)'
 				--
 				Set @jobCountAdded = @jobCountAdded + 1
 			End

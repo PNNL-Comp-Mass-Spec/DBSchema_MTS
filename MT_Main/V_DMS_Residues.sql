@@ -4,10 +4,20 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW dbo.V_DMS_Residues
+CREATE VIEW [dbo].[V_DMS_Residues]
 AS
-SELECT t1.*
-FROM GIGASAX.DMS5.dbo.T_Residues t1
+SELECT Residue_ID,
+       Residue_Symbol,
+       Description,
+       Average_Mass,
+       Monoisotopic_Mass,
+       Num_C,
+       Num_H,
+       Num_N,
+       Num_O,
+       Num_S,
+       Empirical_Formula
+FROM dbo.T_DMS_Residues_Cached
 
 
 GO

@@ -16,6 +16,8 @@ CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
 **	Auth:	mem
 **	Date:	06/14/2006
 **			01/03/2008 mem - Now using T_Analysis_Job to track assigned tasks
+**			10/13/2010 mem - Now looking up the AMT Count FDR stats using V_PM_Results_FDR_Stats and then storing the values in T_Analysis_Job
+**			10/14/2010 mem - Added parameter @DebugMode
 **			
 *****************************************************/
 (
@@ -23,7 +25,8 @@ CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
 	@serverName varchar(128),
 	@mtdbName varchar (128),
 	@JobID int = NULL,				-- Job number in T_Analysis_Job
-	@JobStateID int = 3
+	@JobStateID int = 3,
+	@DebugMode tinyint = 0
 )
 As
 	set nocount on
@@ -35,9 +38,24 @@ As
 
 	declare @AssignedProcessor varchar(128)
 	declare @TimeCompleted as datetime
-	declare @message varchar(512)
+	declare @message varchar(4000)
 	
+	declare @WorkingServerPrefix varchar(128)
+	declare @S nvarchar(1024)
+	declare @SqlParams nvarchar(1024)
+	
+	declare @AMTCount1pctFDR int = 0,
+            @AMTCount5pctFDR int = 0,
+            @AMTCount10pctFDR int = 0,
+            @AMTCount25pctFDR int = 0,
+            @AMTCount50pctFDR int = 0
+
+
+	---------------------------------------------------
+	-- Validate the inputs
+	---------------------------------------------------	
 	Set @JobID = IsNull(@JobID, 0)
+	Set @DebugMode = IsNull(@DebugMode, 0)
 
 	---------------------------------------------------
 	-- Cache the current time and lookup the cached History ID value
@@ -46,6 +64,11 @@ As
 	
 	If @JobID <> 0
 	Begin
+
+		Set @message = 'Look for @JobID in T_Analysis_Job for job ' + convert(varchar(12), @JobID)
+		If @DebugMode <> 0
+			Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
 		-- Look for @JobID in T_Analysis_Job to determine the Processor Name
 		SELECT TOP 1 @AssignedProcessor = Assigned_Processor_Name
 		FROM T_Peak_Matching_Activity
@@ -64,6 +87,11 @@ As
 	End
 	Else
 	Begin
+
+		Set @message = 'Lookup processor name using T_Peak_Matching_Activity; Task_ID = ' + Convert(varchar(12), @taskID)
+		If @DebugMode <> 0
+			Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
 		---------------------------------------------------
 		-- Find the processor name that most recently processed
 		-- task @taskID in DB @mtdbName 
@@ -95,6 +123,12 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
+
+
+	Set @message = 'Update T_Peak_Matching_Activity for processor ' + @AssignedProcessor
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
 	
 	---------------------------------------------------
 	-- Update T_Peak_Matching_Activity with the current time
@@ -109,6 +143,69 @@ As
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
+
+	
+	---------------------------------------------------
+	-- Lookup the AMT Count FDR values for this peak matching task
+	---------------------------------------------------
+
+	Set @message = 'Prepare SQL for extracting AMT_Count FDR values'
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+	
+	-- Construct the working server prefix
+	If Lower(@@ServerName) = Lower(@serverName)
+		Set @WorkingServerPrefix = ''
+	Else
+		Set @WorkingServerPrefix = @serverName + '.'
+	
+	Set @S = ''
+	Set @S = @S + ' SELECT '
+	Set @S = @S +    ' @AMTCount1pctFDR = AMT_Count_1pct_FDR,'
+	Set @S = @S +    ' @AMTCount5pctFDR = AMT_Count_5pct_FDR,'
+	Set @S = @S +    ' @AMTCount10pctFDR = AMT_Count_10pct_FDR,'
+	Set @S = @S +    ' @AMTCount25pctFDR = AMT_Count_25pct_FDR,'
+	Set @S = @S +    ' @AMTCount50pctFDR = AMT_Count_50pct_FDR'
+	Set @S = @S + ' FROM ' + @WorkingServerPrefix + '[' + @mtdbname + '].dbo.V_PM_Results_FDR_Stats'
+	Set @S = @S + ' WHERE Task_ID = ' + Convert(varchar(12), @taskID)
+	
+	Set @SqlParams = '@AMTCount1pctFDR int output, @AMTCount5pctFDR int output, @AMTCount10pctFDR int output, @AMTCount25pctFDR int output, @AMTCount50pctFDR int output'
+
+	
+	Set @message = 'Sql to execute: ' + @S
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
+	Set @message = 'SqlParams: ' + @SqlParams
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
+	
+	exec sp_executeSql @S, @SqlParams,  @AMTCount1pctFDR output,
+										@AMTCount5pctFDR output,
+										@AMTCount10pctFDR output,
+										@AMTCount25pctFDR output,
+										@AMTCount50pctFDR output
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+	Set @message = 'Executed Sql; @AMTCount1pctFDR=' + IsNull(Convert(varchar(12), @AMTCount1pctFDR), 'NULL')
+	Set @message = @message +  '; @AMTCount5pctFDR=' + IsNull(Convert(varchar(12), @AMTCount5pctFDR), 'NULL')
+	Set @message = @message +  '; @AMTCount10pctFDR=' + IsNull(Convert(varchar(12), @AMTCount10pctFDR), 'NULL')
+	Set @message = @message +  '; @AMTCount25pctFDR=' + IsNull(Convert(varchar(12), @AMTCount25pctFDR), 'NULL')
+	Set @message = @message +  '; @AMTCount50pctFDR=' + IsNull(Convert(varchar(12), @AMTCount50pctFDR), 'NULL')
+
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
+	If @myError <> 0
+	Begin
+		Set @message = 'Error looking up AMT Count FDR values for Task ' + Convert(varchar(12), @taskID) + ' using "' + @WorkingServerPrefix + '[' + @mtdbname + '].dbo.V_PM_Results_FDR_Stats"'
+		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
+		set @message = ''
+	End
+	
 	---------------------------------------------------
 	-- Update T_Analysis_Job with the current time
 	---------------------------------------------------
@@ -117,10 +214,33 @@ As
 	Begin
 		UPDATE T_Analysis_Job
 		SET Job_Finish = @TimeCompleted,
-			State_ID = @JobStateID
+		    State_ID = @JobStateID,
+		    AMT_Count_1pct_FDR = @AMTCount1pctFDR,
+		    AMT_Count_5pct_FDR = @AMTCount5pctFDR,
+		    AMT_Count_10pct_FDR = @AMTCount10pctFDR,
+		    AMT_Count_25pct_FDR = @AMTCount25pctFDR,
+		    AMT_Count_50pct_FDR = @AMTCount50pctFDR
 		WHERE Job_ID = @JobID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		If @myError <> 0
+		Begin
+			Set @message = 'Error updating T_Analysis_Job for Job ' + Convert(varchar(12), @JobID)
+			Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
+		End
+		Else
+		Begin
+			Set @message = 'Updated T_Analysis_Job for Job ' + Convert(varchar(12), @JobID)
+			If @DebugMode <> 0
+				Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+		End
+
+	End
+	Else
+	Begin
+		Set @message = '@JobID is Null or 0; cannot update T_Analysis_Job'
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
 	End
 
 
@@ -130,7 +250,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[SetPeakMatchingActivityValuesToComplete] TO [DMS_SP_User] AS [dbo]

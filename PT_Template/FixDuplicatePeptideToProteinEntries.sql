@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[FixDuplicatePeptideToProteinEntries] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE dbo.FixDuplicatePeptideToProteinEntries
@@ -14,7 +14,8 @@ CREATE PROCEDURE dbo.FixDuplicatePeptideToProteinEntries
 **
 **	Auth:	mem
 **	Date:	02/27/2007
-**			04/23/2008 mem - Added @PreviewPeptideRowsToDeleteOrUpdate
+**			04/23/2008 mem - Added parameter @PreviewPeptideRowsToDeleteOrUpdate
+**			02/10/2011 mem - Added parameter @ProteinPrefixExclusion
 **
 *****************************************************/
 (
@@ -22,6 +23,7 @@ CREATE PROCEDURE dbo.FixDuplicatePeptideToProteinEntries
 	@infoOnly tinyint = 0,
 	@PreviewDuplicateProteins tinyint = 0,						-- Only used if @infoOnly <> 0
 	@PreviewPeptideRowsToDeleteOrUpdate tinyint = 0,			-- Only used if @infoOnly <> 0
+	@ProteinPrefixExclusion varchar(64) = 'Reversed%',			-- Will skip proteins that start with this text
 	@PeptideToProteinMapEntriesUpdated int = 0 output,
 	@PeptideToProteinMapEntriesDeleted int = 0 output,
 	@ProteinEntriesDeleted int = 0 output,
@@ -41,7 +43,7 @@ As
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
-
+	
 	Begin Try
 		---------------------------------------------------
 		-- Validate the inputs
@@ -52,6 +54,7 @@ As
 		set @infoOnly = IsNull(@infoOnly, 0)
 		set @PreviewDuplicateProteins = IsNull(@PreviewDuplicateProteins, 0)
 		set @PreviewPeptideRowsToDeleteOrUpdate = IsNull(@PreviewPeptideRowsToDeleteOrUpdate, 0)
+		Set @ProteinPrefixExclusion = IsNull(@ProteinPrefixExclusion, '')
 		set @message = ''
 		set @PeptideToProteinMapEntriesUpdated = 0
 		set @PeptideToProteinMapEntriesDeleted = 0
@@ -62,12 +65,12 @@ As
 		-- Create some temporary tables
 		---------------------------------------------------
 		--
-		CREATE TABLE #Tmp_Ref_ID_Updates (
+		CREATE TABLE T_Tmp_Ref_ID_Updates (
 			Ref_ID int NOT NULL,
 			Ref_ID_Master int NOT NULL
 		)
 
-		CREATE CLUSTERED INDEX #IX_Tmp_Ref_ID_Updates_Ref_ID ON #Tmp_Ref_ID_Updates (Ref_ID)
+		CREATE CLUSTERED INDEX IX_Tmp_Ref_ID_Updates_Ref_ID ON T_Tmp_Ref_ID_Updates (Ref_ID)
 
 
 		CREATE TABLE #Tmp_EntriesToDelete (
@@ -79,16 +82,17 @@ As
 		
 		
 		---------------------------------------------------
-		-- Populate #Tmp_Ref_ID_Updates
+		-- Populate T_Tmp_Ref_ID_Updates
 		---------------------------------------------------
 		--
-		Set @CurrentLocation = 'Populate #Tmp_Ref_ID_Updates'
+		Set @CurrentLocation = 'Populate T_Tmp_Ref_ID_Updates'
 
-		INSERT INTO #Tmp_Ref_ID_Updates (Ref_ID, Ref_ID_Master)
+		INSERT INTO T_Tmp_Ref_ID_Updates (Ref_ID, Ref_ID_Master)
 		SELECT T_Proteins.Ref_ID, MappingQ.Ref_ID_Master
 		FROM T_Proteins INNER JOIN
 				(	SELECT SUBSTRING(Reference, 1, 34) AS ReferenceStart
 					FROM T_Proteins
+					WHERE (@ProteinPrefixExclusion = '' OR Not Reference Like @ProteinPrefixExclusion)
 					GROUP BY SUBSTRING(Reference, 1, 34)
 					HAVING (COUNT(*) > 1)
 				) ProteinQ ON SUBSTRING(T_Proteins.Reference, 1, 34) = ProteinQ.ReferenceStart INNER JOIN
@@ -98,12 +102,14 @@ As
 						FROM T_Proteins INNER JOIN
 							(	SELECT SUBSTRING(Reference, 1, 34) AS ReferenceStart
 								FROM T_Proteins
+								WHERE (@ProteinPrefixExclusion = '' OR Not Reference Like @ProteinPrefixExclusion)
 								GROUP BY SUBSTRING(Reference, 1, 34)
 								HAVING (COUNT(*) > 1)
 							) ProteinQ ON SUBSTRING(T_Proteins.Reference, 1, 34) = ProteinQ.ReferenceStart
 						GROUP BY ProteinQ.ReferenceStart
 					) OuterQ ON SUBSTRING(T_Proteins.Reference, 1, 34) = OuterQ.ReferenceStart AND 
 								LEN(T_Proteins.Reference) = OuterQ.RefNameLength
+					WHERE (@ProteinPrefixExclusion = '' OR Not T_Proteins.Reference Like @ProteinPrefixExclusion)
 					GROUP BY OuterQ.ReferenceStart
 				) MappingQ ON ProteinQ.ReferenceStart = MappingQ.ReferenceStart AND 
 							T_Proteins.Ref_ID <> MappingQ.Ref_ID_Master
@@ -114,7 +120,7 @@ As
 		
 		If @myError <> 0
 		Begin
-			set @message = 'Error populating #Tmp_Ref_ID_Updates'
+			set @message = 'Error populating T_Tmp_Ref_ID_Updates'
 			Goto Done
 		End
 		
@@ -140,7 +146,7 @@ As
 				FROM T_Peptide_to_Protein_Map PPM INNER JOIN
 						(	SELECT PPM.Peptide_ID, PPM.Ref_ID
 							FROM T_Peptide_to_Protein_Map PPM INNER JOIN
-								#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+								T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
 								T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
 									PPM.Peptide_ID = PPM_Master.Peptide_ID
 						) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
@@ -153,7 +159,7 @@ As
 					FROM T_Peptide_to_Protein_Map PPM INNER JOIN
 							(	SELECT PPM.Peptide_ID, PPM.Ref_ID
 								FROM T_Peptide_to_Protein_Map PPM INNER JOIN
-									#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+									T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
 									T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
 										PPM.Peptide_ID = PPM_Master.Peptide_ID
 							) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
@@ -164,7 +170,7 @@ As
 					FROM T_Peptide_to_Protein_Map PPM INNER JOIN
 							(	SELECT PPM.Peptide_ID, PPM.Ref_ID
 								FROM T_Peptide_to_Protein_Map PPM INNER JOIN
-									#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+									T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
 									T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
 										PPM.Peptide_ID = PPM_Master.Peptide_ID
 							) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
@@ -176,7 +182,7 @@ As
 				-- 
 				SELECT @PeptideToProteinMapEntriesUpdated = COUNT(*)
 				FROM T_Peptide_to_Protein_Map PPM INNER JOIN 
-					#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID
+					T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID
 
 				If @PeptideToProteinMapEntriesUpdated > 0 And @PeptideToProteinMapEntriesDeleted > 0
 				Begin
@@ -192,7 +198,7 @@ As
 					       PPM.Ref_ID AS Ref_ID_Old,
 					       U.Ref_ID_Master AS Ref_ID_New
 					FROM T_Peptide_to_Protein_Map PPM
-					     INNER JOIN #Tmp_Ref_ID_Updates U
+					     INNER JOIN T_Tmp_Ref_ID_Updates U
 					       ON PPM.Ref_ID = U.Ref_ID
 					     LEFT OUTER JOIN #Tmp_EntriesToDelete ED
 					       ON PPM.Peptide_ID = ED.Peptide_ID AND
@@ -213,10 +219,10 @@ As
 				Begin
 					Set @CurrentLocation = 'Display the protein information, showing the truncated name and the full name'
 					-- 
-					SELECT Prot.Ref_ID, Prot.Reference, #Tmp_Ref_ID_Updates.Ref_ID_Master, Prot_Master.Reference AS Reference_Master
+					SELECT Prot.Ref_ID, Prot.Reference, T_Tmp_Ref_ID_Updates.Ref_ID_Master, Prot_Master.Reference AS Reference_Master
 					FROM T_Proteins Prot INNER JOIN
-						#Tmp_Ref_ID_Updates ON Prot.Ref_ID = #Tmp_Ref_ID_Updates.Ref_ID INNER JOIN
-						T_Proteins Prot_Master ON #Tmp_Ref_ID_Updates.Ref_ID_Master = Prot_Master.Ref_ID
+						T_Tmp_Ref_ID_Updates ON Prot.Ref_ID = T_Tmp_Ref_ID_Updates.Ref_ID INNER JOIN
+						T_Proteins Prot_Master ON T_Tmp_Ref_ID_Updates.Ref_ID_Master = Prot_Master.Ref_ID
 					ORDER BY Prot_Master.Reference, Prot.Reference
 				End				
 			End
@@ -236,7 +242,7 @@ As
 				FROM T_Peptide_to_Protein_Map PPM INNER JOIN
 						(	SELECT PPM.Peptide_ID, PPM.Ref_ID
 							FROM T_Peptide_to_Protein_Map PPM INNER JOIN
-								#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
+								T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID INNER JOIN
 								T_Peptide_to_Protein_Map PPM_Master ON U.Ref_ID_Master = PPM_Master.Ref_ID AND 
 									PPM.Peptide_ID = PPM_Master.Peptide_ID
 						) DeleteQ ON PPM.Peptide_ID = DeleteQ.Peptide_ID AND PPM.Ref_ID = DeleteQ.Ref_ID
@@ -250,7 +256,7 @@ As
 				UPDATE T_Peptide_to_Protein_Map
 				SET Ref_ID = U.Ref_ID_Master
 				FROM T_Peptide_to_Protein_Map PPM INNER JOIN 
-					#Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID
+					 T_Tmp_Ref_ID_Updates U ON PPM.Ref_ID = U.Ref_ID
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 
@@ -301,7 +307,7 @@ As
 						-- 
 						DELETE T_Proteins
 						FROM T_Proteins INNER JOIN
-							#Tmp_Ref_ID_Updates U ON T_Proteins.Ref_ID = U.Ref_ID
+							T_Tmp_Ref_ID_Updates U ON T_Proteins.Ref_ID = U.Ref_ID
 						--
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 						
@@ -323,10 +329,14 @@ As
 
 	End Try
 	Begin Catch
+		If @@tranCount > 0
+			RollBack
+
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'FixDuplicatePeptideToProteinEntries')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 								@ErrorNum = @myError output, @message = @message output
+			
 		Goto Done
 	End Catch
 	
@@ -335,9 +345,9 @@ As
 	---------------------------------------------------
 	--
 Done:
-	DROP TABLE #Tmp_Ref_ID_Updates
+	DROP TABLE T_Tmp_Ref_ID_Updates
 	DROP TABLE #Tmp_EntriesToDelete
-	
+
 	return @myError
 
 

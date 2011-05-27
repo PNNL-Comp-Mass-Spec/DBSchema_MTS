@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[SetMultiAlignTaskComplete] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE Procedure dbo.SetMultiAlignTaskComplete
@@ -16,6 +16,7 @@ CREATE Procedure dbo.SetMultiAlignTaskComplete
 **
 **	Auth:	mem
 **	Date:	01/05/2008
+**			05/24/2011 mem - Now including the job number when logging that @errorCode is non-zero
 **
 *****************************************************/
 (
@@ -97,7 +98,25 @@ As
 	
 	if IsNull(@errorCode, 0) <> 0
 	Begin
+		-- Lookup the Job number(s) associated with this peak matching task
+		Declare @job1 int = 0
+		Declare @job2 int = 0
+		
+		SELECT @job1 = MIN(TJ.Job),
+		       @job2 = MAX(TJ.Job)
+		FROM T_MultiAlign_Task T
+		     INNER JOIN T_MultiAlign_Task_Jobs TJ
+		       ON T.Task_ID = TJ.Task_ID
+		WHERE (T.Task_ID = @taskID)
+
+
 		Set @message = @TaskText + ' generated error code ' + convert(varchar(19), @errorCode)
+		
+		If @job1 = @job2
+			Set @message = @message + ' for job ' + Convert(varchar(12), @job1)
+		Else
+			Set @message = @message + ' for jobs ' + Convert(varchar(12), @job1) + ' to ' + Convert(varchar(12), @job2)
+		
 		Exec PostLogEntry 'Error', @message, 'SetMultiAlignTaskComplete'
 		Set @message = ''
 	End

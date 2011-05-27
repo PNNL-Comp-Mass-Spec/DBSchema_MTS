@@ -4,13 +4,13 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
+CREATE PROCEDURE QCMSMSMetricByJobWork
 /****************************************************
 **
 **	Desc: 
-**	Uses @SeqIDList and @MetricID to return a metric value
-**   for all jobs matching the given job filters in the specified database
-**  This procedure can only be used with Peptide databases
+**		Uses @SeqIDList and @MetricID to return a metric value
+**		 for all jobs matching the given job filters in the specified database
+**		This procedure can only be used with Peptide databases
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -24,6 +24,8 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
 **			11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
 **		    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
+**			09/22/2010 mem - Added parameter @ResultTypeFilter
+**			10/06/2010 mem - Now returning column Dataset_Rating
 **
 *****************************************************/
 (
@@ -48,6 +50,8 @@ CREATE PROCEDURE dbo.QCMSMSMetricByJobWork
 	@UseNaturalLog tinyint = 1,
 	@SeqIDList varchar(7000),						-- Required: Comma separated list of Seq_ID values to match
 	@MeanSquareError float = 0 output,
+
+	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
 	@PreviewSql tinyint = 0
 )
 As
@@ -105,6 +109,7 @@ As
 	-- Cleanup the True/False parameters
 	Exec CleanupTrueFalseParameter @returnRowCount OUTPUT, 1
 
+	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
 	Set @previewSql = IsNull(@previewSql, 0)
 
 	-- Force @maximumRowCount to be negative if @returnRowCount is true
@@ -130,6 +135,7 @@ As
 		Job int NOT NULL,
 		Instrument varchar(64) NULL,
 		Dataset_Name varchar(128) NOT NULL,
+		Dataset_Rating varchar(64) NOT NULL,
 		Job_Date datetime NULL,
 		Value int NULL
 	)
@@ -143,7 +149,8 @@ As
 	Exec @myError = QCMSMSJobsTablePopulate	@DBName, @message output, 
 											@InstrumentFilter, @CampaignFilter, @ExperimentFilter, @DatasetFilter, 
 											@OrganismDBFilter, @DatasetDateMinimum, @DatasetDateMaximum, 
-											@JobMinimum, @JobMaximum, @maximumRowCount
+											@JobMinimum, @JobMaximum, @maximumRowCount,
+											@ResultTypeFilter, @PreviewSql
 	If @myError <> 0
 	Begin
 		If Len(IsNull(@message, '')) = 0
@@ -209,15 +216,15 @@ As
 	Else
 		Set @Sql = @Sql + ' MAX(DSSIC.Peak_SN_Ratio)'
 
-	Set @Sql = @Sql +  ' FROM DATABASE..T_Analysis_Description JobTable'
+	Set @Sql = @Sql +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 	Set @Sql = @Sql +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 
-	Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-	Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
 
-    Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Dataset_Stats_SIC DSSIC WITH (NOLOCK) ON'
+    Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Dataset_Stats_SIC DSSIC WITH (NOLOCK) ON'
     Set @Sql = @Sql +         ' DatasetTable.SIC_Job = DSSIC.Job AND Pep.Scan_Number = DSSIC.Frag_Scan_Number'
-    Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Dataset_Stats_Scans DSS_OptimalPeakApex WITH (NOLOCK) ON'
+    Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Dataset_Stats_Scans DSS_OptimalPeakApex WITH (NOLOCK) ON'
     Set @Sql = @Sql +         ' DSSIC.Job = DSS_OptimalPeakApex.Job AND DSSIC.Optimal_Peak_Apex_Scan_Number = DSS_OptimalPeakApex.Scan_Number'
 
 	-- Define the where clause using @SeqIDList
@@ -230,7 +237,7 @@ As
 	-- Customize the columns for the given database
 	---------------------------------------------------
 
-	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
+	set @Sql = replace(@Sql, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
 
 	---------------------------------------------------
 	-- Run the query to populate #TmpQCMetricData
@@ -356,31 +363,34 @@ As
 	Set @JobQuery = ''
 	Set @JobQuery = @JobQuery + ' SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 	Set @JobQuery = @JobQuery +		  ' JobTable.Dataset_ID, JobTable.Job,JobTable.Instrument,'
-	Set @JobQuery = @JobQuery +		  ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date, 0 as Value'
-	Set @JobQuery = @JobQuery +  ' FROM DATABASE..T_Analysis_Description JobTable'
-	Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+	Set @JobQuery = @JobQuery +       ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'
+	Set @JobQuery = @JobQuery +       ' JobTable.Completed AS Job_Date, 0 as Value'
+	Set @JobQuery = @JobQuery +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
+	Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
 	Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
+	Set @JobQuery = @JobQuery +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 		
 	Set @Sql = ''
 	Set @Sql = @Sql + ' SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
-	Set @Sql = @Sql +		  ' JobTable.Dataset_ID,JobTable.Job,JobTable.Instrument,'
-	Set @Sql = @Sql +		  ' JobTable.Dataset AS Dataset_Name,JobTable.Completed AS Job_Date,'
-	Set @Sql = @Sql +		  ' SM.Mean AS Value'
-	Set @Sql = @Sql +  ' FROM DATABASE..T_Analysis_Description JobTable'
-	Set @Sql = @Sql +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+	Set @Sql = @Sql +		  ' JobTable.Dataset_ID,JobTable.Job, JobTable.Instrument,'
+	Set @Sql = @Sql +		  ' JobTable.Dataset AS Dataset_Name, IsNull(DS.Rating, '''') AS Dataset_Rating,'	
+	Set @Sql = @Sql +		  ' JobTable.Completed AS Job_Date, SM.Mean AS Value'
+	Set @Sql = @Sql +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
+	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
 	Set @Sql = @Sql +       ' INNER JOIN #TmpQCMetricSampleMeans SM ON JobTable.Job = SM.Job'
-		
+	Set @Sql = @Sql +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
+	
 	Set @sqlOrderBy = 'ORDER BY IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS), JobTable.Dataset_ID'
 
 
 	---------------------------------------------------
 	-- Customize the columns for the given database
 	---------------------------------------------------
-	set @JobQuery = replace(@JobQuery, 'DATABASE..', '[' + @DBName + ']..')
-	set @Sql = replace(@Sql, 'DATABASE..', '[' + @DBName + ']..')
+	set @JobQuery = replace(@JobQuery, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
+	set @Sql = replace(@Sql, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
 	
 	
-	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value) '
+	Set @SqlInsert = 'INSERT INTO #TmpQueryResults (Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Dataset_Rating, Job_Date, Value) '
 
 	Set @sqlAddMissingJobs = @SqlInsert
 	Set @sqlAddMissingJobs = @sqlAddMissingJobs + ' ' + @JobQuery
@@ -418,7 +428,7 @@ As
 			-- Old method:
 			--Exec (	 @Sql + ' ' + @sqlOrderBy)
 
-			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Job_Date, Value 
+			SELECT Dataset_Date, Dataset_ID, Job, Instrument, Dataset_Name, Dataset_Rating, Job_Date, Value 
 			FROM #TmpQueryResults
 			ORDER BY Dataset_Date, Dataset_ID
 		end
@@ -434,7 +444,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QCMSMSMetricByJobWork] TO [DMS_SP_User] AS [dbo]

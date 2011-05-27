@@ -1,8 +1,9 @@
 /****** Object:  View [dbo].[V_SysJobs_Stats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE VIEW dbo.V_SysJobs_Stats
 AS
 SELECT Category,
@@ -19,7 +20,8 @@ SELECT Category,
        Convert(smalldatetime, 
          Substring(Convert(varchar(12), RunDate_Last ), 1, 4) + '-' + 
          Substring(Convert(varchar(12), RunDate_Last ), 5, 2) + '-' + 
-         Substring(Convert(varchar(12), RunDate_Last ), 7, 2)) AS RunDate_Last
+         Substring(Convert(varchar(12), RunDate_Last ), 7, 2)) AS RunDate_Last,
+       Run_Count
 FROM ( SELECT C.Name AS Category,
               V.Name AS Job,
               V.Job_ID,
@@ -28,7 +30,8 @@ FROM ( SELECT C.Name AS Category,
               Max(H.run_date) AS RunDate_Last,
               Convert(decimal(18, 2), Avg(H.run_Duration / 60.0)) AS RunDuration_Avg_Minutes,
               Convert(decimal(18, 2), Min(H.run_Duration / 60.0)) AS RunDuration_Min_Minutes,
-              Convert(decimal(18, 2), Max(H.run_Duration / 60.0)) AS RunDuration_Max_Minutes
+              Convert(decimal(18, 2), Max(H.run_Duration / 60.0)) AS RunDuration_Max_Minutes,
+              COUNT(*) as Run_Count
        FROM msdb.dbo.sysjobhistory H
             INNER JOIN msdb.dbo.sysjobs_view V
               ON V.job_id = H.Job_ID

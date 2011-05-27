@@ -25,6 +25,7 @@ CREATE TABLE [dbo].[T_Mass_Tags](
 	[Min_Log_EValue] [real] NULL,
 	[Cleavage_State_Max] [tinyint] NOT NULL,
 	[PeptideEx] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Min_MSGF_SpecProb] [real] NULL,
  CONSTRAINT [PK_T_Mass_Tags] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC
@@ -54,10 +55,19 @@ CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_ModCount] ON [dbo].[T_Mass_Tags]
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 
-/****** Object:  Index [IX_T_Mass_Tags_PeptideProphetProbability] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PeptideProphetProbability] ON [dbo].[T_Mass_Tags] 
+/****** Object:  Index [IX_T_Mass_Tags_MSGFSpecProb_PMTQS] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_MSGFSpecProb_PMTQS] ON [dbo].[T_Mass_Tags] 
 (
-	[High_Peptide_Prophet_Probability] ASC
+	[Min_MSGF_SpecProb] ASC,
+	[PMT_Quality_Score] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_Mass_Tags_PepProphetProb_PMTQS] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Mass_Tags_PepProphetProb_PMTQS] ON [dbo].[T_Mass_Tags] 
+(
+	[High_Peptide_Prophet_Probability] ASC,
+	[PMT_Quality_Score] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 

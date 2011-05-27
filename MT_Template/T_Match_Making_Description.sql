@@ -44,6 +44,13 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[Refine_NET_Tol_PeakCenter] [real] NULL,
 	[Refine_NET_Tol_Used] [tinyint] NULL,
 	[Ini_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Match_Score_Mode] [tinyint] NOT NULL,
+	[STAC_Used_Prior_Probability] [tinyint] NOT NULL,
+	[AMT_Count_1pct_FDR] [int] NULL,
+	[AMT_Count_5pct_FDR] [int] NULL,
+	[AMT_Count_10pct_FDR] [int] NULL,
+	[AMT_Count_25pct_FDR] [int] NULL,
+	[AMT_Count_50pct_FDR] [int] NULL,
  CONSTRAINT [PK_T_MatchMaking_Description] PRIMARY KEY CLUSTERED 
 (
 	[MD_ID] ASC
@@ -55,6 +62,11 @@ ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK
 REFERENCES [T_FTICR_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode] FOREIGN KEY([Match_Score_Mode])
+REFERENCES [T_MMD_Match_Score_Mode] ([Match_Score_Mode])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode]
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name] FOREIGN KEY([MD_State])
 REFERENCES [T_MMD_State_Name] ([MD_State])
@@ -93,4 +105,8 @@ GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_TolerancePPM]  DEFAULT ((0)) FOR [MD_NetAdj_TolerancePPM]
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_UMCs_HitCount]  DEFAULT ((0)) FOR [MD_NetAdj_UMCs_HitCount]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  DEFAULT ((0)) FOR [Match_Score_Mode]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  DEFAULT ((0)) FOR [STAC_Used_Prior_Probability]
 GO

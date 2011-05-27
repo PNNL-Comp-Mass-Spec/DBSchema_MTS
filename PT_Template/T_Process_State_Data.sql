@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_State] ******/
-/****** RowCount: 32 ******/
+/****** RowCount: 33 ******/
 /****** Columns: ID, Name ******/
 INSERT INTO [T_Process_State] VALUES (0,'(na)')
 INSERT INTO [T_Process_State] VALUES (3,'Load Failed')
@@ -7,6 +7,7 @@ INSERT INTO [T_Process_State] VALUES (4,'Load Skipped')
 INSERT INTO [T_Process_State] VALUES (5,'Do Not Export')
 INSERT INTO [T_Process_State] VALUES (6,'Holding')
 INSERT INTO [T_Process_State] VALUES (7,'Joined into Segmented_Job')
+INSERT INTO [T_Process_State] VALUES (9,'Load failed due to file read error; retry load')
 INSERT INTO [T_Process_State] VALUES (10,'New')
 INSERT INTO [T_Process_State] VALUES (15,'Peptides Loaded')
 INSERT INTO [T_Process_State] VALUES (20,'Proteins Updated')

@@ -10,6 +10,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Dataset_Created_DMS] [datetime] NULL,
 	[Dataset_Acq_Time_Start] [datetime] NULL,
 	[Dataset_Acq_Time_End] [datetime] NULL,
+	[Dataset_Acq_Length] [decimal](9, 2) NULL,
 	[Dataset_Scan_Count] [int] NULL,
 	[Experiment] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Campaign] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,

@@ -10,6 +10,7 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
 	[Dataset_Created_DMS] [datetime] NULL,
 	[Dataset_Acq_Time_Start] [datetime] NULL,
 	[Dataset_Acq_Time_End] [datetime] NULL,
+	[Dataset_Acq_Length] [decimal](9, 2) NULL,
 	[Dataset_Scan_Count] [int] NULL,
 	[Experiment] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Campaign] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -56,7 +57,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_d_FTICRAnalysisDescription] on [dbo].[T_FTICR_Analysis_Description]
 For Delete
 AS
@@ -68,14 +68,12 @@ AS
 	FROM deleted
 	order by deleted.Job
 
-
 GO
 /****** Object:  Trigger [dbo].[trig_i_FTICRAnalysisDescription] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_i_FTICRAnalysisDescription] on [dbo].[T_FTICR_Analysis_Description]
 For Insert
 AS
@@ -87,14 +85,12 @@ AS
 	FROM inserted
 	ORDER BY inserted.Job
 
-
 GO
 /****** Object:  Trigger [dbo].[trig_u_FTICRAnalysisDescription] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_u_FTICRAnalysisDescription] on [dbo].[T_FTICR_Analysis_Description]
 For Update
 AS
@@ -106,7 +102,6 @@ AS
 		SELECT 2, inserted.Job, inserted.State, deleted.State, GetDate()
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
 		ORDER BY inserted.Job
-
 
 GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])

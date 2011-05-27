@@ -16,7 +16,8 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 **
 **  Auth:	mem
 **	Date:	04/06/2007
-**			01/11/2020 mem - Added parameter @infoOnly
+**			01/11/2010 mem - Added parameter @infoOnly
+**			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
 **  
 ****************************************************************/
 (
@@ -36,10 +37,11 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@JobToFilterOnByDataset int = 0,				-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
-	@MinimumHighNormalizedScore float = 0,	-- The minimum value required for High_Normalized_Score; 0 to allow all
-	@MinimumPMTQualityScore decimal(9,5) = 0,	-- The minimum PMT_Quality_Score to allow; 0 to allow all
-	@MinimumHighDiscriminantScore real = 0,		-- The minimum High_Discriminant_Score to allow; 0 to allow all
+	@MinimumHighNormalizedScore float = 0,			-- The minimum value required for High_Normalized_Score; 0 to allow all
+	@MinimumPMTQualityScore decimal(9,5) = 0,		-- The minimum PMT_Quality_Score to allow; 0 to allow all
+	@MinimumHighDiscriminantScore real = 0,			-- The minimum High_Discriminant_Score to allow; 0 to allow all
 	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MaximumMSGFSpecProb float = 0,					-- The maximum MSGF Spectrum Probability value to allow (examines Min_MSGF_SpecProb in T_Mass_Tags); 0 to allow all
 	@DatasetToFilterOn varchar(256)='' output,
 	@infoOnly tinyint = 0
 )
@@ -77,13 +79,16 @@ As
 	---------------------------------------------------	
 	-- @MassCorrectionIDFilterList is validated below
 	Set @ConfirmedOnly = IsNull(@ConfirmedOnly, 0)
+	
 	Set @MinimumHighNormalizedScore = IsNull(@MinimumHighNormalizedScore, 0)
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
 	Set @MinimumHighDiscriminantScore = IsNull(@MinimumHighDiscriminantScore, 0)
+	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
+	Set @MaximumMSGFSpecProb = IsNull(@MaximumMSGFSpecProb, 0)
+	
 	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
 	Set @ExperimentExclusionFilter = IsNull(@ExperimentExclusionFilter, '')
 	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
-	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 	Set @infoOnly = IsNull(@infoOnly, 0)
 
 	---------------------------------------------------	
@@ -103,6 +108,9 @@ As
 
 	If @MinimumHighNormalizedScore <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.High_Normalized_Score, 0) >= ' +  Convert(varchar(11), @MinimumHighNormalizedScore) + ') '
+
+	If @MaximumMSGFSpecProb <> 0
+		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.Min_MSGF_SpecProb, 1) <= ' + Convert(varchar(11), @MaximumMSGFSpecProb) + ') '
 	
 	If @ConfirmedOnly <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
@@ -354,7 +362,6 @@ As
     
 	If @infoOnly <> 0
 		Print @FullSql
-
 
 Done:
 	Return @myError

@@ -20,7 +20,7 @@ CREATE PROCEDURE dbo.GetMassTags
 **							--   If blank, all columns are returned.  Valid column names:
 **							--     Experiment, Protein_Name, Mass_Tag_ID, Mass_Tag_Name, Peptide_Sequence, Peptide_Monoisotopic_Mass, 
 **							--     MSMS_Observation_Count, MSMS_High_Normalized_Score, MSMS_DeltaCn2_Maximum, MSMS_High_Discriminant_Score,
-**							--     PMT_Quality_Score, Cleavage_State_Name, Residue_Start, Residue_End, Dataset_Count, and Job_Count
+**							--     PMT_Quality_Score, Cleavage_State_Name, Residue_Start, Residue_End, Dataset_Count, Job_Count, and Obs_Count_Filtered
 **							--     In addition, for method UMCPeakMatch(MS-FTICR) only, columns: Peak_Matching_Task_Count, SLiC_Score_Maximum, and MT_Abundance_Avg
 **							--   Note that Experiment, Protein_Name, and Mass_Tag_ID will always be displayed, regardless of @outputColumnNameList
 **	  @criteriaSql			-- Sql "Where clause compatible" text for filtering ResultSet
@@ -56,6 +56,7 @@ CREATE PROCEDURE dbo.GetMassTags
 **			02/15/2007 mem - Clarified use of MSMS_Dataset_Count, MS_Dataset_Count,MSMS MS_Dataset_Count, and MS_Dataset_Count in @criteriaSql
 **						   - Fixed bug that failed to put MSMS_DeltaCn2_Maximum criteria in the Having clause of the query
 **			10/09/2009 mem - Removed Sequest-specific table references
+**			05/19/2010 mem - Now returning column MSMS_Obs_Count_Filtered
 **
 *****************************************************/
 (
@@ -158,6 +159,7 @@ As
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'Mod_Description', 'MT.Mod_Description')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Dataset_Count', 'COUNT(DISTINCT JobTable.Dataset)')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Job_Count', 'COUNT(DISTINCT JobTable.Job)')
+	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MSMS_Obs_Count_Filtered', 'COUNT(DISTINCT PT.Peptide_ID)')	
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MS_Dataset_Count', 'COUNT(DISTINCT JobTable.Dataset)')
 	Set @criteriaSqlUpdated = Replace(@criteriaSqlUpdated, 'MS_Job_Count', 'COUNT(DISTINCT JobTable.Job)')
 
@@ -196,7 +198,7 @@ As
 		if @internalMatchCode = 'UMC'
 			Set @outputColumnNameList = @outputColumnNameList + 'MS_Dataset_Count, MS_Job_Count'
 		else
-			Set @outputColumnNameList = @outputColumnNameList + 'MSMS_Dataset_Count, MSMS_Job_Count'
+			Set @outputColumnNameList = @outputColumnNameList + 'MSMS_Dataset_Count, MSMS_Job_Count, MSMS_Obs_Count_Filtered'
 
 		If @internalMatchCode = 'UMC'
 		Begin
@@ -339,6 +341,14 @@ As
 		else
 			Set @sqlSelect = @sqlSelect + ', COUNT(DISTINCT JobTable.Job) AS MSMS_Job_Count'
 	End
+
+	If CharIndex('Obs_Count_Filtered', @outputColumnNameList) > 0 OR CharIndex('Obs_Count_Filtered', @criteriaSql) > 0
+	Begin
+		if @internalMatchCode <> 'UMC'
+			Set @sqlSelect = @sqlSelect + ', COUNT(DISTINCT PT.Peptide_ID) AS MSMS_Obs_Count_Filtered'
+	End
+		
+	
 	
 	-- The following optional columns only apply to mass tags from UMC peak matching data
 	If @internalMatchCode = 'UMC'
@@ -469,7 +479,7 @@ As
 	Else
 	begin
 		If @previewSql <> 0
-			Print  @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy
+			Print @sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy
 		Else
 			Exec (@sqlSelect + ' ' + @sqlFrom + ' ' + @sqlWhere + @experimentWhereClause + @ProteinWhereClause + ' ' + @sqlGroupBy + ' ' + @sqlHaving + ' ' + @sqlOrderBy)
 	end

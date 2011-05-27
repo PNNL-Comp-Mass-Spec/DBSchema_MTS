@@ -15,6 +15,7 @@ CREATE TABLE [dbo].[T_MTS_MT_DBs](
 	[DB_Schema_Version] [real] NOT NULL,
 	[Comment] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Created] [datetime] NULL,
+	[Last_Online] [date] NULL,
  CONSTRAINT [PK_T_MTS_MT_DBs] PRIMARY KEY CLUSTERED 
 (
 	[MT_DB_ID] ASC

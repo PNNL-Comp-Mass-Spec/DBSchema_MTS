@@ -13,6 +13,7 @@ CREATE TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached](
 	[Original_Source] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Original_Source_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Alternative_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Empirical_Formula] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_DMS_Mass_Correction_Factors_Cached] PRIMARY KEY CLUSTERED 
 (
@@ -26,7 +27,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Trigger [dbo].[trig_u_DMS_Mass_Correction_Factors_Cached] on [dbo].[T_DMS_Mass_Correction_Factors_Cached]
 For Update
 AS
@@ -45,8 +45,6 @@ AS
 			SET Last_Affected = GetDate()
 			FROM T_DMS_Mass_Correction_Factors_Cached MCF INNER JOIN 
 				 inserted ON MCF.Mass_Correction_ID = inserted.Mass_Correction_ID
-
-
 
 GO
 ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Affected_Atom]  DEFAULT ('-') FOR [Affected_Atom]

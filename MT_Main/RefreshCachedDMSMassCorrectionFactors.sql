@@ -16,11 +16,11 @@ CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
 **			05/09/2007 mem - Now calling UpdateDMSCachedDataStatus to update the cache status variables (Ticket:422)
 **			09/18/2008 mem - Added parameters @MassCorrectionIDMinimum and @MassCorrectionIDMaximum
 **						   - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
+**			07/30/2010 mem - Updated to use a single-step MERGE statement instead of three separate Delete, Update, and Insert statements
+**			08/02/2010 mem - Updated to use V_DMS_Mass_Correction_Factors_Import to obtain the information from DMS
 **
 *****************************************************/
 (
-	@MassCorrectionIDMinimum int = 0,		-- This parameter is not actually used, but is required for compatibility with the other RefreshCachedDMS procedures
-	@MassCorrectionIDMaximum int = 0,		-- This parameter is not actually used, but is required for compatibility with the other RefreshCachedDMS procedures
 	@message varchar(255) = '' output
 )
 AS
@@ -45,96 +45,89 @@ AS
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
 
+	---------------------------------------------------
+	-- Create the temporary table that will be used to
+	-- track the number of inserts, updates, and deletes 
+	-- performed by the MERGE statement
+	---------------------------------------------------
+	
+	CREATE TABLE #Tmp_UpdateSummary (
+		UpdateAction varchar(32)
+	)
+	
 	Begin Try
 		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
 		-- 
 		Exec UpdateDMSCachedDataStatus 'T_DMS_Mass_Correction_Factors_Cached', @IncrementRefreshCount = 0, @FullRefreshPerformed = 1, @LastRefreshMinimumID = 0
 
-		
-		Set @CurrentLocation = 'Delete extra rows in T_DMS_Mass_Correction_Factors_Cached'
-		-- 
-		DELETE T_DMS_Mass_Correction_Factors_Cached
-		FROM T_DMS_Mass_Correction_Factors_Cached Target LEFT OUTER JOIN
-			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
-		WHERE (Src.Mass_Correction_ID IS NULL)
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @DeleteCount = @myRowCount
-		
-		If @DeleteCount > 0
-			Set @message = 'Deleted ' + convert(varchar(12), @DeleteCount) + ' extra rows'
-			
-		Set @CurrentLocation = 'Update existing rows in T_DMS_Mass_Correction_Factors_Cached'
-		--
-		UPDATE T_DMS_Mass_Correction_Factors_Cached
-		SET Mass_Correction_Tag = Src.Mass_Correction_Tag, 
-			Description = Src.Description, 
-			Monoisotopic_Mass_Correction = Src.Monoisotopic_Mass_Correction,
-			Average_Mass_Correction = Src.Average_Mass_Correction, 
-			Affected_Atom = Src.Affected_Atom, 
-			Original_Source = Src.Original_Source, 
-			Original_Source_Name = Src.Original_Source_Name, 
-			Alternative_Name = Src.Alternative_Name
-		FROM T_DMS_Mass_Correction_Factors_Cached Target INNER JOIN
-			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
-		WHERE (Target.Mass_Correction_Tag <> Src.Mass_Correction_Tag) OR
-			  (IsNull(Target.Description,'') <> IsNull(Src.Description,'')) OR
-			  (Target.Monoisotopic_Mass_Correction <> Src.Monoisotopic_Mass_Correction) OR
-			  (IsNull(Target.Average_Mass_Correction,0) <> IsNull(Src.Average_Mass_Correction,0)) OR
-			  (Target.Affected_Atom <> Src.Affected_Atom)
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @UpdateCount = @myRowcount
-		
-		If @UpdateCount > 0
-		Begin
-			If Len(@message) > 0 
-				Set @message = @message + '; '
-			Set @message = @message + 'Updated ' + convert(varchar(12), @UpdateCount) + ' rows'
-		End
-		
-		Set @CurrentLocation = 'Add new rows to T_DMS_Mass_Correction_Factors_Cached'
-		--
-		INSERT INTO T_DMS_Mass_Correction_Factors_Cached
-			(Mass_Correction_ID, Mass_Correction_Tag, Description, 
-			Monoisotopic_Mass_Correction, Average_Mass_Correction, 
-			Affected_Atom, Original_Source, Original_Source_Name, 
-			Alternative_Name)
-		SELECT Src.Mass_Correction_ID, Src.Mass_Correction_Tag, 
-			Src.Description, Src.Monoisotopic_Mass_Correction, 
-			Src.Average_Mass_Correction, Src.Affected_Atom, 
-			Src.Original_Source, Src.Original_Source_Name, 
-			Src.Alternative_Name
-		FROM T_DMS_Mass_Correction_Factors_Cached Target RIGHT OUTER JOIN
-			 Gigasax.DMS5.dbo.T_Mass_Correction_Factors Src ON Target.Mass_Correction_ID = Src.Mass_Correction_ID
-		WHERE (Target.Mass_Correction_ID IS NULL)
-		--
-		SELECT @myRowCount = @@RowCount, @myError = @@Error
-		Set @InsertCount = @myRowcount
-		
-		If @InsertCount > 0
-		Begin
-			If Len(@message) > 0 
-				Set @message = @message + '; '
-			Set @message = @message + 'Added ' + convert(varchar(12), @InsertCount) + ' new rows'
-		End
-		
-		If Len(@message) > 0 
-		Begin	
-			Set @message = 'Updated T_DMS_Mass_Correction_Factors_Cached: ' + @message
-			execute PostLogEntry 'Normal', @message, 'RefreshCachedDMSMassCorrectionFactors'
-		End
+		Set @CurrentLocation = 'Merge data into T_DMS_Mass_Correction_Factors_Cached'
 
-		Set @CurrentLocation = 'Update stats in T_DMS_Cached_Data_Status'
-		-- 
-		Exec UpdateDMSCachedDataStatus 'T_DMS_Mass_Correction_Factors_Cached', 
-											@IncrementRefreshCount = 1, 
-											@InsertCountNew = @InsertCount, 
-											@UpdateCountNew = @UpdateCount, 
-											@DeleteCountNew = @DeleteCount,
-											@FullRefreshPerformed = 1, 
-											@LastRefreshMinimumID = 0
-		
+		-- Use a MERGE Statement to synchronize T_DMS_Mass_Correction_Factors_Cached with V_DMS_Mass_Correction_Factors_Import
+		--
+		MERGE T_DMS_Mass_Correction_Factors_Cached AS target
+		USING (SELECT Mass_Correction_ID,
+                      Mass_Correction_Tag,
+                      Description,
+                      Monoisotopic_Mass_Correction,
+                      Average_Mass_Correction,
+                      Affected_Atom,
+                      Original_Source,
+                      Original_Source_Name,
+                      Alternative_Name,
+                      Empirical_Formula
+               FROM V_DMS_Mass_Correction_Factors_Import
+			) AS Source (  Mass_Correction_ID,
+                           Mass_Correction_Tag,
+                           Description,
+                           Monoisotopic_Mass_Correction,
+                           Average_Mass_Correction,
+                           Affected_Atom,
+                           Original_Source,
+                           Original_Source_Name,
+                           Alternative_Name,
+                           Empirical_Formula)
+		ON (target.Mass_Correction_ID = source.Mass_Correction_ID)
+		WHEN Matched AND (  target.Mass_Correction_Tag <> source.Mass_Correction_Tag OR
+				            IsNull(target.Description,'') <> IsNull(source.Description,'') OR
+				            target.Monoisotopic_Mass_Correction <> source.Monoisotopic_Mass_Correction OR
+				            IsNull(target.Average_Mass_Correction,0) <> IsNull(source.Average_Mass_Correction,0) OR
+				            target.Affected_Atom <> source.Affected_Atom OR
+				            IsNull(target.Empirical_Formula,'') <> IsNull(source.Empirical_Formula,'')) THEN 
+			UPDATE set Mass_Correction_Tag = source.Mass_Correction_Tag, 
+			           Description = source.Description, 
+			           Monoisotopic_Mass_Correction = source.Monoisotopic_Mass_Correction,
+			           Average_Mass_Correction = source.Average_Mass_Correction, 
+			           Affected_Atom = source.Affected_Atom, 
+			           Original_Source = source.Original_Source, 
+			           Original_Source_Name = source.Original_Source_Name, 
+			           Alternative_Name = source.Alternative_Name,
+			           Empirical_Formula = source.Empirical_Formula
+		WHEN Not Matched THEN
+			INSERT (Mass_Correction_ID, Mass_Correction_Tag, Description, 
+			        Monoisotopic_Mass_Correction, Average_Mass_Correction, 
+			        Affected_Atom, Original_Source, Original_Source_Name, 
+			        Alternative_Name, Empirical_Formula)
+			VALUES (source.Mass_Correction_ID, source.Mass_Correction_Tag, 
+			        source.Description, source.Monoisotopic_Mass_Correction, 
+			        source.Average_Mass_Correction, source.Affected_Atom, 
+			        source.Original_Source, source.Original_Source_Name, 
+			        source.Alternative_Name, source.Empirical_Formula)
+		WHEN NOT MATCHED BY SOURCE THEN 
+			DELETE
+		OUTPUT $action INTO #Tmp_UpdateSummary
+		;
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		if @myError <> 0
+		begin
+			set @message = 'Error merging V_DMS_Mass_Correction_Factors_Import with T_DMS_Mass_Correction_Factors_Cached (ErrorID = ' + Convert(varchar(12), @myError) + ')'
+			execute PostLogEntry 'Error', @message, 'RefreshCachedDMSMassCorrectionFactors'
+		end
+
+		-- Update the stats in T_DMS_Cached_Data_Status
+		exec RefreshCachedDMSInfoFinalize 'RefreshCachedDMSMassCorrectionFactors', '', 'T_DMS_Mass_Correction_Factors_Cached'
+				
 	End Try
 	Begin Catch
 		-- Error caught; log the error then abort processing

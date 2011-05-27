@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.JoinSplitSeparationJobSections
 **			11/06/2006 mem - Added fields Protein_Collection_List and Protein_Options_List to the Insert Queries that add joined jobs to T_Analysis_Description
 **			11/02/2007 mem - Added field @UseExistingDatasetAndMASICJob
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
+**			07/13/2010 mem - Now populating Acq_Length in T_Datasets
 **    
 *****************************************************/
 (
@@ -381,11 +382,12 @@ As
 		--Create the Joined_Dataset in T_Datasets, keep the SIC job at NULL for now
 		INSERT INTO T_Datasets
 			(Dataset_ID, Dataset, Type, Created_DMS, Acq_Time_Start, 
-			Acq_Time_End, Scan_Count, Created, Dataset_Process_State)
+			Acq_Time_End, Acq_Length, Scan_Count, Created, Dataset_Process_State)
 		SELECT @JoinedDatasetID AS Dataset_ID, 
 			@JoinedDataset AS Dataset, 
 			Type, GetDate() AS Created_DMS, MIN(Acq_Time_Start) 
 			AS Acq_Time_Start, MAX(Acq_Time_End) AS Acq_Time_End, 
+			DATEDIFF(second, MIN(Acq_Time_Start), MAX(Acq_Time_End)) / 60.0 AS Acq_Length,
 			SUM(Scan_Count) AS Scan_Count, GetDate() AS Created, 
 			10 AS Dataset_Process_State
 		FROM T_Datasets

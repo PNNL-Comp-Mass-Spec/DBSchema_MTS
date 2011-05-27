@@ -5,6 +5,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 	[Job] [int] NOT NULL,
+	[RequestID] [int] NOT NULL,
 	[Priority] [int] NOT NULL,
 	[Dataset] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Experiment] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -26,11 +27,12 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 	[DatasetFolder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ResultsFolder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Owner] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Comment] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Comment] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[SeparationSysType] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ResultType] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Dataset Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[DS_created] [datetime] NOT NULL,
+	[DS_Acq_Length] [decimal](9, 2) NULL,
 	[EnzymeID] [int] NOT NULL,
 	[Labelling] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[PreDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -62,13 +64,14 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create Trigger trig_u_DMS_Analysis_Job_Info_Cached on T_DMS_Analysis_Job_Info_Cached
+CREATE Trigger [dbo].[trig_u_DMS_Analysis_Job_Info_Cached] on [dbo].[T_DMS_Analysis_Job_Info_Cached]
 For Update
 AS
 	If @@RowCount = 0
 		Return
 
 	If update(Job) OR
+       update(RequestID) OR
 	   update(Priority) OR
 	   update(Dataset) OR
 	   update(Experiment) OR
@@ -95,6 +98,7 @@ AS
 	   update(ResultType) OR
 	   update([Dataset Int Std]) OR
 	   update(DS_created) OR
+	   update(DS_Acq_Length) OR
 	   update(EnzymeID) OR
 	   update(Labelling) OR
 	   update([PreDigest Int Std]) OR
@@ -106,6 +110,8 @@ AS
 				 inserted ON AJ.Job = inserted.Job
 	End
 
+GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_RequestID]  DEFAULT ((1)) FOR [RequestID]
 GO
 ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 **						   - Updated to allow for wildcards in T_Quantitation_Defaults.Instrument_Name
 **						   - Switched to Try/Catch error handling
 **			06/08/2007 mem - Updated to use the minimum score values defined in T_Match_Making_Description if they are larger than the defaults defined for this instrument
+**			10/14/2010 mem - Added Minimum_Uniqueness_Probability and Maximum_FDR_Threshold
 **
 ****************************************************/
 (
@@ -45,7 +46,10 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 	@InternalStdInclusionMode tinyint output,
 
 	@MinimumPeptideProphetProbability real output,
-	@MaximumMatchesPerUMCToKeep smallint output
+	@MaximumMatchesPerUMCToKeep smallint output,
+	
+	@MinimumUniquenessProbability real = 0 output,
+	@MaximumFDRThreshold real = 1 output	
 )
 AS
 	Set NoCount On
@@ -94,8 +98,11 @@ AS
 	
 	Set @MinimumPeptideLength = 6
 	Set @MaximumMatchesPerUMCToKeep = 1
+	
 	Set @MinimumMatchScore = 0.25
 	Set @MinimumDelMatchScore = 0
+	Set @MinimumUniquenessProbability = 0
+	Set @MaximumFDRThreshold = 1
 
 	Set @MinimumPeptideReplicateCount = 0
 	Set @ORFCoverageComputationLevel = 1
@@ -203,6 +210,8 @@ AS
 							@MaximumMatchesPerUMCToKeep = Maximum_Matches_per_UMC_to_Keep,
 							@MinimumMatchScore = Minimum_Match_Score, 
 							@MinimumDelMatchScore = Minimum_Del_Match_Score, 
+							@MinimumUniquenessProbability = Minimum_Uniqueness_Probability, 
+							@MaximumFDRThreshold = Maximum_FDR_Threshold,
 							@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count, 
 							@ORFCoverageComputationLevel = ORF_Coverage_Computation_Level, 
 							@InternalStdInclusionMode = Internal_Std_Inclusion_Mode

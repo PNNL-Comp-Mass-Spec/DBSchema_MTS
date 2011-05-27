@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER OFF
 GO
 
-CREATE PROCEDURE QRGenerateORFColumnSql
+CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 /****************************************************	
 **  Desc: Generates the sql for the ORF column data
 **		  obtained from T_Quantitation_Results
@@ -26,6 +26,7 @@ CREATE PROCEDURE QRGenerateORFColumnSql
 **			06/13/2007 mem - Now truncating T_Proteins.Description at 900 characters, since Visual Studio's SqlDataAdapter tool has problems with text strings over 910 characters in length
 **			01/24/2008 mem - Added parameters @IncludeProteinDescription and @IncludeQID
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
+**			10/14/2010 mem - Added parameters @MatchScoreModeMin and @MatchScoreModeMax, which control the name given to values in column Match_Score_Average
 **
 ****************************************************/
 (
@@ -33,7 +34,9 @@ CREATE PROCEDURE QRGenerateORFColumnSql
 	@OrfColumnSql varchar(2048) = '' OUTPUT,
 	@IncludeProteinDescription tinyint = 1,
 	@IncludeQID tinyint = 0,
-	@ChangeCommasToSemicolons tinyint = 0		 -- Replaces commas with semicolons in various text fields, including:  Sample_Name, Reference, Protein_Description
+	@ChangeCommasToSemicolons tinyint = 0,		 -- Replaces commas with semicolons in various text fields, including:  Sample_Name, Reference, Protein_Description
+	@MatchScoreModeMin tinyint = 0,
+	@MatchScoreModeMax tinyint = 0
 )
 AS
 
@@ -69,7 +72,17 @@ AS
 	
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
-	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) AS SLiC_Score_Avg,'
+	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) '
+	
+	If @MatchScoreModeMin = 0 And @MatchScoreModeMax = 0
+		Set @sql = @sql + 'AS SLiC_Score_Avg,'
+	Else
+	Begin
+		If @MatchScoreModeMin >= 1 And @MatchScoreModeMax >= 1
+			Set @sql = @sql + 'AS STAC_Score_Avg,'
+		Else
+			Set @sql = @sql + 'AS SLiC_or_STAC_Score_Avg,'
+	End
 	
 	If @ERValuesPresent > 0
 	Begin
@@ -79,7 +92,7 @@ AS
 	
 	Set @sql = @sql + 'QR.MassTagCountUniqueObserved AS Mass_Tag_Count_Unique_Observed,'
 	Set @sql = @sql + 'QR.InternalStdCountUniqueObserved AS Internal_Std_Count_Unique_Observed,'
-	Set @sql = @sql + 'QR.MassTagCountUsedForAbundanceAvg AS Peptide_Count_Used_For_Abundance_Avg,'
+	Set @sql = @sql + 'QR.MassTagCountUsedForAbundanceAvg AS Peptide_Count_Used_For_Abundance,'
 	Set @sql = @sql + 'QR.MT_Count_Unique_Observed_Both_MS_and_MSMS,'
 	
 	Set @sql = @sql + 'QR.Full_Enzyme_Count,'

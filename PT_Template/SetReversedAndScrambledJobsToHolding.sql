@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.SetReversedAndScrambledJobsToHolding
+CREATE Procedure SetReversedAndScrambledJobsToHolding
 /****************************************************
 **
 **	Desc:	Looks for jobs that were searched against a reversed or
@@ -20,6 +20,7 @@ CREATE Procedure dbo.SetReversedAndScrambledJobsToHolding
 **			02/07/2007 mem - Now calling DeleteSeqCandidateDataForSkippedJobs
 **			07/23/2009 mem - Now posting log entries for the jobs that are set to holding
 **			11/07/2009 mem - Now also looking for decoy searches where all of the loaded search results are reversed/scrambled proteins
+**			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -66,9 +67,11 @@ As
 	SELECT Job
 	FROM ( SELECT Pep.Analysis_ID AS Job,
 	              COUNT(*) AS PeptideCount,
-	              SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR
-				                Prot.Reference LIKE 'scrambled[_]%' OR
-				                Prot.Reference LIKE '%[:]reversed' THEN 1
+	              SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+				                Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+				                Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
+				                Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+				           THEN 1
 	                       ELSE 0 END) AS DecoyCount
 	       FROM T_Peptides Pep
 	            INNER JOIN T_Peptide_to_Protein_Map PPM
@@ -126,7 +129,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetReversedAndScrambledJobsToHolding] TO [MTS_DB_Dev] AS [dbo]

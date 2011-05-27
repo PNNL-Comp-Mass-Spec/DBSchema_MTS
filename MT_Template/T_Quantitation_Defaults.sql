@@ -21,6 +21,8 @@ CREATE TABLE [dbo].[T_Quantitation_Defaults](
 	[Maximum_Matches_per_UMC_to_Keep] [smallint] NOT NULL,
 	[Minimum_Match_Score] [real] NOT NULL,
 	[Minimum_Del_Match_Score] [real] NOT NULL,
+	[Minimum_Uniqueness_Probability] [real] NOT NULL,
+	[Maximum_FDR_Threshold] [real] NOT NULL,
 	[Minimum_Peptide_Replicate_Count] [smallint] NOT NULL,
 	[ORF_Coverage_Computation_Level] [tinyint] NOT NULL,
 	[Internal_Std_Inclusion_Mode] [tinyint] NOT NULL,
@@ -63,6 +65,10 @@ GO
 ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Match_Score]  DEFAULT ((0.25)) FOR [Minimum_Match_Score]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Del_Match_Score]  DEFAULT ((0)) FOR [Minimum_Del_Match_Score]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Uniqueness_Probability]  DEFAULT ((0.25)) FOR [Minimum_Uniqueness_Probability]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Maximum_FDR_Threshold]  DEFAULT ((0.5)) FOR [Maximum_FDR_Threshold]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Minimum_Peptide_Replicate_Count]  DEFAULT ((0)) FOR [Minimum_Peptide_Replicate_Count]
 GO
