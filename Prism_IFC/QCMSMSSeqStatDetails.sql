@@ -19,6 +19,7 @@ CREATE PROCEDURE QCMSMSSeqStatDetails
 **				11/16/2005 mem - Now returning additional columns: Peak_Apex_Scan, Peak_Scan_Start, Peak_Scan_End, and Peak_Width_Base_Points
 **			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
 **				09/22/2010 mem - Added parameters @ResultTypeFilter and @PreviewSql
+**				01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -257,7 +258,7 @@ As
 			T_Datasets DatasetTable ON 
 			JobTable.Dataset_ID = DatasetTable.Dataset_ID INNER JOIN
 			T_Peptides Pep ON 
-			JobTable.Job = Pep.Analysis_ID INNER JOIN
+			JobTable.Job = Pep.Job INNER JOIN
 			T_Dataset_Stats_SIC DSSIC ON 
 			DatasetTable.SIC_Job = DSSIC.Job AND 
 			Pep.Scan_Number = DSSIC.Frag_Scan_Number INNER JOIN
@@ -284,7 +285,7 @@ As
 	Set @Sql = @Sql + ' FROM DATABASE..T_Analysis_Description JobTable'
 	Set @Sql = @Sql +      ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 	Set @Sql = @Sql +      ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-	Set @Sql = @Sql +      ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+	Set @Sql = @Sql +      ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Job'
 
 	-- Define the where clause using @SeqIDList
 	Set @sqlWhere = 'WHERE Pep.Seq_ID In (' + @SeqIDList + ')'

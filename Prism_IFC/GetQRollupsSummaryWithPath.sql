@@ -35,6 +35,7 @@ CREATE PROCEDURE dbo.GetQRollupsSummaryWithPath
 **			06/13/2007 mem - Now returns [Max Matches per UMC]
 **			11/27/2007 mem - Added parameters @QIDMinimum and @QIDMaximum
 **			10/13/2010 mem - Now returns [AMT Count 5% FDR], [AMT Count 10% FDR], [AMT Count 25% FDR], [Min Uniq Prob], and [Max FDR]
+**			11/02/2011 mem - Now returns [Protein Degeneracy Mode]
 **    
 *****************************************************/
 (
@@ -96,7 +97,7 @@ As
 	set @sql = @sql + ' [Max Matches per UMC], [Min SLiC Score], [Min Del SLiC Score],'
 	set @sql = @sql + ' [Min Uniq Prob], [Max FDR],'
 	set @sql = @sql + ' [Min Peptide Length], [Min Peptide Rep Count],'
-	set @sql = @sql + ' [ORF Coverage Computation Level], [Rep Norm Stats],'
+	set @sql = @sql + ' [Protein Degeneracy Mode], [ORF Coverage Computation Level], [Rep Norm Stats],'
 	set @sql = @sql + ' [Quantitation State ID], State, [Last Affected]'
 	set @sql = @sql + ' FROM DATABASE..V_QR_SummaryList_Ex'
 	
@@ -140,7 +141,7 @@ As
 		--
 		Declare @UsageMessage varchar(512)
 		Set @UsageMessage = Convert(varchar(9), @myRowCount) + ' rows'
-		Exec PostUsageLogEntry 'GetQRollupsSummary', @MTDBName, @UsageMessage
+		Exec PostUsageLogEntry 'GetQRollupsSummaryWithPath', @MTDBName, @UsageMessage
 	End
 		
 	---------------------------------------------------

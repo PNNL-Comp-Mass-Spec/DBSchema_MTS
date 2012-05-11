@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
+CREATE PROCEDURE GetProteinJobPeptideCrosstab
 /****************************************************
 **	Desc:  
 **  Generates a crosstab report of proteins against jobs
@@ -32,6 +32,7 @@ CREATE PROCEDURE dbo.GetProteinJobPeptideCrosstab
 **			06/05/2007 mem - Changed @sql and @crossTabCols to varchar(max) and added parameter @PreviewSql
 **			03/07/2009 mem - Changed the column names in the temporary tables to make them more readable
 **						   - Updated the 'Preview_Data_Analysis_Jobs' mode to show jobs that are in the database but are excluded because all proteins in the job were excluded by the filter thresholds
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -127,10 +128,10 @@ AS
 	set @sql = @sql + ' ( '+ CHAR(10)
 	if @dbVer > 1
 		begin
-			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID as Job, P.Mass_Tag_ID as MT, S.XCorr, P.Peak_Area '+ CHAR(10)
+			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Job, P.Mass_Tag_ID as MT, S.XCorr, P.Peak_Area '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A INNER JOIN'+ CHAR(10)
-			set @sql = @sql + '[' + @MTDBName + '].dbo.V_GtL_Filtered_Peptides_KJA P ON A.Job = P.Analysis_ID INNER JOIN'+ CHAR(10)
+			set @sql = @sql + '[' + @MTDBName + '].dbo.V_GtL_Filtered_Peptides_KJA P ON A.Job = P.Job INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Mass_Tag_to_Protein_Map M ON P.Mass_Tag_ID = M.Mass_Tag_ID INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Proteins O ON M.Ref_ID = O.Ref_ID INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Score_Sequest S ON P.Peptide_ID = S.Peptide_ID'+ CHAR(10)
@@ -138,12 +139,12 @@ AS
 		end
 	else
 		begin
-			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Analysis_ID AS Job, P.Mass_Tag_ID as MT, P.XCorr '+ CHAR(10)
+			set @sql = @sql + 'SELECT DISTINCT O.Ref_ID, A.Experiment, A.Dataset, P.Job, P.Mass_Tag_ID as MT, P.XCorr '+ CHAR(10)
 			set @sql = @sql + 'FROM '+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_ORF_Reference O INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Mass_Tag_to_ORF_Map M ON O.Ref_ID = M.Ref_ID INNER JOIN'+ CHAR(10)
 			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Peptides P ON M.MT_ID = P.Mass_Tag_ID INNER JOIN'+ CHAR(10)
-			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A ON P.Analysis_ID = A.Job'+ CHAR(10)
+			set @sql = @sql + '[' + @MTDBName + '].dbo.T_Analysis_Description A ON P.Job = A.Job'+ CHAR(10)
 			set @sql = @sql + 'WHERE ' + @experimentWhereClause
 		end
 	set @sql = @sql + ' ) Z '+ CHAR(10)
@@ -479,7 +480,6 @@ Done:
 	end
 */
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetProteinJobPeptideCrosstab] TO [DMS_SP_User] AS [dbo]

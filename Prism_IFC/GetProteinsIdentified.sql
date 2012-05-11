@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetProteinsIdentified
+CREATE PROCEDURE GetProteinsIdentified
 /****************************************************
 **
 **	Desc: 
@@ -50,6 +50,7 @@ CREATE PROCEDURE dbo.GetProteinsIdentified
 **			05/13/2005 mem - Now checking for @outputColumnNameList = 'All' and @criteriaSql = 'na'
 **			11/23/2005 mem - Added brackets around @MTDBName as needed to allow for DBs with dashes in the name
 **			02/20/2006 mem - Now validating that @MTDBName has a state less than 100 in MT_Main
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -271,7 +272,7 @@ As
 	If @internalMatchCode = 'PMT'
 	Begin
 		Set @sqlStatsQ = @sqlStatsQ + ' SOURCEJOBTABLE AS JobTable INNER JOIN'
-		Set @sqlStatsQ = @sqlStatsQ + ' DATABASE..T_Peptides AS PT ON JobTable.Job = PT.Analysis_ID INNER JOIN'
+		Set @sqlStatsQ = @sqlStatsQ + ' DATABASE..T_Peptides AS PT ON JobTable.Job = PT.Job INNER JOIN'
 		Set @sqlStatsQ = @sqlStatsQ + ' DATABASE..V_IFC_Mass_Tag_To_Protein_Map AS MTO INNER JOIN'
 		Set @sqlStatsQ = @sqlStatsQ + ' DATABASE..T_Mass_Tags AS MT ON MTO.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN'
 		Set @sqlStatsQ = @sqlStatsQ + ' DATABASE..V_IFC_Proteins AS RefTable ON MTO.Ref_ID = RefTable.Ref_ID'

@@ -26,6 +26,7 @@ CREATE PROCEDURE QCMSMSMetricByJobWork
 **			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
 **			09/22/2010 mem - Added parameter @ResultTypeFilter
 **			10/06/2010 mem - Now returning column Dataset_Rating
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -220,7 +221,7 @@ As
 	Set @Sql = @Sql +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 
 	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+	Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Job'
 
     Set @Sql = @Sql +       ' INNER JOIN DATABASE.dbo.T_Dataset_Stats_SIC DSSIC WITH (NOLOCK) ON'
     Set @Sql = @Sql +         ' DatasetTable.SIC_Job = DSSIC.Job AND Pep.Scan_Number = DSSIC.Frag_Scan_Number'

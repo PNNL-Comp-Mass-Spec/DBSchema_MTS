@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetMassTags
+CREATE PROCEDURE GetMassTags
 /****************************************************
 **
 **	Desc: 
@@ -57,6 +57,7 @@ CREATE PROCEDURE dbo.GetMassTags
 **						   - Fixed bug that failed to put MSMS_DeltaCn2_Maximum criteria in the Having clause of the query
 **			10/09/2009 mem - Removed Sequest-specific table references
 **			05/19/2010 mem - Now returning column MSMS_Obs_Count_Filtered
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -375,7 +376,7 @@ As
 	If @internalMatchCode = 'PMT'
 	Begin
 		Set @sqlFrom = @sqlFrom + ' SOURCEJOBTABLE AS JobTable INNER JOIN'
-		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Peptides AS PT ON JobTable.Job = PT.Analysis_ID INNER JOIN'
+		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Peptides AS PT ON JobTable.Job = PT.Job INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..V_IFC_Mass_Tag_To_Protein_Map AS MTO INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Mass_Tags AS MT ON MTO.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..V_IFC_Proteins AS RefTable ON MTO.Ref_ID = RefTable.Ref_ID LEFT OUTER JOIN'
@@ -492,7 +493,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetMassTags] TO [DMS_SP_User] AS [dbo]

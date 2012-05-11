@@ -27,6 +27,7 @@ CREATE PROCEDURE QCMSMSIDCountsByJob
 **			10/07/2008 mem - Now returning jobs that don't have any peptides passing the filters (reporting a value of 0 for those jobs)
 **			09/22/2010 mem - Added parameters @MSGFThreshold, @ResultTypeFilter, and @PreviewSql
 **			10/06/2010 mem - Now returning column Dataset_Rating
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -209,7 +210,7 @@ As
 		Set @JobQuery = @JobQuery +         ' JobTable.Completed AS Job_Date'
 		Set @JobQuery = @JobQuery +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @JobQuery = @JobQuery +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @JobQuery = @JobQuery +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Job'
 		Set @JobQuery = @JobQuery +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 		Set @JobQuery = @JobQuery + ') AS JobLookupQ'
 		
@@ -220,7 +221,7 @@ As
 		Set @sqlFrom = @sqlFrom +         ' JobTable.Completed AS Job_Date, Pep.Mass_Tag_ID AS Seq_ID'
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Job'
 		Set @sqlFrom = @sqlFrom +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
@@ -281,7 +282,7 @@ As
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'		
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE.dbo.T_Peptides Pep ON JobTable.Job = Pep.Job'
 		Set @sqlFrom = @sqlFrom +       ' LEFT OUTER JOIN MT_Main.dbo.T_DMS_Dataset_Info_Cached DS ON JobTable.Dataset_ID = DS.ID'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0

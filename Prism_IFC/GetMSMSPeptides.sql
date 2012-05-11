@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetMSMSPeptides
+CREATE PROCEDURE GetMSMSPeptides
 /****************************************************
 **
 **	Desc: 
@@ -37,6 +37,7 @@ CREATE PROCEDURE dbo.GetMSMSPeptides
 **
 **	Auth:	mem
 **	Date:	11/28/2007
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -461,7 +462,7 @@ As
 	-- Construct the From clause
 	Set @sqlFrom = ' FROM'
 	Set @sqlFrom = @sqlFrom + ' #TmpJobList JobTable INNER JOIN'
-	Set @sqlFrom = @sqlFrom + ' DATABASE..T_Peptides P ON JobTable.Job = P.Analysis_ID INNER JOIN'
+	Set @sqlFrom = @sqlFrom + ' DATABASE..T_Peptides P ON JobTable.Job = P.Job INNER JOIN'
 	
 	If @AnalysisTool = 'Sequest'
 		Set @sqlFrom = @sqlFrom + ' DATABASE..T_Score_Sequest ScoreTable ON P.Peptide_ID = ScoreTable.Peptide_ID INNER JOIN'
@@ -577,7 +578,6 @@ Done:
 		Select @myError as Error_Code, @Message as Error_Message
 
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetMSMSPeptides] TO [DMS_SP_User] AS [dbo]

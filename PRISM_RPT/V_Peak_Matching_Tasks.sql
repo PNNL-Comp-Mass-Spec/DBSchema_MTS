@@ -4,6 +4,8 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
+
 CREATE VIEW [dbo].[V_Peak_Matching_Tasks]
 AS
 SELECT AnTool.Tool_Name,
@@ -28,14 +30,19 @@ SELECT AnTool.Tool_Name,
        ISNULL(AJ.AMT_Count_5pct_FDR, 0) AS AMT_Count_5pct_FDR,
        ISNULL(AJ.AMT_Count_10pct_FDR, 0) AS AMT_Count_10pct_FDR,
        ISNULL(AJ.AMT_Count_25pct_FDR, 0) AS AMT_Count_25pct_FDR,
-       ISNULL(AJ.AMT_Count_50pct_FDR, 0) AS AMT_Count_50pct_FDR
+       ISNULL(AJ.AMT_Count_50pct_FDR, 0) AS AMT_Count_50pct_FDR,
+       AJ.MD_ID,
+       AJ.QID,
+       AJ.Ini_File_Name, 
+       AJ.Comparison_Mass_Tag_Count, 
+       AJ.MD_State
 FROM T_Analysis_Job AJ
      INNER JOIN T_Analysis_Tool AnTool
        ON AJ.Tool_ID = AnTool.Tool_ID
      INNER JOIN T_Analysis_Job_Target_Jobs AJTJ
        ON AJ.Job_ID = AJTJ.Job_ID
-WHERE AJ.State_ID < 100  
-
+WHERE AJ.State_ID < 100 AND 
+      ISNULL(AJ.MD_State, 0) <> 7
 
 
 GO

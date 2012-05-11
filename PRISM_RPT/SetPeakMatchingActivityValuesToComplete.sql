@@ -18,6 +18,8 @@ CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
 **			01/03/2008 mem - Now using T_Analysis_Job to track assigned tasks
 **			10/13/2010 mem - Now looking up the AMT Count FDR stats using V_PM_Results_FDR_Stats and then storing the values in T_Analysis_Job
 **			10/14/2010 mem - Added parameter @DebugMode
+**			12/14/2011 mem - Now looking up MDID and QID using V_PM_Results_MDID_and_QID
+**			03/19/2012 mem - Now looking up Ini_File_Name, Comparison_Mass_Tag_Count, and MD_State using V_PM_Results_MDID_and_QID
 **			
 *****************************************************/
 (
@@ -49,7 +51,12 @@ As
             @AMTCount10pctFDR int = 0,
             @AMTCount25pctFDR int = 0,
             @AMTCount50pctFDR int = 0
-
+    
+	declare @MDID int
+	declare @QID int
+	declare @IniFileName varchar(255)
+	declare @ComparisonMassTagCount int
+	declare @MDState tinyint
 
 	---------------------------------------------------
 	-- Validate the inputs
@@ -142,8 +149,6 @@ As
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
-
-
 	
 	---------------------------------------------------
 	-- Lookup the AMT Count FDR values for this peak matching task
@@ -206,8 +211,62 @@ As
 		set @message = ''
 	End
 	
+	
 	---------------------------------------------------
-	-- Update T_Analysis_Job with the current time
+	-- Lookup the MD_ID, QID, etc. date for this peak matching task
+	---------------------------------------------------
+
+	Set @message = 'Prepare SQL for extracting MD_ID, QID, etc.'
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+	
+	-- Construct the working server prefix
+	If Lower(@@ServerName) = Lower(@serverName)
+		Set @WorkingServerPrefix = ''
+	Else
+		Set @WorkingServerPrefix = @serverName + '.'
+	
+	Set @S = ''
+	Set @S = @S + ' SELECT '
+	Set @S = @S +    ' @MDID = MD_ID,'
+	Set @S = @S +    ' @QID = Quantitation_ID,'
+	Set @S = @S +    ' @IniFileName = Ini_File_Name,'
+	Set @S = @S +    ' @ComparisonMassTagCount = Comparison_Mass_Tag_Count,'
+	Set @S = @S +    ' @MDState = MD_State'
+	
+	Set @S = @S + ' FROM ' + @WorkingServerPrefix + '[' + @mtdbname + '].dbo.V_PM_Results_MDID_and_QID'
+	Set @S = @S + ' WHERE Task_ID = ' + Convert(varchar(12), @taskID)
+	
+	Set @SqlParams = '@MDID int output, @QID int output, @IniFileName varchar(255) output, @ComparisonMassTagCount int output, @MDState tinyint output'
+
+	
+	Set @message = 'Sql to execute: ' + @S
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
+	Set @message = 'SqlParams: ' + @SqlParams
+	If @DebugMode <> 0
+		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
+
+	
+	exec sp_executeSql @S, @SqlParams,  @MDID output,
+										@QID output,
+										@IniFileName output,
+										@ComparisonMassTagCount output,
+										@MDState output
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	If @myError <> 0
+	Begin
+		Set @message = 'Error looking up MDID, QID, etc. values for Task ' + Convert(varchar(12), @taskID) + ' using "' + @WorkingServerPrefix + '[' + @mtdbname + '].dbo.V_PM_Results_MDID_and_QID"'
+		Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
+		set @message = ''
+	End
+	
+	---------------------------------------------------
+	-- Update T_Analysis_Job with the current time, 
+	-- FDR stats, MDID, QID, etc.
 	---------------------------------------------------
 
 	If IsNull(@JobID, 0) > 0
@@ -219,7 +278,12 @@ As
 		    AMT_Count_5pct_FDR = @AMTCount5pctFDR,
 		    AMT_Count_10pct_FDR = @AMTCount10pctFDR,
 		    AMT_Count_25pct_FDR = @AMTCount25pctFDR,
-		    AMT_Count_50pct_FDR = @AMTCount50pctFDR
+		    AMT_Count_50pct_FDR = @AMTCount50pctFDR,
+		    MD_ID = @MDID,
+		    QID = @QID,
+		    Ini_File_Name = @IniFileName,
+		    Comparison_Mass_Tag_Count = @ComparisonMassTagCount,
+		    MD_State = @MDState
 		WHERE Job_ID = @JobID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount

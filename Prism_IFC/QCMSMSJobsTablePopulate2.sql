@@ -1,19 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[QCMSMSJobsTablePopulate] ******/
+/****** Object:  StoredProcedure [dbo].[QCMSMSJobsTablePopulate2] ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
+CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate2
 /****************************************************
 **
 **	Desc: 
-**		Populates a temporary table with the jobs matching the given job filters in the specified database
-**		The calling procedure must have already created the temporary table (#TmpQCJobList)
-**
-**			CREATE TABLE #TmpQCJobList (
-**				Job int NOT NULL 
-**			)
+**	Populates a temporary table with the jobs matching the given job filters in the specified database
+**	The calling procedure must have already created the temporary table (#TmpQCJobList)
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -21,16 +16,11 @@ CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
 **	  @DBName				-- Peptide or PMT Tag database name
 **	  @message				-- Status/error message output
 **
-**	Auth:	mem
-**	Date:	08/26/2005
-**			11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
-**			11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
-**			06/21/2006 mem - Added support for Protein_Collection_List
-**							 Now auto-adding % sign wildcards to the beginning and end of @CampaignFilter, @CampaignFilter, @ExperimentFilter, and @OrganismDBFilter (provided they don't already contain a % sign)
-**			10/07/2008 mem - Now returning jobs in state 3=Load Failed (since that state is used for jobs that were loaded, but had no filter-passing results)
-**			09/22/2010 mem - Added parameters @ResultTypeFilter and @PreviewSql
-**			10/06/2010 mem - Replaced '..' with '.dbo.'
-**			04/16/2012 mem - Now looking for ! at the start of @CampaignFilter, @ExperimentFilter, and @DatasetFilter prior to auto-adding % sign wildcards
+**		Auth:	mem
+**		Date:	08/26/2005
+**				11/10/2005 mem - Updated to preferably use Acq_Time_Start rather than Created_DMS for dataset date filtering
+**			    11/23/2005 mem - Added brackets around @DBName as needed to allow for DBs with dashes in the name
+**				06/21/2006 mem - Added support for Protein_Collection_List
 **
 *****************************************************/
 (
@@ -38,10 +28,10 @@ CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
 	@message varchar(512) = '' output,
 	
 	@InstrumentFilter varchar(1024) = '',			-- Single instrument name or instrument name match strings; use SP GetInstrumentNamesForDB to see the instruments for the jobs in a given DB
-	@CampaignFilter varchar(1024) = '',				-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @CampaignFilter
-	@ExperimentFilter varchar(1024) = '',			-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @ExperimentFilter
-	@DatasetFilter varchar(1024) = '',				-- If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @DatasetFilter
-	@OrganismDBFilter varchar(1024) = '',			-- Matches field Organism_DB_Name or field Protein_Collection_List; If this filter is defined, and if it doesn't contain any % wildcards, then the % wildcard will be added at the beginning and end of @OrganismDBFilter
+	@CampaignFilter varchar(1024) = '',
+	@ExperimentFilter varchar(1024) = '',
+	@DatasetFilter varchar(1024) = '',
+	@OrganismDBFilter varchar(1024) = '',			-- Matches field Organism_DB_Name or field Protein_Collection_List
 
 	@DatasetDateMinimum varchar(32) = '',			-- Ignored if blank; note that this will be compared against the Dataset's Acquisition Start Time, if possible
 	@DatasetDateMaximum varchar(32) = '',			-- Ignored if blank; note that this will be compared against the Dataset's Acquisition End Time, if possible
@@ -49,9 +39,7 @@ CREATE PROCEDURE dbo.QCMSMSJobsTablePopulate
 	@JobMinimum int = 0,							-- Ignored if 0
 	@JobMaximum int = 0,							-- Ignored if 0
 	
-	@maximumJobCount int = 0,						-- 0 means to return all rows
-	@ResultTypeFilter varchar(32) = 'XT_Peptide_Hit',	-- Peptide_Hit is Sequest, XT_Peptide_Hit is X!Tandem, IN_Peptide_Hit is Inspect
-	@PreviewSql tinyint = 0
+	@maximumJobCount int = 0						-- 0 means to return all rows
 )
 As
 	set nocount on
@@ -62,63 +50,6 @@ As
 	set @myRowCount = 0
 	
 	set @message = ''
-
-	---------------------------------------------------
-	-- Check for NULLs
-	---------------------------------------------------
-	
-	Set @DBName = IsNull(@DBName, '')
-	Set @InstrumentFilter = IsNull(@InstrumentFilter, '')
-	Set @CampaignFilter = IsNull(@CampaignFilter, '')
-	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
-	Set @DatasetFilter = IsNull(@DatasetFilter, '')
-	Set @OrganismDBFilter = IsNull(@OrganismDBFilter, '')
-
-	Set @ResultTypeFilter = IsNull(@ResultTypeFilter, '')
-	Set @previewSql = IsNull(@previewSql, 0)
-
-	---------------------------------------------------
-	-- Auto add percent signs (wildcards) to the filter names
-	---------------------------------------------------
-	
-	If CharIndex('%', @CampaignFilter) < 1
-	Begin
-		If @CampaignFilter Like '!%'
-			Set @CampaignFilter = '!%' + Substring(@CampaignFilter, 2, 2048) + '%'
-		Else
-			Set @CampaignFilter = '%' + @CampaignFilter + '%'
-	End
-
-	If CharIndex('%', @ExperimentFilter) < 1
-	Begin
-		If @ExperimentFilter Like '!%'
-			Set @ExperimentFilter = '!%' + Substring(@ExperimentFilter, 2, 2048) + '%'
-		Else
-			Set @ExperimentFilter = '%' + @ExperimentFilter + '%'
-	End
-	
-
-	If CharIndex('%', @DatasetFilter) < 1
-	Begin
-		If @DatasetFilter Like '!%'
-			Set @DatasetFilter = '!%' + Substring(@DatasetFilter, 2, 2048) + '%'
-		Else
-			Set @DatasetFilter = '%' + @DatasetFilter + '%'
-	End
-		
-	-- Note: @OrganismDBFilter can apply to field Organism_DB_Name or field Protein_Collection_List
-	-- Additionally, if @OrganismDBFilter does not end in .fasta and does not contain a % sign, then we'll auto add a % sign to the end
-	If CharIndex('%', @OrganismDBFilter) < 1
-	Begin
-		If CharIndex('.fasta', @OrganismDBFilter) > 1
-			Set @OrganismDBFilter = Replace(@OrganismDBFilter, '.fasta', '')
-
-		If @OrganismDBFilter Like '!%'
-			Set @OrganismDBFilter = '!%' + Substring(@OrganismDBFilter, 2, 2048) + '%'
-		Else
-			Set @OrganismDBFilter = '%' + @OrganismDBFilter + '%'		
-	End
-
 	
 	---------------------------------------------------
 	-- Validate that DB exists on this server, determine its type,
@@ -192,10 +123,9 @@ As
 		Set @sqlFromA = @sqlFromA + ' (SELECT IsNull(JobTable.Dataset_Acq_Time_Start, JobTable.Dataset_Created_DMS) AS Dataset_Date,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
-		Set @sqlFromA = @sqlFromA +  ' WHERE JobTable.State <> 5 '				-- Exclude jobs marked as 'No Interest' in PMT Tag DBs
-		If @ResultTypeFilter <> ''
-			Set @sqlFromA = @sqlFromA +  ' AND JobTable.ResultType = ''' + @ResultTypeFilter + ''''
+		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @sqlFromA = @sqlFromA +  ' WHERE  JobTable.ResultType = ''Peptide_Hit'''
+		Set @sqlFromA = @sqlFromA +     ' AND JobTable.State <> 5'				-- Exclude jobs marked as 'No Interest' in PMT Tag DBs
 
 		-- Add the optional dataset range filters
 		If Len(@DatasetDateMinimum) > 0
@@ -218,12 +148,11 @@ As
 		-- Peptide DB
 		Set @sqlFromA = @sqlFromA + ' (SELECT IsNull(DatasetTable.Acq_Time_Start, DatasetTable.Created_DMS) AS Dataset_Date,'
 		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset_ID, JobTable.Job, JobTable.Instrument,'
-		Set @sqlFromA = @sqlFromA +    ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
-		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE.dbo.T_Analysis_Description JobTable'
-		Set @sqlFromA = @sqlFromA +       ' INNER JOIN DATABASE.dbo.T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-		Set @sqlFromA = @sqlFromA +  ' WHERE JobTable.Process_State IN (3, 70)'				-- Include jobs with state 70 in Peptide DBs; also include jobs with state 3 so that we return counts of "0" for jobs with no filter-passing results
-		If @ResultTypeFilter <> ''
-			Set @sqlFromA = @sqlFromA +  ' AND JobTable.ResultType = ''' + @ResultTypeFilter + ''''
+		Set @sqlFromA = @sqlFromA +         ' JobTable.Dataset AS Dataset_Name, JobTable.Completed AS Job_Date'
+		Set @sqlFromA = @sqlFromA +  ' FROM DATABASE..T_Analysis_Description JobTable'
+		Set @sqlFromA = @sqlFromA +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
+		Set @sqlFromA = @sqlFromA +  ' WHERE  JobTable.ResultType = ''Peptide_Hit'''
+		Set @sqlFromA = @sqlFromA +     ' AND JobTable.Process_State = 70'				-- Only include jobs with state 70 in Peptide DBs
 
 		-- Add the optional dataset range filters
 		If Len(@DatasetDateMinimum) > 0
@@ -263,8 +192,8 @@ As
 	-- Customize the columns for the given database
 	---------------------------------------------------
 
-	set @sqlFromA = replace(@sqlFromA, 'DATABASE.dbo.', '[' + @DBName + '].dbo.')
-
+	set @sqlFromA = replace(@sqlFromA, 'DATABASE..', '[' + @DBName + ']..')
+	
 
 	---------------------------------------------------
 	-- Parse filter parameters to create a proper
@@ -290,7 +219,8 @@ As
 	Exec ConvertListToWhereClause @CampaignFilter, 'JobTable.Campaign', @entryListWhereClause = @CampaignWhere OUTPUT
 	Exec ConvertListToWhereClause @ExperimentFilter, 'JobTable.Experiment', @entryListWhereClause = @ExperimentWhere OUTPUT
 	Exec ConvertListToWhereClause @DatasetFilter, 'JobTable.Dataset', @entryListWhereClause = @DatasetWhere OUTPUT
-		
+	
+	-- Note: @OrganismDBFilter can apply to field Organism_DB_Name or field Protein_Collection_List
 	Exec ConvertListToWhereClause @OrganismDBFilter, 'JobTable.Organism_DB_Name', @entryListWhereClause = @OrganismDBWhere OUTPUT
 	Exec ConvertListToWhereClause @OrganismDBFilter, 'JobTable.Protein_Collection_List', @entryListWhereClause = @ProteinCollectionWhere OUTPUT
 
@@ -320,21 +250,12 @@ As
 	-- Populate #TmpQCJobList with the list of jobs
 	---------------------------------------------------
 	
-	if @PreviewSql <> 0
-		print	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy
-	else
-		Exec (	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
+	--print	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy
+	Exec (	@sqlSelect + ' ' + @sqlFromA + ' ' + @InstrumentWhere + @CampaignWhere + @ExperimentWhere + @DatasetWhere + @OrganismDBWhere + ' ' + @sqlFromB + ' ' + @sqlGroupBy + ' ' + @sqlOrderBy)
 	--	
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
 Done:
 	return @myError
 
-
-GO
-GRANT EXECUTE ON [dbo].[QCMSMSJobsTablePopulate] TO [DMS_SP_User] AS [dbo]
-GO
-GRANT VIEW DEFINITION ON [dbo].[QCMSMSJobsTablePopulate] TO [MTS_DB_Dev] AS [dbo]
-GO
-GRANT VIEW DEFINITION ON [dbo].[QCMSMSJobsTablePopulate] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -31,6 +31,7 @@ CREATE PROCEDURE ObtainSeqOccurrenceStats
 **	Auth:	mem
 **	Date:	03/01/2006
 **			09/22/2010 mem - Added parameters @PeptideProphetMinimum, @MSGFThreshold, @ResultTypeFilter, and @PreviewSql
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -208,11 +209,11 @@ As
 	If @DBType = 1
 	Begin
 		-- PMT Tag DB
-		Set @sqlFrom = @sqlFrom + ' (SELECT Pep.Mass_Tag_ID AS Seq_ID, COUNT(DISTINCT Pep.Analysis_ID) AS Job_Count_Observed,'
+		Set @sqlFrom = @sqlFrom + ' (SELECT Pep.Mass_Tag_ID AS Seq_ID, COUNT(DISTINCT Pep.Job) AS Job_Count_Observed,'
 		Set @sqlFrom = @sqlFrom +         ' AVG(Pep.GANET_Obs) As Avg_NET, COUNT(Pep.Peptide_ID) As Cnt_NET, StDev(Pep.GANET_Obs) As StD_NET'
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Job'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'
@@ -253,13 +254,13 @@ As
 	Else
 	Begin
 		-- Peptide DB
-		Set @sqlFrom = @sqlFrom + ' (SELECT Pep.Seq_ID, COUNT(DISTINCT Pep.Analysis_ID) AS Job_Count_Observed,'
+		Set @sqlFrom = @sqlFrom + ' (SELECT Pep.Seq_ID, COUNT(DISTINCT Pep.Job) AS Job_Count_Observed,'
 		Set @sqlFrom = @sqlFrom +         ' AVG(Pep.GANET_Obs) As Avg_NET, COUNT(Pep.Peptide_ID) As Cnt_NET, StDev(Pep.GANET_Obs) As StD_NET'
 		Set @sqlFrom = @sqlFrom +  ' FROM DATABASE..T_Analysis_Description JobTable'
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN #TmpQCJobList ON JobTable.Job = #TmpQCJobList.Job'
 
 		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Datasets DatasetTable ON JobTable.Dataset_ID = DatasetTable.Dataset_ID'
-		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Analysis_ID'
+		Set @sqlFrom = @sqlFrom +       ' INNER JOIN DATABASE..T_Peptides Pep ON JobTable.Job = Pep.Job'
 
 		If @XCorrMinimum > 0 OR @DeltaCn2Minimum > 0 OR @RankXcMaximum > 0
 			Set @sqlFrom = @sqlFrom +   ' INNER JOIN DATABASE..T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID'

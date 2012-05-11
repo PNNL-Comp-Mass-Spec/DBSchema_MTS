@@ -17,10 +17,11 @@ CREATE PROCEDURE dbo.ConvertListToWhereClause
 **	Date:	04/7/2004
 **			09/23/2004 grk - replaced ORF with Entry
 **			11/27/2007 mem - Expanded @entryList and @entryListWhereClause to varchar(max)
+**			04/16/2012 mem - Now looking for ! at the start of @entryList
 **    
 *****************************************************/
 (
-	@entryList varchar(max) = '',								-- Comma-separated list of values
+	@entryList varchar(max) = '',								-- Comma-separated list of values (with or without wildcard symbols).  If this list starts with an exclamation point, then @entryListWhereClause will be of the form "NOT (...)"
 	@ColumnName varchar(255) = 'MyColumn',						-- Column for which the Where statements will apply
 	@entryListWhereClause varchar(max) = '' output,
 	@message varchar(512) = '' output,
@@ -34,9 +35,21 @@ As
 	declare @myError int
 	set @myError = 0
 
-	set @message = ''
-	declare @result int
+	Declare @result int
+	Declare @AddNot tinyint = 0
 
+	set @message = ''
+
+
+	---------------------------------------------------
+	-- Look for an exclamation mark at the start of @entryList
+	---------------------------------------------------
+	If @entryList Like '!%'
+	Begin
+		Set @entryList = SubString(@entryList, 2, Len(@entryList)-1)
+		Set @AddNot = 1
+	End
+	
 	---------------------------------------------------
 	-- Add single quotes around each Entry in @entryList
 	---------------------------------------------------
@@ -105,6 +118,11 @@ As
 		If Len(@entryListWhereClause) > 0
 			Set @entryListWhereClause = @entryListWhereClause + ' OR '
 		Set @entryListWhereClause = @entryListWhereClause + @sqlLikeClause
+	End
+	
+	If @AddNot = 1
+	Begin
+		Set @entryListWhereClause = 'NOT ( ' + @entryListWhereClause + ')'
 	End
 	
 	

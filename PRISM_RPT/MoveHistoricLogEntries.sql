@@ -8,7 +8,7 @@ CREATE Procedure MoveHistoricLogEntries
 **
 **	Desc: Move log entries from main log into the 
 **        historic log (insert and then delete)
-**        that are older then given by @intervalHrs
+**        that are older then @intervalDays days
 **
 **	Return values: 0: success, otherwise, error code
 **	
@@ -18,16 +18,17 @@ CREATE Procedure MoveHistoricLogEntries
 **			08/01/2004 mem - Updated @intervalHrs to 168 (1 week)
 **			12/01/2005 mem - Increased size of @DBName from 64 to 128 characters
 **			08/17/2006 mem - Added support for column Entered_By
+**			10/18/2011 mem - Changed from @intervalHrs to @intervalDays
 **    
 *****************************************************/
 (
-	@intervalHrs int = 168
+	@intervalDays int = 180
 )
 As
 	set nocount on
 	declare @cutoffDateTime datetime
 	
-	set @cutoffDateTime = dateadd(hour, -1 * @intervalHrs, getdate())
+	set @cutoffDateTime = dateadd(day, -1 * @intervalDays, getdate())
 
 	declare @DBName varchar(128)
 	set @DBName = DB_NAME()
@@ -90,7 +91,6 @@ As
 	commit transaction @transName
 	
 	return 0
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MoveHistoricLogEntries] TO [MTS_DB_Dev] AS [dbo]
