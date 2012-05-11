@@ -22,7 +22,7 @@ CREATE TABLE [dbo].[T_Internal_Std_to_Protein_Map](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Internal_Std_to_Protein_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Internal_Std_to_Protein_Map_T_Internal_Std_Proteins] FOREIGN KEY([Internal_Std_Protein_ID])
+ALTER TABLE [dbo].[T_Internal_Std_to_Protein_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Internal_Std_to_Protein_Map_T_Internal_Std_Proteins] FOREIGN KEY([Internal_Std_Protein_ID])
 REFERENCES [T_Internal_Std_Proteins] ([Internal_Std_Protein_ID])
 GO
 ALTER TABLE [dbo].[T_Internal_Std_to_Protein_Map] CHECK CONSTRAINT [FK_T_Internal_Std_to_Protein_Map_T_Internal_Std_Proteins]

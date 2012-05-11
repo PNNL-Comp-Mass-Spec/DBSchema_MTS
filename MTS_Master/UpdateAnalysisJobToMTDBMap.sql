@@ -15,11 +15,13 @@ CREATE PROCEDURE dbo.UpdateAnalysisJobToMTDBMap
 **	Auth:	mem
 **	Date:	08/30/2006
 **			09/07/2006 mem - Now populating column Process_State
+**			10/28/2011 mem - Added @RemoveDuplicateRows
 **    
 *****************************************************/
 (
 	@ServerFilter varchar(128) = '',				-- If supplied, then only examines the given Server
 	@PreviewSql tinyint = 0,
+	@RemoveDuplicateRows tinyint = 1,
 	@JobCountUpdatedTotal int = 0 OUTPUT,
 	@message varchar(512)='' output
 )
@@ -34,6 +36,7 @@ As
 	-- Validate or clear the input/output parameters
 	Set @ServerFilter = IsNull(@ServerFilter, '')
 	Set @PreviewSql = IsNull(@PreviewSql, 0)
+	Set @RemoveDuplicateRows = IsNull(@RemoveDuplicateRows, 1)
 	
 	Set @JobCountUpdatedTotal = 0
 	Set @message = ''
@@ -273,7 +276,54 @@ As
 		End -- </b>
 	End -- </a>
 
-		
+	If @RemoveDuplicateRows <> 0
+	Begin
+		-----------------------------------------------------------
+		-- Delete extra, invalid rows from T_Analysis_Job_to_MT_DB_Map
+		-- These rows typically correspond to databases that were
+		-- once on server A, but the DB was moved to server B
+		-- and now the database has been deleted
+		-----------------------------------------------------------
+		--	
+		DELETE T_Analysis_Job_to_MT_DB_Map
+		FROM T_Analysis_Job_to_MT_DB_Map Target
+			INNER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID
+						FROM T_MTS_MT_DBs
+							INNER JOIN ( SELECT MT_DB_ID,
+												COUNT(DISTINCT Server_ID) AS ServerCount
+											FROM T_Analysis_Job_to_MT_DB_Map
+											GROUP BY MT_DB_ID
+											HAVING (COUNT(DISTINCT Server_ID) > 1) 
+										) ProblemQ
+								ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
+						) DBsToFix
+			ON Target.MT_DB_ID = DBsToFix.MT_DB_ID
+			LEFT OUTER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID,
+									T_MTS_MT_DBs.Server_ID
+							FROM T_MTS_MT_DBs
+									INNER JOIN ( SELECT MT_DB_ID,
+														COUNT(DISTINCT Server_ID) AS ServerCount
+												FROM T_Analysis_Job_to_MT_DB_Map
+												GROUP BY MT_DB_ID
+												HAVING (COUNT(DISTINCT Server_ID) > 1) 
+										) ProblemQ
+									ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
+							) CorrectServerQ
+			ON Target.MT_DB_ID = CorrectServerQ.MT_DB_ID AND
+				Target.Server_ID = CorrectServerQ.Server_ID
+		WHERE (CorrectServerQ.Server_ID IS NULL)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+		If @myRowCount > 0
+		Begin
+			Set @message = 'Deleted extra, duplicate rows from T_Analysis_Job_to_MT_DB_Map; this indicates that multiple MTS DBs have the same information cached for jobs in a given MT DB; you should delete the extra rows from MT_Main on one of the servers'	
+			Exec PostLogEntry 'Error', @message, 'UpdateAnalysisJobToMTDBMap'
+			Set @message = ''
+		end
+	End
+	
 Done:
 	-----------------------------------------------------------
 	-- Exit

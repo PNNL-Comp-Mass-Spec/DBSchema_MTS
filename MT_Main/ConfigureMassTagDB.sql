@@ -20,6 +20,7 @@ CREATE PROCEDURE ConfigureMassTagDB
 **			07/25/2006 mem - Added parameter @UseProteinSequencesDB
 **			07/27/2006 mem - Updated to use @OrganismDBFileList to also populate Protein_Collection_Filter
 **			05/15/2007 mem - Expanded several input parameters to varchar(max)
+**			10/28/2011 mem - Added parameter @PeptideImportMSGFSpecProbFilter
 **    
 *****************************************************/
 (
@@ -29,7 +30,7 @@ CREATE PROCEDURE ConfigureMassTagDB
 	@proteinDBName varchar(1024) = '',				-- e.g. ORF_Deinococcus_V23 (can be a comma separated list)
 	@OrganismDBFileList varchar(max) = '',			-- Comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
 	@ParameterFileList varchar(max) = '',			-- e.g. sequest_N14_NE.params, sequest_N14_NE_Stat_C_Iodoacetimide.params  (can be a comma separated list)
-
+	
 	@PeptideImportFilterIDList varchar(512) = '',	-- e.g. 117
 	@PMTQualityScoreSetList varchar(512) = '',		-- e.g. 105, 1				(separate values with a semicolon)
 	@SeparationTypeList varchar(max) = '',			-- e.g. LC-ISCO-Standard
@@ -41,6 +42,8 @@ CREATE PROCEDURE ConfigureMassTagDB
 
 	@DatasetDateMinimum	varchar(32) = '',			-- e.g. 1/1/2000
 	@UseProteinSequencesDB tinyint = 1,				-- Set to 1 to use the V_DMS_Protein_Sequences views to obtain the protein sequence information for protein names
+
+	@PeptideImportMSGFSpecProbFilter varchar(24) = '1',
 	
 	@message varchar(512) = '' output
 )
@@ -107,6 +110,7 @@ AS
 	
 	Exec AddUpdateConfigEntry @MTDBName, 'Dataset_DMS_Creation_Date_Minimum', @DatasetDateMinimum
 
+	Exec AddUpdateConfigEntry @MTDBName, 'Peptide_Import_MSGF_SpecProb_Filter', @PeptideImportMSGFSpecProbFilter
 
 	-- Update T_Process_Step_Control as needed
 	Set @UseProteinSequencesDB = IsNull(@UseProteinSequencesDB, 0)

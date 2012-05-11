@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.MasterUpdateStepPauseControl
 /****************************************************
 ** 
@@ -15,12 +16,14 @@ CREATE PROCEDURE dbo.MasterUpdateStepPauseControl
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	03/11/2006
+**	Date:	03/11/2006 mem - Initial verion
+**			11/04/2011 mem - Added @ProcessingStepNameExclusionFilter
 **    
 *****************************************************/
 (
-	@Pause tinyint = 0,								-- Set to 1 to pause, 0 to unpause; ignored if @Enable = 0
-	@ProcessingStepNameFilter varchar(64) = '',		-- Optional filter
+	@Pause tinyint = 0,										-- Set to 1 to pause, 0 to unpause
+	@ProcessingStepNameFilter varchar(64) = '',				-- Optional processing step to exclusively process, e.g. Peptide_DB_Update
+	@ProcessingStepNameExclusionFilter varchar(64) = '',    -- Optional processing step to skip, e.g. MS_Peak_Matching
 	@PostLogEntry tinyint = 1,
 	@message varchar(255) = '' output
 )
@@ -36,6 +39,7 @@ As
 	declare @NewExecutionState int
 	
 	Set @ProcessingStepNameFilter = IsNull(@ProcessingStepNameFilter, '')
+	Set @ProcessingStepNameExclusionFilter = IsNull(@ProcessingStepNameExclusionFilter, '')
 	
 	If IsNull(@Pause, 255) < 255
 	Begin
@@ -53,7 +57,8 @@ As
 		UPDATE T_Process_Step_Control
 		SET Execution_State = @NewExecutionState
 		WHERE Execution_State = @ExecutionStateMatch AND
-			  (@ProcessingStepNameFilter = '' OR Processing_Step_Name = @ProcessingStepNameFilter)
+			  (@ProcessingStepNameFilter = '' OR Processing_Step_Name = @ProcessingStepNameFilter) AND
+			  (@ProcessingStepNameExclusionFilter = '' OR Processing_Step_Name <> @ProcessingStepNameExclusionFilter)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -80,6 +85,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MasterUpdateStepPauseControl] TO [MTS_DB_Dev] AS [dbo]

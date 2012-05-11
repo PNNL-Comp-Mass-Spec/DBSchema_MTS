@@ -19,6 +19,7 @@ CREATE Procedure dbo.AckErrors
 **	Date:	02/20/2008
 **			03/28/2008 mem - Added parameter @DBMatchList
 **			12/09/2008 mem - Updated to examine the value in @ErrorActionCode when calling AckError for each acknowledged error
+**			01/04/2012 mem - Added parameter @ProcessErrorStateZeroEntries
 **    
 *****************************************************/
 (
@@ -27,6 +28,7 @@ CREATE Procedure dbo.AckErrors
 	@DBSkipList varchar(2048) = '',				-- Databases to skip when @InfoOnly = 0; comma separated list of database names
 	@ErrorHoldoffMinutes int = 30,
 	@DaysToKeepAckedEntries int = 15,
+	@ProcessErrorStateZeroEntries tinyint = 0,		-- If 1, then auto-processes all entries with DB_Error_State = 0; this allows you to manually set a series of entries to DB_Error_State 0 so they can be processed
 	@PreviewSql tinyint= 0 ,
 	@message varchar(255) = '' OUTPUT
 )
@@ -128,26 +130,39 @@ As
 	-- state DB_Error_State =1 and are older than @ErrorHoldoffMinutes minutes
 	---------------------------------------------------
 
-	Set @S = ''
-	
-	Set @S = @S + ' INSERT INTO #TmpEntriesToProcess (Entry_ID_Global)'
-	Set @S = @S + ' SELECT Entry_ID_Global'
-	Set @S = @S + ' FROM T_MTS_DB_Errors'
-	Set @S = @S + ' WHERE (DB_Error_State = 1) AND '
-	Set @S = @S +       ' (NOT Database_Name IN (SELECT Database_Name FROM #TmpDBsToSkip)) AND'
-	Set @S = @S +       ' (DATEDIFF(minute, Posting_Time, GETDATE()) > ' + Convert(varchar(12), @DaysToKeepAckedEntries) + ')'
-	
-	If @OnlyUseSpecifiedDBs <> 0
-		Set @S = @S + ' AND (Database_Name IN (SELECT Database_Name FROM #TmpDBsToInclude))'
+	If @ProcessErrorStateZeroEntries = 1
+	Begin
+		INSERT INTO #TmpEntriesToProcess (Entry_ID_Global)
+		SELECT Entry_ID_Global
+		FROM T_MTS_DB_Errors
+		WHERE (DB_Error_State = 0)
+		ORDER BY Server_Name, Database_Name, Entry_ID_Global
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+	End
+	Else
+	Begin
+		Set @S = ''
 		
-	Set @S = @S + ' ORDER BY Server_Name, Database_Name, Entry_ID_Global'
-	
-	If @PreviewSql <> 0
-		Print @S
+		Set @S = @S + ' INSERT INTO #TmpEntriesToProcess (Entry_ID_Global)'
+		Set @S = @S + ' SELECT Entry_ID_Global'
+		Set @S = @S + ' FROM T_MTS_DB_Errors'
+		Set @S = @S + ' WHERE (DB_Error_State = 1) AND '
+		Set @S = @S +       ' (NOT Database_Name IN (SELECT Database_Name FROM #TmpDBsToSkip)) AND'
+		Set @S = @S +       ' (DATEDIFF(minute, Posting_Time, GETDATE()) > ' + Convert(varchar(12), @DaysToKeepAckedEntries) + ')'
 		
-	Exec (@S)
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount	
+		If @OnlyUseSpecifiedDBs <> 0
+			Set @S = @S + ' AND (Database_Name IN (SELECT Database_Name FROM #TmpDBsToInclude))'
+			
+		Set @S = @S + ' ORDER BY Server_Name, Database_Name, Entry_ID_Global'
+		
+		If @PreviewSql <> 0
+			Print @S
+			
+		Exec (@S)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+	End
 
 	Set @EntryCount = @myRowCount
 	

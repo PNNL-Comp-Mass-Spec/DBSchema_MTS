@@ -72,7 +72,7 @@ GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Affected]) TO [DMS_SP_User
 GO
 GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Entered_By]) TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Process_Step_Control]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States] FOREIGN KEY([Execution_State])
+ALTER TABLE [dbo].[T_Process_Step_Control]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States] FOREIGN KEY([Execution_State])
 REFERENCES [T_Process_Step_Control_States] ([Execution_State])
 GO
 ALTER TABLE [dbo].[T_Process_Step_Control] CHECK CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States]

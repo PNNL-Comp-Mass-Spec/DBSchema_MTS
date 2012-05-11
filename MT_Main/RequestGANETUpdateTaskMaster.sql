@@ -32,6 +32,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 **			03/19/2010 mem - Added parameter @ParamFileName
 **			04/06/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 10 sections)
 **			04/20/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 30 sections)
+**			01/18/2012 mem - Now calling VerifyUpdateEnabled separately for PT and MT databases
 **
 *****************************************************/
 (
@@ -119,11 +120,6 @@ As
 	set @taskAvailable = 0
 
 
-	-- Validate that updating is enabled, abort if not enabled
-	exec VerifyUpdateEnabled 'Peptide_DB_Update', 'RequestGANETUpdateTaskMaster', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
-	If @UpdateEnabled = 0
-		Goto Done
-
 	---------------------------------------------------
 	-- Create a temporary table to hold list of databases to process
 	---------------------------------------------------
@@ -136,41 +132,57 @@ As
 	-- Add an index to #TmpDBsToProcess on column UniqueRowID
 	CREATE CLUSTERED INDEX #IX_TmpDBsToProcess ON #TmpDBsToProcess(UniqueRowID)
 
-	---------------------------------------------------
-	-- Populate the temporary table with the list of 
-	-- mass tag databases that are not deleted
-	---------------------------------------------------
-	INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
-	SELECT	MTL_Name, 0 As IsPeptideDB
-	FROM	T_MT_Database_List
-	WHERE MTL_State <> 100
-	ORDER BY MTL_Name
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0
-	begin
-		set @message = 'could not load temporary table with candidate mass tag databases'
-		goto done
-	end
+	-- Validate that Peptide DB updating is enabled; skip Peptide DBs if not enabled
+	exec VerifyUpdateEnabled 'Peptide_DB_Update', 'RequestGANETUpdateTaskMaster', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled > 0
+	Begin
+		---------------------------------------------------
+		-- Add the peptide databases that are not deleted
+		---------------------------------------------------
+		INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
+		SELECT	PDB_Name, 1 As IsPeptideDB
+		FROM	T_Peptide_Database_List
+		WHERE PDB_State <> 100
+		ORDER BY PDB_Name
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0
+		begin
+			set @message = 'could not load temporary table with candidate peptide databases'
+			goto done
+		end
+	End
 
-	---------------------------------------------------
-	-- Add the peptide databases that are not deleted
-	---------------------------------------------------
-	INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
-	SELECT	PDB_Name, 1 As IsPeptideDB
-	FROM	T_Peptide_Database_List
-	WHERE PDB_State <> 100
-	ORDER BY PDB_Name
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0
-	begin
-		set @message = 'could not load temporary table with candidate peptide databases'
-		goto done
-	end
-
+	-- Validate that AMT tag DB updating is enabled; skip MT DBs if not enabled
+	exec VerifyUpdateEnabled 'PMT_Tag_DB_Update', 'RequestGANETUpdateTaskMaster', @AllowPausing = 0, @PostLogEntryIfDisabled = 0, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled > 0
+	Begin
+		---------------------------------------------------
+		-- Populate the temporary table with the list of 
+		-- mass tag databases that are not deleted
+		---------------------------------------------------
+		INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
+		SELECT	MTL_Name, 0 As IsPeptideDB
+		FROM	T_MT_Database_List
+		WHERE MTL_State <> 100
+		ORDER BY MTL_Name
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0
+		begin
+			set @message = 'could not load temporary table with candidate mass tag databases'
+			goto done
+		end
+	End
+	
+	If Not Exists (Select * From #TmpDBsToProcess)
+	Begin
+		-- Nothing to do
+		Goto done
+	End
+	
 	---------------------------------------------------
 	-- Lookup the standard folder paths and filenames
 	-- For Peptide DB's, the filenames will be overridden

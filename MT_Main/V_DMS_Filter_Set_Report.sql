@@ -32,7 +32,10 @@ SELECT FSO.Filter_Type_Name,
        PR.[19] AS Inspect_TotalPRMScore,
        PR.[20] AS Inspect_FScore,
        PR.[21] AS Inspect_PValue,
-       PR.[22] AS MSGF_SpecProb
+       PR.[22] AS MSGF_SpecProb,
+       PR.[23] AS MSGFDB_SpecProb,
+       PR.[24] AS MSGFDB_PValue,
+       PR.[25] AS MSGFDB_FDR       
 FROM ( SELECT FSD.Filter_Set_ID,
               FSD.Filter_Criteria_Group_ID,
               FSD.Criterion_ID,
@@ -40,7 +43,7 @@ FROM ( SELECT FSD.Filter_Set_ID,
        FROM dbo.T_DMS_Filter_Set_Details_Cached FSD ) AS DataQ
      PIVOT ( MAX(Criterion)
              FOR Criterion_id
-             IN ( [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [18], [19], [20], [21], [22] ) 
+             IN ( [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [18], [19], [20], [21], [22], [23], [24], [25] ) 
      ) AS PR
      INNER JOIN dbo.T_DMS_Filter_Set_Overview_Cached FSO
        ON PR.Filter_Set_ID = FSO.Filter_Set_ID

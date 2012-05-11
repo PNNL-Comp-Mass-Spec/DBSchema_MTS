@@ -19,6 +19,7 @@ CREATE Procedure dbo.UpdateDatabaseStates
 **			06/25/2008 mem - Added parameter @StateIgnoreList
 **			04/20/2009 mem - Updated @StateIgnoreList to be '15,100'
 **			02/05/2010 mem - Now sending @RemoteDescriptionField, @RemoteOrganismField, @RemoteCampaignField,and @PreviewSql to UpdateDatabaseStatesSingleTable
+**			10/18/2011 mem - Now calling UpdateDatabaseStatesForOfflineDBs to auto-mark databases as deleted if their Last_Online date is more than 30 days ago yet their state is less than 15
 **    
 *****************************************************/
 (
@@ -167,6 +168,16 @@ As
 		End -- </B>
 			
 	End -- </A>
+
+
+	-- Mark MT databases as deleted (state 100) if they have been offline for over 30 days
+	--		
+	exec UpdateDatabaseStatesForOfflineDBs 'T_MTS_MT_DBs', 'MT', @InfoOnly=0
+
+	-- Mark PT databases as deleted (state 100) if they have been offline for over 30 days
+	--
+	exec UpdateDatabaseStatesForOfflineDBs 'T_MTS_Peptide_DBs', 'PT', @InfoOnly=0
+
 	
 Done:
 	-----------------------------------------------------------

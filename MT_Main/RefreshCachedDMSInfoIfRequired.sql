@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
+CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
 /****************************************************
 **
 **	Desc: 
@@ -15,11 +15,12 @@ CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
 **	Return values: 0: success, otherwise, error code
 **
 **	Auth:	mem
-**	Date:	05/09/2007 - See Ticket:422
-**			09/18/2008 - Added parameters @DynamicMinimumCountThreshold and @UpdateIntervalAllItems
-**			08/02/2010 - Now calling RefreshCachedDMSFilterSetInfo, RefreshCachedDMSResidues, and RefreshCachedDMSEnzymes
-**			12/13/2010 - Now calling RefreshCachedProteinCollectionInfo
-**			12/14/2010 - Now calling RefreshCachedOrganismDBInfo
+**	Date:	05/09/2007 mem - See Ticket:422
+**			09/18/2008 mem - Added parameters @DynamicMinimumCountThreshold and @UpdateIntervalAllItems
+**			08/02/2010 mem - Now calling RefreshCachedDMSFilterSetInfo, RefreshCachedDMSResidues, and RefreshCachedDMSEnzymes
+**			12/13/2010 mem - Now calling RefreshCachedProteinCollectionInfo
+**			12/14/2010 mem - Now calling RefreshCachedOrganismDBInfo
+**			10/17/2011 mem - Now setting @SourceMTSServer to '' when calling 'RefreshCachedDMSAnalysisJobInfo' or 'RefreshCachedDMSDatasetInfo'
 **    
 *****************************************************/
 (
@@ -52,6 +53,7 @@ As
 	Declare @IDColumnName varchar(64)
 	Declare @SP varchar(128)
 	Declare @AlwaysFullRefresh tinyint
+	Declare @AddnlParamsForSP varchar(256)
 
 	Declare @S nvarchar(2048)
 	Declare @Params nvarchar(256)
@@ -82,39 +84,40 @@ As
 			CacheTable varchar(128),
 			IDColumnName varchar(128),
 			SP varchar(128),
-			AlwaysFullRefresh tinyint
+			AlwaysFullRefresh tinyint Default 1,
+			AddnlParamsForSP varchar(256) Default ''
 		)
 		
 		-- Jobs and Datasets 
 		--
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Analysis_Job_Info_Cached', 'Job', 'RefreshCachedDMSAnalysisJobInfo', 0)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, AddnlParamsForSP)
+		VALUES ('T_DMS_Analysis_Job_Info_Cached', 'Job', 'RefreshCachedDMSAnalysisJobInfo', 0, '@SourceMTSServer=''''')
 
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, AddnlParamsForSP)
+		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0, '@SourceMTSServer=''''')
 		
 		-- Mass correction factors and filter sets
 		--
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Mass_Correction_Factors_Cached', 'Mass_Correction_ID', 'RefreshCachedDMSMassCorrectionFactors', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Mass_Correction_Factors_Cached', 'Mass_Correction_ID', 'RefreshCachedDMSMassCorrectionFactors')
 		
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Filter_Set_Overview_Cached', 'Filter_Set_ID', 'RefreshCachedDMSFilterSetInfo', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Filter_Set_Overview_Cached', 'Filter_Set_ID', 'RefreshCachedDMSFilterSetInfo')
 
 		-- Residues and enzymes
 		--
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Residues_Cached', 'Residue_ID', 'RefreshCachedDMSResidues', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Residues_Cached', 'Residue_ID', 'RefreshCachedDMSResidues')
 
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Enzymes_Cached', 'Enzyme_ID', 'RefreshCachedDMSEnzymes', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Enzymes_Cached', 'Enzyme_ID', 'RefreshCachedDMSEnzymes')
 
 		-- Fasta Files and Protein Collections
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Organism_DB_Info', 'ID', 'RefreshCachedOrganismDBInfo', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Organism_DB_Info', 'ID', 'RefreshCachedOrganismDBInfo')
 
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh)
-		VALUES ('T_DMS_Protein_Collection_Info', 'Protein_Collection_ID', 'RefreshCachedProteinCollectionInfo', 1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Protein_Collection_Info', 'Protein_Collection_ID', 'RefreshCachedProteinCollectionInfo')
 
 		-- Call each stored procedure to perform the update
 		--
@@ -128,7 +131,8 @@ As
 			             @CacheTable = CacheTable,
 			             @IDColumnName = IDColumnName,
 			             @SP = SP,
-			             @AlwaysFullRefresh = AlwaysFullRefresh
+			             @AlwaysFullRefresh = AlwaysFullRefresh,
+			             @AddnlParamsForSP = AddnlParamsForSP
 			FROM #Tmp_CachedDMSInfoToUpdate
 			WHERE  EntryID > @EntryID
 			ORDER BY EntryID
@@ -192,10 +196,17 @@ As
 					End
 
 					Set @S = 'Exec ' + @SP
-					
+
 					If @IDMinimum <> 0
-						Set @S = @S + ' ' + Convert(varchar(12), @IDMinimum)
+					Begin
+						If Len(@AddnlParamsForSP) > 0
+							Set @AddnlParamsForSP = Convert(varchar(12), @IDMinimum) + ', ' + @AddnlParamsForSP
+						Else
+							Set @AddnlParamsForSP = Convert(varchar(12), @IDMinimum)
+					End
 					
+					If Len(@AddnlParamsForSP) > 0
+						Set @S = @S + ' ' + @AddnlParamsForSP
 					
 					If @InfoOnly = 0
 						Exec (@S)
@@ -226,6 +237,7 @@ As
 			
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSInfoIfRequired] TO [MTS_DB_Dev] AS [dbo]

@@ -1,15 +1,15 @@
 /****** Object:  Database [MT_HistoricLog] ******/
 CREATE DATABASE [MT_HistoricLog] ON  PRIMARY 
-( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 347392KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 745600KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
-( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 2560KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 5696KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MT_HistoricLog] SET COMPATIBILITY_LEVEL = 100
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin
-EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'enable'
+EXEC [MT_HistoricLog].[dbo].[sp_fulltext_database] @action = 'disable'
 end
 GO
 ALTER DATABASE [MT_HistoricLog] SET ANSI_NULL_DEFAULT OFF 
@@ -64,13 +64,21 @@ ALTER DATABASE [MT_HistoricLog] SET RECOVERY FULL
 GO
 ALTER DATABASE [MT_HistoricLog] SET  MULTI_USER 
 GO
-ALTER DATABASE [MT_HistoricLog] SET PAGE_VERIFY TORN_PAGE_DETECTION  
+ALTER DATABASE [MT_HistoricLog] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [MT_HistoricLog] SET DB_CHAINING OFF 
 GO
+GRANT CONNECT TO [d3m578] AS [dbo]
+GO
+GRANT CONNECT TO [DMSWebUser] AS [dbo]
+GO
+GRANT CONNECT TO [h0693075] AS [dbo]
+GO
+GRANT CONNECT TO [msdadmin] AS [dbo]
+GO
 GRANT CONNECT TO [MTAdmin] AS [dbo]
 GO
-GRANT CONNECT TO [MTS_DB_Dev] AS [dbo]
+GRANT CONNECT TO [MTS_DB_DEV] AS [dbo]
 GO
 GRANT CONNECT TO [MTS_DB_Lite] AS [dbo]
 GO

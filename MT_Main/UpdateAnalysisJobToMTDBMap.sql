@@ -25,6 +25,7 @@ CREATE Procedure UpdateAnalysisJobToMTDBMap
 **			11/13/2007 mem - Updated to use PMTs_Last_Affected instead of querying T_Mass_Tags to determine the most recently changed peptides for each analysis job
 **						   - Added @previewSql and @infoOnly
 **			03/11/2008 mem - Added parameters @DBStateMin and @DBStateMax
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -189,7 +190,7 @@ As
 				Set @sql = @sql +   ' ( SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
 				Set @sql = @sql +     ' FROM [' + @MTL_Name + '].dbo.T_Mass_Tags MT INNER JOIN'
 				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
-				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @sql = @sql +          ' [' + @MTL_Name + '].dbo.T_Analysis_Description TAD ON P.Job = TAD.Job'
 				Set @sql = @sql +     ' GROUP BY TAD.Job'
 				Set @sql = @sql +   ' ) LookupQ ON TAD.Job = LookupQ.Job'
 				Set @sql = @sql + ' WHERE TAD.Analysis_Tool LIKE ''%sequest%'' AND NOT Created IS NULL'

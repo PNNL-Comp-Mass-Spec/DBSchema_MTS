@@ -13,7 +13,6 @@ CREATE TABLE [dbo].[T_MT_Database_List](
 	[MTL_NetSQL_Conn_String] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MTL_NetOleDB_Conn_String] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MTL_State] [int] NULL,
-	[MTL_Update_Schedule] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MTL_Last_Update] [datetime] NULL,
 	[MTL_Last_Import] [datetime] NULL,
 	[MTL_Import_Holdoff] [int] NULL,
@@ -126,7 +125,7 @@ AS
 
 
 GO
-ALTER TABLE [dbo].[T_MT_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name] FOREIGN KEY([MTL_State])
+ALTER TABLE [dbo].[T_MT_Database_List]  WITH CHECK ADD  CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name] FOREIGN KEY([MTL_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_MT_Database_List] CHECK CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name]

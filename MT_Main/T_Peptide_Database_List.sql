@@ -124,7 +124,7 @@ AS
 
 
 GO
-ALTER TABLE [dbo].[T_Peptide_Database_List]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name] FOREIGN KEY([PDB_State])
+ALTER TABLE [dbo].[T_Peptide_Database_List]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name] FOREIGN KEY([PDB_State])
 REFERENCES [T_MT_Database_State_Name] ([ID])
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List] CHECK CONSTRAINT [FK_T_Peptide_Database_List_T_MT_Database_State_Name]

@@ -3,18 +3,20 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE Procedure dbo.QueryAllPeptideDatabasesForDatasetStats
 /****************************************************
 ** 
-**		Desc: Runs a query against all peptide databases,
+**	Desc: Runs a query against all peptide databases,
 **		      storing the results in a table in this DB
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	mem
-**		Date:	03/20/2006
+**	Auth:	mem
+**	Date:	03/20/2006
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -163,7 +165,7 @@ As
 				Set @Sql = @Sql +               ' END AS InstrumentClass,'
 				Set @Sql = @Sql +               ' COUNT(*) AS PeptideCount'
 				Set @Sql = @Sql +        ' FROM  DATABASE..T_Analysis_Description TAD INNER JOIN'
-				Set @Sql = @Sql +              ' DATABASE..T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN'
+				Set @Sql = @Sql +              ' DATABASE..T_Peptides P ON TAD.Job = P.Job INNER JOIN'
 				Set @Sql = @Sql +              ' DATABASE..T_Peptide_Filter_Flags PFF ON P.Peptide_ID = PFF.Peptide_ID INNER JOIN'
 				Set @Sql = @Sql +              ' DATABASE..T_Score_Discriminant DS ON P.Peptide_ID = DS.Peptide_ID'
 				Set @Sql = @Sql +        ' WHERE TAD.ResultType LIKE ''%peptide_hit'' AND PFF.Filter_ID = 117 AND'
@@ -189,6 +191,7 @@ Done:
 		SELECT 'Done: Processed ' + Convert(varchar(9), @processCount) + ' databases' As Message
 
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QueryAllPeptideDatabasesForDatasetStats] TO [MTS_DB_Dev] AS [dbo]
