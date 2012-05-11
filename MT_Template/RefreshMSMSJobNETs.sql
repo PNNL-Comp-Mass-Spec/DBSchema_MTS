@@ -1,11 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSJobNETs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE Procedure dbo.RefreshMSMSJobNETs
+CREATE Procedure RefreshMSMSJobNETs
 /****************************************************
 **
 **	Desc: 
@@ -38,6 +37,8 @@ CREATE Procedure dbo.RefreshMSMSJobNETs
 **			03/25/2010 mem - Added new NET Regression fields
 **			05/28/2010 mem - Fixed query bug when @infoOnly is non-zero
 **			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
+**			10/04/2011 mem - Now skipping jobs where ScanTime_NET_Slope is Null in the source PT database
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -171,6 +172,9 @@ As
 	Begin -- <a>
 		Set @PeptideDBPath = ''
 
+		-- Note that @PeptideDBPath will have square brackets around the database name
+		-- This allows for processing databases with a space or dash in the name
+		
 		SELECT TOP 1 @PeptideDBPath = PeptideDBPath,
 					 @PeptideDBID = PeptideDBID
 		FROM #T_Peptide_Database_List
@@ -193,19 +197,20 @@ As
 			Set @S = @S + 'INSERT INTO #T_Tmp_JobsToUpdateNETs (Job)'
 			Set @S = @S + ' SELECT TAD.Job'
 			Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN '
-			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
+			Set @S = @S +        @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
 			Set @S = @S + ' 	TAD.Job = PepTAD.Job'
-			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @PeptideDBID) + ' AND'
-			Set @S = @S + '    ('
-			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Slope, 0) <> IsNull(PepTAD.ScanTime_NET_Slope, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Intercept, 0) <> IsNull(PepTAD.ScanTime_NET_Intercept, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_Fit, 0) <> IsNull(PepTAD.ScanTime_NET_Fit, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0)) OR'
+			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(nvarchar(21), @PeptideDBID) + ' AND '
+			Set @S = @S + '    NOT PepTAD.ScanTime_NET_Slope Is Null AND '
+			Set @S = @S +     ' ('
+			Set @S = @S +     '  (IsNull(TAD.ScanTime_NET_Slope, 0) <> IsNull(PepTAD.ScanTime_NET_Slope, 0)) OR'
+			Set @S = @S +     '  (IsNull(TAD.ScanTime_NET_Intercept, 0) <> IsNull(PepTAD.ScanTime_NET_Intercept, 0)) OR'
+			Set @S = @S +     '  (IsNull(TAD.ScanTime_NET_Fit, 0) <> IsNull(PepTAD.ScanTime_NET_Fit, 0)) OR'
+			Set @S = @S +     '  (IsNull(TAD.ScanTime_NET_RSquared, 0) <> IsNull(PepTAD.ScanTime_NET_RSquared, 0)) OR'
 			
-			Set @S = @S + '  (IsNull(TAD.Regression_Order, 0) <> IsNull(PepTAD.Regression_Order, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.Regression_Filtered_Data_Count, 0) <> IsNull(PepTAD.Regression_Filtered_Data_Count, 0)) OR'
-			Set @S = @S + '  (IsNull(TAD.Regression_Equation, 0) <> IsNull(PepTAD.Regression_Equation, 0))'
-			Set @S = @S + '    )'
+			Set @S = @S +     '  (IsNull(TAD.Regression_Order, 0) <> IsNull(PepTAD.Regression_Order, 0)) OR'
+			Set @S = @S +     '  (IsNull(TAD.Regression_Filtered_Data_Count, 0) <> IsNull(PepTAD.Regression_Filtered_Data_Count, 0)) OR'
+			Set @S = @S +     '  (IsNull(TAD.Regression_Equation, 0) <> IsNull(PepTAD.Regression_Equation, 0))'
+			Set @S = @S +     ' )'
 
 			If Len(IsNull(@JobFilterList, '')) > 0
 				Set @S = @S + ' AND TAD.Job In (' + @JobFilterList + ')'
@@ -228,12 +233,12 @@ As
 			Set @S = @S + ' SELECT LookupQ.Job'
 			Set @S = @S + ' FROM (SELECT TAD.Job,'
 			Set @S = @S +              ' COUNT(TP.Peptide_ID) AS NullScanTimeCount'
-			Set @S = @S +    ' FROM T_Analysis_Description AS TAD INNER JOIN'
-			Set @S = @S + ' T_Peptides AS TP ON TAD.Job = TP.Analysis_ID'
-			Set @S = @S +              ' WHERE TP.Scan_Time_Peak_Apex IS NULL AND TAD.State > 1'
-			Set @S = @S +              ' GROUP BY TAD.Job'
+			Set @S = @S +       ' FROM T_Analysis_Description AS TAD INNER JOIN'
+			Set @S = @S +            ' T_Peptides AS TP ON TAD.Job = TP.Job'
+			Set @S = @S +       ' WHERE TP.Scan_Time_Peak_Apex IS NULL AND TAD.State > 1'
+			Set @S = @S +       ' GROUP BY TAD.Job'
 			Set @S = @S +      ' ) LookupQ INNER JOIN '
-			Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
+			Set @S = @S +        @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map JobMap ON '
 			Set @S = @S + '   LookupQ.Job = JobMap.Job LEFT OUTER JOIN #T_Tmp_JobsToUpdateNETs'
 			Set @S = @S + '   ON LookupQ.Job = #T_Tmp_JobsToUpdateNETs.Job'
 			Set @S = @S + ' WHERE (LookupQ.NullScanTimeCount > 0) AND #T_Tmp_JobsToUpdateNETs.Job IS NULL'
@@ -284,15 +289,15 @@ As
 				End
 
 				Set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
-				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON'
-				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND'
+				Set @S = @S +        @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON'
+				Set @S = @S +      ' TP.Job = PepTP.Job AND'
 				Set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND'
 				Set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND'
 				Set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND'
 				Set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID AND'
 				Set @S = @S +      ' (IsNull(TP.GANET_Obs,0) <> PepTP.GANET_Obs OR'
 				Set @S = @S +       ' IsNull(TP.Scan_Time_Peak_Apex,0) <> PepTP.Scan_Time_Peak_Apex)'
-				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Job = JTU.Job'
 				If @infoOnly <> 0
 				Begin
 					Set @S = @S + ' GROUP BY JTU.Job'
@@ -331,19 +336,19 @@ As
 				End
 			
 				Set @S = @S + ' FROM T_Peptides AS TP INNER JOIN '
-				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON '
-				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND '
+				Set @S = @S +        @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON '
+				Set @S = @S +      ' TP.Job = PepTP.Job AND '
 				Set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND '
 				Set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND '
 				Set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND '
 				Set @S = @S +      ' TP.Mass_Tag_ID = PepTP.Seq_ID INNER JOIN'
 				Set @S = @S +      ' T_Score_Discriminant AS SD ON '
 				Set @S = @S +      ' TP.Peptide_ID = SD.Peptide_ID INNER JOIN '
-				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS PepSD ON '
+				Set @S = @S +        @PeptideDBPath + '.dbo.T_Score_Discriminant AS PepSD ON '
 				Set @S = @S +      ' PepTP.Peptide_ID = PepSD.Peptide_ID AND '
 				Set @S = @S +      ' (IsNull(SD.DiscriminantScore,0) <> PepSD.DiscriminantScore OR '
 				Set @S = @S +       ' IsNull(SD.DiscriminantScoreNorm,0) <> PepSD.DiscriminantScoreNorm)'
-				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateNETs AS JTU ON TP.Job = JTU.Job'
 
 				If @infoOnly <> 0
 				Begin
@@ -394,7 +399,7 @@ As
 					Set @S = @S +     ' ScanTime_NET_RSquared = PTAD.ScanTime_NET_RSquared,'
 					Set @S = @S +     ' Regression_Order = PTAD.Regression_Order, '
 					Set @S = @S +     ' Regression_Filtered_Data_Count = PTAD.Regression_Filtered_Data_Count,'
-					Set @S = @S +    ' Regression_Equation = PTAD.Regression_Equation, '
+					Set @S = @S +     ' Regression_Equation = PTAD.Regression_Equation, '
 					Set @S = @S +     ' Regression_Equation_XML = PTAD.Regression_Equation_XML'
 
 				End
@@ -475,7 +480,6 @@ Done:
 	DROP TABLE #T_Tmp_JobsToUpdateNETs
 			
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSJobNETs] TO [MTS_DB_Dev] AS [dbo]

@@ -185,7 +185,7 @@ AS
 
 
 GO
-ALTER TABLE [dbo].[T_Process_Config]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters] FOREIGN KEY([Name])
+ALTER TABLE [dbo].[T_Process_Config]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters] FOREIGN KEY([Name])
 REFERENCES [T_Process_Config_Parameters] ([Name])
 GO
 ALTER TABLE [dbo].[T_Process_Config] CHECK CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters]

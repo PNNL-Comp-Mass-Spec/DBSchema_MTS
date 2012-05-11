@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.CreateAMTCollection
+CREATE PROCEDURE CreateAMTCollection
 /****************************************************
 **
 **	Desc: 
@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.CreateAMTCollection
 **	Date:	05/13/2009
 **			05/19/2009 mem - Added filter on State > 1 when populating #Tmp_AMTCollection_Job_List
 **						   - Added parameters @UpdateMTStats and @UpdatePMTQS
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -88,7 +89,7 @@ AS
 		       COUNT(DISTINCT MT.Mass_Tag_ID) AS AMT_Count
 		FROM #Tmp_AMTCollection_Job_List
 		     INNER JOIN T_Peptides P
-		       ON #Tmp_AMTCollection_Job_List.Job = P.Analysis_ID
+		       ON #Tmp_AMTCollection_Job_List.Job = P.Job
 		     INNER JOIN T_Score_Discriminant SD
 		       ON P.Peptide_ID = SD.Peptide_ID
 		     INNER JOIN T_Mass_Tags MT
@@ -181,7 +182,7 @@ AS
 		                MTN.StD_GANET AS NET_StDev
 		FROM #Tmp_AMTCollection_Job_List
 		     INNER JOIN T_Peptides P
-		       ON #Tmp_AMTCollection_Job_List.Job = P.Analysis_ID
+		       ON #Tmp_AMTCollection_Job_List.Job = P.Job
 		     INNER JOIN T_Score_Discriminant SD
 		       ON P.Peptide_ID = SD.Peptide_ID
 		     INNER JOIN T_Mass_Tags MT
@@ -203,6 +204,5 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QuantitationProcessWorkStepG
+CREATE PROCEDURE QuantitationProcessWorkStepG
 /****************************************************	
 **  Desc: 
 **
@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.QuantitationProcessWorkStepG
 **
 **  Auth:	mem
 **	Date:	09/07/2006
+**			11/02/2011 mem - Added ORDER BY Ref_ID
 **
 ****************************************************/
 (
@@ -117,6 +118,7 @@ AS
 						@Protein_Sequence_Full = Protein_Sequence
 		FROM #Protein_Coverage
 		WHERE Ref_ID > @LastRefID
+		ORDER BY Ref_ID
 		--	
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -281,7 +283,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepG] TO [MTS_DB_Dev] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdateGeneralStatistics
+CREATE Procedure UpdateGeneralStatistics
 /****************************************************
 **
 **	Desc: Gathers several general statistics from mass
@@ -33,6 +33,8 @@ CREATE Procedure dbo.UpdateGeneralStatistics
 **			06/04/2006 mem - Now examining Protein_Collection_List and Protein_Options_List in T_Analysis_Description
 **			01/13/2008 mem - Increased field sizes in #StatsSaved
 **			04/05/2008 mem - Updated to use Cleavage_State_Max in T_Mass_Tags
+**			07/22/2011 mem - Now including Peak Matching Task stats
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 As
@@ -399,7 +401,7 @@ As
 		FROM (	SELECT	T_Analysis_Description.Organism_DB_Name, 
 						COUNT(DISTINCT T_Peptides.Mass_Tag_ID) AS PMTCount
 				FROM T_Peptides INNER JOIN
-					T_Analysis_Description ON T_Peptides.Analysis_ID = T_Analysis_Description.Job
+					T_Analysis_Description ON T_Peptides.Job = T_Analysis_Description.Job
 				GROUP BY T_Analysis_Description.Organism_DB_Name
 			) As StatsQ
 		ORDER BY Label
@@ -413,6 +415,27 @@ As
 	FROM T_Analysis_Description 
 	GROUP BY Parameter_File_Name
 	ORDER BY Parameter_File_Name
+
+	-- Update Peak Matching stats by state
+	--
+	INSERT INTO T_General_Statistics (Category, Label, Value)
+	SELECT 'Peak Matching Tasks by State' AS category,
+	       CONVERT(varchar(11), PM.Processing_State) + ' - ' + TSN.Processing_State_Name AS Label, 
+	       COUNT(*) AS Value
+	FROM T_Peak_Matching_Task PM INNER JOIN
+		T_Peak_Matching_Task_State_Name TSN ON PM.Processing_State = TSN.Processing_State
+	GROUP BY PM.Processing_State, TSN.Processing_State_Name
+	ORDER BY PM.Processing_State
+
+	-- Update Peak Matching stats by .Ini file
+	--
+	INSERT INTO T_General_Statistics (Category, Label, Value)
+	SELECT 'Peak Matching Tasks by .Ini File' AS category,
+	       Ini_File_Name as Label, COUNT(*) AS Value
+	FROM T_Peak_Matching_Task
+	WHERE (Processing_State <> 5)
+	GROUP BY Ini_File_Name
+	ORDER BY Ini_File_Name
 
 
 	-- update GANET histogram
@@ -449,7 +472,6 @@ As
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[UpdateGeneralStatistics] TO [DMS_SP_User] AS [dbo]

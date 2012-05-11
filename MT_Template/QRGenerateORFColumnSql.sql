@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[QRGenerateORFColumnSql] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QRGenerateORFColumnSql
+CREATE PROCEDURE QRGenerateORFColumnSql
 /****************************************************	
 **  Desc: Generates the sql for the ORF column data
 **		  obtained from T_Quantitation_Results
@@ -27,6 +27,7 @@ CREATE PROCEDURE dbo.QRGenerateORFColumnSql
 **			01/24/2008 mem - Added parameters @IncludeProteinDescription and @IncludeQID
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **			10/14/2010 mem - Added parameters @MatchScoreModeMin and @MatchScoreModeMax, which control the name given to values in column Match_Score_Average
+**			01/25/2012 mem - Now returning Abundance_Average_Unscaled
 **
 ****************************************************/
 (
@@ -72,6 +73,8 @@ AS
 	
 	Set @sql = @sql + 'Round(QR.Abundance_Average,4) AS Abundance_Average,'
 	Set @sql = @sql + 'Round(QR.Abundance_StDev,4) AS Abundance_StDev,'
+	Set @sql = @sql + 'CASE WHEN QD.Normalize_To_Standard_Abundances > 0 THEN Round(QR.Abundance_Average / 100.0 * QD.Standard_Abundance_Max + QD.Standard_Abundance_Min, 0) ELSE Round(QR.Abundance_Average,4) END As Abundance_Average_Unscaled,'
+	
 	Set @sql = @sql + 'Round(QR.Match_Score_Average,3) '
 	
 	If @MatchScoreModeMin = 0 And @MatchScoreModeMax = 0
@@ -111,7 +114,6 @@ AS
 	Set @OrfColumnSql = @sql
 	
 	Return 0
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRGenerateORFColumnSql] TO [DMS_SP_User] AS [dbo]

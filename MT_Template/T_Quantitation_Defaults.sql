@@ -26,6 +26,7 @@ CREATE TABLE [dbo].[T_Quantitation_Defaults](
 	[Minimum_Peptide_Replicate_Count] [smallint] NOT NULL,
 	[ORF_Coverage_Computation_Level] [tinyint] NOT NULL,
 	[Internal_Std_Inclusion_Mode] [tinyint] NOT NULL,
+	[Protein_Degeneracy_Mode] [tinyint] NOT NULL,
  CONSTRAINT [PK_T_Quantitation_Defaults] PRIMARY KEY CLUSTERED 
 (
 	[Default_ID] ASC
@@ -75,4 +76,6 @@ GO
 ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_ORF_Coverage_Computation_Level]  DEFAULT ((1)) FOR [ORF_Coverage_Computation_Level]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Internal_Std_Inclusion_Mode]  DEFAULT ((0)) FOR [Internal_Std_Inclusion_Mode]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Defaults] ADD  CONSTRAINT [DF_T_Quantitation_Defaults_Protein_Degeneracy_Mode]  DEFAULT ((0)) FOR [Protein_Degeneracy_Mode]
 GO

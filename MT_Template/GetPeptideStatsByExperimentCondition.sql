@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[GetPeptideStatsByExperimentCondition] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure GetPeptideStatsByExperimentCondition
@@ -23,6 +23,7 @@ CREATE Procedure GetPeptideStatsByExperimentCondition
 **	Date:	05/01/2008
 **			05/05/2008 mem - Updated to treat null Peptide_Prophet_Probability values as 0
 **			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -620,7 +621,7 @@ AS
 		Set @S = @S +            ' Pep.Charge_State'
 		Set @S = @S +        ' FROM T_Analysis_Description TAD'
 		Set @S = @S +        ' INNER JOIN T_Peptides Pep'
-		Set @S = @S +          ' ON TAD.Job = Pep.Analysis_ID'
+		Set @S = @S +          ' ON TAD.Job = Pep.Job'
 		Set @S = @S +        ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
 		Set @S = @S +          ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
 		Set @S = @S +        ' INNER JOIN #Tmp_BaseData D'
@@ -677,7 +678,7 @@ AS
 					Set @S = @S +        ' TAD.Dataset_ID,'
 					Set @S = @S +        ' SeqFilteredDataQ.Mass_Tag_ID,'
 					Set @S = @S +        ' SeqFilteredDataQ.Scan_Number'
-					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Analysis_ID,'
+					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Job,'
 					Set @S = @S +                        ' Pep.Mass_Tag_ID,'
 					Set @S = @S +                        ' Pep.Scan_Number'
 					Set @S = @S +        ' FROM MassTagsQ'
@@ -693,7 +694,7 @@ AS
 					Set @S = @S +              ' (Pep.Charge_State >= 3 AND SS.XCorr >= 3.0)) '
 					Set @S = @S +      ' ) SeqFilteredDataQ'
 					Set @S = @S +      ' INNER JOIN T_Analysis_Description TAD'
-					Set @S = @S +        ' ON SeqFilteredDataQ.Analysis_ID = TAD.Job'
+					Set @S = @S +        ' ON SeqFilteredDataQ.Job = TAD.Job'
 					Set @S = @S +      ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
 					Set @S = @S +        ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
 					
@@ -703,7 +704,7 @@ AS
 					Set @S = @S +        ' TAD.Dataset_ID,'
 					Set @S = @S +        ' XTFilteredDataQ.Mass_Tag_ID,'
 					Set @S = @S +        ' XTFilteredDataQ.Scan_Number'
-					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Analysis_ID,'
+					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Job,'
 					Set @S = @S +                ' Pep.Mass_Tag_ID,'
 					Set @S = @S +                ' Pep.Scan_Number'
 					Set @S = @S +        ' FROM MassTagsQ'
@@ -719,7 +720,7 @@ AS
 					Set @S = @S +              ' (Pep.Charge_State >= 3 AND XT.Hyperscore >= 17)) '
 					Set @S = @S +      ' ) XTFilteredDataQ'
 					Set @S = @S +      ' INNER JOIN T_Analysis_Description TAD'
-					Set @S = @S +        ' ON XTFilteredDataQ.Analysis_ID = TAD.Job'
+					Set @S = @S +        ' ON XTFilteredDataQ.Job = TAD.Job'
 					Set @S = @S +      ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
 					Set @S = @S +        ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
 
@@ -729,7 +730,7 @@ AS
 					Set @S = @S +        ' TAD.Dataset_ID,'
 					Set @S = @S +        ' INFilteredDataQ.Mass_Tag_ID,'
 					Set @S = @S +        ' INFilteredDataQ.Scan_Number'
-					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Analysis_ID,'
+					Set @S = @S + ' FROM ( SELECT DISTINCT Pep.Job,'
 					Set @S = @S +                ' Pep.Mass_Tag_ID,'
 					Set @S = @S +                ' Pep.Scan_Number'
 					Set @S = @S +        ' FROM MassTagsQ'
@@ -745,7 +746,7 @@ AS
 					Set @S = @S +              ' (Pep.Charge_State >= 3 AND I.FScore >= 0)) '
 					Set @S = @S +      ' ) INFilteredDataQ'
 					Set @S = @S +      ' INNER JOIN T_Analysis_Description TAD'
-					Set @S = @S +        ' ON INFilteredDataQ.Analysis_ID = TAD.Job'
+					Set @S = @S +        ' ON INFilteredDataQ.Job = TAD.Job'
 					Set @S = @S +      ' INNER JOIN #Tmp_Condition_to_DS_Map DS_Conditions'
 					Set @S = @S +        ' ON TAD.Dataset_ID = DS_Conditions.Dataset_ID'
 										

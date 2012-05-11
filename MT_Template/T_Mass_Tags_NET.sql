@@ -20,7 +20,7 @@ CREATE TABLE [dbo].[T_Mass_Tags_NET](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Mass_Tags_NET]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Mass_Tags_NET_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
+ALTER TABLE [dbo].[T_Mass_Tags_NET]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tags_NET_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
 GO
 ALTER TABLE [dbo].[T_Mass_Tags_NET] CHECK CONSTRAINT [FK_T_Mass_Tags_NET_T_Mass_Tags]

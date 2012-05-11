@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[ComputeMaxObsAreaByJob] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure ComputeMaxObsAreaByJob
@@ -23,6 +23,7 @@ CREATE Procedure ComputeMaxObsAreaByJob
 **			03/01/2006 mem - Added parameter @JobBatchSize
 **			03/03/2006 mem - Added parameter @MaxJobsToProcess
 **			04/23/2008 mem - Now explicitly dropping the temporary table created by this procedure; in addition, uniquified the JobsToUpdate temporary table
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -68,11 +69,11 @@ As
 	---------------------------------------------------
 	set @S = ''	
 	set @S = @S + ' INSERT INTO #T_Tmp_JobsToComputeArea (Job)'
-	set @S = @S + ' SELECT Analysis_ID'
+	set @S = @S + ' SELECT Job'
 	set @S = @S + ' FROM T_Peptides'
 	If Len(IsNull(@JobFilterList, '')) > 0
-		Set @S = @S + ' WHERE T_Peptides.Analysis_ID In (' + @JobFilterList + ')'
-	set @S = @S + ' GROUP BY Analysis_ID'
+		Set @S = @S + ' WHERE T_Peptides.Job In (' + @JobFilterList + ')'
+	set @S = @S + ' GROUP BY Job'
 	set @S = @S + ' HAVING SUM(Max_Obs_Area_In_Job) = 0'
 
 	exec @result = sp_executesql @S
@@ -138,7 +139,7 @@ As
 				UPDATE T_Peptides
 				SET Max_Obs_Area_In_Job = 0
 				FROM T_Peptides AS Pep INNER JOIN
-					#T_Tmp_JobsToComputeArea AS JTU ON Pep.Analysis_ID = JTU.Job
+					#T_Tmp_JobsToComputeArea AS JTU ON Pep.Job = JTU.Job
 				WHERE (JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID) AND
 					  Max_Obs_Area_In_Job <> 0
 				--
@@ -156,7 +157,7 @@ As
 			If @infoOnly <> 0
 			Begin
 				-- Return the Job and the number of rows that would be updated
-				set @S = @S + ' SELECT TP.Analysis_ID, COUNT(TP.Peptide_ID) AS Peptide_Rows_To_Update'
+				set @S = @S + ' SELECT TP.Job, COUNT(TP.Peptide_ID) AS Peptide_Rows_To_Update'
 			End
 			Else
 			Begin
@@ -165,20 +166,20 @@ As
 			End
 
 			set @S = @S + ' FROM T_Peptides AS TP INNER JOIN'
-			set @S = @S +      ' (	SELECT  Pep.Analysis_ID, Pep.Mass_Tag_ID, '
+			set @S = @S +      ' (	SELECT  Pep.Job, Pep.Mass_Tag_ID, '
 			set @S = @S +                 ' MIN(Pep.Peptide_ID) AS Min_Peptide_ID'
 			set @S = @S +         ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +              ' (  SELECT Pep.Analysis_ID, Pep.Mass_Tag_ID,'
+			set @S = @S +              ' (  SELECT Pep.Job, Pep.Mass_Tag_ID,'
 			set @S = @S +                        ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
 			set @S = @S +                 ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +                      ' #T_Tmp_JobsToComputeArea AS JTU ON Pep.Analysis_ID = JTU.Job'
+			set @S = @S +                      ' #T_Tmp_JobsToComputeArea AS JTU ON Pep.Job = JTU.Job'
 			set @S = @S +                 ' WHERE (JTU.Unique_Row_ID BETWEEN ' + Convert(varchar(19), @MinUniqueRowID) + ' AND ' + Convert(varchar(19), @MaxUniqueRowID) + ')'
-			set @S = @S +                 ' GROUP BY Pep.Analysis_ID, Pep.Mass_Tag_ID'
+			set @S = @S +                 ' GROUP BY Pep.Job, Pep.Mass_Tag_ID'
 			set @S = @S +              ' ) AS LookupQ ON'
-			set @S = @S +              ' Pep.Analysis_ID = LookupQ.Analysis_ID AND'
+			set @S = @S +              ' Pep.Job = LookupQ.Job AND'
 			set @S = @S +              ' Pep.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND'
 			set @S = @S +              ' LookupQ.Max_Area_Times_SN = IsNull(Pep.Peak_Area * Pep.Peak_SN_Ratio, 0)'
-			set @S = @S + ' GROUP BY Pep.Analysis_ID, Pep.Mass_Tag_ID'
+			set @S = @S + ' GROUP BY Pep.Job, Pep.Mass_Tag_ID'
 			set @S = @S +      ' ) AS BestObsQ ON'
 			set @S = @S +      ' TP.Peptide_ID = BestObsQ.Min_Peptide_ID'
 			--
@@ -186,8 +187,8 @@ As
 
 			If @infoOnly <> 0
 			Begin
-				set @S = @S + ' GROUP BY TP.Analysis_ID'
-				set @S = @S + ' ORDER BY TP.Analysis_ID'
+				set @S = @S + ' GROUP BY TP.Job'
+				set @S = @S + ' ORDER BY TP.Job'
 			End
 
 			exec @result = sp_executesql @S

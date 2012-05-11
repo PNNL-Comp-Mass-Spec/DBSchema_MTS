@@ -1,10 +1,10 @@
 /****** Object:  View [dbo].[V_Sequest_vs_Inspect] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-create VIEW V_Sequest_vs_Inspect
+CREATE VIEW V_Sequest_vs_Inspect
 AS
 SELECT SequestQ.Dataset_ID,
        SequestQ.Scan_Number,
@@ -28,7 +28,7 @@ FROM ( SELECT TAD.Dataset_ID,
               SS.DeltaCn2
        FROM T_Analysis_Description TAD
             INNER JOIN T_Peptides P
-              ON TAD.Job = P.Analysis_ID
+              ON TAD.Job = P.Job
             INNER JOIN T_Score_Sequest SS
               ON P.Peptide_ID = SS.Peptide_ID
        WHERE (TAD.ResultType = 'Peptide_Hit') ) SequestQ
@@ -44,7 +44,7 @@ FROM ( SELECT TAD.Dataset_ID,
                          I.Normalized_Score AS Inspect_Normalized_Score
                   FROM T_Analysis_Description TAD
                        INNER JOIN T_Peptides P
-                         ON TAD.Job = P.Analysis_ID
+                         ON TAD.Job = P.Job
                        INNER JOIN T_Score_Inspect I
                          ON P.Peptide_ID = I.Peptide_ID
                   WHERE (TAD.ResultType = 'IN_Peptide_Hit') ) InspectQ

@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 40 ******/
+/****** RowCount: 45 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -21,7 +21,11 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('GANET_Weighted_Average_Enable
 INSERT INTO [T_Process_Config_Parameters] VALUES ('General_Statistics_Update_Interval','Update Interval',1,1,'Time interval (in hours) to update the general statistics table')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Job_Info_DMS_Update_Interval','Update Interval',1,1,'Time interval (in hours) to validate the analysis job details against those stored in DMS')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Instrument_Class','FTICR analysis job import',1,99,'Allow FTICR analysis jobs that are associated with datasets that were produced on this type of MS instrument')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Job_Maximum','FTICR analysis job import',0,1,'Maximum FTICR anlaysis job number to import')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Job_Minimum','FTICR analysis job import',0,1,'Minimum FTICR anlaysis job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Result_Type','FTICR analysis job import',1,99,'Allow FTICR analysis jobs that produce this type of result')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Job_Maximum','MS/MS analysis job import',0,1,'Maximum MS/MS job number to import')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Job_Minimum','MS/MS analysis job import',0,1,'Minimum MS/MS job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Result_Type','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that produce this type of result')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Regression_Param_File_Name','NET Regression',0,1,'Name of the parameter file to use when performing NET regression (stored at \\gigasax\DMS_Parameter_Files\NET_Regression\)')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Organism','Info only',1,99,'Not used for filtering - information only')
@@ -31,6 +35,7 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_DB_Name','MS/MS analy
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_Filter_ID','Peptide hit import',0,99,'Allow peptide hits that have satisfied this filter')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_MaxJobsPerBatch','MS/MS analysis job import',1,1,'Number of jobs to process in each batch of jobs whose Peptide_hit data is being imported')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_MaxPeptidesPerBatch','MS/MS analysis job import',1,1,'Number of peptides to process in each batch of jobs whose Peptide_hit data is being imported')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Import_MSGF_SpecProb_Filter','Peptide hit import',0,1,'MSGF Spectrum Probability filter to apply during peptide import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Thresholds','Statistics Threshold',1,99,'Comma separated list of minimum discriminant score and minimum peptide prophet value to filter on when preparing stats for T_Peptide_Load_Stats')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Load_Stats_Detail_Update_Interval','Update Interval',1,1,'Defines how often detailed load stats are added to T_Peptide_Load_Stats when loading a large number of analysis job')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Peptide_Obs_Count_Filter_ID','Info Only',1,1,'Filter ID to use when determining the MS/MS peptide observation count that passes a filter')

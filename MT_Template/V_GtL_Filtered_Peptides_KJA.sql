@@ -3,10 +3,11 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW [dbo].[V_GtL_Filtered_Peptides_KJA]
+
+CREATE VIEW V_GtL_Filtered_Peptides_KJA
 AS
 SELECT Pep.Peptide_ID,
-       Pep.Analysis_ID,
+       Pep.Job AS Analysis_ID,
        Pep.Scan_Number,
        Pep.Charge_State,
        Pep.Peptide,
@@ -48,6 +49,5 @@ WHERE (SS.RankXC = 1 AND Pep.Peptide LIKE '[rk-].%[rk].%' AND
           )
        ) OR
        (SS.RankXC = 1 AND SS.XCorr >= 5)
-
 
 GO

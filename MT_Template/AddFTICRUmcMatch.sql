@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure AddFTICRUmcMatch
+CREATE Procedure dbo.AddFTICRUmcMatch
 /****************************************************	
 **	Adds row to the T_FTICR_UMC_ResultDetails table
 **
@@ -19,9 +19,11 @@ CREATE Procedure AddFTICRUmcMatch
 **						   - added the @MatchScore parameter
 **			07/27/2004 mem - added the @DelMatchScore parameter
 **			05/28/2005 mem - Now populating column Expected_NET
-**			10/07/2010 mem - Added column @UniquenessProbability
+**			10/07/2010 mem - Added parameter @UniquenessProbability
 **						   - Changed @MassTagModMass from float to real
-**			10/11/2010 mem - Added column @FDRThreshold (value between 0 and 1)
+**			10/11/2010 mem - Added parameter @FDRThreshold (value between 0 and 1)
+**			06/21/2011 mem - Added parameter @ConformerID
+**			11/10/2011 mem - Added parameters @wSTAC and @wSTACFDR
 **
 ****************************************************/
 (
@@ -35,7 +37,10 @@ CREATE Procedure AddFTICRUmcMatch
 	@MassTagModMass real=0,				-- Mass of the modification applied to this mass tag prior to peak peak matching
 	@DelMatchScore decimal(9,5)=0,		-- Difference between the next lower value's match score and the highest value's match score for all mass tags matching this UMC
 	@UniquenessProbability real=0,		-- Uniqueness Probability, computed by STAC (similar to SLiC score in that it indicates the density of the region that a UMC is matching one or more AMT tags)
-	@FDRThreshold real = 1				-- FDR Threshold that the given STAC score corresponds to; will be 1 if @MatchScore is SLiC Score
+	@FDRThreshold real = 1,				-- FDR Threshold that the given STAC score corresponds to; will be 1 if @MatchScore is SLiC Score
+	@ConformerID int = null,			-- ConformerID of the given match (only applicable if matching using Drift Times)
+	@wSTAC real = null,					-- Weighted STAC score (simply STAC times UniquenessProbability aka STAC * UP)
+	@wSTACFDR real = 1					-- FDR associatd with the wSTAC score
 )
 As
 	SET NOCOUNT ON
@@ -64,7 +69,10 @@ As
 	                                           Matching_Member_Count,
 	                                           Del_Match_Score,
 	                                           Uniqueness_Probability,
-	                                           FDR_Threshold )
+	                                           FDR_Threshold,
+	                                           Conformer_ID,
+	                                           wSTAC,
+	                                           wSTAC_FDR_Threshold )
 	VALUES(@UMCResultsID, 
 	       @MassTagID, 
 	       @MatchScore, 
@@ -72,10 +80,13 @@ As
 	       @Avg_GANET, 
 	       IsNull(@MassTagMods, ''), 
 	       @MassTagModMass, 
-	       @MatchingMemberCount, 
+	  @MatchingMemberCount, 
 	       @DelMatchScore, 
 	       @UniquenessProbability,
-	       @FDRThreshold)
+	       @FDRThreshold,
+	       @ConformerID,
+	       @wSTAC,
+	       @wSTACFDR)
 	--
 	SET @returnvalue=@@ERROR
 	--
@@ -106,6 +117,7 @@ As
 Done:
 	
 	RETURN @returnvalue
+
 
 GO
 GRANT EXECUTE ON [dbo].[AddFTICRUmcMatch] TO [DMS_SP_User] AS [dbo]

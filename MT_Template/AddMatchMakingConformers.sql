@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.AddMatchMakingConformers
+CREATE PROCEDURE AddMatchMakingConformers
 /****************************************************
 **
 **	Desc:	Examines the UMCs and matching AMT tags for the given MD_ID
@@ -27,6 +27,7 @@ CREATE PROCEDURE dbo.AddMatchMakingConformers
 **	Date:	11/08/2010 mem - Initial version
 **			02/21/2011 mem - Added parameter @FilterByExperimentMSMS
 **			03/23/2011 mem - Now updating Last_Affected in T_Mass_Tag_Conformers_Observed
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -186,7 +187,7 @@ AS
 		SET Valid_Match = 1
 		FROM #Tmp_CandidateConformers Target INNER JOIN
              T_Peptides Pep ON Target.Mass_Tag_ID = Pep.Mass_Tag_ID
-        WHERE Pep.Analysis_ID = @JobFilter
+        WHERE Pep.Job = @JobFilter
         --
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		
@@ -394,6 +395,5 @@ AS
 Done:
 
 	Return @myError
-
 
 GO

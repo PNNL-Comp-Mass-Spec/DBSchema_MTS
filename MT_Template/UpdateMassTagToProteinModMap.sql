@@ -23,6 +23,7 @@ CREATE Procedure dbo.UpdateMassTagToProteinModMap
 **						   - Optimized modified MT selection logic to exclude existing entries during the selection query rather than using a separate delete query (if @SkipExistingEntries = 1)
 **			04/25/2008 mem - Updated to properly handle MTs with multiple occurences of the same modification on a given residue (e.g. N-terminus of peptide has NHS_SS modification twice)
 **						   - Added Try/Catch error handling
+**			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
 **    
 *****************************************************/
 (
@@ -202,7 +203,10 @@ AS
 		Begin
 				Set @S = @S + ' AND (NOT ( Prot.Reference LIKE ''reversed[_]%'' OR'
 				Set @S = @S +           ' Prot.Reference LIKE ''scrambled[_]%'' OR'
-				Set @S = @S +           ' Prot.Reference LIKE ''%[:]reversed'''
+				Set @S = @S +           ' Prot.Reference LIKE ''%[:]reversed'' OR'
+				Set @S = @S +           ' Prot.Reference LIKE ''xxx.%'' OR'
+				Set @S = @S +           ' Prot.Reference LIKE ''rev[_]%'''
+				
 				Set @S = @S +         ' ))'
 		End
 		

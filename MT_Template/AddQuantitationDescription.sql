@@ -37,6 +37,7 @@ CREATE Procedure dbo.AddQuantitationDescription
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
 **			06/06/2007 mem - Added parameter @MaximumMatchesPerUMCToKeep; switched to Try/Catch error handling
 **			10/14/2010 mem - Added parameters @MinimumUniquenessProbability and @MaximumFDRThreshold
+**			11/02/2011 mem - Added parameter @ProteinDegeneracyMode
 **
 ****************************************************/
 (
@@ -83,7 +84,9 @@ CREATE Procedure dbo.AddQuantitationDescription
 	@MaximumMatchesPerUMCToKeep smallint = 1,		-- Ignored if @LookupDefaultOptions <> 0
 	
 	@MinimumUniquenessProbability real = 0,			-- Ignored if @LookupDefaultOptions <> 0
-	@MaximumFDRThreshold real = 1					-- Ignored if @LookupDefaultOptions <> 0
+	@MaximumFDRThreshold real = 1,					-- Ignored if @LookupDefaultOptions <> 0
+	
+	@ProteinDegeneracyMode tinyint = 0				-- Ignored if @LookupDefaultOptions <> 0
 )
 As
 	Set NoCount On
@@ -129,7 +132,8 @@ As
 											@InternalStdInclusionMode output, @MinimumPeptideProphetProbability output,
 											@MaximumMatchesPerUMCToKeep output,
 											@MinimumUniquenessProbability output,
-											@MaximumFDRThreshold output
+											@MaximumFDRThreshold output,
+											@ProteinDegeneracyMode output
 		End	
 
 		Set @TransAddQuantitationDescription = 'TransAddQuantitation'
@@ -184,7 +188,8 @@ As
 				Maximum_FDR_Threshold,				
 				Minimum_Peptide_Replicate_Count,
 				ORF_Coverage_Computation_Level,
-				Internal_Std_Inclusion_Mode
+				Internal_Std_Inclusion_Mode,
+				Protein_Degeneracy_Mode
 			)
 		VALUES (@SampleName, @State, @Comment,
 				Round(@Fraction_Highest_Abu_To_Use, 4), @Normalize_To_Standard_Abundances,
@@ -203,7 +208,8 @@ As
 				@MaximumFDRThreshold,
 				@MinimumPeptideReplicateCount,
 				@ORFCoverageComputationLevel,
-				@InternalStdInclusionMode
+				@InternalStdInclusionMode,
+				@ProteinDegeneracyMode
 				)
 		--
 		Select @myError = @@Error, @myRowCount = @@RowCount

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
+CREATE PROCEDURE UpdateMassTagPeptideProphetStats
 /****************************************************
 **
 **	Desc:	Populates T_Mass_Tag_Peptide_Prophet_Stats
@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.UpdateMassTagPeptideProphetStats
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **			06/16/2008 mem - Now populating column Cleavage_State_Max
 **			03/09/2008 mem - Updated queries to compute ObsCount values for distinct combinations of dataset, scan, charge, and peptide
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -125,7 +126,7 @@ AS
 		Set @S = @S +                   ' INNER JOIN T_Score_Discriminant SD'
 		Set @S = @S +                     ' ON P.Peptide_ID = SD.Peptide_ID'
 		Set @S = @S +                   ' INNER JOIN T_Analysis_Description TAD'
-		Set @S = @S +                     ' ON P.Analysis_ID = TAD.Job'
+		Set @S = @S +                     ' ON P.Job = TAD.Job'
 		
 		If @ChargeState < @ChargeStateMax
 			Set @S = @S +                   ' WHERE (P.Charge_State >= ' + @CSText + ')'
@@ -169,7 +170,6 @@ AS
 			 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagPeptideProphetStats] TO [MTS_DB_Dev] AS [dbo]

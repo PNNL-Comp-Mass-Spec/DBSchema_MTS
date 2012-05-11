@@ -104,7 +104,7 @@ AS
 		ORDER BY inserted.Job
 
 GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])
 REFERENCES [T_FAD_State_Name] ([FAD_State_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description] CHECK CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name]

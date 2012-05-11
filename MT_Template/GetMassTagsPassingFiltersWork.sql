@@ -18,6 +18,8 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 **	Date:	04/06/2007
 **			01/11/2010 mem - Added parameter @infoOnly
 **			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/28/2012 mem - No longer using @ConfirmedOnly
 **  
 ****************************************************************/
 (
@@ -33,7 +35,7 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 											--				1				will filter for Mass Tags without modifications (just like Not Any)
 											--				Not 1			will filter for Mass Tags with modifications
 											-- Mods are defined in T_Mass_Correction_Factors in DMS and are accessible via MT_Main.V_DMS_Mass_Correction_Factors
-	@ConfirmedOnly tinyint = 0,				-- Mass Tag must have Is_Confirmed = 1
+	@ConfirmedOnly tinyint = 0,				-- Mass Tag must have Is_Confirmed = 1  (ignored as of February 2012)
 	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@JobToFilterOnByDataset int = 0,				-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
@@ -78,7 +80,10 @@ As
 	-- Validate the input parameters
 	---------------------------------------------------	
 	-- @MassCorrectionIDFilterList is validated below
-	Set @ConfirmedOnly = IsNull(@ConfirmedOnly, 0)
+	
+	/* Deprecated in February 2012
+	--Set @ConfirmedOnly = IsNull(@ConfirmedOnly, 0)
+	*/
 	
 	Set @MinimumHighNormalizedScore = IsNull(@MinimumHighNormalizedScore, 0)
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
@@ -112,8 +117,10 @@ As
 	If @MaximumMSGFSpecProb <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.Min_MSGF_SpecProb, 1) <= ' + Convert(varchar(11), @MaximumMSGFSpecProb) + ') '
 	
-	If @ConfirmedOnly <> 0
-		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
+	/* Deprecated in February 2012
+	-- If @ConfirmedOnly <> 0
+	--	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
+	*/
 
 	-- Remove ' AND' from the start of @ScoreFilteringSQL if non-blank
 	If Len(@ScoreFilteringSQL) > 0
@@ -179,7 +186,7 @@ As
 		Set @BaseSql = @BaseSql + ' SELECT DISTINCT MT.Mass_Tag_ID'
 		Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
 		Set @BaseSql = @BaseSql +     ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
-		Set @BaseSql = @BaseSql +     ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+		Set @BaseSql = @BaseSql +     ' T_Analysis_Description TAD ON P.Job = TAD.Job'
 		Set @BaseSql = @BaseSql + ' WHERE TAD.Dataset = ''' + @DatasetToFilterOn + ''''
 		If Len(@ScoreFilteringSQL) > 0
 			Set @BaseSql = @BaseSql + ' AND ' + @ScoreFilteringSQL
@@ -198,7 +205,7 @@ As
 			Set @BaseSql = @BaseSql + ' SELECT DISTINCT MT.Mass_Tag_ID'
 			Set @BaseSql = @BaseSql + ' FROM T_Mass_Tags MT INNER JOIN'
 			Set @BaseSql = @BaseSql +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
-			Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @BaseSql = @BaseSql +      ' T_Analysis_Description TAD ON P.Job = TAD.Job'
 			Set @BaseSql = @BaseSql + ' WHERE ' + @ExperimentFilteringSQL
 			If Len(@ScoreFilteringSQL) > 0
 				Set @BaseSql = @BaseSql + ' AND ' + @ScoreFilteringSQL

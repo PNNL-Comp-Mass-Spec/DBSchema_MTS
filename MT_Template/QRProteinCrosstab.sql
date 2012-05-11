@@ -31,6 +31,8 @@ CREATE Procedure QRProteinCrosstab
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			01/24/2008 mem - Added column @DateStampHeaderColumn
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
+**			01/25/2012 mem - Added parameter @UnscaledAbundances
+**			02/02/2012 mem - Now assuring that @QuantitationIDList is not null
 **
 ****************************************************/
 (
@@ -45,7 +47,8 @@ CREATE Procedure QRProteinCrosstab
 	@IncludeProteinDescription tinyint = 1,				-- Set to 1 to include protein descriptions; 0 to exclude them
 	@DateStampHeaderColumn tinyint = 0,
 	@MinimumPeptidesPerProtein tinyint = 0,				-- Set to 2 or higher to exclude proteins with MassTagCountUniqueObserved values less than this number
-	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: Reference and Protein Description
+	@ChangeCommasToSemicolons tinyint = 0,				-- Replaces commas with semicolons in various text fields, including: Reference and Protein Description
+	@UnscaledAbundances tinyint = 0						-- When 1, then returns un-scaled abundances; only valid if @SourceColName is 'Abundance_Average'
 )
 AS
 
@@ -65,12 +68,13 @@ AS
 			@ColumnListToShow2 varchar(900),
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
-			@QuantitationIDListClean varchar(max)
+			@QuantitationIDListClean varchar(max),
+			@QRSourceColName varchar(256)
 
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
 	Set @QuantitationIDListClean = ''
-
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -80,6 +84,8 @@ AS
 		--------------------------------------------------------------
 		-- Validate the inputs
 		--------------------------------------------------------------
+		--		
+		Set @QuantitationIDList = IsNull(@QuantitationIDList, '')
 		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
 		Set @SourceColName  = IsNull(@SourceColName, 'Abundance_Average')
 		Set @AggregateColName  = IsNull(@AggregateColName, 'AvgAbu')
@@ -91,6 +97,11 @@ AS
 		Set @DateStampHeaderColumn = IsNull(@DateStampHeaderColumn, 0)
 		Set @MinimumPeptidesPerProtein  = IsNull(@MinimumPeptidesPerProtein, 0)
 		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
+
+		If IsNull(@UnscaledAbundances, 0) > 0 AND @SourceColName IN ('Abundance_Average')
+			Set @QRSourceColName = 'CASE WHEN QD.Normalize_To_Standard_Abundances > 0 THEN Round(QR.' + @SourceColName + ' / 100.0 * QD.Standard_Abundance_Max + QD.Standard_Abundance_Min, 0) ELSE Round(QR.' + @SourceColName + ',4) END'	
+		Else
+			Set @QRSourceColName = 'QR.' + @SourceColName
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -149,14 +160,15 @@ AS
 			
 		Set @sql = @sql +        @PivotColumnsSql
 		Set @sql = @sql + ' FROM (SELECT QR.Quantitation_ID, QR.Ref_ID,'
-		Set @sql = @sql +       ' CONVERT(VARCHAR(19), QR.' + @SourceColName + ') AS ' + @SourceColName
+		Set @sql = @sql +       ' CONVERT(VARCHAR(19), ' + @QRSourceColName + ') AS ' + @SourceColName
 		Set @sql = @sql +       ' FROM  #TmpQIDSortInfo INNER JOIN '
-		Set @sql = @sql +             ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID'
+		Set @sql = @sql +             ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN '
+		Set @sql = @sql +             ' T_Quantitation_Description QD ON QD.Quantitation_ID = #TmpQIDSortInfo.QID'
 		If @MinimumPeptidesPerProtein > 0
 			Set @sql = @sql +   ' WHERE QR.MassTagCountUniqueObserved >= ' + Convert(varchar(12), @MinimumPeptidesPerProtein)
 		Set @sql = @sql +       ') AS DataQ'
 		Set @sql = @sql +       ' PIVOT ('
-		Set @sql = @sql +       '   MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
+		Set @sql = @sql +         ' MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
 		Set @sql = @sql +       ' ) AS PivotResults'
 		Set @sql = @sql +        ' LEFT OUTER JOIN T_Proteins Prot ON PivotResults.Ref_ID = Prot.Ref_ID'
 		

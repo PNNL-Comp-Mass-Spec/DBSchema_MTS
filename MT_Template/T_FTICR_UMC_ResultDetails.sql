@@ -18,6 +18,8 @@ CREATE TABLE [dbo].[T_FTICR_UMC_ResultDetails](
 	[FDR_Threshold] [real] NULL,
 	[Conformer_ID] [int] NULL,
 	[Conformer_Max_Abundance] [tinyint] NULL,
+	[wSTAC] [real] NULL,
+	[wSTAC_FDR_Threshold] [real] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_ResultDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_ResultDetails_ID] ASC

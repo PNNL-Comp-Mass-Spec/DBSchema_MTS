@@ -32,6 +32,10 @@ CREATE Procedure dbo.UpdateMassTagsFromMultipleAnalyses
 **			07/16/2009 mem - Now populating PeptideEx in T_Mass_Tags
 **			11/11/2009 mem - Now examining state of ValidateSICStatsForImportedMSMSJobs
 **			08/16/2010 mem - Now populating MSGF_SpecProb in T_Score_Discriminant
+**			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			10/27/2011 mem - Added option to apply an MSGF SpecProb filter to the imported peptides
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/09/2012 mem - Now populating T_Peptides.DelM_PPM
 **
 *****************************************************/
 (
@@ -88,6 +92,8 @@ As
 			@MaxScanNumberSICs int,
 			@MaxScanNumberAllScans int
 	
+	Declare @UseMSGFSpecProbFilter tinyint = 0
+	
 	Declare @Continue int
 	Declare @StateCurrentJob int
 	
@@ -123,6 +129,32 @@ As
 
 	Set @ImportStartTime = GetDate()
 
+	-----------------------------------------------------------
+	-- Check whether MSGF SpecProb filtering is enabled
+	-----------------------------------------------------------
+	
+	Declare @MSGFSpecProbText varchar(128) = ''
+	
+	SELECT TOP 1 @MSGFSpecProbText = Value
+	FROM T_Process_Config
+	WHERE [Name] = 'Peptide_Import_MSGF_SpecProb_Filter'
+	ORDER BY Process_Config_ID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @myRowCount = 1
+	Begin
+		If Isnumeric(@MSGFSpecProbText) = 0
+		Begin
+			Set @message = 'Entry for "Peptide_Import_MSGF_SpecProb_Filter" in T_Process_Config is not a number: ' + @MSGFSpecProbText + '; unable to continue'
+			execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromMultipleAnalysis'
+			set @myError = 50002
+			goto done
+		End
+		
+		Set @UseMSGFSpecProbFilter = 1
+	End
+	
 	---------------------------------------------------
 	-- Count number of import filters defined
 	---------------------------------------------------
@@ -141,7 +173,6 @@ As
 		set @myError = 50000
 		goto Done
 	end
-	
 	
 	-----------------------------------------------------------
 	-- Create temporary table for jobs to process
@@ -266,7 +297,7 @@ As
 				set @S = @S + ' SELECT @matchCount = COUNT(*)'
 				set @S = @S + ' FROM '
 				set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_Peptide_Export '
-				set @S = @S + ' WHERE (Analysis_ID = ' + @JobStrCurrent + ') '
+				set @S = @S + ' WHERE (Job = ' + @JobStrCurrent + ') '
 
 				if @ImportFilterCount > 0
 				begin
@@ -351,6 +382,7 @@ As
 		Peptide_ID_Original int NOT NULL,
 		Peak_Area float,
 		Peak_SN_Ratio real,
+		DelM_PPM real,
 		Unique_Row_ID int IDENTITY (1, 1) NOT NULL,
 		Peptide_ID_New int NULL
 	)   
@@ -485,17 +517,17 @@ As
 	set @S = @S +   ' Job, Scan_Number, Number_Of_Scans, Charge_State, MH,'
 	set @S = @S +   ' Monoisotopic_Mass, GANET_Obs, GANET_Predicted, Scan_Time_Peak_Apex, Multiple_ORF,'
 	set @S = @S +   ' Peptide, Clean_Sequence, Mod_Count, Mod_Description,'
-	set @S = @S +   ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio'
+	set @S = @S +   ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio, DelM_PPM'
 	set @S = @S + ') '
 	--
 	set @S = @S + ' SELECT '
-	set @S = @S +   ' Src.Analysis_ID, Src.Scan_Number, Src.Number_Of_Scans, Src.Charge_State, Src.MH,'
+	set @S = @S +   ' Src.Job, Src.Scan_Number, Src.Number_Of_Scans, Src.Charge_State, Src.MH,'
 	set @S = @S +   ' Src.Monoisotopic_Mass, Src.GANET_Obs, Src.GANET_Predicted, Src.Scan_Time_Peak_Apex, Src.Multiple_ORF,'
 	set @S = @S +   ' Src.Peptide, Src.Clean_Sequence, Src.Mod_Count, Src.Mod_Description,'
-	set @S = @S +   ' Src.Seq_ID, Src.Peptide_ID, Src.Peak_Area, Src.Peak_SN_Ratio'
+	set @S = @S +   ' Src.Seq_ID, Src.Peptide_ID, Src.Peak_Area, Src.Peak_SN_Ratio, Src.DelM_PPM'
 	set @S = @S + ' FROM '
 	set @S = @S +     @PeptideDBPath + '.dbo.V_Peptide_Export Src INNER JOIN'
-	set @S = @S +   ' #TmpJobsInBatch JobList ON Src.Analysis_ID = JobList.Job'
+	set @S = @S +   ' #TmpJobsInBatch JobList ON Src.Job = JobList.Job'
 
 	if @ImportFilterCount > 0
 	begin
@@ -504,7 +536,7 @@ As
 		set @S = @S + '    (SELECT Value FROM T_Process_Config WHERE [Name] = ''Peptide_Import_Filter_ID'' AND Len(Value) > 0)'
 		set @S = @S + ') '
 	end
-	set @S = @S + ' ORDER BY Src.Analysis_ID, Src.Peptide_ID'
+	set @S = @S + ' ORDER BY Src.Job, Src.Peptide_ID'
 
 	If @infoOnly = 0	  
 	Begin
@@ -669,6 +701,31 @@ As
 	End -- </a2>
 
 
+	If @UseMSGFSpecProbFilter > 0
+	Begin
+		-----------------------------------------------------------
+		-- Delete entries from #Imported_Peptides if their MSGF_SpecProb value is > @MSGFSpecProbThreshold
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + ' DELETE #Imported_Peptides'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
+		set @S = @S + ' WHERE IsNull(SD.MSGF_SpecProb, 1) > ' + @MSGFSpecProbText
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+		If @myRowCount > 0
+		Begin
+			Set @message = 'Removed ' + Convert(varchar(12), @myRowCount) + ' / ' + Convert(varchar(12), @PeptideCountCurrentBatch) + ' imported peptides for ' + @JobListMsgStr + ' since MSGF_SpecProb > ' + @MSGFSpecProbText
+			execute PostLogEntry 'Normal', @message, 'UpdateMassTagsFromMultipleAnalysis'
+			Set @message = ''
+		End
+	End
+	
+	
 	-----------------------------------------------------------
 	-- Populate #ImportedMassTags
 	-----------------------------------------------------------
@@ -893,13 +950,13 @@ As
 	-----------------------------------------------------------
 	--
 	INSERT INTO T_Peptides (
-		Peptide_ID, Analysis_ID, Scan_Number, Number_Of_Scans, Charge_State, MH,
+		Peptide_ID, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_Proteins, Peptide, Mass_Tag_ID, GANET_Obs, State_ID, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio
+		Peak_Area, Peak_SN_Ratio, DelM_PPM
 		)
 	SELECT Peptide_ID_New, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_ORF, Peptide, Seq_ID, GANET_Obs, 2 As StateCandidate, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio
+		Peak_Area, Peak_SN_Ratio, DelM_PPM
 	FROM #Imported_Peptides
 	ORDER BY Job, Peptide_ID_New
 	--
@@ -982,7 +1039,7 @@ As
 		set @S = @S +  ' Y_Score, Y_Ions, B_Score, B_Ions, DelM, Intensity, Normalized_Score'
 		set @S = @S + ' )'
 		set @S = @S + ' SELECT IP.Peptide_ID_New, X.Hyperscore, X.Log_EValue, X.DeltaCn2,'
-		set @S = @S +        ' X.Y_Score, X.Y_Ions, X.B_Score, X.B_Ions, X.DelM, X.Intensity, X.Normalized_Score'
+		set @S = @S +      ' X.Y_Score, X.Y_Ions, X.B_Score, X.B_Ions, X.DelM, X.Intensity, X.Normalized_Score'
 		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
 		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_XTandem AS X ON IP.Peptide_ID_Original = X.Peptide_ID'
 		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
@@ -1076,6 +1133,58 @@ As
 		Set @ResultTypeValid = 1
 	End
 
+	If @ResultType = 'MSG_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_MSGFDB
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_MSGFDB ('
+		set @S = @S +  ' Peptide_ID, FragMethod, PrecursorMZ, DelM, '
+		set @S = @S +  ' DeNovoScore, MSGFScore, SpecProb, RankSpecProb, '
+		set @S = @S +  ' PValue, Normalized_Score, FDR, PepFDR'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, M.FragMethod, M.PrecursorMZ, M.DelM, '
+		set @S = @S +  ' M.DeNovoScore, M.MSGFScore, M.SpecProb, M.RankSpecProb, '
+		set @S = @S +  ' M.PValue, M.Normalized_Score, M.FDR, M.PepFDR'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSGFDB AS M ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @result <> 0 
+		begin
+			rollback transaction @transName
+			set @message = 'Error executing dynamic SQL for T_Score_MSGFDB for ' + @JobListMsgStr
+			set @myError = 50022
+			goto Done
+		end
+		--
+		Set @numAddedPeptideHitScores = @myRowCount
+		
+		-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+		--
+		INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+		SELECT	Mass_Tag_ID, 
+				COUNT(*) AS Observation_Count, 
+				MAX(Normalized_Score_Max) AS Normalized_Score_Max
+		FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+						IP.Scan_Number, 
+						MAX(ISNULL(M.Normalized_Score, 0)) AS Normalized_Score_Max
+				FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					 T_Score_MSGFDB AS M ON IP.Peptide_ID_New = M.Peptide_ID
+				GROUP BY IP.Seq_ID, IP.Scan_Number
+				) AS SubQ
+		GROUP BY SubQ.Mass_Tag_ID	
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		Set @ResultTypeValid = 1
+	End
 
 	If @ResultTypeValid = 0
 	Begin
@@ -1087,7 +1196,7 @@ As
 
 	-----------------------------------------------------------
 	-- Add new entries to T_Score_Discriminant
-	-- Note that PassFilt and MScore are estimated for XTandem and Inspect data
+	-- Note that PassFilt and MScore are estimated for XTandem, Inspect, and MSGFDB data
 	--  PassFilt was set to 1
 	--  MScore was set to 10.75
 	-----------------------------------------------------------

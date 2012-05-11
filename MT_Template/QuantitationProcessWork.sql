@@ -4,12 +4,12 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure QuantitationProcessWork
+CREATE Procedure dbo.QuantitationProcessWork
 /****************************************************	
 **  Desc: Processes a single Quantitation ID entry 
-**		Quantitation results are written to T_Quantitation_Results,
-**		T_Quantitation_ResultDetails, and, for replicate
-**		quantitation sets, to T_Quantitation_ReplicateResultDetails
+**		  Quantitation results are written to T_Quantitation_Results,
+**		  T_Quantitation_ResultDetails, and, for replicate
+**		  quantitation sets, to T_Quantitation_ReplicateResultDetails
 **
 **  Return values: 0 if success, otherwise, error code
 **
@@ -72,6 +72,8 @@ CREATE Procedure QuantitationProcessWork
 **			09/13/2010 mem - Changed Charge_State_Min and Charge_State_Max to smallint
 **			10/13/2010 mem - Now validating that peak matching results being rolled up all have the same value for Match_Score_Mode
 **						   - Added support for Minimum_Uniqueness_Probability and Maximum_FDR_Threshold; these are only used when Match_Score_Mode <> 0
+**			11/02/2011 mem - Added Protein_Degeneracy_Mode
+**			01/30/2012 mem - No longer auto-changing @MinimumMatchScore to 0 if @MaximumFDRThreshold is between 0 and 1
 **
 ****************************************************/
 (
@@ -119,7 +121,8 @@ AS
  			@MaximumFDRThreshold real,					-- 1 to use all matching AMTs, < 1 to filter by FDR_Threshold; Ignored if T_Match_Making_Description.Match_Score_Mode = 0
 			@MinimumPeptideReplicateCount tinyint,		-- 0 or 1 to filter out nothing; 2 or higher to filter out peptides not seen in the given number of replicates
 			@ORFCoverageComputationLevel tinyint,		-- 0 for no ORF coverage, 1 for observed ORF coverage, 2 for observed and potential ORF coverage; option 2 is very CPU intensive for large databases
-			@InternalStdInclusionMode tinyint			-- 0 for no NET lockers, 1 for PMT tags and NET Lockers, 2 for NET lockers only
+			@InternalStdInclusionMode tinyint,			-- 0 for no NET lockers, 1 for PMT tags and NET Lockers, 2 for NET lockers only
+			@ProteinDegeneracyMode tinyint				-- 0 to keep all degenerate proteins; 1 or 2 to remove degenerate peptide to protein matches by iteratively removing protein matches for each peptide that has multiple protein matches  (1 uses sequence coverage while 2 uses peptide counts)
 
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
@@ -147,6 +150,7 @@ AS
  		Set @MinimumPeptideReplicateCount = 0
  		Set @ORFCoverageComputationLevel = 1
 		Set @InternalStdInclusionMode = 1
+		Set @ProteinDegeneracyMode = 0
 		
 		Declare @PctSmallDataToDiscard tinyint,							-- Percentage, between 0 and 99
 				@PctLargeDataToDiscard tinyint,							-- Percentage, between 0 and 99
@@ -265,7 +269,8 @@ AS
 				@PctSmallDataToDiscard = RepNormalization_PctSmallDataToDiscard, 
 				@PctLargeDataToDiscard = RepNormalization_PctLargeDataToDiscard,
 				@MinimumDataPointsForRegressionNormalization = RepNormalization_MinimumDataPointCount,
-				@InternalStdInclusionMode = Internal_Std_Inclusion_Mode
+				@InternalStdInclusionMode = Internal_Std_Inclusion_Mode,
+				@ProteinDegeneracyMode = Protein_Degeneracy_Mode
 		FROM	T_Quantitation_Description
 		WHERE	Quantitation_ID = @QuantitationID
 		--
@@ -283,6 +288,8 @@ AS
 		If @InternalStdInclusionMode < 0 Or @InternalStdInclusionMode > 2
 			Set @InternalStdInclusionMode = 1
 
+		Set @ProteinDegeneracyMode = IsNull(@ProteinDegeneracyMode, 0)
+		
 		If @MatchScoreModeMin = 0
 		Begin
 			-- The Match_Score column contains SLiC Score values
@@ -293,14 +300,23 @@ AS
 		Else
 		Begin
 			-- The Match_Score column contains STAC Score values
-				
-			-- If @MaximumFDRThreshold is non-zero (but less than 1), then change @MinimumMatchScore to 0 so that we only filter on FDR
-			If @MaximumFDRThreshold > 0 AND @MaximumFDRThreshold < 1
-				Set @MinimumMatchScore = 0
-			Else
-				-- @MaximumFDRThreshold is 0; change it to 1
+			
+			-- @MaximumFDRThreshold should be between 0 and 1
+			-- Prior to January 30, 2012 we would auto-change @MinimumMatchScore to 0 if @MaximumFDRThreshold was between 0 and 1, meaning that we would only filter on FDR and not on STAC-score
+			-- This led to confusion so we now simply validate that the values are between 0 and 1
+			-- 	
+			If @MaximumFDRThreshold < 0
+				Set @MaximumFDRThreshold = 0
+
+			If @MaximumFDRThreshold > 1
 				Set @MaximumFDRThreshold = 1
 
+			If @MinimumMatchScore < 0
+				Set @MinimumMatchScore = 0
+
+			If @MinimumMatchScore > 1
+				Set @MinimumMatchScore = 1
+				
 		End
 
 		-----------------------------------------------------------
@@ -610,7 +626,7 @@ AS
 		Set @CurrentLocation = 'Call QuantitationProcessWorkStepE for ' + @QuantitationIDText
 		--
 		exec @myError = QuantitationProcessWorkStepE
-							@QuantitationID, @InternalStdInclusionMode, 
+							@QuantitationID, @InternalStdInclusionMode,  @ProteinDegeneracyMode,
 							@message output
 		If @myError <> 0
 			Goto Done
@@ -695,6 +711,7 @@ Done:
 DoneSkipLog:			
 
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[QuantitationProcessWork] TO [DMS_SP_User] AS [dbo]

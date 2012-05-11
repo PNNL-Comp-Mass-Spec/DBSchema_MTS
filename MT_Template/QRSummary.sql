@@ -44,6 +44,8 @@ CREATE Procedure dbo.QRSummary
 **			06/13/2007 mem - Expanded the size of @QuantitationIDList to varchar(max)
 **			01/24/2007 mem - Expanded the size of @WorkingList to varchar(max)
 **			10/13/2010 mem - Now returning columns [AMTs 1% FDR] through [AMTs 50% FDR] if @VerboseColumnOutput=1 or if any of the entries in T_Quantitation_Description has Match_Score_Mode = 1
+**			01/25/2012 mem - Now returning several new columns, including [Match Score Mode Name] and [XCorr or Normalized Score Minimum] through [STAC FDR Maximum]
+**			01/31/2012 mem - Renamed [Quantitation ID] to Quantitation_ID
 **
 ****************************************************/
 (
@@ -89,7 +91,7 @@ AS
 
 		CREATE TABLE #QIDSummary (
 			[UniqueRowID] [int] identity(1,1) NOT NULL,
-			[Quantitation ID] [int] NOT NULL ,
+			[Quantitation_ID] [int] NOT NULL ,
 			[Sample Name] [varchar] (255) NOT NULL ,
 			[Comment] [varchar] (255) NOT NULL ,
 			[Experiments] [varchar] (1024) NULL ,
@@ -119,7 +121,15 @@ AS
 			[Scan_Start] [int] NULL ,
 			[Scan_End] [int] NULL ,
 			[ReplicateNormalizationStats] [varchar](1024) NULL,
-			[Match Score Mode] tinyint NULL	
+			[Match Score Mode] tinyint NULL	,
+			Minimum_MT_High_Normalized_Score real NULL ,
+			Minimum_MT_High_Discriminant_Score real NULL ,
+			Minimum_MT_Peptide_Prophet_Probability real NULL ,
+			Minimum_PMT_Quality_Score real NULL ,
+			Minimum_Peptide_Length real NULL ,
+			Minimum_Match_Score real NULL ,
+			Minimum_Uniqueness_Probability real NULL ,
+			Maximum_FDR_Threshold real NULL
 		)
 		
 		-- Copy from @WorkingQIDList into @WorkingList
@@ -172,7 +182,7 @@ AS
 				Begin
 					-- Just one Job
 					INSERT INTO #QIDSummary
-						(	[Quantitation ID], [Sample Name], [Comment], [Experiments], 
+						(	Quantitation_ID, [Sample Name], [Comment], [Experiments], 
 							[Jobs],
 							[MDIDs],
 							[Results Folder Path],
@@ -194,7 +204,16 @@ AS
 							[Refine Mass Cal PPMShift], 
 							[Total_Scans_Avg], [Scan_Start], [Scan_End],
 							[ReplicateNormalizationStats],
-							[Match Score Mode])
+							[Match Score Mode],
+							Minimum_MT_High_Normalized_Score,
+							Minimum_MT_High_Discriminant_Score,
+							Minimum_MT_Peptide_Prophet_Probability,
+							Minimum_PMT_Quality_Score,
+							Minimum_Peptide_Length,
+							Minimum_Match_Score,
+							Minimum_Uniqueness_Probability,
+							Maximum_FDR_Threshold
+							)
 					SELECT QD.Quantitation_ID, QD.SampleName, QD.Comment, FAD.Experiment, 
 						CONVERT(varchar(19), MMD.MD_Reference_Job) AS Jobs, 
 						CONVERT(varchar(19), MMD.MD_ID) AS Jobs,
@@ -217,7 +236,15 @@ AS
 						MMD.Refine_Mass_Cal_PPMShift, 
 						IsNull(FAD.Total_Scans, 0), IsNull(FAD.Scan_Start, 0), IsNull(FAD.Scan_End, 0),
 						IsNull(QD.ReplicateNormalizationStats, ''),
-						QD.Match_Score_Mode
+						QD.Match_Score_Mode,
+						QD.Minimum_MT_High_Normalized_Score,
+						QD.Minimum_MT_High_Discriminant_Score,
+						QD.Minimum_MT_Peptide_Prophet_Probability,
+						QD.Minimum_PMT_Quality_Score,
+						QD.Minimum_Peptide_Length,
+						QD.Minimum_Match_Score,
+						QD.Minimum_Uniqueness_Probability,
+						QD.Maximum_FDR_Threshold
 					FROM T_Quantitation_Description AS QD INNER JOIN
 						T_Quantitation_MDIDs ON 
 						QD.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
@@ -278,7 +305,7 @@ AS
 
 					
 					INSERT INTO #QIDSummary
-						(	[Quantitation ID], [Sample Name], [Comment], [Experiments], 
+						(	Quantitation_ID, [Sample Name], [Comment], [Experiments], 
 							[Jobs], [MDIDs],
 							[Results Folder Path],
 							[Fraction Highest Abu To Use], [Feature (UMC) Count], 
@@ -298,7 +325,16 @@ AS
 							[Refine Mass Cal PPMShift], 
 							[Total_Scans_Avg], [Scan_Start], [Scan_End],
 							[ReplicateNormalizationStats],
-							[Match Score Mode])
+							[Match Score Mode],
+							Minimum_MT_High_Normalized_Score,
+							Minimum_MT_High_Discriminant_Score,
+							Minimum_MT_Peptide_Prophet_Probability,
+							Minimum_PMT_Quality_Score,
+							Minimum_Peptide_Length,
+							Minimum_Match_Score,
+							Minimum_Uniqueness_Probability,
+							Maximum_FDR_Threshold
+							)
 					SELECT QD.Quantitation_ID, QD.SampleName, QD.Comment, @ExperimentList, 
 						@JobList, @MDIDList,
 						dbo.udfPeakMatchingPathForMDID(MIN(MMD.MD_ID)),
@@ -323,7 +359,15 @@ AS
 						AVG(ABS(MMD.Refine_Mass_Cal_PPMShift)),
 						@TotalScanAvg, @ScanStartMin, @ScanEndMax,
 						IsNull(QD.ReplicateNormalizationStats, ''),
-						QD.Match_Score_Mode					
+						QD.Match_Score_Mode,
+						QD.Minimum_MT_High_Normalized_Score,
+						QD.Minimum_MT_High_Discriminant_Score,
+						QD.Minimum_MT_Peptide_Prophet_Probability,
+						QD.Minimum_PMT_Quality_Score,
+						QD.Minimum_Peptide_Length,
+						QD.Minimum_Match_Score,
+						QD.Minimum_Uniqueness_Probability,
+						QD.Maximum_FDR_Threshold				
 					FROM T_Quantitation_Description AS QD INNER JOIN
 						T_Quantitation_MDIDs ON 
 						QD.Quantitation_ID = T_Quantitation_MDIDs.Quantitation_ID
@@ -344,7 +388,15 @@ AS
 						QD.AMT_Count_25pct_FDR, 
 						QD.AMT_Count_50pct_FDR,
 						QD.ReplicateNormalizationStats,
-						QD.Match_Score_Mode
+						QD.Match_Score_Mode,
+						QD.Minimum_MT_High_Normalized_Score,
+						QD.Minimum_MT_High_Discriminant_Score,
+						QD.Minimum_MT_Peptide_Prophet_Probability,
+						QD.Minimum_PMT_Quality_Score,
+						QD.Minimum_Peptide_Length,
+						QD.Minimum_Match_Score,
+						QD.Minimum_Uniqueness_Probability,
+						QD.Maximum_FDR_Threshold
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 				End
@@ -417,11 +469,11 @@ AS
 
 					UPDATE #QIDSummary
 					SET [Feature Count With Hits] = IsNull(@UMCCountWithHits,0)
-					WHERE [Quantitation ID] = Convert(int, @QuantitationID)						
+					WHERE Quantitation_ID = Convert(int, @QuantitationID)						
 
 					UPDATE #QIDSummary
 					SET [Percent Features With Hits] = [Feature Count With Hits] / Convert(real, [Feature (UMC) Count]) * 100
-					WHERE [Quantitation ID] = Convert(int, @QuantitationID) AND [Feature (UMC) Count] > 0
+					WHERE Quantitation_ID = Convert(int, @QuantitationID) AND [Feature (UMC) Count] > 0
 
 				End
 	      			
@@ -448,7 +500,7 @@ AS
 		--------------------------------------------------------------
 		--
 		INSERT INTO #TmpQIDValues (QID)
-		SELECT [Quantitation ID]
+		SELECT Quantitation_ID
 		FROM #QIDSummary
 		ORDER BY UniqueRowID
 		--
@@ -475,7 +527,7 @@ AS
 		
 		If @VerboseColumnOutput <> 0
 		Begin
-			SELECT 	[Quantitation ID],
+			SELECT 	Quantitation_ID,
 					[Sample Name], [Comment], [Experiments],
 					[Jobs], [MDIDs],
 					[Results Folder Path],
@@ -496,9 +548,22 @@ AS
 					[Refine Mass Cal PPMShift],
 					[Total_Scans_Avg], [Scan_Start], [Scan_End],
 					[Match Score Mode],
-					[ReplicateNormalizationStats]
+					CASE [Match Score Mode]
+					   WHEN 0 THEN 'SLiC'
+					   WHEN 1 THEN 'STAC'
+					   ELSE 'Unknown'
+					END AS [Match Score Mode Name],
+					[ReplicateNormalizationStats],
+					Minimum_MT_High_Normalized_Score AS [XCorr or Normalized Score Minimum], 
+					Minimum_MT_High_Discriminant_Score AS [Discriminant Score Minimum], 
+					Minimum_MT_Peptide_Prophet_Probability AS [Peptide Prophet Probability Minimum], 
+					Minimum_PMT_Quality_Score AS [PMT QS Minimum], 
+					Minimum_Peptide_Length AS [Peptide Length Minimum], 
+					Minimum_Match_Score AS [STAC or SLiC Score Minimum], 
+					Minimum_Uniqueness_Probability AS [UP Minimum], 
+					Maximum_FDR_Threshold AS [STAC FDR Maximum]
 			FROM #QIDSummary INNER JOIN 
-				#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+				#TmpQIDSortInfo ON #QIDSummary.Quantitation_ID = #TmpQIDSortInfo.QID
 			ORDER BY #TmpQIDSortInfo.SortKey
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -508,7 +573,7 @@ AS
 		Begin
 			IF EXISTS (SELECT * FROM #QIDSummary WHERE [Match Score Mode] <> 0)
 				-- Used STAC Scores
-				SELECT 	[Quantitation ID],
+				SELECT 	Quantitation_ID,
 						[Sample Name], [Experiments],
 						[Jobs], [MDIDs],
 						[Feature (UMC) Count],
@@ -526,12 +591,12 @@ AS
 						[MD NetAdj NET Min], [MD NetAdj NET Max],
 						[Refine Mass Cal PPMShift]
 				FROM #QIDSummary INNER JOIN 
-					#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+					#TmpQIDSortInfo ON #QIDSummary.Quantitation_ID = #TmpQIDSortInfo.QID
 				ORDER BY #TmpQIDSortInfo.SortKey
 
 			Else
 				-- Used SLiC Scores
-				SELECT 	[Quantitation ID],
+				SELECT 	Quantitation_ID,
 						[Sample Name], [Experiments],
 						[Jobs], [MDIDs],
 						[Feature (UMC) Count],
@@ -543,7 +608,7 @@ AS
 						[MD NetAdj NET Min], [MD NetAdj NET Max],
 						[Refine Mass Cal PPMShift]
 				FROM #QIDSummary INNER JOIN 
-					#TmpQIDSortInfo ON #QIDSummary.[Quantitation ID] = #TmpQIDSortInfo.QID
+					#TmpQIDSortInfo ON #QIDSummary.Quantitation_ID = #TmpQIDSortInfo.QID
 				ORDER BY #TmpQIDSortInfo.SortKey
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -561,7 +626,6 @@ End Try
 Done:
 	--
 	Return @myError
-
 
 
 GO

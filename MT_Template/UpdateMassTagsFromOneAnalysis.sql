@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
+CREATE Procedure UpdateMassTagsFromOneAnalysis
 /****************************************************
 ** 
 **		Desc: 
@@ -53,6 +53,8 @@ CREATE Procedure dbo.UpdateMassTagsFromOneAnalysis
 **			11/07/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			07/16/2009 mem - Now populating PeptideEx in T_Mass_Tags
 **			08/16/2010 mem - Now populating MSGF_SpecProb in T_Score_Discriminant
+**			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -91,6 +93,7 @@ As
 	declare @JobListMsgStr varchar(140)
 	declare @ResultType varchar(64)
 
+	Declare @UseMSGFSpecProbFilter tinyint = 0
 
 	---------------------------------------------------
 	-- Validate the inputs
@@ -116,6 +119,32 @@ As
 	Set @jobStr = Convert(varchar(19), @job)
 	Set @JobListMsgStr = 'job ' + @jobStr
 
+	-----------------------------------------------------------
+	-- Check whether MSGF SpecProb filtering is enabled
+	-----------------------------------------------------------
+	
+	Declare @MSGFSpecProbText varchar(128) = ''
+	
+	SELECT TOP 1 @MSGFSpecProbText = Value
+	FROM T_Process_Config
+	WHERE [Name] = 'Peptide_Import_MSGF_SpecProb_Filter'
+	ORDER BY Process_Config_ID
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	If @myRowCount = 1
+	Begin
+		If Isnumeric(@MSGFSpecProbText) = 0
+		Begin
+			Set @message = 'Entry for "Peptide_Import_MSGF_SpecProb_Filter" in T_Process_Config is not a number: ' + @MSGFSpecProbText + '; unable to continue'
+			execute PostLogEntry 'Error', @message, 'UpdateMassTagsFromMultipleAnalysis'
+			set @myError = 50002
+			goto done
+		End
+		
+		Set @UseMSGFSpecProbFilter = 1
+	End
+	
 	---------------------------------------------------
 	-- Count number of import filters defined
 	---------------------------------------------------
@@ -350,7 +379,7 @@ As
 	set @S = @S + ' Seq_ID, Peptide_ID, Peak_Area, Peak_SN_Ratio '
 	set @S = @S + 'FROM '
 	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_Peptide_Export '
-	set @S = @S + 'WHERE (Analysis_ID = ' + @jobStr + ') '
+	set @S = @S + 'WHERE (Job = ' + @jobStr + ') '
 
 	if @ImportFilterCount > 0
 	begin
@@ -434,6 +463,30 @@ As
 		End
 	End
 
+
+	If @UseMSGFSpecProbFilter > 0
+	Begin
+		-----------------------------------------------------------
+		-- Delete entries from #Imported_Peptides if their MSGF_SpecProb value is > @MSGFSpecProbThreshold
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + ' DELETE #Imported_Peptides'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_Discriminant AS SD ON IP.Peptide_ID_Original = SD.Peptide_ID'
+		set @S = @S + ' WHERE IsNull(SD.MSGF_SpecProb, 1) > ' + @MSGFSpecProbText
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+		If @myRowCount > 0
+		Begin
+			Set @message = 'Removed ' + Convert(varchar(12), @myRowCount) + ' / ' + Convert(varchar(12), @numPeptidesImported) + ' imported peptides for job ' + @JobStr + ' since MSGF_SpecProb > ' + @MSGFSpecProbText
+			execute PostLogEntry 'Normal', @message, 'UpdateMassTagsFromOneAnalysis'
+			Set @message = ''
+		End
+	End
 
 	-----------------------------------------------------------
 	-- Populate #ImportedMassTags
@@ -642,7 +695,7 @@ As
 	-----------------------------------------------------------
 	--
 	INSERT INTO T_Peptides (
-		Peptide_ID, Analysis_ID, Scan_Number, Number_Of_Scans, Charge_State, MH,
+		Peptide_ID, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_Proteins, Peptide, Mass_Tag_ID, GANET_Obs, State_ID, Scan_Time_Peak_Apex,
 		Peak_Area, Peak_SN_Ratio
 		)
@@ -840,6 +893,63 @@ As
 		Set @ResultTypeValid = 1
 	End
 
+	If @ResultType = 'MSG_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_MSGFDB
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_MSGFDB ('
+		set @S = @S +  ' Peptide_ID, FragMethod, PrecursorMZ, DelM, '
+		set @S = @S +  ' DeNovoScore, MSGFScore, SpecProb, RankSpecProb, '
+		set @S = @S +  ' PValue, Normalized_Score, FDR, PepFDR'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, M.FragMethod, M.PrecursorMZ, M.DelM, '
+		set @S = @S +  ' M.DeNovoScore, M.MSGFScore, M.SpecProb, M.RankSpecProb, '
+		set @S = @S +  ' M.PValue, M.Normalized_Score, M.FDR, M.PepFDR'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSGFDB AS I ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		
+		If @previewSql <> 0
+			Print @S
+		Else
+		Begin
+			exec @result = sp_executesql @S
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--
+			if @result <> 0 
+			begin
+				rollback transaction @transName
+				set @message = 'Error executing dynamic SQL for T_Score__MSGFDB for ' + @JobListMsgStr
+				set @myError = 50022
+				goto Done
+			end
+			--
+			Set @numAddedPeptideHitScores = @myRowCount
+			
+			-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+			--
+			INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+			SELECT	Mass_Tag_ID, 
+					COUNT(*) AS Observation_Count, 
+					MAX(Normalized_Score_Max) AS Normalized_Score_Max
+			FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+							IP.Scan_Number, 
+							MAX(ISNULL(M.Normalized_Score, 0)) AS Normalized_Score_Max
+					FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					     T_Score_MSGFDB AS M ON IP.Peptide_ID_New = M.Peptide_ID
+					GROUP BY IP.Seq_ID, IP.Scan_Number
+					) AS SubQ
+			GROUP BY SubQ.Mass_Tag_ID	
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+		End
+		
+		Set @ResultTypeValid = 1
+	End
 
 	If @ResultTypeValid = 0
 	Begin
@@ -1146,7 +1256,6 @@ Done:
 PreviewOnlyDone:
 
 	return @errorReturn
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromOneAnalysis] TO [MTS_DB_Dev] AS [dbo]

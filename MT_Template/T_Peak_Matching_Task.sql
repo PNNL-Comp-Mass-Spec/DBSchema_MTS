@@ -151,22 +151,22 @@ GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
 GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_FTICR_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description] FOREIGN KEY([MD_ID])
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description] FOREIGN KEY([MD_ID])
 REFERENCES [T_Match_Making_Description] ([MD_ID])
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
 REFERENCES [T_Peak_Matching_NET_Value_Type_Name] ([NET_Value_Type])
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
 REFERENCES [T_Peak_Matching_Task_State_Name] ([Processing_State])
 ON UPDATE CASCADE
 GO

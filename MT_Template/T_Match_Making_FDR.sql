@@ -9,12 +9,17 @@ CREATE TABLE [dbo].[T_Match_Making_FDR](
 	[STAC_Cutoff] [real] NOT NULL,
 	[Unique_AMTs] [int] NULL,
 	[FDR] [real] NOT NULL,
-	[Matches] [int] NOT NULL,
+	[Matches] [int] NULL,
 	[Errors] [real] NOT NULL,
 	[UP_Filtered_Unique_AMTs] [int] NULL,
 	[UP_Filtered_FDR] [real] NOT NULL,
-	[UP_Filtered_Matches] [int] NOT NULL,
+	[UP_Filtered_Matches] [int] NULL,
 	[UP_Filtered_Errors] [real] NOT NULL,
+	[Unique_Conformers] [int] NULL,
+	[UP_Filtered_Unique_Conformers] [int] NULL,
+	[wSTAC_Unique_AMTs] [int] NULL,
+	[wSTAC_Unique_Conformers] [int] NULL,
+	[wSTAC_FDR] [real] NULL,
  CONSTRAINT [PK_T_Match_Making_FDR] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC

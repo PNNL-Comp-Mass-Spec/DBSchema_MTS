@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE QuantitationProcessWorkStepE
+CREATE PROCEDURE dbo.QuantitationProcessWorkStepE
 /****************************************************	
 **  Desc: 
 **
@@ -16,11 +16,13 @@ CREATE PROCEDURE QuantitationProcessWorkStepE
 **			06/06/2007 mem - Now populating column Rank_Match_Score_Avg
 **			09/13/2010 mem - Changed Charge_State_Min and Charge_State_Max to smallint
 **			10/13/2010 mem - Added support for Uniqueness_Probability and FDR_Threshold
+**			11/02/2011 mem - Added @ProteinDegeneracyMode
 **
 ****************************************************/
 (
 	@QuantitationID int,
 	@InternalStdInclusionMode tinyint,			-- 0 for no NET lockers, 1 for PMT tags and NET Lockers, 2 for NET lockers only
+	@ProteinDegeneracyMode tinyint,
 	@message varchar(512)='' output
 )
 AS
@@ -390,7 +392,52 @@ AS
 	--
 	-- We can also link in Ref_ID at this time
 	-----------------------------------------------------------
+	
+	-- Step 11a
+	--
+	-- Populate a table with the AMTs and corresponding proteins
+	-- If @ProteinDegeneracyMode = 0, then peptides will map to all proteins defined in T_Mass_Tag_to_Protein_Map
+	-- If @ProteinDegeneracyMode > 0, then the "best" protein will be determined using SP ReduceProteinDegeneracy
+	
+	CREATE TABLE #TmpAMTtoProteinMap (
+		Mass_Tag_ID int not null,
+		Ref_ID int not null,
+		Valid smallint not null
+	)
+	
+	CREATE CLUSTERED INDEX #IX_TmpAMTtoProteinMap ON #TmpAMTtoProteinMap(Mass_Tag_ID, Ref_ID)
+	
+	INSERT INTO #TmpAMTtoProteinMap( Mass_Tag_ID, Ref_ID, Valid )
+	SELECT DISTINCT UMR.Mass_Tag_ID,
+	                MTPM.Ref_ID,
+	                1 AS Valid
+	FROM #UMCMatchResultsByTopLevelFraction AS UMR
+	     INNER JOIN T_Mass_Tag_to_Protein_Map AS MTPM
+	       ON UMR.Mass_Tag_ID = MTPM.Mass_Tag_ID
+	--
+	IF @myError <> 0
+	Begin
+		Set @message = 'Error while populating the #TmpAMTtoProteinMap temporary table'
+		Set @myError = 134
+		Goto Done
+	End
+ 
+	If IsNull(@ProteinDegeneracyMode, 0) <> 0
+	Begin
+		-- Only allow a peptide to map to a single protein
+		-- @ProteinDegeneracyMode = 1 means to Iteratively remove entries from #TmpAMTtoProteinMap by favoring the protein with the highest sequence coverage
+		-- @ProteinDegeneracyMode = 2 means to Iteratively remove entries from #TmpAMTtoProteinMap by favoring the protein with the most identified peptides
 
+		exec @myError = ReduceProteinDegeneracy @ProteinDegeneracyMode=@ProteinDegeneracyMode
+		--
+		IF @myError <> 0
+		Begin
+			Set @message = 'Error calling ReduceProteinDegeneracy to update #TmpAMTtoProteinMap when @ProteinDegeneracyMode > 0'
+			Set @myError = 135
+			Goto Done
+		End
+	End
+	
 	-- Step 11b
 	--
 	-- Sum peptide abundances across top level fractions
@@ -482,8 +529,8 @@ AS
 			COUNT(TopLevelFraction), MIN(TopLevelFraction), MAX(TopLevelFraction),
 			CONVERT(float, 0)
 	FROM	#UMCMatchResultsByTopLevelFraction AS UMR INNER JOIN
-			T_Mass_Tag_to_Protein_Map AS MTPM ON
-			UMR.Mass_Tag_ID = MTPM.Mass_Tag_ID INNER JOIN
+			T_Mass_Tag_to_Protein_Map AS MTPM ON UMR.Mass_Tag_ID = MTPM.Mass_Tag_ID INNER JOIN
+			#TmpAMTtoProteinMap AS MTPMFilter ON MTPM.Mass_Tag_ID = MTPMFilter.Mass_Tag_ID AND MTPM.Ref_ID = MTPMFilter.Ref_ID AND MTPMFilter.Valid > 0 INNER JOIN
 			T_Mass_Tags AS MT ON UMR.Mass_Tag_ID = MT.Mass_Tag_ID
 	GROUP BY MTPM.Ref_ID, UMR.InternalStdMatch, UMR.Mass_Tag_ID, UMR.Mass_Tag_Mods, IsNull(MT.Multiple_Proteins,0) + 1, IsNull(MT.PMT_Quality_Score,0), MTPM.Cleavage_State, MTPM.Fragment_Span
 	ORDER BY MTPM.Ref_ID, UMR.InternalStdMatch, UMR.Mass_Tag_ID, UMR.Mass_Tag_Mods
@@ -505,24 +552,27 @@ AS
 		goto Done
 	End
 
-	-- Make sure Protein_Count is not under-estimated in #UMCMatchResultsSummary
+	-- Make sure Protein_Count is accurate in #UMCMatchResultsSummary
 	-- The Protein_Count value was originally obtained from T_Mass_Tags.Multiple_Proteins
-	-- If there are more entries in T_Mass_Tag_to_Protein_Map than Multiple_Proteins+1, then
-	-- Protein_Count in #UMCMatchResultsSummary will be updated to the number of 
-	-- entries in T_Mass_Tag_to_Protein_Map for the given mass tag
+	-- If @ProteinDegeneracyMode is non-zero, then the Protein_Count value will be 1 for every peptide
+	-- Even if @ProteinDegeneracyMode is zero, the actual protein count may disagree with T_Mass_Tags.Multiple_Proteins
+	-- The following query computes the correct count
 	UPDATE #UMCMatchResultsSummary
 	SET Protein_Count = SubQ.Protein_Count_For_MT
-	FROM #UMCMatchResultsSummary INNER JOIN (
-			SELECT Mass_Tag_ID, Count(Ref_ID) AS Protein_Count_For_MT
-			FROM #UMCMatchResultsSummary
-			GROUP BY Mass_Tag_ID
-		 ) AS SubQ ON #UMCMatchResultsSummary.Mass_Tag_ID = SubQ.Mass_Tag_ID
-	WHERE SubQ.Protein_Count_For_MT > Protein_Count
+	FROM #UMCMatchResultsSummary MSummary
+	     INNER JOIN ( SELECT Mass_Tag_ID,
+	                         Count(DISTINCT Ref_ID) AS Protein_Count_For_MT
+	                  FROM #UMCMatchResultsSummary
+	                  GROUP BY Mass_Tag_ID 
+	                ) AS SubQ
+	       ON MSummary.Mass_Tag_ID = SubQ.Mass_Tag_ID
+	WHERE SubQ.Protein_Count_For_MT <> MSummary.Protein_Count
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepE] TO [MTS_DB_Dev] AS [dbo]

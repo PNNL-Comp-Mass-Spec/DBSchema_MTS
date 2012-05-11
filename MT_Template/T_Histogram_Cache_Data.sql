@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_Histogram_Cache_Data](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Histogram_Cache_Data]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_Data_T_Histogram_Cache] FOREIGN KEY([Histogram_Cache_ID])
+ALTER TABLE [dbo].[T_Histogram_Cache_Data]  WITH CHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_Data_T_Histogram_Cache] FOREIGN KEY([Histogram_Cache_ID])
 REFERENCES [T_Histogram_Cache] ([Histogram_Cache_ID])
 ON DELETE CASCADE
 GO

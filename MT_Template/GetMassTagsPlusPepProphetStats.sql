@@ -20,6 +20,11 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 **			04/05/2008 mem - Updated to use Cleavage_State_Max in T_Mass_Tags
 **			03/09/2009 mem - Now including column NET_Obs_Count
 **			12/02/2010 mem - No longer returning the Mass_Tag_ID column twice in the resultset returned
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/28/2012 mem - Now calling AddUpdatePMTCollection to update T_PMT_Collection; if a match is not found, then adds new rows to T_PMT_Collection and T_PMT_Collection_Members
+**			               - Added parameter @PMTCollectionID
+**			02/29/2012 mem - Updated #Tmp_MTandConformer_Details to include PMT_QS
+**			               - Added parameters @AMTCount and @infoOnly
 **  
 ****************************************************************/
 (
@@ -43,7 +48,10 @@ CREATE PROCEDURE dbo.GetMassTagsPlusPepProphetStats
 	@ExperimentFilter varchar(64) = '',				-- If non-blank, then selects PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@ExperimentExclusionFilter varchar(64) = '',	-- If non-blank, then excludes PMT tags from datasets with this experiment; ignored if @JobToFilterOnByDataset is non-zero
 	@JobToFilterOnByDataset int = 0,				-- Set to a non-zero value to only select PMT tags from the dataset associated with the given MS job; useful for matching LTQ-FT MS data to peptides detected during the MS/MS portion of the same analysis; if the job is not present in T_FTICR_Analysis_Description then no data is returned
-	@MinimumPeptideProphetProbability real = 0		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@PMTCollectionID int = 0 output,
+	@AMTCount int = 0 output,				-- Number of rows returned (or that would be returned if @infoOnly = 0)
+	@infoOnly int = 0						-- Set to 0 to return the data; set to 1 to preview the results; Set to 2 to update @PMTCollectionID and @AMTCount but not return the specific AMTs
 )
 As
 	Set NoCount On
@@ -53,14 +61,18 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @DatasetToFilterOn varchar(256)
-	
+	Declare @DatasetToFilterOn varchar(256)
+	Declare @MaximumMSGFSpecProb float = 0
+
 	---------------------------------------------------	
 	-- Validate the input parameters
 	---------------------------------------------------	
 	Set @NETValueType = IsNull(@NETValueType, 0)
 	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
 	Set @DatasetToFilterOn = ''
+	Set @PMTCollectionID = 0
+	Set @AMTCount = 0
+	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	---------------------------------------------------	
 	-- Create a temporary table to hold the list of mass tags that match the 
@@ -72,11 +84,35 @@ As
 
 	CREATE CLUSTERED INDEX #IX_TmpMassTags ON #TmpMassTags (Mass_Tag_ID ASC)
 
+	---------------------------------------------------	
+	-- Create a temporary table to hold the MT details
+	-- This will be used when calling AddUpdatePMTCollection
+	---------------------------------------------------
+	--
+	CREATE TABLE #Tmp_MTandConformer_Details (
+		Mass_Tag_ID int NOT NULL,
+		Monoisotopic_Mass float NULL,
+		NET real NULL,
+		PMT_QS real NULL,
+		Conformer_ID int NULL,
+		Conformer_Charge smallint NULL,
+		Conformer smallint NULL,
+		Drift_Time_Avg real NULL
+	)
+
+	CREATE CLUSTERED INDEX #IX_Tmp_MTandConformer_Details ON #Tmp_MTandConformer_Details (Mass_Tag_ID ASC, Conformer_ID ASC)
+	
+	
+	---------------------------------------------------	
+	-- Populate #TmpMassTags with the AMTs to use
+	---------------------------------------------------
+	--
 	Exec @myError = GetMassTagsPassingFiltersWork	
 							@MassCorrectionIDFilterList, @ConfirmedOnly, 
 							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
 							@MinimumHighNormalizedScore, @MinimumPMTQualityScore, 
 							@MinimumHighDiscriminantScore, @MinimumPeptideProphetProbability,
+							@MaximumMSGFSpecProb = 0,								-- Passing 0 means to not filter on MSGF
 							@DatasetToFilterOn = @DatasetToFilterOn Output
 	
 	If @myError <> 0
@@ -93,23 +129,165 @@ As
 	If @JobToFilterOnByDataset <> 0
 	Begin
 		---------------------------------------------------
-		-- Return data for just one job
-		-- Using GANET_Obs in T_Peptides for each MT's NET
-		-- Returning 0 for StD_GANET
-		---------------------------------------------------]
+		-- Possibly create a new PMT_Collection		
+		---------------------------------------------------
+		
+		INSERT INTO #Tmp_MTandConformer_Details( Mass_Tag_ID,
+		                                         Monoisotopic_Mass,
+		                                         NET,
+		                                         PMT_QS,
+		                                         Conformer_ID,
+		                                         Conformer_Charge,
+		                                         Conformer,
+		                                         Drift_Time_Avg )
+		SELECT MT.Mass_Tag_ID,
+		       MT.Monoisotopic_Mass,
+		       CASE
+		           WHEN @NETValueType = 1 THEN MTN.PNET
+		           ELSE MIN(P.GANET_Obs)
+		       END AS NET_Value_to_Use,
+		       MT.PMT_Quality_Score,
+		       NULL AS Conformer_ID,
+		       NULL AS Conformer_Charge,
+		       NULL AS Conformer,
+		       NULL AS Drift_Time_Avg
+		FROM #TmpMassTags
+		     INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
+		     INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID
+		     INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID
+		     INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job
+		     LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
+		WHERE TAD.Dataset = @DatasetToFilterOn AND
+		   P.Max_Obs_Area_In_Job = 1
+		GROUP BY MT.Mass_Tag_ID, MT.Monoisotopic_Mass, MTN.PNET
 		--
-		SELECT	MT.Mass_Tag_ID, 
+		SELECT @AMTCount = @@RowCount
+		
+		exec AddUpdatePMTCollection
+							@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+							@MinimumPeptideProphetProbability, @MaximumMSGFSpecProb, @MinimumPMTQualityScore, 
+							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
+							@MassCorrectionIDFilterList, @NETValueType, @infoOnly=@infoOnly, @PMTCollectionID = @PMTCollectionID output
+
+
+		If @infoOnly = 0
+		Begin
+			---------------------------------------------------
+			-- Return data for just one job
+			-- Using GANET_Obs in T_Peptides for each MT's NET
+			-- Returning 0 for StD_GANET
+			---------------------------------------------------
+			--
+			SELECT MT.Mass_Tag_ID,
+				MT.Peptide,
+				MT.Monoisotopic_Mass,
+				CASE
+					WHEN @NETValueType = 1 THEN MTN.PNET
+					ELSE MIN(P.GANET_Obs)
+				END AS NET_Value_to_Use,
+				MTN.Cnt_GANET AS NET_Obs_Count,
+				MTN.PNET,
+				MT.High_Normalized_Score,
+				0 AS StD_GANET,
+				MT.High_Discriminant_Score,
+				MT.Peptide_Obs_Count_Passing_Filter,
+				MT.Mod_Count,
+				MT.Mod_Description,
+				MT.High_Peptide_Prophet_Probability,
+				MTPPS.ObsCount_CS1,
+				MTPPS.ObsCount_CS2,
+				MTPPS.ObsCount_CS3,
+				MTPPS.PepProphet_FScore_Max_CS1,
+				MTPPS.PepProphet_FScore_Max_CS2,
+				MTPPS.PepProphet_FScore_Max_CS3,
+				MTPPS.PepProphet_Probability_Max_CS1,
+				MTPPS.PepProphet_Probability_Max_CS2,
+				MTPPS.PepProphet_Probability_Max_CS3,
+				MTPPS.PepProphet_FScore_Avg_CS1,
+				MTPPS.PepProphet_FScore_Avg_CS2,
+				MTPPS.PepProphet_FScore_Avg_CS3,
+				MT.Cleavage_State_Max AS Cleavage_State
+			FROM #TmpMassTags
+				INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
+				INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID
+				INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID
+				INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job
+				LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
+			WHERE TAD.Dataset = @DatasetToFilterOn AND
+				P.Max_Obs_Area_In_Job = 1
+			GROUP BY MT.Mass_Tag_ID, MT.Peptide, MT.Monoisotopic_Mass, MTN.PNET, MTN.Cnt_GANET, MTN.PNET,
+					MT.High_Normalized_Score, MT.High_Discriminant_Score, MT.Peptide_Obs_Count_Passing_Filter, 
+					MT.Mod_Count, MT.Mod_Description, MT.High_Peptide_Prophet_Probability, MTPPS.ObsCount_CS1,
+					MTPPS.ObsCount_CS2, MTPPS.ObsCount_CS3, MTPPS.PepProphet_FScore_Max_CS1,
+					MTPPS.PepProphet_FScore_Max_CS2, MTPPS.PepProphet_FScore_Max_CS3,
+					MTPPS.PepProphet_Probability_Max_CS1, MTPPS.PepProphet_Probability_Max_CS2,
+					MTPPS.PepProphet_Probability_Max_CS3, MTPPS.PepProphet_FScore_Avg_CS1,
+					MTPPS.PepProphet_FScore_Avg_CS2, MTPPS.PepProphet_FScore_Avg_CS3, MT.Cleavage_State_Max
+			ORDER BY MT.Monoisotopic_Mass
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+		End
+	End
+	Else
+	Begin
+		---------------------------------------------------
+		-- Possibly create a new PMT_Collection		
+		---------------------------------------------------
+		
+		INSERT INTO #Tmp_MTandConformer_Details( Mass_Tag_ID,
+		                                         Monoisotopic_Mass,
+		                                         NET,
+		                                         PMT_QS,
+		                                         Conformer_ID,
+		                                         Conformer_Charge,
+		                                         Conformer,
+		                                         Drift_Time_Avg )
+		SELECT MT.Mass_Tag_ID,
+		       MT.Monoisotopic_Mass,
+		       CASE
+		           WHEN @NETValueType = 1 THEN MTN.PNET
+		           ELSE MTN.Avg_GANET
+		       END AS NET_Value_to_Use,
+		       MT.PMT_Quality_Score,
+		       NULL AS Conformer_ID,
+		       NULL AS Conformer_Charge,
+		       NULL AS Conformer,
+		       NULL AS Drift_Time_Avg
+		FROM #TmpMassTags
+		  INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
+		     INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
+		     LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
+		--
+		SELECT @AMTCount = @@RowCount
+		
+		exec AddUpdatePMTCollection
+							@MinimumHighNormalizedScore, @MinimumHighDiscriminantScore, 
+							@MinimumPeptideProphetProbability, @MaximumMSGFSpecProb, @MinimumPMTQualityScore, 
+							@ExperimentFilter, @ExperimentExclusionFilter, @JobToFilterOnByDataset, 
+							@MassCorrectionIDFilterList, @NETValueType, @infoOnly=@infoOnly, @PMTCollectionID = @PMTCollectionID output
+
+
+		If @infoOnly = 0
+		Begin
+			---------------------------------------------------
+			-- Return stats for all matching MTs
+			-- Using Avg_GANET in T_Mass_Tags_NET for each MT's NET
+			-- Returning StD_GANET from T_Mass_Tags_NET for StD_GANET
+			---------------------------------------------------
+			--
+			SELECT 
+				MT.Mass_Tag_ID, 
 				MT.Peptide, 
 				MT.Monoisotopic_Mass, 
-				CASE WHEN @NETValueType = 1
+				CASE WHEN @NETValueType = 1 
 				THEN MTN.PNET
-				ELSE MIN(P.GANET_Obs) 
+				ELSE MTN.Avg_GANET 
 				END As NET_Value_to_Use, 
 				MTN.Cnt_GANET AS NET_Obs_Count,
 				MTN.PNET,
 				MT.High_Normalized_Score, 
-				0 AS StD_GANET,
-				MT.High_Discriminant_Score, 
+				MTN.StD_GANET,
+				MT.High_Discriminant_Score,
 				MT.Peptide_Obs_Count_Passing_Filter,
 				MT.Mod_Count,
 				MT.Mod_Description,
@@ -127,63 +305,15 @@ As
 				MTPPS.PepProphet_FScore_Avg_CS2, 
 				MTPPS.PepProphet_FScore_Avg_CS3,
 				MT.Cleavage_State_Max AS Cleavage_State
-		FROM #TmpMassTags
-			 INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID 
-			 INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID 
-			 INNER JOIN T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID 
-			 INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
-			 LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
-		WHERE TAD.Dataset = @DatasetToFilterOn AND
-				P.Max_Obs_Area_In_Job = 1
-		ORDER BY MT.Monoisotopic_Mass
+			FROM #TmpMassTags 
+				INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
+				INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
+				LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
+			ORDER BY MT.Monoisotopic_Mass
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+		End
 	End
-	Else
-	Begin
-		---------------------------------------------------
-		-- Return stats for all matching MTs
-		-- Using Avg_GANET in T_Mass_Tags_NET for each MT's NET
-		-- Returning StD_GANET from T_Mass_Tags_NET for StD_GANET
-		---------------------------------------------------]
-		--
-		SELECT 
-			MT.Mass_Tag_ID, 
-			MT.Peptide, 
-			MT.Monoisotopic_Mass, 
-			CASE WHEN @NETValueType = 1 
-			THEN MTN.PNET
-			ELSE MTN.Avg_GANET 
-			END As NET_Value_to_Use, 
-			MTN.Cnt_GANET AS NET_Obs_Count,
-			MTN.PNET,
-			MT.High_Normalized_Score, 
-			MTN.StD_GANET,
-			MT.High_Discriminant_Score,
-			MT.Peptide_Obs_Count_Passing_Filter,
-			MT.Mod_Count,
-			MT.Mod_Description,
-			MT.High_Peptide_Prophet_Probability,
-			MTPPS.ObsCount_CS1, 
-			MTPPS.ObsCount_CS2, 
-			MTPPS.ObsCount_CS3, 
-			MTPPS.PepProphet_FScore_Max_CS1, 
-			MTPPS.PepProphet_FScore_Max_CS2, 
-			MTPPS.PepProphet_FScore_Max_CS3, 
-			MTPPS.PepProphet_Probability_Max_CS1, 
-			MTPPS.PepProphet_Probability_Max_CS2, 
-			MTPPS.PepProphet_Probability_Max_CS3, 
-			MTPPS.PepProphet_FScore_Avg_CS1, 
-			MTPPS.PepProphet_FScore_Avg_CS2, 
-			MTPPS.PepProphet_FScore_Avg_CS3,
-			MT.Cleavage_State_Max AS Cleavage_State
-		FROM #TmpMassTags 
-			INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
-			INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID
-			LEFT OUTER JOIN T_Mass_Tag_Peptide_Prophet_Stats MTPPS ON MT.Mass_Tag_ID = MTPPS.Mass_Tag_ID
-		ORDER BY MT.Monoisotopic_Mass
-	End
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-
 
 Done:
 	Return @myError

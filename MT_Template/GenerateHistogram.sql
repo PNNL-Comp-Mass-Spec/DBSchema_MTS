@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GenerateHistogram
+CREATE PROCEDURE GenerateHistogram
 /****************************************************
 **
 **	Desc: 
@@ -34,6 +34,7 @@ CREATE PROCEDURE dbo.GenerateHistogram
 **			04/13/2006 mem - Fixed query bug involving NET histogram generation when @ResultTypeFilter <> ''
 **			09/06/2006 mem - Added mode 7 for Peptide Prophet Probability
 **						   - Added parameter @PeptideProphetProbabilityMinimum
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -195,7 +196,7 @@ AS
 			Set @Fromsql = @FromSql + '  FROM T_Peptides P'
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 			
@@ -228,7 +229,7 @@ AS
 				
 				Set @FromSql = @FromSql + ' INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID'
 				If Len(@ResultTypeFilter) > 0
-				 Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				 Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 			End
 
 			Set @FromSql = @FromSql + ' WHERE NOT MTN.Avg_GANET Is Null'
@@ -296,7 +297,7 @@ AS
 			Set @Fromsql = @FromSql +     ' FROM T_Peptides P '
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 
@@ -368,7 +369,7 @@ AS
 			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 
@@ -440,7 +441,7 @@ AS
 			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 
 			Set @FromSql = @FromSql +  ' WHERE NOT MT.Peptide Is Null'
 			If Len(@ResultTypeFilter) > 0
@@ -516,7 +517,7 @@ AS
 			If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 
 			Set @FromSql = @FromSql +  ' WHERE NOT MT.PMT_Quality_Score Is Null'
 			If Len(@ResultTypeFilter) > 0
@@ -571,7 +572,7 @@ AS
 		If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 		If Len(@ResultTypeFilter) > 0
-			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 		If @PMTQualityScoreMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 
@@ -625,7 +626,7 @@ AS
 		If @DiscriminantScoreMinimum > 0 OR @PeptideProphetProbabilityMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 		If Len(@ResultTypeFilter) > 0
-			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 		If @PMTQualityScoreMinimum > 0
 			Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 
@@ -695,7 +696,7 @@ AS
 			Set @Fromsql = @FromSql +     ' FROM T_Peptides P '
 			Set @FromSql = @FromSql +     ' INNER JOIN T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID'
 			If Len(@ResultTypeFilter) > 0
-				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+				Set @FromSql = @FromSql + ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 			If @PMTQualityScoreMinimum > 0
 				Set @FromSql = @FromSql + ' INNER JOIN T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID'
 
@@ -1143,7 +1144,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GenerateHistogram] TO [DMS_SP_User] AS [dbo]

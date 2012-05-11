@@ -1,9 +1,8 @@
 /****** Object:  StoredProcedure [dbo].[RefreshMSMSPeptideProphetValues] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
-
 
 CREATE Procedure RefreshMSMSPeptideProphetValues
 /****************************************************
@@ -24,6 +23,7 @@ CREATE Procedure RefreshMSMSPeptideProphetValues
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			04/23/2008 mem - Now explicitly dropping the temporary table created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -231,7 +231,7 @@ As
 
 				Set @S = @S + ' FROM T_Peptides P_Target INNER JOIN'
 				Set @S = @S +      ' ' + @PeptideDBPath + '.dbo.T_Peptides P_Src ON'
-				Set @S = @S +      ' P_Target.Analysis_ID = P_Src.Analysis_ID AND'
+				Set @S = @S +      ' P_Target.Job = P_Src.Job AND'
 				Set @S = @S +      ' P_Target.Scan_Number = P_Src.Scan_Number AND'
 				Set @S = @S +      ' P_Target.Number_Of_Scans = P_Src.Number_Of_Scans AND'
 				Set @S = @S +      ' P_Target.Charge_State = P_Src.Charge_State AND'
@@ -240,7 +240,7 @@ As
 				Set @S = @S +      ' P_Src.Peptide_ID = SD_Src.Peptide_ID INNER JOIN'
 				Set @S = @S +      ' T_Score_Discriminant SD_Target ON'
 				Set @S = @S +      ' P_Target.Peptide_ID = SD_Target.Peptide_ID INNER JOIN'
-				Set @S = @S +      ' #T_Tmp_JobsToUpdatePepProphet AS JTU ON P_Src.Analysis_ID = JTU.Job'
+				Set @S = @S +      ' #T_Tmp_JobsToUpdatePepProphet AS JTU ON P_Src.Job = JTU.Job'
 				Set @S = @S + ' WHERE NOT SD_Src.Peptide_Prophet_Probability IS Null AND SD_Src.Peptide_Prophet_Probability <> IsNull(SD_Target.Peptide_Prophet_Probability, -12345) OR '
 				Set @S = @S +      ' (SD_Src.Peptide_Prophet_Probability IS Null AND NOT SD_Target.Peptide_Prophet_Probability IS Null)'
 
@@ -319,7 +319,6 @@ Done:
 	DROP TABLE #T_Tmp_JobsToUpdatePepProphet
 			
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSPeptideProphetValues] TO [MTS_DB_Dev] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure AddFTICRUmcInternalStdMatch
+CREATE Procedure dbo.AddFTICRUmcInternalStdMatch
 /****************************************************	
 **	Adds row to the T_FTICR_UMC_InternalStdDetails
 **  Modelled after AddFTICRUmcMatch
@@ -20,9 +20,10 @@ CREATE Procedure AddFTICRUmcInternalStdMatch
 **			05/16/2005 mem - switched to using Seq_ID for the Locker ID
 **			05/28/2005 mem - renamed column Predicted_GANET to Predicted_NET
 **			12/20/2005 mem - Renamed SP from AddFTICRUmcNETLockerMatch to AddFTICRUmcInternalStdMatch
-**			10/07/2010 mem - Added column @UniquenessProbability
+**			10/07/2010 mem - Added parameter @UniquenessProbability
 **						   - Changed @MatchingMemberCount from float to int
-**			10/11/2010 mem - Added column @FDRThreshold (value between 0 and 1)
+**			10/11/2010 mem - Added parameter @FDRThreshold (value between 0 and 1)
+**			11/10/2011 mem - Added parameters @wSTAC an @wSTACFDR
 **
 ****************************************************/
 (
@@ -34,7 +35,9 @@ CREATE Procedure AddFTICRUmcInternalStdMatch
 	@ExpectedNET float,					-- NET Value of the Internal Standard
 	@DelMatchScore decimal(9,5)=0,		-- Difference between the next lower value's match score and the highest value's match score for all mass tags matching this UMC
 	@UniquenessProbability real = 0,	-- Uniqueness Probability, computed by STAC (similar to SLiC score in that it indicates the density of the region that a UMC is matching one or more AMT tags)
-	@FDRThreshold real = 1				-- FDR Threshold that the given STAC score corresponds to; will be 1 if @MatchScore is SLiC Score
+	@FDRThreshold real = 1,				-- FDR Threshold that the given STAC score corresponds to; will be 1 if @MatchScore is SLiC Score
+	@wSTAC real = null,					-- Weighted STAC score (simply STAC times UniquenessProbability aka STAC * UP)
+	@wSTACFDR real = 1					-- FDR associatd with the wSTAC score
 )
 As
 	Set NoCount On
@@ -51,7 +54,9 @@ As
 	                                            Matching_Member_Count,
 	                                            Del_Match_Score,
 	                                            Uniqueness_Probability,
-	                                            FDR_Threshold )
+	                                            FDR_Threshold,
+	                                            wSTAC,
+	                                            wSTAC_FDR_Threshold )
 	VALUES (@UMCResultsID, 
             @SeqID, 
             @MatchScore, 
@@ -60,12 +65,15 @@ As
             @MatchingMemberCount,
             @DelMatchScore, 
             @UniquenessProbability,
-            @FDRThreshold)
+            @FDRThreshold,
+            @wSTAC,
+            @wSTACFDR)
 	--
 	Set @ReturnValue=@@ERROR
 	
 Done:
 	Return @ReturnValue
+
 
 GO
 GRANT EXECUTE ON [dbo].[AddFTICRUmcInternalStdMatch] TO [DMS_SP_User] AS [dbo]

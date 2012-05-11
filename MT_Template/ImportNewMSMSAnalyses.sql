@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ImportNewMSMSAnalyses
+CREATE Procedure dbo.ImportNewMSMSAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -59,6 +59,8 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			07/09/2010 mem - Now showing the dataset name, tool name, and result type when @InfoOnly = 1
 **			07/13/2010 mem - Now validating the dataset acquisition length against the ranges defined in T_Process_Config
 **						   - Now populating DS_Acq_Length in T_Analysis_Description
+**			03/28/2012 mem - Now using parameters MSMS_Job_Minimum and MSMS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
+**			04/26/2012 mem - Now showing warnings if jobs in @JobListOverride are not in a Peptide DB, or if those jobs are in a Peptide DB that is not defined in T_Process_Config
 **
 *****************************************************/
 (
@@ -104,7 +106,7 @@ As
 	declare @FilterOnEnzymeID tinyint
 	
 	declare @UsingJobListOverride tinyint
-	set @UsingJobListOverride =0
+	set @UsingJobListOverride = 0
 	
 	declare @JobsByDualKeyFilters int
 	
@@ -199,12 +201,33 @@ As
 		---------------------------------------------------
 		--
 		CREATE TABLE #T_Tmp_JobListOverride (
-			JobOverride int
+			JobOverride int,
+			Dataset varchar(128),
+			AnalysisTool varchar(128),
+			ResultType varchar(128),
+			Completed DateTime,
+			Peptide_DB varchar(128),
+			Valid_Peptide_DB varchar(32),
+			Already_In_MTDB varchar(32)
 		)
-		
-		INSERT INTO #T_Tmp_JobListOverride (JobOverride)
-		SELECT Value
-		FROM dbo.udfParseDelimitedIntegerList(@JobListOverride, ',')
+					
+		INSERT INTO #T_Tmp_JobListOverride (JobOverride, Dataset, AnalysisTool, ResultType, Completed, Peptide_DB, Valid_Peptide_DB, Already_In_MTDB)
+		SELECT JobListQ.Job,
+		       DAJI.Dataset,
+		       DAJI.AnalysisTool,
+		       DAJI.ResultType,
+		       DAJI.Completed,
+		       PDM.DB_Name,
+		       'No' AS Valid_Peptide_DB,
+		       'No' AS Already_In_MTDB
+		FROM ( SELECT DISTINCT Value AS Job
+		       FROM dbo.udfParseDelimitedIntegerList ( @JobListOverride, ',' ) 
+		     ) AS JobListQ
+		     LEFT OUTER JOIN MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI
+		       ON JobListQ.Job = DAJI.Job
+		     LEFT OUTER JOIN MT_Main.dbo.V_Analysis_Job_to_Peptide_DB_Map_AllServers PDM
+		       ON DAJI.Job = PDM.Job
+		ORDER BY DAJI.Job, PDM.DB_Name
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -215,15 +238,60 @@ As
 		end
 
 		Set @UsingJobListOverride = 1
+
+		-- Look for jobs that are already in T_Analysis_Description
+		--
+		UPDATE #T_Tmp_JobListOverride
+		SET Already_In_MTDB = 'Yes'
+		FROM #T_Tmp_JobListOverride Target
+		     INNER JOIN T_Analysis_Description TAD
+		       ON Target.JobOverride = TAD.Job
 		
+		---------------------------------------------------------------------------
+		-- Validate that the jobs in @JobListOverride are present in a Peptide DB defined in T_Process_Config
+		---------------------------------------------------------------------------
+		--
+		-- First update column Valid_Peptide_DB
+		--
+		UPDATE #T_Tmp_JobListOverride
+		SET Valid_Peptide_DB = 'Yes'
+		FROM #T_Tmp_JobListOverride Target
+		     INNER JOIN ( SELECT Value
+		                  FROM T_Process_Config
+		                  WHERE Name = 'Peptide_DB_Name' 
+		                ) PeptideDBs
+		       ON Target.Peptide_DB = PeptideDBs.Value
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		-- Delete entries from #T_Tmp_JobListOverride where Valid_Peptide_DB = 'No' yet the job has another entry with Valid_Peptide_DB='Yes'
+		--
+		DELETE FROM #T_Tmp_JobListOverride
+		WHERE Valid_Peptide_DB = 'No' AND
+		      JobOverride IN ( SELECT JobOverride
+		                       FROM #T_Tmp_JobListOverride
+		                       WHERE Valid_Peptide_DB = 'Yes' )
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
 		If @InfoOnly <> 0
 		Begin
+
 			set @S = ''
-			set @S = @S + ' SELECT JobListQ.JobOverride, DAJI.Dataset, DAJI.AnalysisTool, DAJI.ResultType, DAJI.Completed' + @Lf
-			set @S = @S + ' FROM #T_Tmp_JobListOverride JobListQ LEFT OUTER JOIN ' + @Lf
-			set @S = @S + '      MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON DAJI.Job = JobListQ.JobOverride' + @Lf
+			set @S = @S + ' SELECT JobListQ.JobOverride,  Dataset, AnalysisTool, ResultType, Completed, Peptide_DB, ' + @Lf
+			set @S = @S + ' CASE WHEN Valid_Peptide_DB = ''No'' ' + @Lf
+			set @S = @S +      ' THEN CASE WHEN Peptide_DB Is Null ' + @Lf
+			set @S = @S +                ' THEN ''Warning, job is not in a peptide DB; confirm that it is a MS/MS job'' ' + @Lf
+			set @S = @S +                ' ELSE ''Warning, invalid Peptide_DB; update T_Process_Config'' ' + @Lf
+			set @S = @S +                ' END ' + @Lf
+			set @S = @S +      ' ELSE CASE WHEN Already_In_MTDB = ''Yes'' ' + @Lf
+			set @S = @S +                ' THEN ''Warning, Job already in T_Analysis_Description'' ' + @Lf
+			set @S = @S +                ' ELSE '''' ' + @Lf
+			set @S = @S +                ' End ' + @Lf
+			set @S = @S +      ' END AS Notes ' + @Lf
+			set @S = @S + ' FROM #T_Tmp_JobListOverride JobListQ ' + @Lf
 			set @S = @S + ' ORDER BY JobListQ.JobOverride' + @Lf
-			
+
 			If @PreviewSql <> 0
 			Begin
 				Print '-- SQL used to show Datasets and Tool Names for jobs in #T_Tmp_JobListOverride'
@@ -257,7 +325,37 @@ As
 	--
 	if @myRowCount = 0 OR IsDate(@DateText) = 0
 		Set @DateText = ''
-		
+	
+	---------------------------------------------------
+	-- Look for MSMS_Job_Minimum and MSMS_Job_Maximum in T_Process_Config
+	-- (ignored if @JobListOverride is defined)
+	---------------------------------------------------
+	--
+	declare @JobMinimum int = 0
+	declare @JobMaximum int = 0
+	declare @ErrorOccurred tinyint = 0
+	
+	If @UsingJobListOverride = 0
+	Begin
+		exec GetProcessConfigValueInt 'MSMS_Job_Minimum', @DefaultValue=0, @ConfigValue=@JobMinimum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
+	
+		If @ErrorOccurred > 0
+		Begin
+			Set @message = 'Entry for MSMS_Job_Minimum in T_Process_Config is not numeric; unable to apply job number filter'
+			Exec PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
+			Goto Done
+		End
+	
+		exec GetProcessConfigValueInt 'MSMS_Job_Maximum', @DefaultValue=0, @ConfigValue=@JobMaximum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
+	
+		If @ErrorOccurred > 0
+		Begin
+			Set @message = 'Entry for MSMS_Job_Maximum in T_Process_Config is not numeric; unable to apply job number filter'
+			Exec PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
+			Goto Done
+		End	
+	End
+	
 	---------------------------------------------------
 	-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
 	---------------------------------------------------
@@ -539,6 +637,15 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Jobs matching Campaign/Experiment dual filter', Convert(varchar(18), Job)
 					FROM #TmpJobsByDualKeyFilters
+
+				If @JobMinimum > 0
+					DELETE FROM #TmpJobsByDualKeyFilters
+					WHERE Job < @JobMinimum
+
+				If @JobMaximum > 0
+					DELETE FROM #TmpJobsByDualKeyFilters
+					WHERE Job > @JobMaximum
+				
 			End
 
 			
@@ -768,6 +875,16 @@ As
 						Set @S = @S +     Convert(varchar(12), @AcqLengthMaximum) + @Lf
 					end
 					
+					If @JobMinimum > 0
+					begin
+						Set @S = @S + ' AND PT.Job >= ' + Convert(varchar(12), @JobMinimum) + @Lf
+					end
+					
+					If @JobMaximum > 0
+					begin
+						Set @S = @S + ' AND PT.Job <= ' + Convert(varchar(12), @JobMaximum) + @Lf
+					end
+	
 				set @S = @S + ')'
 					
 				-- Now add jobs found using the alternate job selection method
@@ -941,6 +1058,7 @@ Done:
 
 
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User] AS [dbo]

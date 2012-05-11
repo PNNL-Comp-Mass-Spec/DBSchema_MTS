@@ -28,6 +28,9 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **			07/21/2009 mem - Added @InspectPValue
 **			08/02/2010 mem - Added @MSGFSpecProb
 **						   - Switched to using V_DMS_Filter_Set_Details (which queries a table in MT_Main) rather than querying V_DMS_Filter_Sets_Import
+**			08/09/2011 mem - Switched default PeptideProphet Threshold from >= 0 to >= -1
+**			09/16/2011 mem - Switched default PeptideProphet Threshold from >= -1 to >= -100
+**						   - Added parameters @MSGFDbSpecProb, @MSGFDbPValue, and @MSGFDbFDR
 **    
 *****************************************************/
 (
@@ -83,7 +86,7 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@XTandemLogEValueThreshold real=0 output,
 	
 	@PeptideProphetComparison varchar(2)='>=' output,
-	@PeptideProphetThreshold float=0 output,
+	@PeptideProphetThreshold float=-100 output,
 	
 	@RankScoreComparison varchar(2)='>=' output,
 	@RankScoreThreshold smallint=0 output,
@@ -101,7 +104,16 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@InspectPValueThreshold real=1 output,
 
 	@MSGFSpecProbComparison varchar(2)='<=' output,
-	@MSGFSpecProbThreshold real=1 output
+	@MSGFSpecProbThreshold real=1 output,
+
+	@MSGFDbSpecProbComparison varchar(2)='<=' output,
+	@MSGFDbSpecProbThreshold real=1 output,
+	
+	@MSGFDbPValueComparison varchar(2)='<=' output,
+	@MSGFDbPValueThreshold real=1 output,
+
+	@MSGFDbFDRComparison varchar(2)='<=' output,
+	@MSGFDbFDRThreshold real=1 output
 )
 As
 	Set nocount on
@@ -167,7 +179,7 @@ As
 	Set @XTandemLogEValueThreshold  = 0
 	
 	Set @PeptideProphetComparison = '>='
-	Set @PeptideProphetThreshold  = 0
+	Set @PeptideProphetThreshold  = -100
 
 	Set @RankScoreComparison = '>='
 	Set @RankScoreThreshold  = 0
@@ -183,9 +195,18 @@ As
 	
 	Set @InspectPValueComparison = '<='
 	Set @InspectPValueThreshold = 1
-	
-	Set @MSGFSpecProbComparison = '<='
+
+	Set @MSGFSpecProbComparison = '<='				-- MSGF re-scorer tool
 	Set @MSGFSpecProbThreshold = 1
+
+	Set @MSGFDbSpecProbComparison = '<='			-- MSGFDB Search Engine
+	Set @MSGFDbSpecProbThreshold = 1
+	
+	Set @MSGFDbPValueComparison = '<='				-- MSGFDB Search Engine
+	Set @MSGFDbPValueThreshold = 1
+
+	Set @MSGFDbFDRComparison = '<='					-- MSGFDB Search Engine
+	Set @MSGFDbFDRThreshold = 1
 
 	-------------------------------------------------
 	-- Validate @FilterSetID
@@ -376,6 +397,21 @@ As
 					 @MSGFSpecProbThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 22	-- MSGF SpecProb
+
+		SELECT TOP 1 @MSGFDbSpecProbComparison = Criterion_Comparison,
+					 @MSGFDbSpecProbThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 23	-- MSGFDB SpecProb
+
+		SELECT TOP 1 @MSGFDbPValueComparison = Criterion_Comparison,
+					 @MSGFDbPValueThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 24	-- MSGFDB PValue
+
+		SELECT TOP 1 @MSGFDbFDRComparison = Criterion_Comparison,
+					 @MSGFDbFDRThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 25	-- MSGFDB FDR
 
 	End
 

@@ -21,6 +21,7 @@ CREATE Procedure PMExportPeptidesForJobs
 **							 Now returning columns Peptide_ID and RankXC
 **			07/13/2010 mem - Now returning dataset acquisition length
 **			01/28/2011 mem - Added parameter @MSGFThreshold and now returning MSGF_SpecProb
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 ****************************************************/
 (
@@ -450,7 +451,7 @@ AS
 				Set @S = @S +   ' XCorr, MQScore, TotalPRMScore, FScore, DeltaCn2, RankXC, '
 
 			Set @S = @S +   ' Charge_State, Discriminant, Peptide_Prophet_Prob, MSGF_SpecProb, Elution_Time, Peak_SN, Peak_Area)'
-			Set @S = @S + ' SELECT Pep.Analysis_ID as Job, Pep.Peptide_ID, Pep.Scan_Number, MT.Cleavage_State_Max, '
+			Set @S = @S + ' SELECT Pep.Job, Pep.Peptide_ID, Pep.Scan_Number, MT.Cleavage_State_Max, '
 			Set @S = @S +        ' Pep.Mass_Tag_ID, Pep.Peptide, MT.Monoisotopic_Mass, '
 			If @Iteration = 1
 				Set @S = @S +    ' SS.XCorr, SS.DeltaCn2, SS.RankXC, '
@@ -463,7 +464,7 @@ AS
 			Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb, '
 			Set @S = @S +        ' Pep.Scan_Time_Peak_Apex, Pep.Peak_SN_Ratio, Pep.Peak_Area '
 			Set @S = @S + ' FROM T_Peptides Pep INNER JOIN '
-			Set @S = @S +      ' #TmpJobsCurrentBatch B On Pep.Analysis_ID = B.Job INNER JOIN '
+			Set @S = @S +      ' #TmpJobsCurrentBatch B On Pep.Job = B.Job INNER JOIN '
 			If @Iteration = 1
 				Set @S = @S +    ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN '
 			If @Iteration = 2
@@ -475,7 +476,7 @@ AS
 			Set @S = @S +     ' T_Mass_Tags MT on Pep.Mass_Tag_ID = MT.Mass_Tag_ID '
 		
 			If Len(@JobPeptideFilterTableName) > 0
-				Set @S = @S + ' INNER JOIN [' + @JobPeptideFilterTableName + '] JPF ON Pep.Analysis_ID = JPF.Job AND Pep.Peptide = JPF.Peptide '
+				Set @S = @S + ' INNER JOIN [' + @JobPeptideFilterTableName + '] JPF ON Pep.Job = JPF.Job AND Pep.Peptide = JPF.Peptide '
 
 			Set @S = @S + ' WHERE MT.Cleavage_State_Max >= @MinimumCleavageState AND '
 
@@ -997,7 +998,7 @@ AS
 					Set @S = @S +        ' SET Spectra_Count = LookupQ.Spectra_Count'
 					Set @S = @S + ' FROM #TmpPeptideStats_Results Target INNER JOIN ('
 					
-					Set @S = @S +     ' SELECT Pep.Analysis_ID AS Job, Pep.Mass_Tag_ID,'
+					Set @S = @S +     ' SELECT Pep.Job, Pep.Mass_Tag_ID,'
 					If @GroupByChargeState <> 0
 						Set @S = @S +        ' Pep.Charge_State,'
 					Set @S = @S +            ' COUNT(*) AS Spectra_Count'
@@ -1007,10 +1008,10 @@ AS
 						Set @S = @S +               ', Charge_State'
 					Set @S = @S +          '  FROM #TmpPeptideStats_Results R INNER JOIN '
 					Set @S = @S +                ' #TmpJobsCurrentBatch B ON R.Job = B.Job'
-					Set @S = @S +          ' ) S ON Pep.Analysis_ID = S.Job AND Pep.Mass_Tag_ID = S.Mass_Tag_ID'
+					Set @S = @S +          ' ) S ON Pep.Job = S.Job AND Pep.Mass_Tag_ID = S.Mass_Tag_ID'
 					If @GroupByChargeState <> 0
 						Set @S = @S +      ' AND Pep.Charge_State = S.Charge_State'
-					Set @S = @S +     ' GROUP BY Pep.Analysis_ID, Pep.Mass_Tag_ID'
+					Set @S = @S +     ' GROUP BY Pep.Job, Pep.Mass_Tag_ID'
 					If @GroupByChargeState <> 0
 						Set @S = @S +    ' ,Pep.Charge_State'
 					Set @S = @S +     ') LookupQ ON Target.Job = LookupQ.Job AND Target.Mass_Tag_ID = LookupQ.Mass_Tag_ID'
@@ -1167,7 +1168,6 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[PMExportPeptidesForJobs] TO [DMS_SP_User] AS [dbo]

@@ -3,10 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create VIEW dbo.V_Peptides_DiscriminantScoreRange_Histogram
+
+CREATE VIEW V_Peptides_DiscriminantScoreRange_Histogram
 AS
-SELECT TOP 100 PERCENT DiscriminantScore_Bin, COUNT(*) 
-    AS Match_Count
+SELECT DiscriminantScore_Bin, COUNT(*) AS Match_Count
 FROM (SELECT CASE WHEN DiscriminantScoreNorm IS NULL 
           THEN 0 WHEN DiscriminantScoreNorm BETWEEN 
           0.0 AND 
@@ -31,12 +31,11 @@ FROM (SELECT CASE WHEN DiscriminantScoreNorm IS NULL
           1.0 THEN 10 ELSE 0 END AS DiscriminantScore_Bin
       FROM dbo.T_Peptides INNER JOIN
           dbo.T_Analysis_Description ON 
-          dbo.T_Peptides.Analysis_ID = dbo.T_Analysis_Description.Job
+          dbo.T_Peptides.Job = dbo.T_Analysis_Description.Job
            INNER JOIN
           dbo.T_Score_Discriminant ON 
           dbo.T_Peptides.Peptide_ID = dbo.T_Score_Discriminant.Peptide_ID)
      StatsQ
 GROUP BY DiscriminantScore_Bin
-ORDER BY DiscriminantScore_Bin
 
 GO

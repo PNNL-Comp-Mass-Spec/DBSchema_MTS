@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE Procedure dbo.RefreshMSMSMSGFValues
 /****************************************************
 **
@@ -19,15 +18,21 @@ CREATE Procedure dbo.RefreshMSMSMSGFValues
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	01/31/2011 - Initial version
+**	Date:	01/31/2011 mem - Initial version
+**			09/14/2011 mem - Expanded @JobFilterList to varchar(max)
+**						   - Added parameter @UpdateNonNullValues
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			01/14/2012 mem - Tweaked InfoOnly messages
+**			01/17/2012 mem - Now populating T_Analysis_ToolVersion
 **    
 *****************************************************/
 (
  	@jobsUpdated int = 0 output,
  	@peptideRowsUpdated int = 0 output,
  	@message varchar(255) = '' output,
- 	@JobFilterList varchar(4000) = '',
+ 	@JobFilterList varchar(max) = '',
  	@PostLogEntryOnSuccess tinyint = 1,
+ 	@UpdateNonNullValues tinyint = 0,				-- When 1, then updates all MSGF_SpecProb values for jobs in @JobFilterList, including non-null values
  	@infoOnly tinyint = 0,
  	@PreviewSql tinyint = 0
 )
@@ -48,7 +53,8 @@ As
 
 	Declare @PeptideDBCountInvalid int
 	Declare @InvalidDBList varchar(1024)
-
+	Declare @JobFilterListDefined tinyint
+	
 	Declare @S varchar(7500)
 	Declare @continue tinyint
 
@@ -58,7 +64,9 @@ As
 
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	Set @PreviewSql = IsNull(@PreviewSql, 0)
-	
+	Set @PostLogEntryOnSuccess = IsNull(@PostLogEntryOnSuccess, 1)	
+ 	Set @UpdateNonNullValues = IsNull(@UpdateNonNullValues, 0)
+ 	
 	Set @jobsUpdated = 0
 	Set @peptideRowsUpdated = 0
 	Set @message = ''
@@ -78,6 +86,26 @@ As
 		Job int NOT NULL
 	)
 
+	CREATE TABLE #T_Tmp_JobFilterList (
+		Job int NOT NULL
+	)
+	
+	---------------------------------------------------
+	-- Populate #T_Tmp_JobFilterList
+	---------------------------------------------------
+	
+	Set @JobFilterListDefined = 0
+	
+	If Len(@JobFilterList) > 0
+	Begin
+		INSERT INTO #T_Tmp_JobFilterList (Job)
+		SELECT Value
+		FROM dbo.udfParseDelimitedIntegerList(@JobFilterList, ',')
+		ORDER BY Value
+		
+		Set @JobFilterListDefined = 1
+	End
+	
 	---------------------------------------------------
 	-- Populate #T_Peptide_Database_List with the PDB_ID values
 	-- defined in T_Analysis_Description
@@ -176,21 +204,25 @@ As
 			Set @jobCountToUpdate = 0
 			
 			-- Look for Jobs with at least one null MSGF value
+			-- Alternatively, process all jobs in #T_Tmp_JobFilterList
 			Set @S = ''
-			Set @S = @S + ' INSERT INTO #T_Tmp_JobsToUpdateMSGF (Job)'
+			Set @S = @S +  'INSERT INTO #T_Tmp_JobsToUpdateMSGF (Job)'
 			Set @S = @S + ' SELECT DISTINCT TAD.Job'
 			Set @S = @S + ' FROM T_Analysis_Description AS TAD '
 			Set @S = @S +      ' INNER JOIN ' + @PeptideDBPath + '.dbo.T_Analysis_Description AS PepTAD ON '
 			Set @S = @S +         ' TAD.Job = PepTAD.Job '
 			Set @S = @S +      ' INNER JOIN T_Peptides AS Pep '
-			Set @S = @S +         ' ON Pep.Analysis_ID = TAD.Job'
+			Set @S = @S +         ' ON Pep.Job = TAD.Job'
 			Set @S = @S +      ' INNER JOIN T_Score_Discriminant AS SD ON '
 			Set @S = @S +         ' SD.Peptide_ID = Pep.Peptide_ID'
+			
+			If @JobFilterListDefined = 1
+				Set @S = @S +  ' INNER JOIN #T_Tmp_JobFilterList FL ON TAD.Job = FL.Job'
+			
 			Set @S = @S + ' WHERE TAD.PDB_ID = ' + Convert(varchar(12), @PeptideDBID)
-			Set @S = @S +       ' AND (SD.MSGF_SpecProb IS NULL) '
 
-			If Len(IsNull(@JobFilterList, '')) > 0
-				Set @S = @S + ' AND TAD.Job In (' + @JobFilterList + ')'
+			If Not (@JobFilterListDefined = 1 AND @UpdateNonNullValues <> 0)
+				Set @S = @S +       ' AND (SD.MSGF_SpecProb IS NULL) '
 
 			If @PreviewSql <> 0
 				Print @S
@@ -228,7 +260,7 @@ As
 				If @infoOnly <> 0
 				Begin
 					-- Return the Job and the number of rows that would be updated
-					Set @S = @S + 'SELECT JTU.Job, Count(SD_Target.Peptide_ID) AS Peptide_Rows_To_Update'
+					Set @S = @S + 'SELECT JTU.Job, Count(SD_Target.Peptide_ID) AS Rows_To_Update_T_Score_Discriminant'
 				End
 				Else
 				Begin
@@ -237,8 +269,8 @@ As
 				End
 
 				Set @S = @S + ' FROM T_Peptides P_Target '
-				Set @S = @S +      ' INNER JOIN ' + @PeptideDBPath + '.dbo.T_Peptides P_Src ON'
-				Set @S = @S +         ' P_Target.Analysis_ID = P_Src.Analysis_ID AND'
+				Set @S = @S + ' INNER JOIN ' + @PeptideDBPath + '.dbo.T_Peptides P_Src ON'
+				Set @S = @S +         ' P_Target.Job = P_Src.Job AND'
 				Set @S = @S +         ' P_Target.Scan_Number = P_Src.Scan_Number AND'
 				Set @S = @S +         ' P_Target.Number_Of_Scans = P_Src.Number_Of_Scans AND'
 				Set @S = @S +         ' P_Target.Charge_State = P_Src.Charge_State AND'
@@ -248,7 +280,7 @@ As
 				Set @S = @S +      ' INNER JOIN T_Score_Discriminant SD_Target ON'
 				Set @S = @S +         ' P_Target.Peptide_ID = SD_Target.Peptide_ID '
 				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdateMSGF AS JTU ON'
-				Set @S = @S +         ' P_Src.Analysis_ID = JTU.Job'
+				Set @S = @S +         ' P_Src.Job = JTU.Job'
 				Set @S = @S + ' WHERE NOT SD_Src.MSGF_SpecProb IS Null AND SD_Src.MSGF_SpecProb <> IsNull(SD_Target.MSGF_SpecProb, -12345)'
 
 				If @infoOnly <> 0
@@ -273,6 +305,37 @@ As
 					
 				Set @peptideRowsUpdated = @peptideRowsUpdated + @myRowCount
 
+
+				---------------------------------------------------
+				-- Update T_Analysis_ToolVersion
+				---------------------------------------------------					
+
+				Set @S = ''
+				Set @S = @S + ' MERGE INTO T_Analysis_ToolVersion AS Target'
+				Set @S = @S + ' USING (	SELECT JTU.Job,'
+				Set @S = @S +                ' Src.MSGF_Version'
+				Set @S = @S +         ' FROM #T_Tmp_JobsToUpdateMSGF JTU'
+				Set @S = @S +              ' LEFT OUTER JOIN ' + @PeptideDBPath + '.dbo.T_Analysis_ToolVersion Src'
+				Set @S = @S +                ' ON Src.Job = JTU.Job'
+				Set @S = @S + ' ) AS Source (Job, MSGF_Version) '
+				Set @S = @S +   ' ON Target.Job = Source.Job'
+				Set @S = @S + ' WHEN NOT MATCHED THEN'
+				Set @S = @S +     ' INSERT (Job, MSGF_Version, Entered, Last_Affected)'
+				Set @S = @S +     ' VALUES (Source.Job, Source.MSGF_Version, GETDATE(), GETDATE())'
+				Set @S = @S + ' WHEN Matched And (' 
+				Set @S = @S +         ' ISNULL(Target.MSGF_Version, '''') <> ISNULL(source.MSGF_Version, '''') ' 
+				Set @S = @S +       ') THEN'
+				Set @S = @S +      ' UPDATE SET MSGF_Version = Source.MSGF_Version,'
+				Set @S = @S +                 ' Last_Affected = GETDATE()'
+				Set @S = @S + ' ;'
+								
+				If @PreviewSql <> 0
+					Print @S
+				Else
+				Begin
+					If @infoOnly = 0
+						exec (@S)
+				End
 
 				---------------------------------------------------
 				-- Increment @jobsUpdated
@@ -326,7 +389,7 @@ Done:
 			Else
 			Begin
 				If @infoOnly <> 0			
-					Select 'InfoOnly: No jobs needing to be updated were found' As Message
+					Select 'InfoOnly: No jobs need to have T_Score_Discriminant updated' As Message
 			End
 		End
 	End

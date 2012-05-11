@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.QuantitationProcessCheckForMSMSPeptideIDs
+CREATE PROCEDURE QuantitationProcessCheckForMSMSPeptideIDs
 /****************************************************	
 **
 **  Desc:	Examines the jobs and Mass_Tag_ID values in #UMCMatchResultsByJob
@@ -23,6 +23,7 @@ CREATE PROCEDURE dbo.QuantitationProcessCheckForMSMSPeptideIDs
 **			10/17/2007 mem - Updated to filter on Instrument_Class_Filter if applicable
 **			10/20/2008 mem - Re-worked the #TmpQRFilterPassingMTs update query to explicitly define the table-joining order
 **						   - Added Try/Catch error handling
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 ****************************************************/
 (
@@ -118,7 +119,7 @@ AS
 
 		-- Note: SP CheckFilterForAnalysesWork uses this table
 		CREATE TABLE #PeptideFilterResults (
-			Analysis_ID int NOT NULL ,
+			Job int NOT NULL ,
 			Peptide_ID int NOT NULL ,
 			Pass_FilterSet tinyint NOT NULL		
 		)
@@ -258,7 +259,7 @@ AS
 						FROM #UMCMatchResultsByJob UMR INNER JOIN
 							(	SELECT DISTINCT Pep.Mass_Tag_ID
 								FROM T_Analysis_Description TAD INNER JOIN 
-									 T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN 
+									 T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN 
 									 T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN 
 									 T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN 
 									 T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID
@@ -485,7 +486,7 @@ AS
 										Set @S = @S + ' FROM #UMCMatchResultsByJob UMR INNER JOIN '
 										Set @S = @S +     ' (SELECT DISTINCT Pep.Seq_ID AS Mass_Tag_ID '
 										Set @S = @S +      ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description TAD INNER JOIN '
-										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN'
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN'
 										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN '
 										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN '
 										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID '
@@ -705,7 +706,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessCheckForMSMSPeptideIDs] TO [MTS_DB_Dev] AS [dbo]

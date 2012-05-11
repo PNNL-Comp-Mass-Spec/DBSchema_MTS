@@ -8,6 +8,8 @@ CREATE PROCEDURE dbo.AddMatchMakingConformersForList
 /****************************************************
 **
 **	Desc:	Calls AddMatchMakingConformers for each MDID in @MDIDList
+**			After all MDIDs have been processed, calls AddConformersViaSplitting using @DriftTimeToleranceFinal
+**			to examine the observed drift times for each conformer and create new conformers where needed
 **
 **	Return values: 0 if no error; otherwise error code
 **
@@ -16,17 +18,19 @@ CREATE PROCEDURE dbo.AddMatchMakingConformersForList
 **	Auth:	mem
 **	Date:	02/21/2011 mem - Initial version
 **			02/22/2011 mem - Added parameter @SortMode
+**			11/09/2011 mem - Added @DriftTimeToleranceFinal
 **    
 *****************************************************/
 (
 	@MDIDList varchar(max),
 	@MaxFDRThreshold real = 0.95,				-- Set to a value less than 1 to filter by FDR
 	@MinimumUniquenessProbability real = 0.5,	-- Set to a value greater than 0 to filter by Uniqueness Probability (UP)
-	@DriftTimeTolerance real = 2,				-- Matching conformers must have drift times within this tolerance
+	@DriftTimeTolerance real = 1000,			-- When processing each MDID, matching conformers must have drift times within this tolerance; defaults to a large value so we can intially create just one conformer for each charge state of each AMT tag ID
 	@FilterByExperimentMSMS tinyint = 1,		-- When 1, then requires that each identified AMT tag also be observed by MS/MS for this experiment
 	@SortMode tinyint = 0,						-- 0=Sort by AMT_Count_FDR columns in T_Match_Making_Description; 1=Sort by @MDIDList order
 	@message varchar(255) = '' output,
 	@MaxIterations int = 0,
+	@DriftTimeToleranceFinal real = 0.35,		-- Sent to AddConformersViaSplitting after all MDIDs have been processed
 	@InfoOnly tinyint = 0
 )
 AS
@@ -48,9 +52,10 @@ AS
 	Set @MDIDList = IsNull(@MDIDList, '')
 	Set @MaxFDRThreshold = IsNull(@MaxFDRThreshold, 1)
 	Set @MinimumUniquenessProbability = IsNull(@MinimumUniquenessProbability, 0)
-	Set @DriftTimeTolerance = IsNull(@DriftTimeTolerance, 0.75)
+	Set @DriftTimeTolerance = IsNull(@DriftTimeTolerance, 1000)
 	Set @FilterByExperimentMSMS = IsNull(@FilterByExperimentMSMS, 1)
 	Set @SortMode = IsNull(@SortMode, 0)
+	Set @DriftTimeToleranceFinal = IsNull(@DriftTimeToleranceFinal, 0.35)
 	Set @message = ''
 	
 	Set @MaxIterations = IsNull(@MaxIterations, 0)
@@ -160,7 +165,13 @@ AS
 			
 		End	-- </b>
 	End -- </a>
-		
+	
+	-----------------------------------------------------	
+	-- Call AddConformersViaSplitting to examine the observed drift times for each conformer and create new conformers where needed
+	-----------------------------------------------------
+	--
+	If @DriftTimeToleranceFinal > 0
+		exec @myError = AddConformersViaSplitting @DriftTimeToleranceFinal, @InfoOnly = @InfoOnly
 		
 Done:
 

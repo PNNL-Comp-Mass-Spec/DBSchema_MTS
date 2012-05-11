@@ -32,6 +32,7 @@ SELECT
 	ISNULL(QD.AMT_Count_5pct_FDR, 0)  AS [AMT Count 5% FDR],
 	ISNULL(QD.AMT_Count_10pct_FDR, 0) AS [AMT Count 10% FDR],
 	ISNULL(QD.AMT_Count_25pct_FDR, 0) AS [AMT Count 25% FDR],
+	QD.Protein_Degeneracy_Mode AS [Protein Degeneracy Mode],
 	QD.ORF_Coverage_Computation_Level AS [ORF Coverage Computation Level],
 	QD.ReplicateNormalizationStats AS [Rep Norm Stats], 
 	QD.Quantitation_State AS [Quantitation State ID], 
@@ -48,6 +49,5 @@ FROM T_Quantitation_Description QD INNER JOIN
 		) MDStatsQ ON 
     QD.Quantitation_ID = MDStatsQ.QID INNER JOIN
     T_Quantitation_State_Name QSN ON QD.Quantitation_State = QSN.Quantitation_State
-
 
 GO

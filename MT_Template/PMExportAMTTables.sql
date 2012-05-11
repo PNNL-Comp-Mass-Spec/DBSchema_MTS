@@ -18,6 +18,8 @@ CREATE Procedure dbo.PMExportAMTTables
 **	Date:	10/30/2009 mem - Initial Version
 **			01/26/2011 mem - Now returning Min_MSGF_SpecProb from T_Mass_Tags
 **			02/22/2011 mem - Added parameter @ReturnIMSConformersTable
+**			10/07/2011 mem - Added column Peptide_Count_Observed to the proteins table
+**			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
 **
 ****************************************************/
 (
@@ -94,33 +96,38 @@ AS
 		
 		If @ReturnProteinTable <> 0
 		Begin
-			SELECT 	Prot.Reference AS Protein,
-					Prot.Ref_ID,
-					Prot.Description,
-					Prot.Protein_Residue_Count,
-					Prot.Monoisotopic_Mass,
-					Prot.Protein_DB_ID,
-					Prot.External_Reference_ID,
-					Prot.External_Protein_ID,
-					Prot.Protein_Collection_ID,
-					CASE
-						WHEN Prot.Reference LIKE 'reversed[_]%' OR
-							Prot.Reference LIKE 'scrambled[_]%' OR
-							Prot.Reference LIKE '%[:]reversed' THEN 1
-						ELSE 0
-					END AS Decoy_Protein,
-					Prot.Protein_Sequence
+			SELECT Prot.Reference AS Protein,
+			       Prot.Ref_ID,
+			       Prot.Description,
+			       Prot.Protein_Residue_Count,
+			       Prot.Monoisotopic_Mass,
+			       Prot.Protein_DB_ID,
+			       Prot.External_Reference_ID,
+			       Prot.External_Protein_ID,
+			       Prot.Protein_Collection_ID,
+			       CASE
+			           WHEN Prot.Reference LIKE 'reversed[_]%' OR
+			                Prot.Reference LIKE 'scrambled[_]%' OR
+			                Prot.Reference LIKE '%[:]reversed' OR
+	                        Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
+	                        Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins			                
+			                THEN 1
+			           ELSE 0
+			       END AS Decoy_Protein,
+			       Prot.Protein_Sequence,
+			       ProteinIDQ.Peptide_Count_Observed
 			FROM T_Proteins Prot
-					INNER JOIN ( SELECT Prot.Ref_ID
-								FROM T_Mass_Tags MT
-									INNER JOIN T_Mass_Tag_to_Protein_Map MTPM
-										ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID
-									INNER JOIN T_Proteins Prot
-										ON MTPM.Ref_ID = Prot.Ref_ID
-									INNER JOIN #Tmp_MTs_ToExport F
-										ON MT.Mass_Tag_ID = F.Mass_Tag_ID
-								GROUP BY Prot.Ref_ID ) ProteinIDQ
-					ON Prot.Ref_ID = ProteinIDQ.Ref_ID
+			     INNER JOIN ( SELECT Prot.Ref_ID,
+			                         COUNT(*) AS Peptide_Count_Observed
+			                  FROM T_Mass_Tags MT
+			                       INNER JOIN T_Mass_Tag_to_Protein_Map MTPM
+			                         ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID
+			                       INNER JOIN T_Proteins Prot
+			                         ON MTPM.Ref_ID = Prot.Ref_ID
+			                       INNER JOIN #Tmp_MTs_ToExport F
+			                         ON MT.Mass_Tag_ID = F.Mass_Tag_ID
+			                  GROUP BY Prot.Ref_ID ) ProteinIDQ
+			       ON Prot.Ref_ID = ProteinIDQ.Ref_ID
 			ORDER BY Prot.Reference
 			--
 			SELECT @myError = @@Error, @myRowCount = @@RowCount
@@ -144,7 +151,10 @@ AS
 					CASE
 						WHEN Prot.Reference LIKE 'reversed[_]%' OR
 							Prot.Reference LIKE 'scrambled[_]%' OR
-							Prot.Reference LIKE '%[:]reversed' THEN 1
+			                Prot.Reference LIKE '%[:]reversed' OR
+	                        Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
+	                        Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins			                
+			                THEN 1
 						ELSE 0
 					END AS Decoy_Protein
 			FROM T_Mass_Tags MT

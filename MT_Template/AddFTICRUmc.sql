@@ -22,6 +22,8 @@ CREATE Procedure dbo.AddFTICRUmc
 **			09/21/2004 mem - Switched from FT_ID to FPR_Type_ID
 **			12/20/2005 mem - Renamed column GANET_Locker_Count to InternalStd_Hit_Count
 **			10/07/2010 mem - Added parameter @DriftTime
+**			06/21/2011 mem - Added parameter @DriftTimeAligned
+**			11/10/2011 mem - Added parameter @MemberCountSaturated
 **
 ****************************************************/
 (
@@ -66,7 +68,9 @@ CREATE Procedure dbo.AddFTICRUmc
 	@ExpressionRatioChargeStateBasisCount SMALLINT=Null,		-- Number of charge states used to compute expression ratio
 	@ExpressionRatioMemberBasisCount INT=Null,					-- Number of members used to compute expression ratio
 	@MemberCountUsedForAbu INT=Null,							-- Number of members used to compute class abundance
-	@DriftTime real=0
+	@DriftTime real=0,
+	@DriftTimeAligned real=0,
+	@MemberCountSaturated int = NULL
 )
 As
 SET NOCOUNT ON
@@ -101,8 +105,9 @@ BEGIN
 		 Expression_Ratio_Charge_State_Basis_Count,
 		 Expression_Ratio_Member_Basis_Count,
 		 Member_Count_Used_For_Abu,
-		 Drift_Time)
-		 
+		 Drift_Time, 
+		 Drift_Time_Aligned,
+		 Member_Count_Saturated )		 
 	VALUES (@MDID, @UMCInd, @MemberCount, @UMCScore, 
 			@ScanFirst, @ScanLast, @ScanMaxAbundance, @ClassMass, 
 			@MonoisotopicMassMin, @MonoisotopicMassMax, 
@@ -116,7 +121,9 @@ BEGIN
 			@ExpressionRatioChargeStateBasisCount, 
 			@ExpressionRatioMemberBasisCount,
 			@MemberCountUsedForAbu,
-			@DriftTime)
+			@DriftTime, 
+			@DriftTimeAligned,
+			@MemberCountSaturated )
 
 	SET @UMCResultsID=@@IDENTITY	--return ID
 	

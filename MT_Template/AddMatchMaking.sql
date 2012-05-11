@@ -35,11 +35,15 @@ CREATE Procedure dbo.AddMatchMaking
 **			10/12/2010 mem - Added parameters @AMTCount1pctFDR, @AMTCount5pctFDR, and @AMTCount10pctFDR
 **			10/13/2010 mem - Added parameters @AMTCount25pctFDR and @AMTCount50pctFDR
 **			05/04/2011 mem - Now calling AutoAddFTICRJob to make sure @Reference_Job is present in T_FTICR_Analysis_Description
+**			06/22/2011 mem - Added parameter @DriftTimeTolerance
+**			06/23/2011 mem - Added parameters @DriftTimeAlignmentSlope and @DriftTimeAlignmentIntercept
+**			06/29/2011 mem - Expanded @File to be varchar(2048)
+**			02/28/2012 mem - Added parameter @PMTCollectionID
 **
 *******************************************************/
 (
 	@Reference_Job int,
-	@File varchar(255),
+	@File varchar(2048),		-- For multialign, this could be a comma-separated list of files
 	@Type int,					-- MD_Type, pointer to table T_MMD_Type_Name, field MT_ID
 	@Parameters varchar(2048),
 	@PeaksCount int,
@@ -83,7 +87,11 @@ CREATE Procedure dbo.AddMatchMaking
 	@AMTCount5pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.05
 	@AMTCount10pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.10
 	@AMTCount25pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.25
-	@AMTCount50pctFDR int = 0						-- Unique count of AMT tags with FDR <= 0.50
+	@AMTCount50pctFDR int = 0,						-- Unique count of AMT tags with FDR <= 0.50
+	@DriftTimeTolerance real = NULL,
+	@DriftTimeAlignmentSlope real = NULL,
+	@DriftTimeAlignmentIntercept real = NULL,
+	@PMTCollectionID int = NULL
 )
 As
 	Set NoCount On
@@ -135,7 +143,7 @@ As
 		MD_NetAdj_TolerancePPM, MD_NetAdj_UMCs_HitCount, 
 		MD_NetAdj_TopAbuPct, MD_NetAdj_IterationCount,
 		MD_NetAdj_NET_Min, MD_NetAdj_NET_Max,
-		MD_MMA_TolerancePPM, MD_NET_Tolerance, 
+		MD_MMA_TolerancePPM, MD_NET_Tolerance, MD_DriftTime_Tolerance,
 		GANET_Fit, GANET_Slope, GANET_Intercept,
 		Refine_Mass_Cal_PPMShift, 
 		Refine_Mass_Cal_PeakHeightCounts, Refine_Mass_Cal_PeakWidthPPM,
@@ -152,7 +160,10 @@ As
 		AMT_Count_5pct_FDR,
 		AMT_Count_10pct_FDR,
 		AMT_Count_25pct_FDR,
-		AMT_Count_50pct_FDR
+		AMT_Count_50pct_FDR,
+		DriftTime_Alignment_Slope,
+		DriftTime_Alignment_Intercept,
+		PMT_Collection_ID
 		)
 	VALUES (@Reference_Job, @File, @Type, @Parameters, 
 			GetDate(), @State, @PeaksCount, 
@@ -161,7 +172,7 @@ As
 			@NetAdjTolerancePPM, @NetAdjUMCsHitCount,
 			@NetAdjTopAbuPct, @NetAdjIterationCount,
 			@NetAdjNetMin, @NetAdjNetMax,
-			@MMATolerancePPM, @NETTolerance,
+			@MMATolerancePPM, @NETTolerance, @DriftTimeTolerance,
 			@GANETFit, @GANETSlope, @GANETIntercept,
 			@RefineMassCalPPMShift, 
 			@RefineMassCalPeakHeightCounts, @RefineMassCalPeakWidthPPM, 
@@ -178,7 +189,10 @@ As
 			@AMTCount5pctFDR,
 			@AMTCount10pctFDR,
 			@AMTCount25pctFDR,
-			@AMTCount50pctFDR
+			@AMTCount50pctFDR,
+			@DriftTimeAlignmentSlope,
+			@DriftTimeAlignmentIntercept,
+			@PMTCollectionID
 			)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount, @MatchMakingID = SCOPE_IDENTITY()

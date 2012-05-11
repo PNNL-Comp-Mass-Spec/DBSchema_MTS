@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.RefreshMSMSSICStats
+CREATE Procedure RefreshMSMSSICStats
 /****************************************************
 **
 **	Desc: 
@@ -25,6 +25,7 @@ CREATE Procedure dbo.RefreshMSMSSICStats
 **			09/19/2006 mem - Added support for peptide DBs being located on a separate MTS server, utilizing MT_Main.dbo.PopulatePeptideDBLocationTable to determine DB location given Peptide DB ID
 **			04/23/2008 mem - Now explicitly dropping the temporary tables created by this procedure; in addition, uniquified the JobsToUpdate temporary table
 **			01/13/2011 mem - Renamed ForceLCQProcessingOnNextUpdate to ForceMSMSProcessingOnNextUpdate
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -182,7 +183,7 @@ As
 			Set @S = @S + ' FROM (SELECT TAD.Job,'
 			Set @S = @S + '   COUNT(TP.Peptide_ID) AS NullInfoCount'
 			Set @S = @S + '   FROM T_Analysis_Description AS TAD INNER JOIN'
-			Set @S = @S + '     T_Peptides AS TP ON TAD.Job = TP.Analysis_ID'
+			Set @S = @S + '     T_Peptides AS TP ON TAD.Job = TP.Job'
 			Set @S = @S + '   WHERE TAD.State > 1 AND ('
 			Set @S = @S + '     TP.Scan_Time_Peak_Apex IS NULL OR TP.Peak_Area IS NULL OR TP.Peak_SN_Ratio IS NULL)'
 			Set @S = @S + '   GROUP BY TAD.Job'
@@ -241,9 +242,9 @@ As
 				End
 
 				Set @S = @S + ' FROM #T_Tmp_JobsToRefreshSICStats AS JTU INNER JOIN'
-				Set @S = @S +      ' T_Peptides AS TP ON JTU.Job = TP.Analysis_ID INNER JOIN '
+				Set @S = @S +      ' T_Peptides AS TP ON JTU.Job = TP.Job INNER JOIN '
 				Set @S = @S +    ' ' + @PeptideDBPath + '.dbo.T_Peptides AS PepTP ON '
-				Set @S = @S +      ' TP.Analysis_ID = PepTP.Analysis_ID AND'
+				Set @S = @S +      ' TP.Job = PepTP.Job AND'
 				Set @S = @S +      ' TP.Scan_Number = PepTP.Scan_Number AND'
 				Set @S = @S +      ' TP.Number_Of_Scans = PepTP.Number_Of_Scans AND'
 				Set @S = @S +      ' TP.Charge_State = PepTP.Charge_State AND'
@@ -252,7 +253,7 @@ As
 				/* 
 				** Use the following to grab the data directly from T_Dataset_Stats_SIC and T_Dataset_Stats_Scans
 				Set @S = @S + ' FROM #T_Tmp_JobsToRefreshSICStats AS JTU INNER JOIN'
-				Set @S = @S + '   T_Peptides AS TP ON JTU.Job = TP.Analysis_ID INNER JOIN '
+				Set @S = @S + '   T_Peptides AS TP ON JTU.Job = TP.Job INNER JOIN '
 				Set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_SIC_Job_to_PeptideHit_Map AS JobMap ON '
 				Set @S = @S + '   JTU.Job = JobMap.Job INNER JOIN '
 				Set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Dataset_Stats_Scans AS DSS WITH (NOLOCK) ON '
@@ -292,7 +293,7 @@ As
 					UPDATE T_Peptides
 					Set Max_Obs_Area_In_Job = 0
 					FROM T_Peptides INNER JOIN #T_Tmp_JobsToRefreshSICStats AS JTU ON
-						T_Peptides.Analysis_ID = JTU.Job 
+						T_Peptides.Job = JTU.Job 
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
 				End
@@ -364,7 +365,6 @@ Done:
 	DROP TABLE #T_Tmp_JobsToRefreshSICStats
 		
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshMSMSSICStats] TO [MTS_DB_Dev] AS [dbo]

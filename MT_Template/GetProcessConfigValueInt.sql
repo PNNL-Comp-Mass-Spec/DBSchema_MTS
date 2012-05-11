@@ -1,16 +1,17 @@
 /****** Object:  StoredProcedure [dbo].[GetProcessConfigValueInt] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-create Procedure GetProcessConfigValueInt
+CREATE Procedure dbo.GetProcessConfigValueInt
 /****************************************************
 **
 **	Desc: Looks up the value for the given setting in T_Process_Config
-**		  Returns the value in @ConfigValue
+**		  Returns the value via @ConfigValue
 **		  If more than one entry exists for @ConfigKey, then
-**		  returns the first one, sorted by Process_Config_ID
+**		    returns the first one, sorted by Process_Config_ID
+**		  If no entry is found, then @ConfigValue is set to @DefaultValue (@ErrorOccurred will be 0)
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -18,6 +19,7 @@ create Procedure GetProcessConfigValueInt
 **
 **	Auth:	mem
 **	Date:	09/06/2007
+**			03/28/2012 mem - Added parameters @LogErrors and @ErrorOccurred
 **      
 *****************************************************/
 (
@@ -25,7 +27,10 @@ create Procedure GetProcessConfigValueInt
 	@DefaultValue int = 0,
 	@ConfigValue int output,
 	@MatchFound tinyint=0 output,
+	@LogErrors tinyint = 1,				-- Set to 1 to log any errors in T_Log_Entries
+	@ErrorOccurred tinyint=0 output,	-- Will be 0 if no error, 1 if a conversion error (meaning the entry is not numeric)
 	@message varchar(512)='' output
+
 )
 As
 	set nocount on
@@ -41,7 +46,8 @@ As
 	
 	Set @ConfigValue = IsNull(@DefaultValue, 0)
 	Set @MatchFound = 0
-	set @message = ''
+	Set @ErrorOccurred = 0
+	Set @message = ''
 	
 	Begin Try
 		SELECT TOP 1 @ConfigValue = Convert(int, Value)
@@ -60,12 +66,13 @@ As
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'GetProcessConfigValueInt')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList = '',
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = @LogErrors, @LogWarningErrorList = '',
 								@ErrorNum = @myError output, @message = @message output
-								
+		Set @ErrorOccurred = 1								
 	End Catch
 
-	return @myError
+	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetProcessConfigValueInt] TO [MTS_DB_Dev] AS [dbo]

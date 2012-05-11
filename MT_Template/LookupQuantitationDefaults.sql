@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.LookupQuantitationDefaults
+CREATE PROCEDURE LookupQuantitationDefaults
 /****************************************************	
 **
 **  Desc:	Looks up the default values to use for Q Rollup given the MDID value
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 **						   - Switched to Try/Catch error handling
 **			06/08/2007 mem - Updated to use the minimum score values defined in T_Match_Making_Description if they are larger than the defaults defined for this instrument
 **			10/14/2010 mem - Added Minimum_Uniqueness_Probability and Maximum_FDR_Threshold
+**			11/01/2011 mem - Added Protein_Degeneracy_Mode
 **
 ****************************************************/
 (
@@ -49,7 +50,9 @@ CREATE PROCEDURE dbo.LookupQuantitationDefaults
 	@MaximumMatchesPerUMCToKeep smallint output,
 	
 	@MinimumUniquenessProbability real = 0 output,
-	@MaximumFDRThreshold real = 1 output	
+	@MaximumFDRThreshold real = 1 output,
+	
+	@ProteinDegeneracyMode tinyint = 0 output
 )
 AS
 	Set NoCount On
@@ -214,7 +217,8 @@ AS
 							@MaximumFDRThreshold = Maximum_FDR_Threshold,
 							@MinimumPeptideReplicateCount = Minimum_Peptide_Replicate_Count, 
 							@ORFCoverageComputationLevel = ORF_Coverage_Computation_Level, 
-							@InternalStdInclusionMode = Internal_Std_Inclusion_Mode
+							@InternalStdInclusionMode = Internal_Std_Inclusion_Mode,
+							@ProteinDegeneracyMode = Protein_Degeneracy_Mode
 					FROM T_Quantitation_Defaults
 					WHERE Default_ID = @DefaultID
 					--
@@ -249,7 +253,6 @@ AS
 				
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[LookupQuantitationDefaults] TO [DMS_SP_User] AS [dbo]

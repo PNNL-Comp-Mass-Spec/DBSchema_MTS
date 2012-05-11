@@ -14,6 +14,8 @@ CREATE TABLE [dbo].[T_FTICR_UMC_InternalStdDetails](
 	[Del_Match_Score] [decimal](9, 5) NOT NULL,
 	[Uniqueness_Probability] [real] NULL,
 	[FDR_Threshold] [real] NULL,
+	[wSTAC] [real] NULL,
+	[wSTAC_FDR_Threshold] [real] NULL,
  CONSTRAINT [PK_T_FTICR_UMC_InternalStdDetails] PRIMARY KEY NONCLUSTERED 
 (
 	[UMC_InternalStdDetails_ID] ASC
@@ -38,7 +40,7 @@ REFERENCES [T_FTICR_UMC_Results] ([UMC_Results_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_InternalStdDetails] CHECK CONSTRAINT [FK_T_FTICR_UMC_InternalStdDetails_T_FTICR_UMC_Results]
 GO
-ALTER TABLE [dbo].[T_FTICR_UMC_InternalStdDetails]  WITH NOCHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_InternalStdDetails_T_Mass_Tags] FOREIGN KEY([Seq_ID])
+ALTER TABLE [dbo].[T_FTICR_UMC_InternalStdDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_UMC_InternalStdDetails_T_Mass_Tags] FOREIGN KEY([Seq_ID])
 REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
 GO
 ALTER TABLE [dbo].[T_FTICR_UMC_InternalStdDetails] CHECK CONSTRAINT [FK_T_FTICR_UMC_InternalStdDetails_T_Mass_Tags]

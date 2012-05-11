@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.AddPeptideLoadStatEntry
+CREATE PROCEDURE AddPeptideLoadStatEntry
 /****************************************************
 **
 **	Desc: 
@@ -14,6 +14,7 @@ CREATE PROCEDURE dbo.AddPeptideLoadStatEntry
 **
 **	Auth:	mem
 **	Date:	09/12/2006
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -111,7 +112,7 @@ AS
 		SELECT @PeptideCountUnfiltered = Count(*),
 			   @PMTCountUnfiltered = Count(Distinct P.Mass_Tag_ID)
 		FROM #Tmp_Job_List INNER JOIN 
-			 T_Peptides P ON #Tmp_Job_List.Job = P.Analysis_ID
+			 T_Peptides P ON #Tmp_Job_List.Job = P.Job
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -130,7 +131,7 @@ AS
 		SELECT	@PeptideCountFiltered = COUNT(*), 
 				@PMTCountFiltered = COUNT(Distinct P.Mass_Tag_ID)
 		FROM #Tmp_Job_List INNER JOIN T_Peptides P ON
-			 #Tmp_Job_List.Job = P.Analysis_ID INNER JOIN
+			 #Tmp_Job_List.Job = P.Job INNER JOIN
 			 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 		WHERE (@DiscriminantScoreMinimum = 0 OR IsNull(SD.DiscriminantScoreNorm, 0) >= @DiscriminantScoreMinimum) AND
 			  (@PeptideProphetMinimum = 0 OR IsNull(SD.Peptide_Prophet_Probability, 0) >= @PeptideProphetMinimum)
@@ -158,7 +159,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[AddPeptideLoadStatEntry] TO [MTS_DB_Dev] AS [dbo]

@@ -47,6 +47,7 @@ CREATE Procedure QRRetrieveProteinsMultiQID
 **			01/24/2008 mem - Added @IncludeProteinDescription and @MinimumPeptidesPerProtein
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **			10/14/2010 mem - Now passing @MatchScoreModeMin and @MatchScoreModeMax to QRGenerateORFColumnSql
+**			02/02/2012 mem - Now validating that @QuantitationIDList is not empty
 **
 ****************************************************/
 (
@@ -118,6 +119,14 @@ AS
 		-- Validate the inputs
 		--------------------------------------------------------------
 		--
+		Set @QuantitationIDList = IsNull(@QuantitationIDList, '')
+		
+		If LTrim(RTrim(@QuantitationIDList)) = ''
+		Begin
+			Set @message = '@QuantitationIDList is empty; nothing to do'
+			return 50000
+		End
+		
 		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
 		Set @ReplicateCountAvgMinimum  = IsNull(@ReplicateCountAvgMinimum, 1)
 		Set @Description  = IsNull(@Description, '')
@@ -326,7 +335,6 @@ AS
 Done:
 	--
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRRetrieveProteinsMultiQID] TO [DMS_SP_User] AS [dbo]

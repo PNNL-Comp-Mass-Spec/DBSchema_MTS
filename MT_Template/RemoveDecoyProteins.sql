@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.RemoveDecoyProteins
 **	Auth:	mem
 **	Date:	03/18/2010
 **			03/19/2010 mem - Now posting to the log if proteins are deleted
+**			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
 **    
 *****************************************************/
 (
@@ -46,37 +47,51 @@ AS
 		[Ref_ID] int NOT NULL
 	)
 
-	CREATE INDEX #IX_Tmp_ProteinList_RefID ON #Tmp_ProteinList (Ref_ID)
-
+	CREATE INDEX #IX_Tmp_ProteinList_RefID ON #Tmp_ProteinList (Ref_ID);
+	
 	---------------------------------------------------
-	-- Populate the temporary table
+	-- Find the AMTs that have decoy proteins, yet also have at least one non-decoy protein
+	-- Populate #Tmp_ProteinList using the decoy proteins mapped to these AMTs
+	-- Exclude any proteins that have peptides that only map to that protein
 	---------------------------------------------------
-
+	WITH ProtStats ( Mass_Tag_ID, ProteinCount, DecoyProteinCount )
+	AS
+	( SELECT MTPMA.Mass_Tag_ID,
+	         COUNT(*) AS ProteinCount,
+	         SUM(CASE
+	                 WHEN (Prot.Reference LIKE 'reversed[_]%') OR
+	                      (Prot.Reference LIKE 'scrambled[_]%') OR
+	                      (Prot.Reference LIKE '%[:]reversed') OR
+	                      (Prot.Reference LIKE 'xxx.%') OR
+	                      (Prot.Reference LIKE 'rev[_]%') THEN 1
+	                 ELSE 0
+	             END) AS DecoyProteinCount
+	  FROM T_Proteins Prot
+	       INNER JOIN T_Mass_Tag_to_Protein_Map MTPMA
+	         ON Prot.Ref_ID = MTPMA.Ref_ID
+	  GROUP BY MTPMA.Mass_Tag_ID )
 	INSERT INTO #Tmp_ProteinList( Ref_ID )
-	SELECT MTPM.Ref_ID
+	SELECT DISTINCT MTPM.Ref_ID
 	FROM T_Mass_Tag_to_Protein_Map MTPM
 	     INNER JOIN T_Proteins Prot
 	       ON MTPM.Ref_ID = Prot.Ref_ID
-	     INNER JOIN ( SELECT MTPM.Mass_Tag_ID
-	                  FROM T_Mass_Tag_to_Protein_Map MTPM
-	                       INNER JOIN T_Proteins Prot
-	                         ON MTPM.Ref_ID = Prot.Ref_ID
-	                  WHERE (MTPM.Mass_Tag_ID IN ( SELECT MTPMA.Mass_Tag_ID
-	                                               FROM T_Proteins Prot
-	                                                    INNER JOIN T_Mass_Tag_to_Protein_Map MTPMA
-	                                                      ON Prot.Ref_ID = MTPMA.Ref_ID
-	                                               WHERE Prot.Reference LIKE 'reversed[_]%' OR
-	                                                     Prot.Reference LIKE 'scrambled[_]%' OR
-	                                                     Prot.Reference LIKE '%[:]reversed'
-	                                               GROUP BY MTPMA.Mass_Tag_ID )) AND
-	                        (NOT (Prot.Reference LIKE 'reversed%'))
-	                  GROUP BY MTPM.Mass_Tag_ID ) MTIDList
+	     INNER JOIN ( SELECT Mass_Tag_ID
+	                  FROM ProtStats
+	                  WHERE (DecoyProteinCount > 0) AND
+	                        (ProteinCount > DecoyProteinCount) ) MTIDList
 	       ON MTPM.Mass_Tag_ID = MTIDList.Mass_Tag_ID
-	WHERE Prot.Reference LIKE 'reversed[_]%' OR
-	      Prot.Reference LIKE 'scrambled[_]%' OR
-	      Prot.Reference LIKE '%[:]reversed'
-	GROUP BY MTPM.Ref_ID
-
+	WHERE (Prot.Reference LIKE 'reversed[_]%') OR
+	      (Prot.Reference LIKE 'scrambled[_]%') OR
+	      (Prot.Reference LIKE '%[:]reversed') OR
+	      (Prot.Reference LIKE 'xxx.%') OR
+	      (Prot.Reference LIKE 'rev[_]%') AND
+	      NOT Prot.Ref_ID IN ( SELECT Ref_ID
+	                           FROM T_Mass_Tag_to_Protein_Map
+	                           WHERE Mass_Tag_ID IN ( SELECT Mass_Tag_ID
+	                                                  FROM ProtStats
+	                                                  WHERE (DecoyProteinCount > 0) AND
+	                                                        (ProteinCount = DecoyProteinCount) ) )
+	;
 	--
 	SELECT @myError = @@Error, @myRowCount = @@RowCount
 	

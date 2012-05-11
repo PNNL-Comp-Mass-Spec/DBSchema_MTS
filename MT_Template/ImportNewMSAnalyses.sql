@@ -50,6 +50,7 @@ CREATE Procedure dbo.ImportNewMSAnalyses
 **			07/13/2010 mem - Now validating the dataset acquisition length against the ranges defined in T_Process_Config
 **						   - Now populating DS_Acq_Length in T_FTICR_Analysis_Description
 **			05/04/2011 mem - Now skipping several filter lookup steps when @JobListOverride has jobs listed
+**			03/28/2012 mem - Now using parameters MS_Job_Minimum and MS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
 **    
 *****************************************************/
 (
@@ -308,6 +309,36 @@ As
 
 
 			---------------------------------------------------
+			-- Look for MS_Job_Minimum and MS_Job_Maximum in T_Process_Config
+			-- (ignored if @JobListOverride is defined)
+			---------------------------------------------------
+			--
+			declare @JobMinimum int = 0
+			declare @JobMaximum int = 0
+			declare @ErrorOccurred tinyint = 0
+			
+			If @UsingJobListOverride = 0
+			Begin
+				exec GetProcessConfigValueInt 'MS_Job_Minimum', @DefaultValue=0, @ConfigValue=@JobMinimum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
+			
+				If @ErrorOccurred > 0
+				Begin
+					Set @message = 'Entry for MS_Job_Minimum in T_Process_Config is not numeric; unable to apply job number filter'
+					Exec PostLogEntry 'Error', @message, 'ImportNewMSAnalyses'
+					Goto Done
+				End
+			
+				exec GetProcessConfigValueInt 'MS_Job_Maximum', @DefaultValue=0, @ConfigValue=@JobMaximum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
+			
+				If @ErrorOccurred > 0
+				Begin
+					Set @message = 'Entry for MS_Job_Maximum in T_Process_Config is not numeric; unable to apply job number filter'
+					Exec PostLogEntry 'Error', @message, 'ImportNewMSAnalyses'
+					Goto Done
+				End	
+			End
+
+			---------------------------------------------------
 			-- Lookup the dataset acquisition length range defined in T_Process_Config
 			-- If no entry is present, then @AcqLengthFilterEnabled will be 0
 			---------------------------------------------------
@@ -393,7 +424,8 @@ As
 			Else
 			begin
 				INSERT INTO #TmpJobsByDualKeyFilters (Job)
-				SELECT Convert(int, Value) FROM #TmpFilterList
+				SELECT Convert(int, Value) 
+				FROM #TmpFilterList
 				--
 				select @myError = @@error, @myRowCount = @@rowcount
 				
@@ -403,6 +435,14 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Jobs matching Campaign/Experiment dual filter', Convert(varchar(18), Job)
 					FROM #TmpJobsByDualKeyFilters
+								
+				If @JobMinimum > 0
+					DELETE FROM #TmpJobsByDualKeyFilters
+					WHERE Job < @JobMinimum
+
+				If @JobMaximum > 0
+					DELETE FROM #TmpJobsByDualKeyFilters
+					WHERE Job > @JobMaximum
 			End
 			
 
@@ -638,7 +678,17 @@ As
 				Set @S = @S +     Convert(varchar(12), @AcqLengthMinimum) + ' AND '
 				Set @S = @S +     Convert(varchar(12), @AcqLengthMaximum) + @Lf
 			end
-
+	
+			If @JobMinimum > 0
+			begin
+				Set @S = @S + ' AND Job >= ' + Convert(varchar(12), @JobMinimum) + @Lf
+			end
+			
+			If @JobMaximum > 0
+			begin
+				Set @S = @S + ' AND Job <= ' + Convert(varchar(12), @JobMaximum) + @Lf
+			end
+			
 			set @S = @S + ')'
 			
 			-- Now add jobs found using the alternate job selection method
@@ -755,7 +805,6 @@ As
 	
 Done:
 	return @myError
-
 
 
 GO

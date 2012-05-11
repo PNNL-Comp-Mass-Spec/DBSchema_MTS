@@ -30,6 +30,7 @@ CREATE TABLE [dbo].[T_Quantitation_Description](
 	[RepNormalization_PctLargeDataToDiscard] [tinyint] NOT NULL,
 	[RepNormalization_MinimumDataPointCount] [smallint] NOT NULL,
 	[Internal_Std_Inclusion_Mode] [tinyint] NOT NULL,
+	[Protein_Degeneracy_Mode] [tinyint] NOT NULL,
 	[Minimum_Criteria_ORFMassDaDivisor] [int] NOT NULL,
 	[Minimum_Criteria_UniqueMTCountMinimum] [int] NOT NULL,
 	[Minimum_Criteria_MTIonMatchCountMinimum] [int] NOT NULL,
@@ -120,6 +121,8 @@ GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_RepNormalization_MinimumDataPointCount]  DEFAULT ((10)) FOR [RepNormalization_MinimumDataPointCount]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Internal_Std_Inclusion_Mode]  DEFAULT ((0)) FOR [Internal_Std_Inclusion_Mode]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Protein_Degeneracy_Mode]  DEFAULT ((0)) FOR [Protein_Degeneracy_Mode]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Minimum_Criteria_ORFMassDaDivisor]  DEFAULT ((15000)) FOR [Minimum_Criteria_ORFMassDaDivisor]
 GO

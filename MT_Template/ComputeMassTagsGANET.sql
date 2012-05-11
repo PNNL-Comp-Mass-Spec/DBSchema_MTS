@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ComputeMassTagsGANET
+CREATE Procedure ComputeMassTagsGANET
 /********************************************************
 **	Synchronizes tables T_Mass_Tags_NET and T_Mass_Tags
 **
@@ -31,6 +31,7 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 **			03/13/2006 mem - Now calling UpdateCachedHistograms
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **			11/12/2007 mem - Added parameter @infoOnly
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *********************************************************/
 (
@@ -364,7 +365,7 @@ AS
 		FROM (
 			SELECT	BestObsQ.Mass_Tag_ID,
 					TAD.Dataset_ID,
-					BestObsQ.Analysis_ID,
+					BestObsQ.Job,
 					CASE WHEN IsNull(TAD.GANET_Slope, 0) > 0
 					THEN BestObsQ.BestScanNum * TAD.GANET_Slope + TAD.GANET_Intercept
 					ELSE NULL
@@ -374,15 +375,15 @@ AS
 					ELSE NULL
 					END AS ScanTime_NET,
 					Max(IsNull(SD.DiscriminantScoreNorm, 0.001)) AS MaxDiscriminantScoreNorm
-			FROM  (	SELECT	Analysis_ID, Mass_Tag_ID, 
+			FROM  (	SELECT	Job, Mass_Tag_ID, 
 							MIN(Scan_Number) AS BestScanNum, 
 							MIN(Scan_Time_Peak_Apex) AS BestScanTime
 					FROM T_Peptides
 					WHERE Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison
-					GROUP BY Analysis_ID, Mass_Tag_ID
+					GROUP BY Job, Mass_Tag_ID
 					) AS BestObsQ INNER JOIN T_Analysis_Description AS TAD ON
-					BestObsQ.Analysis_ID = TAD.Job INNER JOIN T_Peptides ON
-					BestObsQ.Analysis_ID = T_Peptides.Analysis_ID AND
+					BestObsQ.Job = TAD.Job INNER JOIN T_Peptides ON
+					BestObsQ.Job = T_Peptides.Job AND
 					BestObsQ.Mass_Tag_ID = T_Peptides.Mass_Tag_ID AND
 					BestObsQ.BestScanNum = T_Peptides.Scan_Number
 					LEFT OUTER JOIN T_Score_Discriminant AS SD ON
@@ -396,7 +397,7 @@ AS
 					  IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
 					  IsNull(TAD.ScanTime_NET_Slope, 0) > 0
 					)
-			GROUP BY BestObsQ.Mass_Tag_ID, TAD.Dataset_ID, BestObsQ.Analysis_ID, BestObsQ.BestScanNum,
+			GROUP BY BestObsQ.Mass_Tag_ID, TAD.Dataset_ID, BestObsQ.Job, BestObsQ.BestScanNum,
 					BestObsQ.BestScanTime, TAD.GANET_Slope, TAD.GANET_Intercept,
 					TAD.ScanTime_NET_Slope, TAD.ScanTime_NET_Intercept
 			) AS LookupQ
@@ -410,15 +411,15 @@ AS
 				Null AS ScanNum_NET,
 				Avg(BestNETObs) As NETAvg,
 				Max(IsNull(SD.DiscriminantScoreNorm, 0.001)) AS MaxDiscriminantScoreNorm
-		FROM  (	SELECT	Analysis_ID, Mass_Tag_ID, 
+		FROM  (	SELECT	Job, Mass_Tag_ID, 
 						MIN(Scan_Number) AS BestScanNum, 
 						MIN(GANET_Obs) AS BestNETObs
 				FROM T_Peptides
 				WHERE Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND NOT GANET_Obs Is Null
-				GROUP BY Analysis_ID, Mass_Tag_ID
+				GROUP BY Job, Mass_Tag_ID
 				) AS BestObsQ INNER JOIN T_Analysis_Description AS TAD ON
-				BestObsQ.Analysis_ID = TAD.Job INNER JOIN T_Peptides ON
-				BestObsQ.Analysis_ID = T_Peptides.Analysis_ID AND
+				BestObsQ.Job = TAD.Job INNER JOIN T_Peptides ON
+				BestObsQ.Job = T_Peptides.Job AND
 				BestObsQ.Mass_Tag_ID = T_Peptides.Mass_Tag_ID AND
 				BestObsQ.BestScanNum = T_Peptides.Scan_Number
 				LEFT OUTER JOIN T_Score_Discriminant AS SD ON
@@ -813,7 +814,6 @@ AS
 Done:
 
 	Return @MyError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev] AS [dbo]

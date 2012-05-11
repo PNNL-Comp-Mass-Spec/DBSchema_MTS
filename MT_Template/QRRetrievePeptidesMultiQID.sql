@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.QRRetrievePeptidesMultiQID
+CREATE Procedure QRRetrievePeptidesMultiQID
 /****************************************************	
 **  Desc: Returns the peptides and associated statistics
 **		    for the given list of QuantitationID's
@@ -49,6 +49,9 @@ CREATE Procedure dbo.QRRetrievePeptidesMultiQID
 **			08/12/2008 mem - Now including column Min_Log_EValue if X!Tandem-based peptides are present in T_Mass_Tags
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
 **			12/19/2008 mem - Added @IncludeQID
+**			06/03/2011 mem - Now returning Min_MSGF_SpecProb As Min_MSGF_SpecProb
+**			01/25/2012 mem - Now returning MT_Abundance_Unscaled
+**			02/02/2012 mem - Now validating that @QuantitationIDList is not empty
 **
 ****************************************************/
 (
@@ -121,6 +124,14 @@ AS
 		-- Validate the inputs
 		--------------------------------------------------------------
 		--
+		Set @QuantitationIDList = IsNull(@QuantitationIDList, '')
+		
+		If LTrim(RTrim(@QuantitationIDList)) = ''
+		Begin
+			Set @message = '@QuantitationIDList is empty; nothing to do'
+			return 50000
+		End
+		
 		Set @SeparateReplicateDataIDs = IsNull(@SeparateReplicateDataIDs, 0)
 		Set @IncludeRefColumn = IsNull(@IncludeRefColumn, 1)
 		Set @Description = ''
@@ -277,9 +288,12 @@ AS
 		Set @QRDsql = ''
 		Set @QRDsql = @QRDsql + ' QRD.Mass_Tag_ID, CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Abundance,4) As MT_Abundance, Round(QRD.MT_Abundance_StDev,4) As MT_Abundance_StDev,'
-		If @VerboseColumnOutput <> 0
-			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
+		Set @QRDsql = @QRDsql + ' CASE WHEN QD.Normalize_To_Standard_Abundances > 0 THEN Round(QRD.MT_Abundance / 100.0 * QD.Standard_Abundance_Max + QD.Standard_Abundance_Min, 0) ELSE Round(QRD.MT_Abundance,4) END As MT_Abundance_Unscaled, '
 
+		If @VerboseColumnOutput <> 0
+		Begin
+			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
+		End
 
 		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) '
 		If @MatchScoreModeMin = 0 And @MatchScoreModeMax = 0
@@ -328,6 +342,7 @@ AS
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Normalized_Score,3) As [High_MS/MS_Score_(XCorr)], '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
+		Set @QRDsql = @QRDsql + ' MT.Min_MSGF_SpecProb As Min_MSGF_SpecProb, '
 
 		If @XTandemDataPresent > 0
 			Set @QRDsql = @QRDsql + ' Round(IsNull(MT.Min_Log_EValue, 0), 3) AS XTandem_Min_Log_EValue,'
@@ -448,7 +463,6 @@ AS
 Done:
 	--
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRRetrievePeptidesMultiQID] TO [DMS_SP_User] AS [dbo]

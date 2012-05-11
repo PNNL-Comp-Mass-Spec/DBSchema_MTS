@@ -12,6 +12,7 @@ CREATE PROCEDURE QuantitationProcessWorkStepA
 **  Auth:	mem
 **	Date:	09/07/2006 mem - Initial Version
 **			10/13/2010 mem - Added parameters @MinimumUniquenessProbability and @MaximumFDRThreshold; these are only used when Match_Score_Mode <> 0
+**			02/29/2012 mem - Refactored population of #MatchingUMCIndices
 **
 ****************************************************/
 (
@@ -56,30 +57,30 @@ AS
 
 	CREATE TABLE #MatchingUMCIndices (
 		[MD_ID] int NOT NULL ,
-		[UMC_Ind] int NOT NULL
+		[UMC_Ind] int NOT NULL ,
+		[Mass_Tag_ID] int NOT NULL
 	) ON [PRIMARY]
 
 	If @InternalStdInclusionMode = 0 OR @InternalStdInclusionMode = 1
 	Begin
-		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind)
-		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind
+		-- Note that this query was refactored in February 2012 due to excessively slow query times when trying to filter the peptides using 
+		-- @MinimumMTHighNormalizedScore, @MinimumMTHighDiscriminantScore, @MinimumMTPeptideProphetProbability, @MinimumPMTQualityScore, and @MinimumPeptideLength
+		-- while populating #MatchingUMCIndices
+		--
+		-- Instead, we first populate #MatchingUMCIndices, then filter delete extra rows afterward
+
+		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind, Mass_Tag_ID)
+		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind, RD.Mass_Tag_ID
 		FROM T_Quantitation_MDIDs TMDID INNER JOIN
 			 T_Match_Making_Description MMD on TMDID.MD_ID = MMD.MD_ID INNER JOIN
 			 T_FTICR_UMC_Results R ON TMDID.MD_ID = R.MD_ID INNER JOIN
-			 T_FTICR_UMC_ResultDetails RD ON R.UMC_Results_ID = RD.UMC_Results_ID INNER JOIN
-			 T_Mass_Tags MT ON RD.Mass_Tag_ID = MT.Mass_Tag_ID LEFT OUTER JOIN
-			 T_Mass_Tags_NET MTN ON RD.Mass_Tag_ID = MTN.Mass_Tag_ID
+			 T_FTICR_UMC_ResultDetails RD ON R.UMC_Results_ID = RD.UMC_Results_ID
 		WHERE	TMDID.Quantitation_ID = @QuantitationID AND 
 				RD.Match_State = 6 AND
-				ISNULL(MT.High_Normalized_Score, 0) >= @MinimumMTHighNormalizedScore AND 
-				ISNULL(MT.High_Discriminant_Score, 0) >= @MinimumMTHighDiscriminantScore AND 
- 				ISNULL(MT.High_Peptide_Prophet_Probability, 0) >= @MinimumMTPeptideProphetProbability AND
-				ISNULL(MT.PMT_Quality_Score, 0) >= @MinimumPMTQualityScore AND 
 				ISNULL(RD.Match_Score, -1) >= @MinimumMatchScore AND 
 				ISNULL(RD.Del_Match_Score, 0) >= @MinimumDelMatchScore AND
 				IsNull(RD.Uniqueness_Probability, 0) >= @MinimumUniquenessProbability AND
-				IsNull(RD.FDR_Threshold, 1) <= @MaximumFDRThreshold AND
-				LEN(MT.Peptide) >= @MinimumPeptideLength
+				IsNull(RD.FDR_Threshold, 1) <= @MaximumFDRThreshold
 		--
 		SELECT @myError = @@error, @myRowCount = @@RowCount
 		--
@@ -89,13 +90,26 @@ AS
 			Set @myError = 115
 			Goto Done
 		End
+		
+		-- Delete rows from #MatchingUMCIndices for which the peptides do not pass the filters
+		DELETE FROM #MatchingUMCIndices
+		WHERE NOT Mass_Tag_ID IN 
+		          ( SELECT MT.Mass_Tag_ID
+		            FROM T_Mass_Tags MT
+		            WHERE ISNULL(MT.High_Normalized_Score, 0) >= @MinimumMTHighNormalizedScore AND
+		                  ISNULL(MT.High_Discriminant_Score, 0) >= @MinimumMTHighDiscriminantScore AND
+		                  ISNULL(MT.High_Peptide_Prophet_Probability, 0) >= @MinimumMTPeptideProphetProbability AND
+		                  ISNULL(MT.PMT_Quality_Score, 0) >= @MinimumPMTQualityScore AND
+		                  LEN(MT.Peptide) >= @MinimumPeptideLength 
+		          )
+
 	End
 	    
 
 	If @InternalStdInclusionMode = 1 OR @InternalStdInclusionMode = 2
 	Begin
-		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind)
-		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind
+		INSERT INTO #MatchingUMCIndices (MD_ID, UMC_Ind, Mass_Tag_ID)
+		SELECT DISTINCT TMDID.MD_ID, R.UMC_Ind, ISD.Seq_ID
 		FROM T_Quantitation_MDIDs TMDID INNER JOIN
 			 T_Match_Making_Description MMD on TMDID.MD_ID = MMD.MD_ID INNER JOIN
 			 T_FTICR_UMC_Results R ON TMDID.MD_ID = R.MD_ID INNER JOIN
@@ -144,6 +158,7 @@ AS
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuantitationProcessWorkStepA] TO [MTS_DB_Dev] AS [dbo]

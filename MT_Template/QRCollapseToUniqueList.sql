@@ -13,8 +13,9 @@ CREATE Procedure dbo.QRCollapseToUniqueList
 **
 **  Parameters: QuantitationID value to examine
 **
-**  Auth: mem
-**	Date: 09/22/2005
+**  Auth:	mem
+**	Date:	09/22/2005
+**			03/29/2012 mem - Updated to use udfParseDelimitedListOrdered
 **
 ****************************************************/
 (
@@ -28,35 +29,18 @@ AS
 	Declare @CommaLoc int
 	Declare @ListItem varchar(7500)
 	
-	If Len(IsNull(@WorkingList, '')) <= 0
-	Begin
-		Set @UniqueList = ''
-	End
-	Else
-	Begin
-		-- Make sure @WorkingList ends in a comma
-		If SubString(@WorkingList, Len(@WorkingList),1) <> ','
-			Set @WorkingList = @WorkingList + ','
-			
-		-- Need a leading comma on @UniqueList for the If CharIndex text below
-		Set @UniqueList = ','
-		Set @CommaLoc = CharIndex(',', @WorkingList)
-		While @CommaLoc > 1
-		Begin
-			Set @ListItem = LTrim(Left(@WorkingList, @CommaLoc-1))
-			Set @WorkingList = SubString(@WorkingList, @CommaLoc+1, Len(@WorkingList))
-		
-			If CharIndex(',' + @ListItem + ',', @UniqueList) < 1
-			Begin
-				Set @UniqueList = @UniqueList + @ListItem + ','
-			End
-			
-			Set @CommaLoc = CharIndex(',', @WorkingList)
-		End	
-
-		-- Remove the leading comma and trailing comma from @UniqueList
-		Set @UniqueList = SubString(@UniqueList,2, Len(@UniqueList)-2)
-	End
+	Set @WorkingList = IsNull(@WorkingList, '')
+	
+	SELECT @UniqueList = COALESCE(@UniqueList + ',' + Value, Value)
+	FROM ( SELECT Value,
+		            MIN(EntryID) AS EntryID
+		    FROM dbo.udfParseDelimitedListOrdered ( @WorkingList, ',' )
+		    GROUP BY Value
+		    HAVING LEN(Value) > 0 
+		    ) LookupQ
+	ORDER BY EntryID
+	
+	Set @UniqueList = IsNull(@UniqueList, '')
 	
 	Return @@Error
 

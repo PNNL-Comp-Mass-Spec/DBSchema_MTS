@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.GetMassTagMatchCount
+CREATE PROCEDURE GetMassTagMatchCount
 /****************************************************************
 **  Desc: Returns the number of mass tags matching the given filters
 **
@@ -17,6 +17,7 @@ CREATE PROCEDURE dbo.GetMassTagMatchCount
 **			12/21/2005 mem - Addedparameter 
 **			12/22/2005 mem - Added parameters @ExperimentFilter, @ExperimentExclusionFilter, and @JobToFilterOnByDataset
 **			09/06/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **  
 ****************************************************************/
 (
@@ -133,7 +134,7 @@ As
 			Set @S = @S + ' SELECT COUNT(DISTINCT MT.Mass_Tag_ID) AS TotalMassTags'
 			Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN'
 			Set @S = @S +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
-			Set @S = @S +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @S = @S +      ' T_Analysis_Description TAD ON P.Job = TAD.Job'
 			Set @S = @S + ' WHERE TAD.Dataset = ''' + @Dataset + ''''
 			If Len(@ScoreFilteringSQL) > 0
 				Set @S = @S + ' AND ' + @ScoreFilteringSQL
@@ -155,7 +156,7 @@ As
 			Set @S = @S + ' SELECT COUNT(DISTINCT MT.Mass_Tag_ID)'
 			Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN'
 			Set @S = @S +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN'
-			Set @S = @S +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+			Set @S = @S +      ' T_Analysis_Description TAD ON P.Job = TAD.Job'
 			Set @S = @S + ' WHERE ' + @ExperimentFilteringSQL
 			If Len(@ScoreFilteringSQL) > 0
 				Set @S = @S + ' AND ' + @ScoreFilteringSQL
@@ -168,7 +169,6 @@ As
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[GetMassTagMatchCount] TO [DMS_SP_User] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ComputeMassTagsAnalysisCounts
+CREATE Procedure ComputeMassTagsAnalysisCounts
 /****************************************************
 **
 **	Desc: 
@@ -37,6 +37,8 @@ CREATE Procedure dbo.ComputeMassTagsAnalysisCounts
 **			12/14/2010 mem - Now updating Min_MSGF_SpecProb in T_Mass_Tags
 **						   - Added support for MSGF_SpecProb filtering
 **			02/18/2011 mem - Changed message reporting Null peptide prophet values for XTandem jobs to be an Error message instead of a Warning message
+**			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -111,7 +113,7 @@ AS
 	Set @S = @S +    ' (	SELECT TAD.Job, MAX(MT.Last_Affected) AS Last_Affected'
 	Set @S = @S +       ' FROM T_Mass_Tags MT'
 	Set @S = @S +       ' INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID'
-	Set @S = @S +    ' INNER JOIN T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job'
+	Set @S = @S +    ' INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job'
 	Set @S = @S +    ' GROUP BY TAD.Job'
 	Set @S = @S +    ' ) LookupQ ON TAD.Job = LookupQ.Job'
 	Set @S = @S + ' WHERE IsNull(PMTs_Last_Affected, 0) <> LookupQ.Last_Affected'
@@ -135,6 +137,7 @@ AS
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 
 
 	If @UpdateFilteredObsStatsOnly = 0
@@ -143,7 +146,7 @@ AS
 		-----------------------------------------------------------
 		-- Update the general stats by examining T_Peptides and associated tables
 		-- Note that the source data for this query is a UNION between the 
-		-- Peptide_Hit (Sequest) data, the XT_Peptide_Hit (XTandem) data, and the the IN_Peptide_Hit (Inspect) data
+		-- Peptide_Hit (Sequest) data, the XT_Peptide_Hit (XTandem) data, the IN_Peptide_Hit (Inspect) data, and the MSG_Peptide_Hit (MSGFDB) data
 		--
 		-- Only Sequest and Inspect data will have values in the Peptide_Prophet_Probability table of T_Score_Discriminant
 		--	For Inspect, Peptide_Prophet_Probability = 1 - Inspect_PValue (populated during load into the PT database)
@@ -180,7 +183,7 @@ AS
 		Set @S = @S +                         ' 0 AS Log_Evalue,'
 		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
-		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN '
+		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 		Set @S = @S +                   ' WHERE TAD.ResultType = ''Peptide_Hit'''
@@ -195,7 +198,7 @@ AS
 		Set @S = @S +                         ' ISNULL(X.Log_Evalue, 0) AS Log_Evalue,'
 		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
-		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN '
+		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 		Set @S = @S +                   ' WHERE TAD.ResultType = ''XT_Peptide_Hit'''
@@ -207,10 +210,22 @@ AS
 		Set @S = @S +                         ' 0 AS Log_Evalue,'
 		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
-		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job LEFT OUTER JOIN '
+		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Inspect AS I ON P.Peptide_ID = I.Peptide_ID LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 		Set @S = @S +                   ' WHERE TAD.ResultType = ''IN_Peptide_Hit'''
+		Set @S = @S +                   ' UNION'
+		Set @S = @S +                   ' SELECT TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, '
+		Set @S = @S +                         ' ISNULL(M.Normalized_Score, 0) AS Normalized_Score,'
+		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
+		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
+		Set @S = @S +                         ' 0 AS Log_Evalue,'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
+		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
+		Set @S = @S +       '  T_Score_MSGFDB AS M ON P.Peptide_ID = M.Peptide_ID LEFT OUTER JOIN '
+		Set @S = @S +                       '  T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+		Set @S = @S +                   ' WHERE TAD.ResultType = ''MSG_Peptide_Hit'''
 		Set @S = @S +                '  ) AS SourceQ'
 		Set @S = @S +             ' GROUP BY Dataset_ID, Mass_Tag_ID, Scan_Number'
 		Set @S = @S +          ' ) AS DatasetQ'
@@ -240,7 +255,7 @@ AS
 
 		If Exists(	SELECT *
 					FROM T_Peptides P INNER JOIN
-						 T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job INNER JOIN
+						 T_Analysis_Description TAD ON P.Job = TAD.Job INNER JOIN
 						 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 					WHERE TAD.ResultType = 'XT_Peptide_Hit' AND 
 						  SD.Peptide_Prophet_Probability IS NULL
@@ -375,7 +390,15 @@ AS
 			@InspectPValueComparison varchar(2),			-- Only used for Inspect results
 			@InspectPValueThreshold real,
 			@MSGFSpecProbComparison varchar(2),				-- Used for Sequest, X!Tandem, or Inspect results
-			@MSGFSpecProbThreshold real
+			@MSGFSpecProbThreshold real,
+			
+			@MSGFDbSpecProbComparison varchar(2),			-- Only used for MSGFDB results
+			@MSGFDbSpecProbThreshold real,
+			@MSGFDbPValueComparison varchar(2),				-- Only used for MSGFDB results
+			@MSGFDbPValueThreshold real,
+			@MSGFDbFDRComparison varchar(2),				-- Only used for MSGFDB results
+			@MSGFDbFDRThreshold real
+
 
 	-----------------------------------------------------------
 	-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -443,13 +466,17 @@ AS
 								@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
 								@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
 								@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
-								@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT
+								@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT,
+								@MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold OUTPUT,
+								@MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold OUTPUT,
+								@MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold OUTPUT
 
 			If @myError <> 0
 			Begin
 				Set @Message = 'Error retrieving next entry from GetThresholdsForFilterSet in CheckFilterForAnalysesWork'
 				Goto Done
 			End
+
 
 			If @CriteriaGroupMatch <= 0
 				Set @TestThresholds = 0
@@ -475,7 +502,7 @@ AS
 
 					-- Populate #TmpMTObsStats with the PMT tags passing the current criteria
 					-- Initially set @myError to a non-zero value in case @ResultType is invalid for this SP
-					-- Note that this error code is used below so update in both places if changing
+					-- Note that this error code is used below so be sure took update the value in both places if you change it
 					--
 					Set @myError = 51200
 					If @ResultType = 'Peptide_Hit'
@@ -496,7 +523,7 @@ AS
 						Set @S = @S +             ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 						Set @S = @S +             ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 						Set @S = @S +             ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb_Min'
-						Set @S = @S + ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
+						Set @S = @S + ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 						Set @S = @S +      ' WHERE TAD.ResultType = ''Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
@@ -556,7 +583,7 @@ AS
 						Set @S = @S +             ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 						Set @S = @S +             ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 						Set @S = @S +             ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb_Min'
-						Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
+						Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 						Set @S = @S +      ' WHERE TAD.ResultType = ''XT_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
@@ -620,7 +647,7 @@ AS
 						Set @S = @S +             ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 						Set @S = @S +             ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 						Set @S = @S +             ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb_Min'
-						Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Analysis_ID = TAD.Job'
+						Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Inspect AS I ON P.Peptide_ID = I.Peptide_ID'
 						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 						Set @S = @S +      ' WHERE TAD.ResultType = ''IN_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
@@ -648,7 +675,7 @@ AS
 						Set @S = @S +   ' IsNull(ABS(StatsQ.GANET_Obs - MTN.PNET), 0) ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
 						Set @S = @S +   ' IsNull(MT.Multiple_Proteins, 0) + 1 ' + @ProteinCountComparison + Convert(varchar(11), @ProteinCountThreshold)
 						Set @S = @S + ' GROUP BY MT.Mass_Tag_ID, Dataset_ID, Scan_Number'
-
+						
 						If @PreviewSql <> 0
 						Begin
 							Print 'Inspect data, Filter Set ID: ' + Convert(varchar(12), @FilterSetID) + ', Criteria Group: ' + Convert(varchar(12), @CriteriaGroupStart)
@@ -660,7 +687,70 @@ AS
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 						--
 						Set @MTObsStatsRowCount = @MTObsStatsRowCount + @myRowCount
+
 					End -- </e3>
+					
+					If @ResultType = 'MSG_Peptide_Hit'
+					Begin -- <e4>
+						Set @S = ''
+						Set @S = @S + ' INSERT INTO #TmpMTObsStats (Mass_Tag_ID, Dataset_ID, Scan_Number)'
+						Set @S = @S + ' SELECT MT.Mass_Tag_ID, Dataset_ID, Scan_Number'
+						Set @S = @S + ' FROM ('
+						Set @S = @S +   ' SELECT Dataset_ID, Mass_Tag_ID, Scan_Number, GANET_Obs, Charge_State,'
+						Set @S = @S +     ' MIN(SubQ.MSGFDB_SpecProb_Min) AS MSGFDB_SpecProb_Min,'
+						Set @S = @S +     ' MIN(SubQ.MSGFDB_PValue_Min) AS MSGFDB_PValue_Min,'
+						Set @S = @S +     ' MIN(SubQ.MSGFDB_FDR_Min) AS MSGFDB_FDR_Min,'
+						Set @S = @S +     ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
+						Set @S = @S +     ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
+						Set @S = @S +     ' MIN(SubQ.MSGF_SpecProb_Min) AS MSGF_SpecProb_Min'
+						Set @S = @S +   ' FROM ('
+						Set @S = @S +      ' SELECT TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, P.GANET_Obs,'
+						Set @S = @S +             ' P.Charge_State,'
+						Set @S = @S +             ' MIN(IsNull(M.SpecProb, 1)) AS MSGFDB_SpecProb_Min,'
+						Set @S = @S +             ' MIN(IsNull(M.PValue, 1)) AS MSGFDB_PValue_Min,'
+						Set @S = @S +             ' MIN(IsNull(M.FDR, 1)) AS MSGFDB_FDR_Min,'
+						Set @S = @S +             ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
+						Set @S = @S +             ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
+						Set @S = @S +             ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb_Min'
+						Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
+						Set @S = @S +           ' LEFT OUTER JOIN T_Score_MSGFDB AS M ON P.Peptide_ID = M.Peptide_ID'
+						Set @S = @S +           ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+						Set @S = @S +      ' WHERE TAD.ResultType = ''MSG_Peptide_Hit'' AND NOT P.Charge_State IS NULL'
+						Set @S = @S +      ' GROUP BY TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, P.GANET_Obs, P.Charge_State'
+						Set @S = @S +      ') AS SubQ'
+						Set @S = @S +   ' GROUP BY Dataset_ID, Mass_Tag_ID, Scan_Number, GANET_Obs, Charge_State'
+						Set @S = @S +   ') AS StatsQ'
+  						Set @S = @S +   ' INNER JOIN T_Mass_Tags AS MT ON StatsQ.Mass_Tag_ID = MT.Mass_Tag_ID'
+						Set @S = @S +   ' LEFT OUTER JOIN T_Mass_Tag_to_Protein_Map AS MTPM ON MT.Mass_Tag_ID = MTPM.Mass_Tag_ID'
+						Set @S = @S +   ' LEFT OUTER JOIN T_Mass_Tags_NET AS MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID'
+						Set @S = @S + ' WHERE '
+						Set @S = @S +   ' StatsQ.Charge_State ' +  @ChargeStateComparison + Convert(varchar(11), @ChargeStateThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGFDB_SpecProb_Min ' +  @MSGFDbSpecProbComparison + Convert(varchar(11), @MSGFDbSpecProbThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGFDB_PValue_Min ' +  @MSGFDbPValueComparison + Convert(varchar(11), @MSGFDbPValueThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGFDB_FDR_Min ' +  @MSGFDbFDRComparison + Convert(varchar(11), @MSGFDbFDRThreshold) + ' AND '
+						Set @S = @S +   ' ISNULL(MTPM.Cleavage_State, 0) ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
+						Set @S = @S +   ' ISNULL(MTPM.Terminus_State, 0) ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
+						Set @S = @S +   ' LEN(MT.Peptide) ' + @PeptideLengthComparison + Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
+						Set @S = @S +   ' IsNull(MT.Monoisotopic_Mass, 0) ' + @MassComparison + Convert(varchar(11), @MassThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.Discriminant_Score_Max ' + @DiscriminantScoreComparison + Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.Peptide_Prophet_Max ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGF_SpecProb_Min ' +   @MSGFSpecProbComparison +   Convert(varchar(11), @MSGFSpecProbThreshold) + ' AND '
+						Set @S = @S +   ' IsNull(ABS(StatsQ.GANET_Obs - MTN.PNET), 0) ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
+						Set @S = @S +   ' IsNull(MT.Multiple_Proteins, 0) + 1 ' + @ProteinCountComparison + Convert(varchar(11), @ProteinCountThreshold)
+						Set @S = @S + ' GROUP BY MT.Mass_Tag_ID, Dataset_ID, Scan_Number'
+						
+						If @PreviewSql <> 0
+						Begin
+							Print 'MSGFDB data, Filter Set ID: ' + Convert(varchar(12), @FilterSetID) + ', Criteria Group: ' + Convert(varchar(12), @CriteriaGroupStart)
+							Print @S
+						End
+						Else
+							Exec sp_executesql @S
+						--
+						SELECT @myRowCount = @@rowcount, @myError = @@error
+						--
+						Set @MTObsStatsRowCount = @MTObsStatsRowCount + @myRowCount
+					End -- </e4>
 
 					--
 					If @myError <> 0 
@@ -702,7 +792,7 @@ AS
 
 				End -- </d>
 			End -- </c>	
-			
+
 			If @PreviewSql <> 0
 				Print ' '
 					
@@ -710,6 +800,7 @@ AS
 			Set @CriteriaGroupStart = @CriteriaGroupMatch + 1
 
 		End -- </b>
+	
 	
 		-- Update T_Mass_Tags with the observation counts
 		Set @S = ''
@@ -743,7 +834,6 @@ AS
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsAnalysisCounts] TO [MTS_DB_Dev] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.QRRetrievePeptides
+CREATE Procedure QRRetrievePeptides
 /****************************************************	
 **  Desc: Returns the peptides and associated statistics
 **		  for the given QuantitationID
@@ -46,6 +46,8 @@ CREATE Procedure dbo.QRRetrievePeptides
 **			05/28/2007 mem - Now returning column JobCount_Observed_Both_MS_and_MSMS
 **			06/05/2007 mem - Added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **			10/14/2010 mem - Now using Match_Score_Mode to determine the name given to values in columns MT_Match_Score_Avg and MT_Del_Match_Score_Avg
+**			06/03/2011 mem - Now returning Min_MSGF_SpecProb As Min_MSGF_SpecProb
+**			01/25/2012 mem - Now returning MT_Abundance_Unscaled
 **
 ****************************************************/
 (
@@ -138,9 +140,13 @@ AS
 		Set @QRDsql = ''
 		Set @QRDsql = @QRDsql + ' QRD.Mass_Tag_ID, CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
 		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Abundance,4) As MT_Abundance, Round(QRD.MT_Abundance_StDev,4) As MT_Abundance_StDev,'
-		If @VerboseColumnOutput <> 0
-			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
+		Set @QRDsql = @QRDsql + ' CASE WHEN QD.Normalize_To_Standard_Abundances > 0 THEN Round(QRD.MT_Abundance / 100.0 * QD.Standard_Abundance_Max + QD.Standard_Abundance_Min, 0) ELSE Round(QRD.MT_Abundance,4) END As MT_Abundance_Unscaled, '
 
+		If @VerboseColumnOutput <> 0
+		Begin
+			Set @QRDsql = @QRDsql + ' QRD.Member_Count_Used_For_Abundance, '
+		End
+		
 		Set @QRDsql = @QRDsql + ' Round(QRD.MT_Match_Score_Avg,3) '
 		If @MatchScoreMode = 0
 			Set @QRDsql = @QRDsql + 'AS MT_SLiC_Score, '
@@ -178,6 +184,8 @@ AS
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Normalized_Score,3) As [High_MS/MS_Score_(XCorr)], '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Discriminant_Score,3) As High_Discriminant_Score, '
 		Set @QRDsql = @QRDsql + ' Round(MT.High_Peptide_Prophet_Probability,3) As High_Peptide_Prophet_Probability, '
+		Set @QRDsql = @QRDsql + ' MT.Min_MSGF_SpecProb As Min_MSGF_SpecProb, '
+
 		Set @QRDsql = @QRDsql + ' Round(QRD.PMT_Quality_Score,2) As PMT_Quality_Score,'
 		Set @QRDsql = @QRDsql + ' QRD.JobCount_Observed_Both_MS_and_MSMS,'
 
@@ -278,7 +286,6 @@ AS
 Done:
 	--
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[QRRetrievePeptides] TO [DMS_SP_User] AS [dbo]

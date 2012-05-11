@@ -32,6 +32,8 @@ CREATE Procedure QRPeptideCrosstab
 **			06/04/2007 mem - Added parameter @PreviewSql and changed several string variables to varchar(max)
 **			06/05/2007 mem - Updated to use the PIVOT operator (new to Sql Server 2005) to create the crosstab; added parameters @message and @PreviewSql; switched to Try/Catch error handling
 **			10/22/2008 mem - Added parameter @ChangeCommasToSemicolons
+**			01/25/2012 mem - Added parameter @UnscaledAbundances
+**			02/02/2012 mem - Now assuring that @QuantitationIDList is not null
 **
 ****************************************************/
 (
@@ -44,7 +46,8 @@ CREATE Procedure QRPeptideCrosstab
 	@SortMode tinyint=0,								-- 0=Unsorted, 1=QID, 2=SampleName, 3=Comment, 4=Job (first job if more than one job)
 	@message varchar(512)='' output,
 	@PreviewSql tinyint=0,
-	@ChangeCommasToSemicolons tinyint = 0				-- Replaces commas with semicolons in various text fields, including: Mod_Description
+	@ChangeCommasToSemicolons tinyint = 0,				-- Replaces commas with semicolons in various text fields, including: Mod_Description
+	@UnscaledAbundances tinyint = 0						-- When 1, then returns un-scaled abundances; only valid if @SourceColName is 'MT_Abundance'
 )
 AS
 
@@ -64,7 +67,8 @@ AS
 			@ColumnListToShow2 varchar(900),
 			@ERValuesPresent tinyint,
 			@ModsPresent tinyint,
-			@QuantitationIDListClean varchar(max)
+			@QuantitationIDListClean varchar(max),
+			@QRDSourceColName varchar(256)
 
 	Set @ERValuesPresent = 0
 	Set @ModsPresent = 0
@@ -79,6 +83,8 @@ AS
 		--------------------------------------------------------------
 		-- Validate the inputs
 		--------------------------------------------------------------
+		--		
+		Set @QuantitationIDList = IsNull(@QuantitationIDList, '')
 		Set @SeparateReplicateDataIDs  = IsNull(@SeparateReplicateDataIDs, 0)
 		Set @SourceColName  = IsNull(@SourceColName, 'MT_Abundance')
 		Set @AggregateColName  = IsNull(@AggregateColName, 'AvgAbu')
@@ -88,6 +94,11 @@ AS
 		set @message = ''
 		Set @PreviewSql  = IsNull(@PreviewSql, 0)
 		Set @ChangeCommasToSemicolons = IsNull(@ChangeCommasToSemicolons, 0)
+
+		If IsNull(@UnscaledAbundances, 0) > 0 AND @SourceColName IN ('MT_Abundance')
+			Set @QRDSourceColName = 'CASE WHEN QD.Normalize_To_Standard_Abundances > 0 THEN Round(QRD.' + @SourceColName + ' / 100.0 * QD.Standard_Abundance_Max + QD.Standard_Abundance_Min, 0) ELSE Round(QRD.' + @SourceColName + ',4) END'	
+		Else
+			Set @QRDSourceColName = 'QRD.' + @SourceColName
 
 		--------------------------------------------------------------
 		-- Create a temporary table to hold the QIDs and sorting info
@@ -155,12 +166,13 @@ AS
 			Set @sql = @sql + ' QR.Ref_ID,'
 
 		Set @sql = @sql +         ' CASE WHEN QRD.Internal_Standard_Match = 1 THEN ''Internal_Std'' ELSE QRD.Mass_Tag_Mods END AS Mass_Tag_Mods,'
-		Set @sql = @sql +         ' CONVERT(VARCHAR(19), QRD.' + @SourceColName + ') AS ' + @SourceColName
+		Set @sql = @sql +         ' CONVERT(VARCHAR(19), ' + @QRDSourceColName + ') AS ' + @SourceColName
 		Set @sql = @sql +       ' FROM #TmpQIDSortInfo INNER JOIN '
 		Set @sql = @sql +            ' T_Quantitation_Results QR ON #TmpQIDSortInfo.QID = QR.Quantitation_ID INNER JOIN'
-		Set @sql = @sql +            ' T_Quantitation_ResultDetails QRD ON QR.QR_ID = QRD.QR_ID) AS DataQ'
+		Set @sql = @sql +            ' T_Quantitation_ResultDetails QRD ON QR.QR_ID = QRD.QR_ID INNER JOIN'
+		Set @sql = @sql +            ' T_Quantitation_Description QD ON QD.Quantitation_ID = #TmpQIDSortInfo.QID ) AS DataQ'
 		Set @sql = @sql +       ' PIVOT ('
-		Set @sql = @sql +       '   MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
+		Set @sql = @sql +         ' MAX(' + @SourceColName + ') FOR Quantitation_ID IN ( ' + @QuantitationIDListSql + ' ) '
 		Set @sql = @sql +       ' ) AS PivotResults'
 		Set @sql = @sql +        ' INNER JOIN T_Mass_Tags MT ON PivotResults.Mass_Tag_ID = MT.Mass_Tag_ID'
 

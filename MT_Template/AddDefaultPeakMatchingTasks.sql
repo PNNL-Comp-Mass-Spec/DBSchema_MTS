@@ -43,6 +43,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			06/16/2009 mem - Added parameter @InfoOnly
 **			12/07/2009 mem - Changed the "Added job" display to be a Print instead of a Select
 **			03/21/2011 mem - Changed default score filters to Discriminant >= 0, Peptide Prophet >= 0, and PMT Quality Score >= 2
+**			07/13/2011 mem - Now stepping through T_Peak_Matching_Defaults twice; first to process entries where Instrument_Name does not have a percent sign, then processing those that do
 **     
 *****************************************************/
 (
@@ -86,6 +87,7 @@ AS
 	Declare @job int
 	declare @Labelling varchar(64)
 	
+	Declare @iteration int
 	Declare @Continue int
 	Declare @EntryID int
 
@@ -225,72 +227,86 @@ AS
 	-- For each, find the jobs in #TmpJobsToProcess that match the instrument name filter, 
 	--  dataset name filter, and labelling filter
 	-- If a filter contains a % sign, then a LIKE comparison is used; otherwise, an exact match is used
+	--
+	-- Note that we step through T_Peak_Matching_Defaults twice; the first time,
+	--  processing entries that do not have a % sign for Instrument_Name, then the second time
+	--  processing entries that do have a % sign
 	---------------------------------------------------
 	
-	Set @DefaultID = -1
-	Set @Continue = 1
-	While @Continue = 1
+	set @Iteration = 1
+	While @Iteration <= 2
 	Begin -- <a>
 		
-		SELECT TOP 1 @DefaultID = Default_ID,
-		             @InstrumentFilter = Instrument_Name,
-		             @DatasetFilter = Dataset_Name_Filter,
-		             @LabellingFilter = Labelling_Filter
-		FROM T_Peak_Matching_Defaults
-		WHERE Default_ID > @DefaultID
-		ORDER BY Default_ID
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
-
-		If @myRowCount = 0
-			Set @Continue = 0
-		Else
+		Set @DefaultID = -1
+		Set @Continue = 1
+		While @Continue = 1
 		Begin -- <b>
-			Set @S = ''
-			Set @S = @S + ' INSERT INTO #TmpJobToPMDefaultMap (Job, Default_ID)'
-			Set @S = @S + ' SELECT Job, ' + Convert(varchar(12), @DefaultID)
-			Set @S = @S + ' FROM #TmpJobsToProcess'
-			Set @S = @S + ' WHERE '
 			
-			If @InstrumentFilter LIKE '%[%]%'
-				Set @Comparison = 'LIKE'
+			SELECT TOP 1 @DefaultID = Default_ID,
+						 @InstrumentFilter = Instrument_Name,
+						 @DatasetFilter = Dataset_Name_Filter,
+						 @LabellingFilter = Labelling_Filter
+			FROM T_Peak_Matching_Defaults
+			WHERE Default_ID > @DefaultID AND 
+			      (@Iteration = 1 AND Instrument_Name NOT LIKE '%[%]%' OR
+			       @Iteration = 2 AND Instrument_Name     LIKE '%[%]%')
+			ORDER BY Default_ID
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			If @myRowCount = 0
+				Set @Continue = 0
 			Else
-				Set @Comparison = '='
+			Begin -- <c>
+				Set @S = ''
+				Set @S = @S + ' INSERT INTO #TmpJobToPMDefaultMap (Job, Default_ID)'
+				Set @S = @S + ' SELECT Job, ' + Convert(varchar(12), @DefaultID)
+				Set @S = @S + ' FROM #TmpJobsToProcess'
+				Set @S = @S + ' WHERE NOT Job In (SELECT Job FROM #TmpJobToPMDefaultMap) AND '
 				
-			Set @S = @S + ' InstrumentName ' + @Comparison + ' ''' + @InstrumentFilter + ''''
-			
-			
-			If IsNull(@DatasetFilter, '') <> ''
-			Begin
-				If @DatasetFilter LIKE '%[%]%'
+				If @InstrumentFilter LIKE '%[%]%'
 					Set @Comparison = 'LIKE'
 				Else
 					Set @Comparison = '='
 					
-				Set @S = @S + ' AND Dataset ' + @Comparison + ' ''' + @DatasetFilter + ''''
+				Set @S = @S + ' InstrumentName ' + @Comparison + ' ''' + @InstrumentFilter + ''''
+				
+				
+				If IsNull(@DatasetFilter, '') <> ''
+				Begin
+					If @DatasetFilter LIKE '%[%]%'
+						Set @Comparison = 'LIKE'
+					Else
+						Set @Comparison = '='
+						
+					Set @S = @S + ' AND Dataset ' + @Comparison + ' ''' + @DatasetFilter + ''''
 
-			End
+				End
 
-			If IsNull(@LabellingFilter, '') <> ''
-			Begin
-				If @LabellingFilter LIKE '%[%]%'
-					Set @Comparison = 'LIKE'
-				Else
-					Set @Comparison = '='
-					
-				Set @S = @S + ' AND Labelling ' + @Comparison + ' ''' + @LabellingFilter + ''''
+				If IsNull(@LabellingFilter, '') <> ''
+				Begin
+					If @LabellingFilter LIKE '%[%]%'
+						Set @Comparison = 'LIKE'
+					Else
+						Set @Comparison = '='
+						
+					Set @S = @S + ' AND Labelling ' + @Comparison + ' ''' + @LabellingFilter + ''''
 
-			End
+				End
+				
+				If @InfoOnly <> 0
+					Print @S
+				
+				Exec (@S)
+
+			End -- </c>
 			
-			If @InfoOnly <> 0
-				Print @S
-			
-			Exec (@S)
-
 		End -- </b>
-		
-	End -- </a>
 	
+		Set @Iteration = @Iteration + 1
+	End -- </a>
+
+
 	If @InfoOnly <> 0
 		SELECT JP.*,
 		       JobMap.Default_ID

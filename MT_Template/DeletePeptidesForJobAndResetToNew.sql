@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[DeletePeptidesForJobAndResetToNew] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure DeletePeptidesForJobAndResetToNew
+CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
 **	Desc: 
@@ -26,6 +26,8 @@ CREATE Procedure DeletePeptidesForJobAndResetToNew
 **			09/09/2006 mem - Updated to post a log entry only if rows were deleted from T_Peptides
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobListToDelete
 **			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			10/06/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -107,7 +109,7 @@ AS
 	DELETE T_Score_Sequest
 	FROM T_Peptides INNER JOIN T_Score_Sequest 
 		 ON T_Peptides.Peptide_ID = T_Score_Sequest.Peptide_ID
-		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -116,7 +118,7 @@ AS
 	DELETE T_Score_Discriminant
 	FROM T_Peptides INNER JOIN T_Score_Discriminant 
 		 ON T_Peptides.Peptide_ID = T_Score_Discriminant.Peptide_ID
-		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -125,7 +127,7 @@ AS
 	DELETE T_Score_XTandem
 	FROM T_Peptides INNER JOIN T_Score_XTandem 
 		 ON T_Peptides.Peptide_ID = T_Score_XTandem.Peptide_ID
-		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -134,7 +136,16 @@ AS
 	DELETE T_Score_Inspect
 	FROM T_Peptides INNER JOIN T_Score_Inspect
 		 ON T_Peptides.Peptide_ID = T_Score_Inspect.Peptide_ID
-		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto Done
+
+	DELETE T_Score_MSGFDB
+	FROM T_Peptides INNER JOIN T_Score_MSGFDB
+		 ON T_Peptides.Peptide_ID = T_Score_MSGFDB.Peptide_ID
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -142,7 +153,7 @@ AS
 
 	DELETE T_Peptides 
 	FROM T_Peptides
-		 INNER JOIN #JobListToDelete ON T_Peptides.Analysis_ID = #JobListToDelete.Job
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--

@@ -131,7 +131,7 @@ AS
 		ORDER BY inserted.job
 
 GO
-ALTER TABLE [dbo].[T_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Analysis_State_Name] FOREIGN KEY([State])
+ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Analysis_State_Name] FOREIGN KEY([State])
 REFERENCES [T_Analysis_State_Name] ([AD_State_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Analysis_State_Name]

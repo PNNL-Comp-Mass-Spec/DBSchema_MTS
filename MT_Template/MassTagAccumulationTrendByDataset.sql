@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[MassTagAccumulationTrendByDataset] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.MassTagAccumulationTrendByDataset
+CREATE PROCEDURE MassTagAccumulationTrendByDataset
 /****************************************************
 **
 **	Desc: 
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.MassTagAccumulationTrendByDataset
 **
 **	Auth:	mem
 **	Date:	05/08/2009 -- Modelled after MassTagAccumulationTrend
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -89,7 +90,7 @@ AS
 	                                         IsNull(TAD.Dataset_Acq_Time_Start, TAD.Dataset_Created_DMS) ) AS DatasetObsRank
 	              FROM T_Analysis_Description TAD
 	                   INNER JOIN T_Peptides Pep
-	                     ON TAD.Job = Pep.Analysis_ID
+	                     ON TAD.Job = Pep.Job
 	                   INNER JOIN T_Mass_Tags MT
 	                     ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 	              WHERE (MT.PMT_Quality_Score >= @MinimumPMTQualityScore) AND
@@ -118,7 +119,7 @@ AS
 	                         COUNT(DISTINCT TAD.Job) AS JobCount
 	                  FROM T_Analysis_Description TAD
 	                       INNER JOIN T_Peptides Pep
-	                         ON TAD.Job = Pep.Analysis_ID
+	                         ON TAD.Job = Pep.Job
 	                       INNER JOIN T_Mass_Tags MT
 	                         ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 	                  WHERE (MT.PMT_Quality_Score >= @MinimumPMTQualityScore) AND
@@ -176,6 +177,5 @@ AS
 
 Done:
 	Return @myError
-
 
 GO

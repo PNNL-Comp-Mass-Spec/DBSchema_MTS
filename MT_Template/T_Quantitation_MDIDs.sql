@@ -32,7 +32,7 @@ GRANT SELECT ON [dbo].[T_Quantitation_MDIDs] TO [DMS_SP_User] AS [dbo]
 GO
 GRANT UPDATE ON [dbo].[T_Quantitation_MDIDs] TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Quantitation_MDIDs]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Quantitation_MDIDs_T_Match_Making_Description] FOREIGN KEY([MD_ID])
+ALTER TABLE [dbo].[T_Quantitation_MDIDs]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_MDIDs_T_Match_Making_Description] FOREIGN KEY([MD_ID])
 REFERENCES [T_Match_Making_Description] ([MD_ID])
 GO
 ALTER TABLE [dbo].[T_Quantitation_MDIDs] CHECK CONSTRAINT [FK_T_Quantitation_MDIDs_T_Match_Making_Description]

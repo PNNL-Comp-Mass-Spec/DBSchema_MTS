@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_Match_Making_Description](
 	[MD_ID] [int] IDENTITY(1,1) NOT NULL,
 	[MD_Reference_Job] [int] NOT NULL,
-	[MD_File] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[MD_File] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[MD_Type] [int] NOT NULL,
 	[MD_Parameters] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[MD_Date] [datetime] NOT NULL,
@@ -18,6 +18,7 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[Minimum_High_Discriminant_Score] [real] NOT NULL,
 	[Minimum_Peptide_Prophet_Probability] [real] NOT NULL,
 	[Minimum_PMT_Quality_Score] [real] NOT NULL,
+	[Maximum_MSGF_SpecProb] [real] NULL,
 	[Experiment_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Experiment_Exclusion_Filter] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Limit_To_PMTs_From_Dataset] [tinyint] NOT NULL,
@@ -31,6 +32,7 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[MD_NetAdj_NET_Max] [numeric](9, 5) NULL,
 	[MD_MMA_TolerancePPM] [numeric](9, 4) NULL,
 	[MD_NET_Tolerance] [numeric](9, 5) NULL,
+	[MD_DriftTime_Tolerance] [real] NULL,
 	[GANET_Fit] [float] NULL,
 	[GANET_Slope] [float] NULL,
 	[GANET_Intercept] [float] NULL,
@@ -51,6 +53,9 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 	[AMT_Count_10pct_FDR] [int] NULL,
 	[AMT_Count_25pct_FDR] [int] NULL,
 	[AMT_Count_50pct_FDR] [int] NULL,
+	[DriftTime_Alignment_Slope] [real] NULL,
+	[DriftTime_Alignment_Intercept] [real] NULL,
+	[PMT_Collection_ID] [int] NULL,
  CONSTRAINT [PK_T_MatchMaking_Description] PRIMARY KEY CLUSTERED 
 (
 	[MD_ID] ASC
@@ -58,7 +63,7 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description] FOREIGN KEY([MD_Reference_Job])
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description] FOREIGN KEY([MD_Reference_Job])
 REFERENCES [T_FTICR_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description]
@@ -68,15 +73,20 @@ REFERENCES [T_MMD_Match_Score_Mode] ([Match_Score_Mode])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode]
 GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name] FOREIGN KEY([MD_State])
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name] FOREIGN KEY([MD_State])
 REFERENCES [T_MMD_State_Name] ([MD_State])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name]
 GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name] FOREIGN KEY([MD_Type])
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name] FOREIGN KEY([MD_Type])
 REFERENCES [T_MMD_Type_Name] ([MD_Type])
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection] FOREIGN KEY([PMT_Collection_ID])
+REFERENCES [T_PMT_Collection] ([PMT_Collection_ID])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection]
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_MatchMaking_Description_mmState]  DEFAULT ((1)) FOR [MD_State]
 GO
@@ -106,7 +116,7 @@ ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Makin
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_MD_NetAdj_UMCs_HitCount]  DEFAULT ((0)) FOR [MD_NetAdj_UMCs_HitCount]
 GO
-ALTER TABLE [dbo].[T_Match_Making_Description] ADD  DEFAULT ((0)) FOR [Match_Score_Mode]
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Match_Score_Mode]  DEFAULT ((0)) FOR [Match_Score_Mode]
 GO
-ALTER TABLE [dbo].[T_Match_Making_Description] ADD  DEFAULT ((0)) FOR [STAC_Used_Prior_Probability]
+ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_STAC_Used_Prior_Probability]  DEFAULT ((0)) FOR [STAC_Used_Prior_Probability]
 GO

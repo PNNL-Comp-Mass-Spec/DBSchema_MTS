@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ExportGANETPeptideFile
+CREATE Procedure ExportGANETPeptideFile
 /****************************************************
 **
 **	Desc: 
@@ -23,6 +23,7 @@ CREATE Procedure dbo.ExportGANETPeptideFile
 **						   - Increased size of @DBName from 64 to 128 characters
 **			07/18/2006 mem - Updated to use dbo.udfCombinePaths
 **			01/24/2008 mem - Now specifying the sort order when querying V_GANET_Peptides
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -76,7 +77,7 @@ As
 	-- dump the peptides into a temporary file
 	--------------------------------------------------------------
 	-- 
-	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + '].dbo.V_GANET_Peptides ORDER BY Analysis_ID, Scan_Number, Charge_State, Normalized_Score DESC" queryout ' + @pepFilePath + ' -c -T'
+	Set @cmd = 'bcp "SELECT * FROM [' + @DBName + '].dbo.V_GANET_Peptides ORDER BY Job, Scan_Number, Charge_State, Normalized_Score DESC" queryout ' + @pepFilePath + ' -c -T'
 	--
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	Set @myError = @result
@@ -134,7 +135,6 @@ As
 Done:
 	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev] AS [dbo]

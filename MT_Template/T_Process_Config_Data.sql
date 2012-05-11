@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config] ******/
-/****** RowCount: 43 ******/
+/****** RowCount: 45 ******/
 SET IDENTITY_INSERT [T_Process_Config] ON
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (100,'Campaign','<Fill In>','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (156,'Dataset_Acq_Length_Range','','7/13/2010 12:00:00 AM','PNL\D3L243')
@@ -18,6 +18,7 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (133,'MS_Instrument_Class','LTQ_FT','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (154,'MS_Instrument_Class','Thermo_Exactive','4/22/2009 12:00:00 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (112,'MS_Result_Type','HMMA_Peak','9/1/2006 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (162,'MSMS_Result_Type','MSG_Peptide_Hit','1/16/2012 12:00:00 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (140,'MSMS_Result_Type','Peptide_Hit','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (144,'MSMS_Result_Type','XT_Peptide_Hit','2/10/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (101,'Organism','<Fill In>','9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -27,6 +28,7 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (114,'Peptide_Import_Filter_ID','117','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (151,'Peptide_Import_MaxJobsPerBatch','25','2/26/2008 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (152,'Peptide_Import_MaxPeptidesPerBatch','75000','2/26/2008 12:00:00 AM','PNL\mtsadmin')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (159,'Peptide_Import_MSGF_SpecProb_Filter','1','10/28/2011 12:00:00 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (149,'Peptide_Load_Stats_Detail_Thresholds','0, 0.5','9/6/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (150,'Peptide_Load_Stats_Detail_Thresholds','0, 0.9','9/6/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (146,'Peptide_Load_Stats_Detail_Thresholds','0.5, 0','9/6/2007 12:00:00 AM','PNL\mtsadmin')
@@ -34,10 +36,10 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (148,'Peptide_Load_Stats_Detail_Thresholds','0.95, 0','9/6/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (145,'Peptide_Load_Stats_Detail_Update_Interval','25','9/6/2007 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (137,'Peptide_Obs_Count_Filter_ID','141','9/1/2006 12:00:00 AM','PNL\mtsadmin')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (123,'PMT_Quality_Score_Set_ID_and_Value','204, 1','3/23/2011 12:00:00 AM','PNL\D3L243')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (130,'PMT_Quality_Score_Set_ID_and_Value','206, 2','3/23/2011 12:00:00 AM','PNL\D3L243')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (157,'PMT_Quality_Score_Set_ID_and_Value','207, 3','3/23/2011 12:00:00 AM','PNL\D3L243')
-INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (158,'PMT_Quality_Score_Set_ID_and_Value','209, 4','3/23/2011 12:00:00 AM','PNL\D3L243')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (158,'PMT_Quality_Score_Set_ID_and_Value','217, 1','2/27/2012 12:10:54 PM','PNL\D3L243')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (157,'PMT_Quality_Score_Set_ID_and_Value','218, 2','2/27/2012 12:10:54 PM','PNL\D3L243')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (130,'PMT_Quality_Score_Set_ID_and_Value','219, 3','2/27/2012 12:10:54 PM','PNL\D3L243')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (123,'PMT_Quality_Score_Set_ID_and_Value','220, 4','2/27/2012 12:10:54 PM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (138,'PMT_Quality_Score_Uses_Filtered_Peptide_Obs_Count','0','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (141,'Protein_Collection_Filter','<Fill In>','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (102,'Protein_DB_Name','(na)','4/17/2007 12:00:00 AM','PNL\mtsadmin')

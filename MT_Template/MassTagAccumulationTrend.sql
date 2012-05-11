@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.MassTagAccumulationTrend
+CREATE PROCEDURE MassTagAccumulationTrend
 /****************************************************
 **
 **	Desc: 
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.MassTagAccumulationTrend
 **	Date:	05/24/2005
 **			08/17/2005 mem - Now rounding TAD.Dataset_Created_DMS to the nearest date in the PMT Creation Stats query
 **			09/07/2006 mem - Added parameter @MinimumPeptideProphetProbability
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -72,7 +73,7 @@ AS
 			COUNT(*) AS PMTTagCountCurrentDate
 	FROM (	SELECT Pep.Mass_Tag_ID, MIN(CONVERT(int, TAD.Dataset_Created_DMS)) AS Created
 			FROM	T_Analysis_Description TAD INNER JOIN
-					T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN
+					T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN
 					T_Mass_Tags MT ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 			WHERE PMT_Quality_Score >= @MinimumPMTQualityScore AND
 				  High_Discriminant_Score >= @MinimumHighDiscriminantScore AND
@@ -109,7 +110,6 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[MassTagAccumulationTrend] TO [DMS_SP_User] AS [dbo]
