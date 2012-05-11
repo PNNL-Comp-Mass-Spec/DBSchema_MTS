@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ExportGANETPeptideFile
+CREATE Procedure ExportGANETPeptideFile
 /****************************************************
 **
 **	Desc: 
@@ -36,6 +36,9 @@ CREATE Procedure dbo.ExportGANETPeptideFile
 **			01/13/2006 mem - Added an explicit order by list within the BCP call itself
 **			07/03/2006 mem - Now using dbo.udfCombinePaths() to combine paths
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
+**			08/23/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			10/25/2011 mem - Now including column MSGF_SpecProb
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -117,7 +120,7 @@ As
 	-- and export the results:
 	--   SELECT GP.*
 	--   FROM V_GANET_Peptides GP INNER JOIN 
-	--        T_NET_Update_Task_Job_Map TJM ON GP.Analysis_ID = TJM.Job
+	--        T_NET_Update_Task_Job_Map TJM ON GP.Job = TJM.Job
 	--   WHERE TJM.Task_ID = @TaskID
 	--
 	-- However, this method is extremely inefficient, since Sql Server must
@@ -140,49 +143,71 @@ As
 	-- Define the Order By Sql since BCP sometimes fails to order the data properly even though the view says to do this
 	-- We're specifying this Order By sql both in the view and in the BCP call
 	-- Be sure @OrderBySql and @OrderBySqlNoPrefix each starts with a space
-	Set @OrderBySql =         ' ORDER BY Pep.Analysis_ID, Pep.Scan_Number, Pep.Charge_State, Normalized_Score DESC, Pep.Seq_ID'
-	Set @OrderBySqlNoPrefix = ' ORDER BY Analysis_ID, Scan_Number, Charge_State, Normalized_Score DESC, Seq_ID'
+	Set @OrderBySql =         ' ORDER BY Pep.Job, Pep.Scan_Number, Pep.Charge_State, Normalized_Score DESC, Pep.Seq_ID'
+	Set @OrderBySqlNoPrefix = ' ORDER BY Job, Scan_Number, Charge_State, Normalized_Score DESC, Seq_ID'
 	
 	set @S = ''
 	Set @S = @S + ' CREATE VIEW dbo.' + @TempViewName + ' AS'
-	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Analysis_ID, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Job, Pep.Scan_Number, Seq.Clean_Sequence,'
 	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
 	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
 	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, SS.XCorr AS Normalized_Score, SS.DeltaCn,'
-	Set @S = @S +   ' CONVERT(real, SS.Sp) AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex'
+	Set @S = @S +   ' CONVERT(real, SS.Sp) AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex,'
+	Set @S = @S +   ' SD.MSGF_SpecProb'
 	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
-	Set @S = @S +   ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
-	Set @S = @S +   ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
-	Set @S = @S +   ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN'
-	Set @S = @S +   ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
+	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID INNER JOIN'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID INNER JOIN'
+	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
 	Set @S = @S +   ' TAD.ResultType = ''Peptide_Hit'''
 	Set @S = @S + ' UNION'
-	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Analysis_ID, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Job, Pep.Scan_Number, Seq.Clean_Sequence,'
 	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
 	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
 	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, X.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
-	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex'
+	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex,'
+	Set @S = @S +   ' SD.MSGF_SpecProb'
 	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
 	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
-	Set @S = @S +      ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Job = TAD.Job INNER JOIN'
 	Set @S = @S +      ' T_Score_XTandem X ON Pep.Peptide_ID = X.Peptide_ID INNER JOIN'
-	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID INNER JOIN'
+	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
 	Set @S = @S +   ' TAD.ResultType = ''XT_Peptide_Hit'''
 	Set @S = @S + ' UNION'
-	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Analysis_ID, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Job, Pep.Scan_Number, Seq.Clean_Sequence,'
 	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
 	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
 	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, I.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
-	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex'
+	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex,'
+	Set @S = @S +   ' SD.MSGF_SpecProb'
 	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
 	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
-	Set @S = @S +      ' T_Peptides Pep ON Pep.Analysis_ID = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Job = TAD.Job INNER JOIN'
 	Set @S = @S +      ' T_Score_Inspect I ON Pep.Peptide_ID = I.Peptide_ID INNER JOIN'
-	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID INNER JOIN'
+	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
 	Set @S = @S +   ' TAD.ResultType = ''IN_Peptide_Hit'''
+	Set @S = @S + ' UNION'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Job, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
+	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
+	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, M.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
+	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex,'
+	Set @S = @S +   ' SD.MSGF_SpecProb'
+	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
+	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Score_MSGFDB M ON Pep.Peptide_ID = M.Peptide_ID INNER JOIN'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID INNER JOIN'
+	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
+	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
+	Set @S = @S +   ' TAD.ResultType = ''MSG_Peptide_Hit'''
+	
 	Set @S = @S + @OrderBySql
 	--
 	Exec (@S)
@@ -218,12 +243,7 @@ As
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
-	--------------------------------------------------------------
-	-- append the peptide lockers to the output
-	--------------------------------------------------------------
-	--
-	-- (future:)
-
+	
 	--------------------------------------------------------------
 	-- append the peptides file to the output file
 	--------------------------------------------------------------
@@ -255,7 +275,6 @@ Done:
 	End
 	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev] AS [dbo]

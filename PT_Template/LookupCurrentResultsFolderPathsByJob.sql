@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.LookupCurrentResultsFolderPathsByJob
 /****************************************************
 ** 
@@ -15,17 +16,19 @@ CREATE Procedure dbo.LookupCurrentResultsFolderPathsByJob
 **			CREATE TABLE #TmpResultsFolderPaths (
 **				Job INT NOT NULL,
 **				Results_Folder_Path varchar(512),
-**				Source_Share varchar(128)
+**				Source_Share varchar(128),
+**				Required_File_List varchar(max)
 **			)
 **
 **	Return values: 0: success, otherwise, error code
 **
 **	Auth:	mem
 **	Date:	04/17/2007 mem - Ticket #423
+**			11/21/2011 mem - Added column Required_File_List to #TmpResultsFolderPaths
 **    
 *****************************************************/
 (
-	@CheckLocalServerFirst tinyint = 1,		-- Set to 1 to preferably use the local server path (Vol_Server); set to 0 to preferably use the client path (Vol_Client)
+	@CheckLocalServerFirst tinyint = 1,		-- Set to 1 to preferably use the Vol_Server path (e.g. \\Proto-5\LTQ_1\2008_2\); set to 0 to preferably use the Vol_Client path (e.g. \\a2.emsl.pnl.gov\dmsarch\LTQ_1\2008_2\)
 	@message varchar(512)='' output
 )
 As
@@ -58,7 +61,10 @@ set nocount on
 	Declare @StoragePathServer varchar(512)
 	Declare @StoragePathResults varchar(512)
 	Declare @SorceServerShare varchar(255)
-	
+
+	Declare @RequiredFileList varchar(max)	
+	Declare @FileCountFound int
+	Declare @FileCountMissing int
 	Declare @FolderCheckIteration tinyint
 	Declare @IterationCount tinyint
 
@@ -77,7 +83,8 @@ set nocount on
 		
 		While @Continue = 1
 		Begin -- <a>
-			SELECT TOP 1 @Job = Job
+			SELECT TOP 1 @Job = Job,
+			             @RequiredFileList = Required_File_List
 			FROM #TmpResultsFolderPaths
 			WHERE Job > @Job
 			--
@@ -131,10 +138,13 @@ set nocount on
 						-- Get path to the analysis job results folder for job @Job
 						---------------------------------------------------
 						--	
+						
+						-- Example path: \\a2.emsl.pnl.gov\dmsarch\LTQ_1\2008_2\
 						set @StoragePathClient = dbo.udfCombinePaths(
 												 dbo.udfCombinePaths(
 												 dbo.udfCombinePaths(@VolClient, @StoragePath), @DatasetFolder), @ResultsFolder)
 						
+						-- Example path: \\Proto-5\LTQ_1\2008_2\
 						set @StoragePathServer = dbo.udfCombinePaths(
 												 dbo.udfCombinePaths(
 												 dbo.udfCombinePaths(@VolServer, @StoragePath), @DatasetFolder), @ResultsFolder)
@@ -174,6 +184,25 @@ set nocount on
 								Begin
 									Set @StoragePathResults = @StoragePathServer
 									Set @SorceServerShare = @VolServer
+								End
+							End
+							
+							If @FolderExists <> 0 And IsNull(@RequiredFileList, '') <> ''
+							Begin
+								-- Also make sure the folder contains the required files
+								exec ValidateFilesExist @StoragePathResults, @RequiredFileList, @FileCountFound = @FileCountFound output, @FileCountMissing = @FileCountMissing output
+								
+								If @FileCountMissing > 0
+								Begin
+									Set @message = 'Storage folder is missing one or more required files: ' + @StoragePathResults
+									
+									If @IterationCount = 0
+										Exec PostLogEntry 'Warning', @message, 'LookupCurrentResultsFolderPathsByJob'
+									Else
+										Exec PostLogEntry 'Error', @message, 'LookupCurrentResultsFolderPathsByJob'
+										
+									set @message = ''
+									Set @FolderExists = 0									
 								End
 							End
 							

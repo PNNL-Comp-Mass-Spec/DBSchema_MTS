@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[T_Seq_Candidate_ModDetails](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Seq_Candidate_ModDetails]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Seq_Candidate_ModDetails_T_Seq_Candidates] FOREIGN KEY([Job], [Seq_ID_Local])
+ALTER TABLE [dbo].[T_Seq_Candidate_ModDetails]  WITH CHECK ADD  CONSTRAINT [FK_T_Seq_Candidate_ModDetails_T_Seq_Candidates] FOREIGN KEY([Job], [Seq_ID_Local])
 REFERENCES [T_Seq_Candidates] ([Job], [Seq_ID_Local])
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_ModDetails] CHECK CONSTRAINT [FK_T_Seq_Candidate_ModDetails_T_Seq_Candidates]

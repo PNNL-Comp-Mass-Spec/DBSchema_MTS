@@ -14,7 +14,7 @@ CREATE TABLE [dbo].[T_Analysis_Filter_Flags](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Analysis_Filter_Flags]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Filter_Flags_T_Analysis_Description] FOREIGN KEY([Job])
+ALTER TABLE [dbo].[T_Analysis_Filter_Flags]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Filter_Flags_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Analysis_Filter_Flags] CHECK CONSTRAINT [FK_T_Analysis_Filter_Flags_T_Analysis_Description]

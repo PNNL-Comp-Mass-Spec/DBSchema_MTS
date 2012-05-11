@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[LoadSeqInfoAndModsPart2] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure LoadSeqInfoAndModsPart2
@@ -31,6 +31,7 @@ CREATE Procedure LoadSeqInfoAndModsPart2
 **			02/14/2006 mem - Updated to use tables #Tmp_Peptide_ResultToSeqMap in addition to tables #Tmp_Peptide_SeqInfo and #Tmp_Peptide_ModDetails
 **			06/28/2006 mem - Now checking for negative Position values in #Tmp_Peptide_ModDetails
 **			08/26/2008 mem - Added additional logging when LogLevel >= 2
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -226,7 +227,7 @@ As
 	
 	SELECT @numPeptidesExpected = COUNT(*)
 	FROM T_Peptides
-	WHERE Analysis_ID = @Job
+	WHERE Job = @Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--

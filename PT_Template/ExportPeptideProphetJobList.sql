@@ -19,6 +19,7 @@ CREATE Procedure dbo.ExportPeptideProphetJobList
 **	Date:	07/05/2006
 **			07/20/2006 mem - Updated query sent to bcp to not include dbo.udfCombinePaths()
 **			04/16/2007 mem - Updated to use Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map for obtaining the path to the results folder (Ticket #423)
+**			09/01/2011 mem - Updated to use Result_File_Suffix in T_Analysis_Description to possibly override the default file suffix
 **    
 *****************************************************/
 (
@@ -143,7 +144,7 @@ AS
 	-- Note: Do not use dbo.udfCombinePaths() in this query, since it does not work with the bcp (bulk copy) program
 	Set @BcpSql = ''
 	Set @BcpSql = @BcpSql + ' SELECT TAD.Job, '
-	Set @BcpSql = @BcpSql +        ' PPT.Results_Folder_Path + TAD.Dataset + ''_syn.txt'' AS Synopsis_File_Path'
+	Set @BcpSql = @BcpSql +        ' PPT.Results_Folder_Path + TAD.Dataset + IsNull(Result_File_Suffix, ''_syn'') + ''.txt'' AS Synopsis_File_Path'
 	Set @BcpSql = @BcpSql + ' FROM [' + @DBName + '].dbo.T_Peptide_Prophet_Task_Job_Map PPT INNER JOIN'
 	Set @BcpSql = @BcpSql +      ' [' + @DBName + '].dbo.T_Analysis_Description TAD ON PPT.Job = TAD.Job'
 	Set @BcpSql = @BcpSql + ' WHERE PPT.Task_ID = ' + Convert(varchar(9), @TaskID)

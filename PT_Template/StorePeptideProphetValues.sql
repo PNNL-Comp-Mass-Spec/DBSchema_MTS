@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create Procedure StorePeptideProphetValues
+CREATE Procedure StorePeptideProphetValues
 /****************************************************
 **
 **	Desc: 
@@ -17,6 +17,10 @@ create Procedure StorePeptideProphetValues
 **
 **	Auth:	mem
 **	Date:	07/23/2010 mem - Initial Version (refactored code from LoadSequestPeptidesBulk)
+**			12/23/2011 mem - Added a where clause when updating T_Score_Discriminant to avoid unnecessary updates
+**						   - Added parameter @UpdateExistingData
+**			12/29/2011 mem - Added an index on #Tmp_PepProphet_DataByPeptideID
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -25,6 +29,7 @@ create Procedure StorePeptideProphetValues
 	@LogLevel int,
 	@LogMessage varchar(512),
 	@UsingPhysicalTempTables tinyint,
+	@UpdateExistingData tinyint,			-- If 1, then will change Peptide_Prophet_FScore and Peptide_Prophet_Probability to Null for entries with Null values for Peptide_ID in #Tmp_Unique_Records
 	@infoOnly tinyint = 0,
 	@message varchar(512)='' output
 )
@@ -36,7 +41,7 @@ As
 	Set @myRowCount = 0
 	Set @myError = 0
 
-	declare @numAddedPepProphetScores int
+	declare @numAddedPepProphetScores int = 0
 	declare @jobStr varchar(12)
 
 	declare @RowCountTotal int
@@ -67,6 +72,8 @@ As
 		Probability real NOT NULL
 	)
 
+	CREATE CLUSTERED INDEX #IX_Tmp_PepProphet_DataByPeptideID ON #Tmp_PepProphet_DataByPeptideID (Peptide_ID)
+
 	-----------------------------------------------
 	-- Copy selected contents of #Tmp_PepProphet_Results
 	-- into T_Score_Discriminant
@@ -93,25 +100,59 @@ As
 	       ON UR.Result_ID = TPI.Result_ID
 	     INNER JOIN #Tmp_PepProphet_Results PPR
 	       ON TPI.Result_ID = PPR.Result_ID
+	WHERE NOT UR.Peptide_ID_New Is Null
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
 	If @myError <> 0
 		set @message = 'Error populating #Tmp_PepProphet_DataByPeptideID with Peptide Prophet results for job ' + @jobStr
 	Else
-	Begin
+	Begin -- <a>
 		UPDATE T_Score_Discriminant
 		SET Peptide_Prophet_FScore = PPD.FScore,
 		    Peptide_Prophet_Probability = PPD.Probability
 		FROM T_Score_Discriminant SD
 		     INNER JOIN #Tmp_PepProphet_DataByPeptideID PPD
 		       ON SD.Peptide_ID = PPD.Peptide_ID
+		WHERE IsNull(Peptide_Prophet_FScore,-9999) <> PPD.FScore OR
+		      IsNull(Peptide_Prophet_Probability,-1) <> PPD.Probability
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
-		if @myError <> 0
+		If @myError <> 0
 			set @message = 'Error updating T_Score_Discriminant with Peptide Prophet results for job ' + @jobStr
-	End
+		Else
+		Begin
+			Set @numAddedPepProphetScores = @myRowCount
+			
+			If IsNull(@UpdateExistingData, 0) > 0
+			Begin
+				-- Change FScore and Probability to Null for entries that are in T_Score_Discriminant
+				-- yet are not in #Tmp_PepProphet_DataByPeptideID
+				UPDATE T_Score_Discriminant
+				SET Peptide_Prophet_FScore = NULL,
+				    Peptide_Prophet_Probability = NULL
+				FROM T_Score_Discriminant SD
+				     INNER JOIN T_Peptides Pep
+				       ON SD.Peptide_ID = Pep.Peptide_ID
+				     LEFT OUTER JOIN #Tmp_PepProphet_DataByPeptideID PPD
+				       ON SD.Peptide_ID = PPD.Peptide_ID
+				WHERE Pep.Job = @Job AND
+				      PPD.FScore IS NULL AND
+				      (NOT SD.Peptide_Prophet_FScore IS NULL OR
+				       NOT SD.Peptide_Prophet_Probability IS NULL)
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
+
+				If @myRowCount > 0
+				Begin
+					Set @LogMessage = 'Changed Peptide Prophet values to Null for ' + Convert(varchar(12), @myRowCount) + ' entries for job ' + @jobStr + ' since not present in newly loaded results'
+					execute PostLogEntry 'Warning', @LogMessage, 'StorePeptideProphetValues'
+				End
+			End
+		End
+		
+	End -- </a>
 	--
 	if @myError <> 0
 	Begin
@@ -120,9 +161,7 @@ As
 	End
 	Else
 	Begin
-		Set @numAddedPepProphetScores = @myRowCount
-
-		Set @LogMessage = 'Updated peptide prophet values in T_Score_Discriminant for ' + Convert(varchar(12), @myRowCount) + ' rows'
+		Set @LogMessage = 'Updated peptide prophet values for ' + Convert(varchar(12), @numAddedPepProphetScores) + ' rows'
 		if @LogLevel >= 2
 			execute PostLogEntry 'Progress', @LogMessage, 'StorePeptideProphetValues'
 	End
@@ -172,15 +211,15 @@ As
 		                PPR.FScore,
 		                PPR.Probability
 		FROM #Tmp_Unique_Records UR
-		     INNER JOIN #Tmp_Peptide_Import_MatchedEntries TPIM
+		 INNER JOIN #Tmp_Peptide_Import_MatchedEntries TPIM
 		       ON UR.Result_ID = TPIM.Result_ID2
 		     INNER JOIN #Tmp_PepProphet_Results PPR
 		       ON TPIM.Result_ID1 = PPR.Result_ID
 		WHERE UR.Peptide_ID_New IN ( SELECT SD.Peptide_ID
-		                             FROM T_Peptides Pep
-		                                  INNER JOIN T_Score_Discriminant SD
+		 FROM T_Peptides Pep
+		                      INNER JOIN T_Score_Discriminant SD
 		                                    ON Pep.Peptide_ID = SD.Peptide_ID
-		                             WHERE (Pep.Analysis_ID = @Job) AND
+		                             WHERE (Pep.Job = @Job) AND
 		                                   (SD.Peptide_Prophet_FScore IS NULL) )
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -195,6 +234,8 @@ As
 			FROM T_Score_Discriminant SD
 			     INNER JOIN #Tmp_PepProphet_DataByPeptideID PPD
 			       ON SD.Peptide_ID = PPD.Peptide_ID
+			WHERE IsNull(Peptide_Prophet_FScore,-9999) <> PPD.FScore OR
+		      IsNull(Peptide_Prophet_Probability,-1) <> PPD.Probability
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			--

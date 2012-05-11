@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.ReindexDatabase
 **			10/30/2007 mem - Now calling VerifyUpdateEnabled
 **			10/09/2008 mem - Added T_Score_Inspect
 **			01/13/2011 mem - Now calling PostLogEntry after re-indexing each table
+**			10/20/2011 mem - Added T_Peptide_Filter_Flags
 **    
 *****************************************************/
 (
@@ -124,6 +125,15 @@ As
 	DBCC DBREINDEX (T_Peptide_to_Protein_Map, '', 90)
 	Set @TableCount = @TableCount + 1
 	Exec PostLogEntry 'Debug', ' ... T_Peptide_to_Protein_Map', 'ReindexDatabase'
+	
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+	
+	DBCC DBREINDEX (T_Peptide_Filter_Flags, '', 90)
+	Set @TableCount = @TableCount + 1
+	Exec PostLogEntry 'Debug', ' ... T_Peptide_Filter_Flags', 'ReindexDatabase'
 	
 	-- Validate that updating is enabled, abort if not enabled
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'ReindexDatabase', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output

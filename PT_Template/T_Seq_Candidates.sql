@@ -36,7 +36,7 @@ CREATE NONCLUSTERED INDEX [IX_T_Seq_Candidates_ModCount] ON [dbo].[T_Seq_Candida
 GO
 GRANT UPDATE ON [dbo].[T_Seq_Candidates] ([Seq_ID]) TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Seq_Candidates]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Seq_Candidates_T_Analysis_Description] FOREIGN KEY([Job])
+ALTER TABLE [dbo].[T_Seq_Candidates]  WITH CHECK ADD  CONSTRAINT [FK_T_Seq_Candidates_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Seq_Candidates] CHECK CONSTRAINT [FK_T_Seq_Candidates_T_Analysis_Description]

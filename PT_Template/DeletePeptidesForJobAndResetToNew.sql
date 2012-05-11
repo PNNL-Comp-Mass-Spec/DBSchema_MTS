@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
+CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 /****************************************************
 **
 **	Desc: 
@@ -39,6 +39,10 @@ CREATE PROCEDURE dbo.DeletePeptidesForJobAndResetToNew
 **			10/10/2008 mem - Added support for Inspect tables
 **			03/17/2010 mem - Now clearing the NET Regression fields in T_Analysis_Description
 **			03/11/2011 mem - Updated @JobListToDelete to varchar(max)
+**			08/19/2011 mem - Tweaked log message
+**			08/23/2011 mem - Now also clearing T_Score_MSGFDB
+**			11/29/2011 mem - Now also clearing T_Peptide_ScanGroupInfo
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -61,6 +65,8 @@ AS
 	Declare @Message varchar(512)
 	Declare @JobListProcessed varchar(512)
 	Set @JobListProcessed = ''
+	
+	Declare @NumJobsDeleted int = 0
 	
 	Declare @DataDeleted tinyint
 	Set @DataDeleted = 0
@@ -142,11 +148,16 @@ AS
 			DROP CONSTRAINT FK_T_Score_Sequest_T_Peptides
 		ALTER TABLE dbo.T_Score_XTandem
 			DROP CONSTRAINT FK_T_Score_XTandem_T_Peptides
-		ALTER TABLE dbo.T_Seq_Candidate_to_Peptide_Map
-			DROP CONSTRAINT FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides
-
 		ALTER TABLE dbo.T_Score_Inspect
 			DROP CONSTRAINT FK_T_Score_Inspect_T_Peptides
+		ALTER TABLE dbo.T_Score_MSGFDB
+			DROP CONSTRAINT FK_T_Score_MSGFDB_T_Peptides
+		
+		ALTER TABLE dbo.T_Peptide_ScanGroupInfo
+			DROP CONSTRAINT FK_T_Peptide_ScanGroupInfo_T_Analysis_Description
+			
+		ALTER TABLE dbo.T_Seq_Candidate_to_Peptide_Map
+			DROP CONSTRAINT FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides
 			
 		ALTER TABLE dbo.T_Peptide_to_Protein_Map
 			DROP CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Peptides
@@ -174,7 +185,7 @@ AS
 	FROM #JobListToDelete JobList INNER JOIN
 		  (	SELECT DISTINCT JobList.Job
 			FROM #JobListToDelete JobList INNER JOIN
-				 T_Peptides P ON JobList.Job = P.Analysis_ID
+				 T_Peptides P ON JobList.Job = P.Job
 		  ) LookupQ ON JobList.Job = LookupQ.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -183,7 +194,7 @@ AS
 	DELETE T_Score_Sequest
 	FROM T_Peptides P INNER JOIN 
 		 T_Score_Sequest SS ON P.Peptide_ID = SS.Peptide_ID INNER JOIN
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -194,7 +205,7 @@ AS
 	DELETE T_Score_XTandem
 	FROM T_Peptides P INNER JOIN 
 		 T_Score_XTandem XT ON P.Peptide_ID = XT.Peptide_ID INNER JOIN
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -205,7 +216,28 @@ AS
 	DELETE T_Score_Inspect
 	FROM T_Peptides P INNER JOIN 
 		 T_Score_Inspect Ins ON P.Peptide_ID = Ins.Peptide_ID INNER JOIN
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
+	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto DefineConstraints
+	If @myRowCount <> 0 Set @DataDeleted = 1
+
+	DELETE T_Score_MSGFDB
+	FROM T_Peptides P INNER JOIN 
+		 T_Score_MSGFDB M ON P.Peptide_ID = M.Peptide_ID INNER JOIN
+		 #JobListToDelete JobList ON P.Job = JobList.Job
+	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto DefineConstraints
+	If @myRowCount <> 0 Set @DataDeleted = 1
+
+	DELETE T_Peptide_ScanGroupInfo
+	FROM T_Peptide_ScanGroupInfo SGI INNER JOIN 
+	     #JobListToDelete JobList ON SGI.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -216,7 +248,7 @@ AS
 	DELETE T_Score_Discriminant
 	FROM T_Peptides P INNER JOIN
 		 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -227,7 +259,7 @@ AS
 	DELETE T_Peptide_to_Protein_Map
 	FROM T_Peptides P INNER JOIN 
 		 T_Peptide_to_Protein_Map PPM ON P.Peptide_ID = PPM.Peptide_ID INNER JOIN
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -240,7 +272,7 @@ AS
 		DELETE T_Peptide_Filter_Flags
 		FROM T_Peptides P INNER JOIN
 			T_Peptide_Filter_Flags PFF ON P.Peptide_ID = PFF.Peptide_ID INNER JOIN
-			#JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+			#JobListToDelete JobList ON P.Job = JobList.Job
 		WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -281,7 +313,7 @@ AS
 	
 	DELETE T_Peptides
 	FROM T_Peptides P INNER JOIN 
-		 #JobListToDelete JobList ON P.Analysis_ID = JobList.Job
+		 #JobListToDelete JobList ON P.Job = JobList.Job
 	WHERE JobList.HasPeptides >= @HasPeptidesThreshold
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -369,8 +401,17 @@ AS
 	If @myError <> 0 Goto DefineConstraints
 	If @myRowCount <> 0 Set @DataDeleted = 1
 	
+	
+	SELECT @NumJobsDeleted = COUNT(*)
+	FROM #JobListToDelete
+	
+
 	-- Prepare the log message
-	Set @message = 'Deleted data for jobs ' + @JobListProcessed
+	If @NumJobsDeleted = 1
+		Set @message = 'Deleted data for job ' + @JobListProcessed
+	Else
+		Set @message = 'Deleted data for jobs ' + @JobListProcessed
+
 	If Len(@message) > 475
 	Begin
 		-- Find the next comma after position 475
@@ -419,7 +460,7 @@ DefineConstraints:
 			ADD CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Peptide_Terminus_State_Name FOREIGN KEY(Terminus_State) REFERENCES dbo.T_Peptide_Terminus_State_Name(Terminus_State)
 					
 		ALTER TABLE dbo.T_Peptides WITH NOCHECK
-			ADD CONSTRAINT FK_T_Peptides_T_Analysis_Description FOREIGN KEY(Analysis_ID) REFERENCES dbo.T_Analysis_Description(Job)
+			ADD CONSTRAINT FK_T_Peptides_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
 		ALTER TABLE dbo.T_Peptides WITH NOCHECK
 			ADD CONSTRAINT FK_T_Peptides_T_Sequence FOREIGN KEY(Seq_ID) REFERENCES dbo.T_Sequence(Seq_ID)
 		ALTER TABLE dbo.T_Peptides WITH NOCHECK
@@ -433,6 +474,12 @@ DefineConstraints:
 			ADD CONSTRAINT FK_T_Score_XTandem_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
 		ALTER TABLE dbo.T_Score_Inspect WITH NOCHECK
 			ADD CONSTRAINT FK_T_Score_Inspect_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
+		ALTER TABLE dbo.T_Score_MSGFDB WITH NOCHECK
+			ADD CONSTRAINT FK_T_Score_MSGFDB_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
+			
+		ALTER TABLE dbo.T_Peptide_ScanGroupInfo WITH NOCHECK
+			ADD CONSTRAINT FK_T_Peptide_ScanGroupInfo_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
+
 		ALTER TABLE dbo.T_Seq_Candidate_to_Peptide_Map WITH NOCHECK
 			ADD CONSTRAINT FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides (Peptide_ID)
 
@@ -446,7 +493,6 @@ DefineConstraints:
 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[DeletePeptidesForJobAndResetToNew] TO [MTS_DB_Dev] AS [dbo]

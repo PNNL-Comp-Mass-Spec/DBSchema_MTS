@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCedure dbo.ComputePeptideGANET
+CREATE PROCedure ComputePeptideGANET
 /********************************************************
 **	Populates the GANET_Obs field in T_Peptides
 **	If the Job's fit value is less than @MinNETFit, then no
@@ -15,6 +15,8 @@ CREATE PROCedure dbo.ComputePeptideGANET
 **	Date:	07/05/2004 mem
 **			09/14/2004 mem - Removed conglomerate GANET_Avg computations
 **			01/22/2005 mem - Added @MinNETRSquared column and switched to using the ScanTime_NET columns
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**
 *********************************************************/
 (
 	@Job int,
@@ -42,7 +44,7 @@ AS
 	-- Clear the existing GANET values for this job in T_Peptides
 	UPDATE T_Peptides
 	SET GANET_Obs = NULL
-	WHERE Analysis_ID = @Job AND NOT GANET_Obs Is NULL
+	WHERE Job = @Job AND NOT GANET_Obs Is NULL
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 	--
@@ -87,7 +89,7 @@ AS
 		SET GANET_Obs = DSS_PeakApex.Scan_Time * TAD.ScanTime_NET_Slope + TAD.ScanTime_NET_Intercept
 		FROM T_Peptides INNER JOIN
 			T_Analysis_Description TAD ON 
-			T_Peptides.Analysis_ID = TAD.Job INNER JOIN
+			T_Peptides.Job = TAD.Job INNER JOIN
 			V_SIC_Job_to_PeptideHit_Map JobMap ON 
 			TAD.Job = JobMap.Job INNER JOIN
 			T_Dataset_Stats_Scans DSS_PeakApex ON 
@@ -96,20 +98,20 @@ AS
 			JobMap.SIC_Job = DSSIC.Job AND 
 			T_Peptides.Scan_Number = DSSIC.Frag_Scan_Number AND 
 			DSS_PeakApex.Scan_Number = DSSIC.Optimal_Peak_Apex_Scan_Number
-		WHERE T_Peptides.Analysis_ID = @Job
+		WHERE T_Peptides.Job = @Job
 	Else	
 		UPDATE T_Peptides
 		SET GANET_Obs = DSS.Scan_Time * TAD.ScanTime_NET_Slope + TAD.ScanTime_NET_Intercept
 		FROM T_Peptides INNER JOIN
 			T_Analysis_Description TAD ON 
-			T_Peptides.Analysis_ID = TAD.Job INNER JOIN
+			T_Peptides.Job = TAD.Job INNER JOIN
 			V_SIC_Job_to_PeptideHit_Map JobMap ON 
 			TAD.Job = JobMap.Job INNER JOIN
 			T_Dataset_Stats_Scans DSS ON 
 			JobMap.SIC_Job = DSS.Job
 			AND 
 			T_Peptides.Scan_Number = DSS.Scan_Number
-		WHERE T_Peptides.Analysis_ID = @Job
+		WHERE T_Peptides.Job = @Job
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
 	--
@@ -135,7 +137,6 @@ Done:
 	Select @message
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputePeptideGANET] TO [MTS_DB_Dev] AS [dbo]

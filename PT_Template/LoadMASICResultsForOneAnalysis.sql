@@ -28,6 +28,9 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			04/16/2007 mem - Now using LookupCurrentResultsFolderPathsByJob to determine the results folder path (Ticket #423)
 **			07/22/2009 mem - Added Try/Catch error handling
 **			10/12/2010 mem - Now setting @completionCode to 9 when ValidateDelimitedFile returns a result code = 63
+**			11/21/2011 mem - Now populating Required_File_List in #TmpResultsFolderPaths
+**						   - Now updating @message when call to LoadMASICSICStatsBulk returns an error code
+**			12/30/2011 mem - Added call to LoadToolVersionInfoOneJob
 **    
 *****************************************************/
 (
@@ -51,14 +54,14 @@ AS
 	set @message = ''
 	set @numLoaded = 0
 
-	declare @messageAddnl varchar(255)
-	set @messageAddnl = ''
+	declare @messageAddnl varchar(255) = ''
 	
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
 	
 	declare @result int
-
+	Declare @RequiredFileList varchar(max)
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -68,9 +71,10 @@ AS
 		-----------------------------------------------
 		-- Get dataset name and ID
 		-----------------------------------------------
-		declare @Dataset  varchar(128)
+		declare @Dataset varchar(128)
 		declare @DatasetID int
-
+		Declare @AnalysisToolName varchar(128)
+		
 		declare @StoragePathResults varchar(512)
 		declare @SourceServer varchar(255)
 		
@@ -78,7 +82,8 @@ AS
 
 		SELECT 
 			@Dataset = Dataset, 
-			@DatasetID = Dataset_ID
+			@DatasetID = Dataset_ID,
+			@AnalysisToolName = Analysis_Tool
 		FROM T_Analysis_Description
 		WHERE (Job = @job)
 		--
@@ -90,7 +95,7 @@ AS
 			set @myError = 60001
 			goto Done
 		end
-
+		
 		---------------------------------------------------
 		-- Use LookupCurrentResultsFolderPathsByJob to get 
 		-- the path to the analysis job results folder
@@ -99,11 +104,14 @@ AS
 		CREATE TABLE #TmpResultsFolderPaths (
 			Job INT NOT NULL,
 			Results_Folder_Path varchar(512),
-			Source_Share varchar(128)
+			Source_Share varchar(128),
+			Required_File_List varchar(max)
 		)
 
-		INSERT INTO #TmpResultsFolderPaths (Job)
-		VALUES (@Job)
+		Set @RequiredFileList = @Dataset + '_SICstats.txt' + ', ' + @Dataset + '_ScanStats.txt'
+
+		INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
+		VALUES (@Job, @RequiredFileList)
 		
 		Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob'
 		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
@@ -285,6 +293,8 @@ AS
 		Else
 		Begin
 			-- Error inserting results; load failed
+			
+			Set @message = 'Error loading ScanStats entries for job ' + @jobStr + ': ' + IsNull(@message, '??')
 			set @completionCode = 3
 			set @myError = 60005
 			Goto Done
@@ -323,10 +333,20 @@ AS
 
 				if @numLoaded > 0
 					set @completionCode = @NextProcessState
+					
+				-----------------------------------------------
+				-- Load and store the Tool Version Info
+				-- If an error occurs, LoadToolVersionInfoOneJob will log the error
+				-----------------------------------------------
+				--
+				Declare @ReturnCode int
+				exec @ReturnCode = LoadToolVersionInfoOneJob @Job, @AnalysisToolName, @StoragePathResults				
+				
 			END
 			Else
 			Begin
-				-- Error inserting results; load failed
+				-- Error inserting results; load failed				
+				Set @message = @message + '; Error loading SIC entries for job ' + @jobStr + ': ' + IsNull(@messageAddnl, '??')
 				set @completionCode = 3
 				set @myError = 60006
 				Goto Done

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE FUNCTION udfParseDelimitedIntegerList
+CREATE FUNCTION dbo.udfParseDelimitedIntegerList
 /****************************************************	
 **	Parses the text in @DelimitedList and returns a table
 **	containing the values
@@ -17,6 +17,7 @@ CREATE FUNCTION udfParseDelimitedIntegerList
 **	Auth:	mem
 **	Date:	11/30/2006
 **			03/14/2007 mem - Changed @DelimitedList parameter from varchar(8000) to varchar(max)
+**			04/02/2012 mem - Now removing Tab characters
 **  
 ****************************************************/
 (
@@ -52,10 +53,18 @@ BEGIN
 			Begin -- <c>
 				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))
 				
+				If @Delimiter <> Char(9)
+				Begin
+					 -- Remove any tab characters present in @Value
+					 Set @Value = Replace(@Value, Char(9), '')
+				End
+				
 				If Len(@Value) > 0 And IsNumeric(@Value) = 1
+				Begin
 					INSERT INTO @tmpValues (Value)
 					VALUES (Convert(int, @Value))
-			end -- </c>
+				End
+			End -- </c>
 
 			Set @StartPosition = @DelimiterPos + 1
 		End -- </b>
@@ -63,5 +72,6 @@ BEGIN
 	
 	RETURN
 END
+
 
 GO

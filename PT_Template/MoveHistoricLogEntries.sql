@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create Procedure MoveHistoricLogEntries
+
+CREATE Procedure MoveHistoricLogEntries
 /****************************************************
 **
 **	Desc: Move log entries from main log into the 
@@ -18,6 +19,7 @@ create Procedure MoveHistoricLogEntries
 **			08/01/2004 mem - Updated @intervalHrs to 168 (1 week)
 **			12/01/2005 mem - Increased size of @DBName from 64 to 128 characters
 **			08/17/2006 mem - Added support for column Entered_By
+**			10/27/2011 mem - Now deleting MSGF warnings before moving log entries to MT_HistoricLog
 **    
 *****************************************************/
 (
@@ -25,8 +27,15 @@ create Procedure MoveHistoricLogEntries
 )
 As
 	set nocount on
-	declare @cutoffDateTime datetime
 	
+	---------------------------------------------------
+	-- Validate @intervalHrs
+	---------------------------------------------------
+	Set @intervalHrs = IsNull(@intervalHrs, 168)
+	If @intervalHrs < 48
+		Set @intervalHrs = 48
+	
+	declare @cutoffDateTime datetime	
 	set @cutoffDateTime = dateadd(hour, -1 * @intervalHrs, getdate())
 
 	declare @DBName varchar(128)
@@ -43,6 +52,22 @@ As
 	set @transName = 'TRAN_MoveHistoricLogEntries'
 	begin transaction @transName
 
+	-- First delete MSGF warning messages from T_Log_Entries
+
+	DELETE FROM T_Log_Entries
+	WHERE posting_time < @cutoffDateTime AND
+	      posted_by = 'StoreMSGFValues' AND
+	      Type = 'Warning' AND
+	      message LIKE '%unrecognizable%'
+	--
+	if @@error <> 0
+	begin
+		rollback transaction @transName
+		RAISERROR ('Error deleting MSGF Warnings in T_Log_Entries',
+			10, 1)
+		return 51180
+	end
+	
 	---------------------------------------------------
 	-- put entries into historic log
 	---------------------------------------------------
@@ -90,6 +115,7 @@ As
 	commit transaction @transName
 	
 	return 0
+
 
 GO
 GRANT EXECUTE ON [dbo].[MoveHistoricLogEntries] TO [DMS_SP_User] AS [dbo]

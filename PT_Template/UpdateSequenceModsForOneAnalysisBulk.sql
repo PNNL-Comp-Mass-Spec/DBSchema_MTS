@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
+CREATE Procedure UpdateSequenceModsForOneAnalysisBulk
 /****************************************************
 ** 
 **	Desc: Sequentially examines all unprocessed entries in
@@ -44,6 +44,7 @@ CREATE Procedure dbo.UpdateSequenceModsForOneAnalysisBulk
 **			08/20/2008 mem - Now checking for jobs where all of the loaded peptides have State_ID = 2
 **			01/30/2010 mem - Added parameters @infoOnly, @MaxRowsToProcess, @OnlyProcessNullSeqIDRows, and @SkipDeleteTempTables
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -213,7 +214,7 @@ As
 		Else
 			Set @Sql = @Sql + ' SELECT Peptide_ID, Peptide'
 		Set @Sql = @Sql + ' FROM T_Peptides'
-		Set @Sql = @Sql + ' WHERE Analysis_ID = ' + @jobStr
+		Set @Sql = @Sql + ' WHERE Job = ' + @jobStr
 		If @SkipPeptidesFromReversedProteins <> 0
 			Set @Sql = @Sql + ' AND State_ID <> 2'
 		If @OnlyProcessNullSeqIDRows <> 0
@@ -234,7 +235,7 @@ As
 		
 		if @myRowCount = 0
 		begin
-			If @SkipPeptidesFromReversedProteins <> 0 And Exists (SELECT * FROM T_Peptides WHERE Analysis_ID = @job)
+			If @SkipPeptidesFromReversedProteins <> 0 And Exists (SELECT * FROM T_Peptides WHERE Job = @job)
 				set @message = 'Warning: all peptides in job ' + @jobStr + ' have State_ID = 2, meaning they only map to Reversed Proteins'
 			Else
 				set @message = 'Unable to populate ' + @MasterSequencesServerName + '.' + @PeptideSequencesTableName + ' with candidate sequences for job ' + @jobStr + '; it is likely this job does not have any peptides in T_Peptides'
@@ -347,7 +348,7 @@ As
 					T_Peptide_to_Protein_Map PPM ON 
 					Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
 					T_Sequence ON Pep.Seq_ID = T_Sequence.Seq_ID
-				WHERE Pep.Analysis_ID = @job
+				WHERE Pep.Job = @job
 				GROUP BY Pep.Seq_ID
 				) LookupQ ON Seq.Seq_ID = LookupQ.Seq_ID
 			WHERE LookupQ.Cleavage_State_Max > Seq.Cleavage_State_Max OR
@@ -373,7 +374,7 @@ As
 			
 			SELECT @myRowCount = COUNT(*)
 			FROM T_Peptides
-			WHERE Analysis_ID = @Job AND
+			WHERE Job = @Job AND
 				Seq_ID IS NULL AND
 				(@SkipPeptidesFromReversedProteins = 0 OR
 				@SkipPeptidesFromReversedProteins <> 0 AND
@@ -429,7 +430,6 @@ Done:
 	End
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForOneAnalysisBulk] TO [MTS_DB_Dev] AS [dbo]

@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[ComputeInspectMassValuesUsingSICStats] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure ComputeInspectMassValuesUsingSICStats
@@ -20,6 +20,7 @@ CREATE Procedure ComputeInspectMassValuesUsingSICStats
 **			01/08/2009 mem - Now storing theoretical peptide MH in T_Peptides.MH
 **						   - Computing DelM as Theoretical_MH - Observed_MH, which is consistent with XTandem and Sequest data in MTS
 **						   - Added parameter @ForceMHRecalculation (with a default of 0)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -138,7 +139,7 @@ As
 			--
 			SELECT @RowCountDefined = COUNT(*)
 			FROM T_Peptides
-			WHERE Analysis_ID = @Job
+			WHERE Job = @Job
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -160,13 +161,13 @@ As
 			                DS_SIC.MZ * Pep.Charge_State - (Pep.Charge_State - 1) * 1.0073 AS Parent_Ion_MH
 			FROM T_Peptides Pep
 			     INNER JOIN T_Analysis_Description TAD
-			       ON Pep.Analysis_ID = TAD.Job
+			       ON Pep.Job = TAD.Job
 			     INNER JOIN T_Dataset_Stats_SIC DS_SIC
 			       ON Pep.Scan_Number = DS_SIC.Frag_Scan_Number
 			     INNER JOIN T_Datasets DS
 			       ON TAD.Dataset_ID = DS.Dataset_ID AND
 			          DS_SIC.Job = DS.SIC_Job
-			WHERE (Pep.Analysis_ID = @Job)
+			WHERE (Pep.Job = @Job)
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -181,7 +182,7 @@ As
 			FROM T_Peptides Pep
 				INNER JOIN T_Sequence S 
 				ON Pep.Seq_ID = S.Seq_ID
-			WHERE (Pep.Analysis_ID = @Job) And 
+			WHERE (Pep.Job = @Job) And 
 				  (@ForceMHRecalculation <> 0 OR IsNull(Pep.MH, 0) = 0)
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -223,7 +224,7 @@ As
 				       ON Pep.Peptide_ID = I.Peptide_ID
 				     INNER JOIN #TmpParentMZInfo PMI
 				       ON Pep.Peptide_ID = PMI.Peptide_ID
-				WHERE (Pep.Analysis_ID = @Job) AND Not Pep.MH Is Null
+				WHERE (Pep.Job = @Job) AND Not Pep.MH Is Null
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--

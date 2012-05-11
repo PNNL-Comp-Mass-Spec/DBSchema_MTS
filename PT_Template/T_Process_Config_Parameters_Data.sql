@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 22 ******/
+/****** RowCount: 23 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_Exclusion','MS/MS analysis job import',0,99,'Exclude MS/MS analysis jobs that are associated with this campaign name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character.')
@@ -11,6 +11,7 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('Experiment_Exclusion','MS/MS 
 INSERT INTO [T_Process_Config_Parameters] VALUES ('General_Statistics_Update_Interval','Update Interval',1,1,'Time interval (in hours) to update the general statistics table')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Import_Result_Type','MS/MS analysis job import',1,99,'Determines types of analysis results imported into T_Analysis_Description')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Job_Info_DMS_Update_Interval','Update Interval',1,1,'Time interval (in hours) to validate the analysis job details against those stored in DMS')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MTDB_Export_Custom_Filter_ID_and_Table','MS/MS results filter',0,99,'Custom filter set ID and filter criteria table')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MTDB_Export_Filter_ID','MS/MS results filter',0,99,'Filters to check all peptides against; used when exporting data to MTDBs')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Regression_Param_File_Name','NET Regression',0,1,'Name of the parameter file to use when performing NET regression (stored at \\gigasax\DMS_Parameter_Files\NET_Regression\)')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('NET_Regression_Param_File_Name_by_Campaign','NET Regression',0,99,'NET Regression parameter file to use for samples with the given Campaign (as defined in T_Analysis_Description); separate the file name and the label name with a comma')

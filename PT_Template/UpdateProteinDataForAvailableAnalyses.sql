@@ -18,6 +18,8 @@ CREATE Procedure UpdateProteinDataForAvailableAnalyses
 **	Auth:	mem
 **	Date:	11/02/2009
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -131,12 +133,13 @@ AS
 						       ON Pep.Peptide_ID = PPM.Peptide_ID
 						     INNER JOIN T_Proteins Prot
 						       ON PPM.Ref_ID = Prot.Ref_ID
-						WHERE Pep.Analysis_ID = @Job AND
+						WHERE Pep.Job = @Job AND
 						      Prot.Protein_Collection_ID IS NULL AND
 						      NOT (	Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
 									Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 									Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
-									Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+									Prot.Reference LIKE 'xxx.%'	OR			-- Inspect reversed/scrambled proteins
+									Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
 						           )
 
 						If @MatchCount > 0

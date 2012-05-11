@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.VerifySequenceInfo
+CREATE Procedure VerifySequenceInfo
 /****************************************************
 **
 **	Desc: 
@@ -38,6 +38,7 @@ CREATE Procedure dbo.VerifySequenceInfo
 **			11/05/2009 mem - Changed default value for @NextProcessState to 31
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **			11/11/2010 mem - Now calling CalculateMonoisotopicMass when SkipPeptidesFromReversedProteins is 0 in T_Process_Step_Control
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -96,7 +97,7 @@ AS
 				(	SELECT DISTINCT P.Seq_ID
 					FROM T_Peptides P INNER JOIN
 						 T_Analysis_Description TAD ON 
-						 P.Analysis_ID = TAD.Job
+						 P.Job = TAD.Job
 					WHERE TAD.Process_State = @ProcessStateMatch
 				) AS SequenceQ ON 
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
@@ -179,16 +180,16 @@ AS
 	)
 	
 	INSERT INTO #MassStatsByJob (Job, NullMassCount)
-	SELECT	P.Analysis_ID AS Job, 
+	SELECT	P.Job, 
 			SUM(CASE WHEN S.Monoisotopic_Mass IS NULL 
 				THEN 1 
 				ELSE 0 
 				END) AS NullMassCount
 	FROM T_Peptides P INNER JOIN 
 		 T_Sequence S ON P.Seq_ID = S.Seq_ID INNER JOIN
-	  T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+	  T_Analysis_Description TAD ON P.Job = TAD.Job
 	WHERE TAD.Process_State = @ProcessStateMatch
-	GROUP BY P.Analysis_ID
+	GROUP BY P.Job
 	--
 	SELECT @myError = @@error, @numJobsProcessed = @@rowcount
 	--
@@ -247,7 +248,6 @@ Done:
 		execute PostLogEntry 'Error', @message, 'VerifySequenceInfo'
 
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[VerifySequenceInfo] TO [MTS_DB_Dev] AS [dbo]

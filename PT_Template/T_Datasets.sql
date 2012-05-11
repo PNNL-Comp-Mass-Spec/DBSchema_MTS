@@ -126,12 +126,12 @@ AS
 		ORDER BY inserted.Dataset_ID
 
 GO
-ALTER TABLE [dbo].[T_Datasets]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
+ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Analysis_Description]
 GO
-ALTER TABLE [dbo].[T_Datasets]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY([Dataset_Process_State])
+ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY([Dataset_Process_State])
 REFERENCES [T_Dataset_Process_State] ([ID])
 GO
 ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State]

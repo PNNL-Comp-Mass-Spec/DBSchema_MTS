@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ImportNewPeptideAnalyses
+CREATE Procedure ImportNewPeptideAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -59,6 +59,7 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			07/23/2009 mem - Now auto-adding SIC jobs for any datasets that are defined in T_Analysis_Description (regardless of organism or other extended metadata filters)
 **			07/13/2010 mem - Now populating Acq_Length in T_Datasets
 **			10/12/2010 mem - Now calling UpdateNETRegressionParamFileName if any new jobs are imported
+**			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -492,6 +493,7 @@ As
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
+		INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 
@@ -930,7 +932,6 @@ As
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Dev] AS [dbo]

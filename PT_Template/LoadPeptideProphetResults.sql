@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadPeptideProphetResults
+CREATE Procedure LoadPeptideProphetResults
 /****************************************************
 **
 **	Desc: Loads Peptide Prophet Calculation results
@@ -16,6 +16,7 @@ CREATE Procedure dbo.LoadPeptideProphetResults
 **	Auth:	mem
 **	Date:	07/06/2006
 **			07/07/2006 mem - Updated to only post a warning if a job has null rows but all of the null rows have charge 6+ or higher
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -246,7 +247,7 @@ AS
 				FROM T_Peptides P INNER JOIN
 					T_Score_Discriminant SD ON 
 					P.Peptide_ID = SD.Peptide_ID
-				WHERE P.Analysis_ID = @JobCurrent AND
+				WHERE P.Job = @JobCurrent AND
 					  NOT (	SD.Peptide_Prophet_FScore IS NULL OR 
 							SD.Peptide_Prophet_Probability IS NULL)
 				--
@@ -264,7 +265,7 @@ AS
 					  (	SELECT P.Peptide_ID, I.FScore, I.Probability 
 						FROM #TmpPeptideProphetResultsImport I INNER JOIN
 							T_Peptides P ON 
-								I.Job = P.Analysis_ID AND 
+								I.Job = P.Job AND 
 								I.Scan = P.Scan_Number AND 
 								I.Scan_Count = P.Number_Of_Scans AND 
 								I.Charge = P.Charge_State AND
@@ -297,7 +298,7 @@ AS
 			FROM T_Peptides P INNER JOIN
 				 T_Score_Discriminant SD ON 
 				 P.Peptide_ID = SD.Peptide_ID
-			WHERE P.Analysis_ID = @JobCurrent
+			WHERE P.Job = @JobCurrent
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -402,7 +403,6 @@ AS
 	-----------------------------------------------
 Done:	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadPeptideProphetResults] TO [MTS_DB_Dev] AS [dbo]

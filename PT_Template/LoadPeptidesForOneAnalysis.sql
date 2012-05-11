@@ -48,11 +48,20 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			07/22/2009 mem - Added Try/Catch error handling
 **			07/23/2010 mem - Added support for MSGF results
 **			10/12/2010 mem - Now setting @completionCode to 9 when ValidateDelimitedFile returns a result code = 63 or when LoadSequestPeptidesBulk, LoadXTandemPeptidesBulk, or LoadInspectPeptidesBulk return 52099
+**			08/19/2011 mem - Now passing @SynFileColumnCount and @SynFileHeader to LoadSequestPeptidesBulk, LoadXTandemPeptidesBulk, and LoadInspectPeptidesBulk
+**			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			09/01/2011 mem - Updated to use Result_File_Suffix in T_Analysis_Description to possibly override the default file suffix
+**			11/21/2011 mem - Now populating Required_File_List in #TmpResultsFolderPaths
+**			11/28/2011 mem - Now passing @ScanGroupInfoFilePath to LoadMSGFDBPeptidesBulk
+**			12/23/2011 mem - Added switch @UpdateExistingData
+**			12/29/2011 mem - Added call to ComputeMaxObsAreaByJob
+**			12/30/2011 mem - Added call to LoadToolVersionInfoOneJob
 **
 *****************************************************/
 (
 	@NextProcessState int = 20,
 	@job int,
+	@UpdateExistingData tinyint,
 	@message varchar(255)='' OUTPUT,
 	@numLoaded int=0 out,
 	@clientStoragePerspective tinyint = 1,
@@ -69,8 +78,13 @@ AS
 	declare @completionCode int
 	set @completionCode = 3				-- Set to state 'Load Failed' for now
 
+	-----------------------------------------------
+	-- Validate the inputs
+	-----------------------------------------------
+	
 	set @message = ''
 	set @numLoaded = 0
+	Set @UpdateExistingData = IsNull(@UpdateExistingData, 0)
 	Set @infoOnly = IsNull(@infoOnly, 0)
 	
 	declare @jobStr varchar(12)
@@ -79,16 +93,23 @@ AS
 	declare @result int
 	declare @SynFileExtension varchar(32)
 	
+	Declare @RequiredFileList varchar(max)
+	
 	declare @ResultToSeqMapFileExtension varchar(48)
 	declare @SeqInfoFileExtension varchar(48)
 	declare @SeqModDetailsFileExtension varchar(48)
 	declare @SeqToProteinMapFileExtension varchar(48)
 	declare @PeptideProphetFileExtension varchar(48)
 	declare @MSGFFileExtension varchar(48)
-        
+	declare @ScanGroupInfoFileExtension varchar(48) = ''
+    declare @AnalysisToolName varchar(128)
+    
 	declare @ColumnCountExpected int
 	declare @LineCountToSkip int
 
+	Declare @ErrMsg varchar(256) = ''
+	Declare @ReturnCode int
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -153,18 +174,17 @@ AS
 		-- Get result type, dataset name, and campaign for this job
 		-----------------------------------------------
 		Declare @ResultType varchar(64)
-		Declare @Dataset  varchar(128)
-		Declare @Campaign varchar(128)
+		Declare @Dataset  varchar(128) = ''
+		Declare @Campaign varchar(128) = ''
+		Declare @ResultFileSuffix varchar(32) = ''
 
 		declare @StoragePathResults varchar(512)
 		declare @SourceServer varchar(255)
 			
-		Set @Dataset = ''
-		Set @Campaign = ''
-
 		SELECT	@ResultType = ResultType,
 				@Dataset = Dataset,
-				@Campaign = Campaign
+				@Campaign = Campaign,
+				@ResultFileSuffix = IsNull(Result_File_Suffix, '')
 		FROM T_Analysis_Description
 		WHERE (Job = @job)
 		--
@@ -188,46 +208,80 @@ AS
 		set @ColumnCountExpected = 0
 		If @ResultType = 'Peptide_Hit'
 		Begin
-			set @SynFileExtension = '_syn.txt'
-			set @ColumnCountExpected = 19
+			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+				Set @ResultFileSuffix = '_syn'
+				
+			set @SynFileExtension = @ResultFileSuffix + '.txt'
+			set @ColumnCountExpected = 19			-- Sequest Synopsis files created after August 2011 will have 20 columns
 
-			set @ResultToSeqMapFileExtension = '_syn_ResultToSeqMap.txt'
-			set @SeqInfoFileExtension = '_syn_SeqInfo.txt'
-			set @SeqModDetailsFileExtension = '_syn_ModDetails.txt'
-			set @SeqToProteinMapFileExtension = '_syn_SeqToProteinMap.txt'
-			set @PeptideProphetFileExtension = '_syn_PepProphet.txt'
-			set @MSGFFileExtension = '_syn_MSGF.txt'
+			set @ResultToSeqMapFileExtension = @ResultFileSuffix + '_ResultToSeqMap.txt'
+			set @SeqInfoFileExtension = @ResultFileSuffix + '_SeqInfo.txt'
+			set @SeqModDetailsFileExtension = @ResultFileSuffix + '_ModDetails.txt'
+			set @SeqToProteinMapFileExtension = @ResultFileSuffix + '_SeqToProteinMap.txt'
+			set @PeptideProphetFileExtension = @ResultFileSuffix + '_PepProphet.txt'
+			set @MSGFFileExtension = @ResultFileSuffix + '_MSGF.txt'
+			
+			set @AnalysisToolName = 'Sequest'
 		End
 		
 		If @ResultType = 'XT_Peptide_Hit'
 		Begin
-			set @SynFileExtension = '_xt.txt'
-			set @ColumnCountExpected = 16
+			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+				Set @ResultFileSuffix = '_xt'
+				
+			set @SynFileExtension = @ResultFileSuffix + '.txt'
+			set @ColumnCountExpected = 16			-- X!Tandem _xt.txt files created after August 2011 will have 17 columns
 
-			set @ResultToSeqMapFileExtension = '_xt_ResultToSeqMap.txt'
-			set @SeqInfoFileExtension = '_xt_SeqInfo.txt'
-			set @SeqModDetailsFileExtension = '_xt_ModDetails.txt'
-			set @SeqToProteinMapFileExtension = '_xt_SeqToProteinMap.txt'
-			set @PeptideProphetFileExtension = '_xt_PepProphet.txt'
-			set @MSGFFileExtension = '_xt_MSGF.txt'
+			set @ResultToSeqMapFileExtension = @ResultFileSuffix + '_ResultToSeqMap.txt'
+			set @SeqInfoFileExtension = @ResultFileSuffix + '_SeqInfo.txt'
+			set @SeqModDetailsFileExtension = @ResultFileSuffix + '_ModDetails.txt'
+			set @SeqToProteinMapFileExtension = @ResultFileSuffix + '_SeqToProteinMap.txt'
+			set @PeptideProphetFileExtension = @ResultFileSuffix + '_PepProphet.txt'
+			set @MSGFFileExtension = @ResultFileSuffix + '_MSGF.txt'
+			
+			set @AnalysisToolName = 'XTandem'
 		End
 
 		If @ResultType = 'IN_Peptide_Hit'
 		Begin
-			set @SynFileExtension = '_inspect_syn.txt'
-			set @ColumnCountExpected = 25
+			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+				Set @ResultFileSuffix = '_inspect_syn'
+				
+			set @SynFileExtension = @ResultFileSuffix + '.txt'
+			set @ColumnCountExpected = 25			-- Inspect synopsis files created after August 2011 will have 28 columns
 
-			set @ResultToSeqMapFileExtension = '_inspect_syn_ResultToSeqMap.txt'
-			set @SeqInfoFileExtension = '_inspect_syn_SeqInfo.txt'
-			set @SeqModDetailsFileExtension = '_inspect_syn_ModDetails.txt'
-			set @SeqToProteinMapFileExtension = '_inspect_syn_SeqToProteinMap.txt'
+			set @ResultToSeqMapFileExtension = @ResultFileSuffix + '_ResultToSeqMap.txt'
+			set @SeqInfoFileExtension = @ResultFileSuffix + '_SeqInfo.txt'
+			set @SeqModDetailsFileExtension = @ResultFileSuffix + '_ModDetails.txt'
+			set @SeqToProteinMapFileExtension = @ResultFileSuffix + '_SeqToProteinMap.txt'
 			set @PeptideProphetFileExtension = ''
-			set @MSGFFileExtension = '_inspect_syn_MSGF.txt'
+			set @MSGFFileExtension = @ResultFileSuffix + '_MSGF.txt'
+			
+			set @AnalysisToolName = 'Inspect'
+		End
+		
+		If @ResultType = 'MSG_Peptide_Hit'
+		Begin
+			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+				Set @ResultFileSuffix = '_msgfdb_syn'				
+				
+			set @SynFileExtension = @ResultFileSuffix + '.txt'
+			set @ColumnCountExpected = 17
+
+			set @ResultToSeqMapFileExtension = @ResultFileSuffix + '_ResultToSeqMap.txt'
+			set @SeqInfoFileExtension = @ResultFileSuffix + '_SeqInfo.txt'
+			set @SeqModDetailsFileExtension = @ResultFileSuffix + '_ModDetails.txt'
+			set @SeqToProteinMapFileExtension = @ResultFileSuffix + '_SeqToProteinMap.txt'
+			set @PeptideProphetFileExtension = ''
+			set @MSGFFileExtension = @ResultFileSuffix + '_MSGF.txt'
+			set @ScanGroupInfoFileExtension = '_msgfdb_ScanGroupInfo.txt'
+			
+			set @AnalysisToolName = 'MSGFDB'
 		End
 		
 		If @ColumnCountExpected = 0
 		Begin
-			set @message = 'Invalid result type ' + @ResultType + ' for job ' + @jobStr + '; should be Peptide_Hit, XT_Peptide_Hit, or IN_Peptide_Hit'
+			set @message = 'Invalid result type ' + @ResultType + ' for job ' + @jobStr + '; should be Peptide_Hit, XT_Peptide_Hit, IN_Peptide_Hit, or MSG_Peptide_Hit'
 			set @myError = 60005
 			goto Done
 		End
@@ -247,11 +301,14 @@ AS
 		CREATE TABLE #TmpResultsFolderPaths (
 			Job INT NOT NULL,
 			Results_Folder_Path varchar(512),
-			Source_Share varchar(128)
+			Source_Share varchar(128),
+			Required_File_List varchar(max)
 		)
 
-		INSERT INTO #TmpResultsFolderPaths (Job)
-		VALUES (@Job)
+		Set @RequiredFileList = @Dataset + @SynFileExtension
+		
+		INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
+		VALUES (@Job, @RequiredFileList)
 		
 		Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob'
 		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
@@ -289,7 +346,8 @@ AS
 		declare @PeptideSeqModDetailsFilePath varchar(512)
 		declare @PeptideSeqToProteinMapFilePath varchar(512)
 		declare @PeptideProphetResultsFilePath varchar(512)
-		declare @MSGFResultsFilePath varchar(512)
+		declare @MSGFResultsFilePath varchar(512)		
+		declare @ScanGroupInfoFilePath varchar(512)			-- Only used by MSGFDB
 
 		set @RootFileName = @Dataset
 		set @PeptideSynFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SynFileExtension)
@@ -300,20 +358,27 @@ AS
 		set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqToProteinMapFileExtension)
 		set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @PeptideProphetFileExtension)
 		set @MSGFResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @MSGFFileExtension)
+				
+		If @ScanGroupInfoFileExtension <> ''
+			set @ScanGroupInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @ScanGroupInfoFileExtension)
+		Else
+			Set @ScanGroupInfoFilePath = ''
 
 		Declare @fileExists tinyint
 		Declare @SynFileColumnCount int
+		Declare @SynFileHeader varchar(2048) = ''
 		
 		-----------------------------------------------
 		-- Verify that the input file exists, count the number of columns, 
-		-- and determine whether or not a header row is present
+		--  and determine whether or not a header row is present
+		-- Output parameter @SynFileHeader will contain the header row (if present)
 		-----------------------------------------------
 		
 		Set @CurrentLocation = 'Call ValidateDelimitedFile'
 		
 		-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
 		Set @LineCountToSkip = -1
-		Exec @result = ValidateDelimitedFile @PeptideSynFilePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @SynFileColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 1
+		Exec @result = ValidateDelimitedFile @PeptideSynFilePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @SynFileColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 1, @HeaderLine=@SynFileHeader OUTPUT
 		
 		Set @myError = 0
 		if @result <> 0
@@ -351,7 +416,7 @@ AS
 
 
 		-----------------------------------------------
-		-- Load peptides from the synopsis file, XTandem results file, or Inspect results file
+		-- Load peptides from the synopsis file, XTandem results file, Inspect results file, or MSGFDB results file
 		-- Also calls LoadSeqInfoAndModsPart1 and LoadSeqInfoAndModsPart2
 		--  to load the results to sequence mapping, sequence info, 
 		-- modification information, and sequence to protein mapping
@@ -374,14 +439,15 @@ AS
 
 		If @infoOnly <> 0
 		Begin
-			SELECT  @LineCountToSkip AS LineCountToSkip,
-					@PeptideResultToSeqMapFilePath AS PeptideResultToSeqMapFilePath,
-					@PeptideSeqInfoFilePath AS PeptideSeqInfoFilePath,
-					@PeptideSeqModDetailsFilePath AS PeptideSeqModDetailsFilePath,
-					@PeptideSeqToProteinMapFilePath AS PeptideSeqToProteinMapFilePath,
-					@PeptideProphetResultsFilePath AS PeptideProphetResultsFilePath,
-					@MSGFResultsFilePath AS MSGFResultsFilePath
-
+			SELECT @LineCountToSkip AS LineCountToSkip,
+			       @SynFileColumnCount AS SynFileColumnCount,
+			       @SynFileHeader AS SynFileHeader,
+			       @PeptideResultToSeqMapFilePath AS PeptideResultToSeqMapFilePath,
+			       @PeptideSeqInfoFilePath AS PeptideSeqInfoFilePath,
+			       @PeptideSeqModDetailsFilePath AS PeptideSeqModDetailsFilePath,
+			       @PeptideSeqToProteinMapFilePath AS PeptideSeqToProteinMapFilePath,
+			       @PeptideProphetResultsFilePath AS PeptideProphetResultsFilePath,
+			       @MSGFResultsFilePath AS MSGFResultsFilePath
 					
 			Goto Done
 		End
@@ -405,6 +471,9 @@ AS
 								@job, 
 								@FilterSetID,
 								@LineCountToSkip,
+								@SynFileColumnCount,
+								@SynFileHeader,
+								@UpdateExistingData,
 								@loaded output,
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
@@ -427,6 +496,9 @@ AS
 								@job, 
 								@FilterSetID,
 								@LineCountToSkip,
+								@SynFileColumnCount,
+								@SynFileHeader,
+								@UpdateExistingData,
 								@loaded output,
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
@@ -448,8 +520,10 @@ AS
 								@MSGFResultsFilePath,
 								@job, 
 								@FilterSetID,
-								@SynFileColumnCount,
 								@LineCountToSkip,
+								@SynFileColumnCount,
+								@SynFileHeader,
+								@UpdateExistingData,
 								@loaded output,
 								@peptideCountSkipped output,
 								@SeqCandidateFilesFound output,
@@ -459,6 +533,32 @@ AS
 				Set @PepProphetFileFound = 0
 			End
 
+			If @ResultType = 'MSG_Peptide_Hit'
+			Begin
+				Set @CurrentLocation = 'Call LoadMSGFDBPeptidesBulk'
+				exec @result = LoadMSGFDBPeptidesBulk
+								@PeptideSynFilePath,
+								@PeptideResultToSeqMapFilePath,
+								@PeptideSeqInfoFilePath,
+								@PeptideSeqModDetailsFilePath,
+								@PeptideSeqToProteinMapFilePath,
+								@MSGFResultsFilePath,
+								@ScanGroupInfoFilePath,
+								@job, 
+								@FilterSetID,
+								@LineCountToSkip,
+								@SynFileColumnCount,
+								@SynFileHeader,
+								@UpdateExistingData,
+								@loaded output,
+								@peptideCountSkipped output,
+								@SeqCandidateFilesFound output,
+								@MSGFFileFound output,
+								@message output
+
+				Set @PepProphetFileFound = 0
+			End
+			
 		End -- </a>
 		
 		Set @CurrentLocation = 'Evalute return code'
@@ -472,9 +572,18 @@ AS
 		set @myError = @result
 		if @result = 0
 		begin -- <b>
+			-----------------------------------------------
 			-- set up success message
+			-----------------------------------------------
 			--
-			set @message = Convert(varchar(12), @loaded) + ' peptides were loaded for job ' + @jobStr + ' (Filtered out ' + Convert(varchar(12), @peptideCountSkipped) + ' peptides'
+			Declare @Action varchar(24)
+			
+			If @UpdateExistingData > 0
+				set @Action = 'updated'
+			Else
+				set @Action = 'loaded'
+			
+			set @message = Convert(varchar(12), @loaded) + ' peptides were ' + @Action + ' for job ' + @jobStr + ' (Filtered out ' + Convert(varchar(12), @peptideCountSkipped) + ' peptides'
 			
 			If @FilterSetIDByCampaign <> 0 And @FilterSetID = @FilterSetIDByCampaign
 				Set @message = @message + '; Filter_Set_ID = ' + Convert(varchar(12), @FilterSetID) + ', specific for campaign "' + @CampaignFilter + '")'
@@ -505,6 +614,35 @@ AS
 				set @completionCode = 3
 				set @myError = 60004			-- Note that this error code is used in SP LoadResultsForAvailableAnalyses; do not change
 			end
+			
+			-----------------------------------------------
+			-- Load and store the Tool Version Info
+			-- If an error occurs, LoadToolVersionInfoOneJob will log the error
+			-----------------------------------------------
+			--
+			exec @ReturnCode = LoadToolVersionInfoOneJob @Job, @AnalysisToolName, @StoragePathResults
+			
+			If @UpdateExistingData > 0
+			Begin
+				-----------------------------------------------
+				-- Updated existing data; perform some additional tasks
+				-----------------------------------------------
+				--
+				-- Delete this job from T_Analysis_Filter_Flags
+				DELETE FROM T_Analysis_Filter_Flags
+				WHERE (Job = @job)
+				
+				-- Make sure Max_Obs_Area_In_Job is up-to-date in T_Peptides
+				exec @ReturnCode = ComputeMaxObsAreaByJob @message=@ErrMsg output, @JobFilterList=@JobStr, @infoOnly=0, @PostLogEntryOnSuccess=0
+				
+				if @ReturnCode <> 0
+				Begin
+					set @ErrMsg = 'Error calling ComputeMaxObsAreaByJob for job ' + @JobStr + ': ' + @ErrMsg
+					exec PostLogEntry 'Error', @ErrMsg, 'LoadPeptidesForOneAnalysis'
+				End
+				
+			End
+			
 		end  -- </b>
 
 

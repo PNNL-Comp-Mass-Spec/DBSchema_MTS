@@ -54,7 +54,7 @@ CREATE NONCLUSTERED INDEX [IX_T_Dataset_Stats_SIC_MZ] ON [dbo].[T_Dataset_Stats_
 	[MZ] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-ALTER TABLE [dbo].[T_Dataset_Stats_SIC]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Dataset_Stats_SIC_T_Analysis_Description] FOREIGN KEY([Job])
+ALTER TABLE [dbo].[T_Dataset_Stats_SIC]  WITH CHECK ADD  CONSTRAINT [FK_T_Dataset_Stats_SIC_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_SIC] CHECK CONSTRAINT [FK_T_Dataset_Stats_SIC_T_Analysis_Description]

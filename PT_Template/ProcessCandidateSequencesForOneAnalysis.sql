@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
+CREATE Procedure ProcessCandidateSequencesForOneAnalysis
 /****************************************************
 ** 
 **	Desc:	Uses T_Seq_Candidates and T_Seq_Candidate_ModDetails to 
@@ -31,6 +31,7 @@ CREATE Procedure dbo.ProcessCandidateSequencesForOneAnalysis
 **			05/23/2007 mem - Now passing source server and database name to ProcessCandidateSequences
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -135,7 +136,7 @@ As
 					FROM T_Peptides Pep INNER JOIN
 						T_Seq_Candidate_to_Peptide_Map SCPM ON Pep.Peptide_ID = SCPM.Peptide_ID INNER JOIN
 						T_Seq_Candidates SC ON SCPM.Job = SC.Job AND SCPM.Seq_ID_Local = SC.Seq_ID_Local
-					WHERE Pep.Analysis_ID = @Job
+					WHERE Pep.Job = @Job
 					GROUP BY SC.Seq_ID_Local
 				) SeqCandidateQ
 			WHERE Rev_Peptide_Count > 0 AND
@@ -497,7 +498,7 @@ As
 				T_Peptide_to_Protein_Map PPM ON 
 				P.Peptide_ID = PPM.Peptide_ID INNER JOIN
 				T_Sequence ON P.Seq_ID = T_Sequence.Seq_ID
-			WHERE P.Analysis_ID = @job
+			WHERE P.Job = @job
 			GROUP BY P.Seq_ID
 			) LookupQ ON S.Seq_ID = LookupQ.Seq_ID
 		WHERE LookupQ.Cleavage_State_Max > S.Cleavage_State_Max OR
@@ -585,7 +586,6 @@ Done:
 	End
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Dev] AS [dbo]

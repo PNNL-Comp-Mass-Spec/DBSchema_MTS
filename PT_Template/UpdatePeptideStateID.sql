@@ -14,6 +14,9 @@ CREATE PROCEDURE UpdatePeptideStateID
 **	Date:	11/27/2006
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @JobList
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
+**			12/23/2011 mem - Added a Where clause when updating State_ID to skip unnecessary updates
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
 **
 *****************************************************/
 (
@@ -102,10 +105,10 @@ As
 	---------------------------------------------------
 	--
 	INSERT INTO #Tmp_PeptideStateIDs (Job, Peptide_ID, State_ID)
-	SELECT Analysis_ID, Peptide_ID, 1 AS State_ID
+	SELECT Pep.Job, Pep.Peptide_ID, 1 AS State_ID
 	FROM T_Peptides Pep INNER JOIN
-		 #Tmp_JobsToProcess JobQ ON Pep.Analysis_ID = JobQ.Job
-	GROUP BY Analysis_ID, Peptide_ID
+		 #Tmp_JobsToProcess JobQ ON Pep.Job = JobQ.Job
+	GROUP BY Pep.Job, Pep.Peptide_ID
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 
@@ -124,19 +127,20 @@ As
 	SET State_ID = 2
 	FROM #Tmp_PeptideStateIDs INNER JOIN 
 		 (	SELECT Job, Peptide_ID
-			FROM (	SELECT  Pep.Analysis_ID as Job, Pep.Peptide_ID, COUNT(*) AS Protein_Count, 
+			FROM (	SELECT  Pep.Job, Pep.Peptide_ID, COUNT(*) AS Protein_Count, 
 							SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
 										  Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 										  Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
-										  Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+										  Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
+										  Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
 									THEN 1
 									ELSE 0 END) AS Rev_Protein_Count
 					FROM #Tmp_JobsToProcess JobQ INNER JOIN
-						 T_Peptides Pep ON JobQ.Job = Pep.Analysis_ID INNER JOIN
+						 T_Peptides Pep ON JobQ.Job = Pep.Job INNER JOIN
 						 T_Peptide_to_Protein_Map PPM ON 
 						  Pep.Peptide_ID = PPM.Peptide_ID INNER JOIN
 						 T_Proteins Prot ON PPM.Ref_ID = Prot.Ref_ID
-					GROUP BY Pep.Analysis_ID, Pep.Peptide_ID
+					GROUP BY Pep.Job, Pep.Peptide_ID
 				) LookupQ
 			WHERE Rev_Protein_Count > 0 AND 
 				  Rev_Protein_Count = Protein_Count
@@ -151,9 +155,10 @@ As
 	UPDATE T_Peptides
 	SET State_ID = #Tmp_PeptideStateIDs.State_ID
 	FROM T_Peptides Pep INNER JOIN #Tmp_PeptideStateIDs
-		 ON #Tmp_PeptideStateIDs.Job = Pep.Analysis_ID AND
+		 ON #Tmp_PeptideStateIDs.Job = Pep.Job AND
 			#Tmp_PeptideStateIDs.Peptide_ID = Pep.Peptide_ID AND
 			#Tmp_PeptideStateIDs.State_ID <> Pep.State_ID
+	WHERE Pep.State_ID <> #Tmp_PeptideStateIDs.State_ID
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 

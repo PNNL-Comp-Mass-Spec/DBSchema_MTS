@@ -18,6 +18,12 @@ CREATE Procedure dbo.StoreMSGFValues
 **	Auth:	mem
 **	Date:	07/23/2010 mem - Initial Version (modelled after StorePeptideProphetValues)
 **			08/16/2010 mem - Updated log warning message
+**			12/23/2011 mem - Added a Where clause to avoid unnecessary updates to MSGF_SpecProb
+**						   - Added parameter @UpdateExistingData
+**			12/29/2011 mem - Added an index on #Tmp_MSGF_DataByPeptideID
+**			01/03/2012 mem - Now updating MSGF_SpecProb to 10 instead of to Null when @UpdateExistingData = 1 and data is not present in #Tmp_Unique_Records
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/20/2012 mem - Now skipping for peptides that contain B, O, J, U, X, or Z and warning "unrecognizable annotation"
 **    
 *****************************************************/
 (
@@ -26,6 +32,7 @@ CREATE Procedure dbo.StoreMSGFValues
 	@LogLevel int,
 	@LogMessage varchar(512),
 	@UsingPhysicalTempTables tinyint,
+	@UpdateExistingData tinyint,			-- If 1, then will change MSGF_SpecProb to 10 for entries with Null values for Peptide_ID in #Tmp_Unique_Records
 	@infoOnly tinyint = 0,
 	@message varchar(512)='' output
 )
@@ -37,7 +44,7 @@ As
 	Set @myRowCount = 0
 	Set @myError = 0
 
-	declare @numAddedMSGFScores int
+	declare @numAddedMSGFScores int = 0
 	declare @jobStr varchar(12)
 
 	declare @RowCountTotal int
@@ -66,6 +73,8 @@ As
 		SpecProb real NOT NULL
 	)
 
+	CREATE CLUSTERED INDEX #IX_Tmp_MSGF_DataByPeptideID ON #Tmp_MSGF_DataByPeptideID (Peptide_ID)
+	
 	-----------------------------------------------
 	-- Copy selected contents of #Tmp_MSGF_Results
 	-- into T_Score_Discriminant
@@ -90,6 +99,7 @@ As
 	       ON UR.Result_ID = TPI.Result_ID
 	     INNER JOIN #Tmp_MSGF_Results MSGF
 	       ON TPI.Result_ID = MSGF.Result_ID
+	WHERE NOT UR.Peptide_ID_New Is Null
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -102,11 +112,40 @@ As
 		FROM T_Score_Discriminant SD
 		     INNER JOIN #Tmp_MSGF_DataByPeptideID MD
 		       ON SD.Peptide_ID = MD.Peptide_ID
+		WHERE IsNull(SD.MSGF_SpecProb, 2) <> MD.SpecProb
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 		--
 		if @myError <> 0
 			set @message = 'Error updating T_Score_Discriminant with MSGF results for job ' + @jobStr
+		Else
+		Begin
+			Set @numAddedMSGFScores = @myRowCount
+
+			If IsNull(@UpdateExistingData, 0) > 0
+			Begin
+				-- Change MSGF_SpecProb to 10 for entries that are in T_Score_Discriminant
+				-- yet are not in #Tmp_PepProphet_DataByPeptideID
+				UPDATE T_Score_Discriminant
+				SET MSGF_SpecProb = 10
+				FROM T_Score_Discriminant SD
+				     INNER JOIN T_Peptides Pep
+				       ON SD.Peptide_ID = Pep.Peptide_ID
+				     LEFT OUTER JOIN #Tmp_MSGF_DataByPeptideID MD
+				       ON SD.Peptide_ID = MD.Peptide_ID
+				WHERE Pep.Job = @Job AND
+				      MD.SpecProb IS NULL AND
+				      IsNull(SD.MSGF_SpecProb, 1) < 10
+				--
+				SELECT @myRowCount = @@rowcount, @myError = @@error
+
+				If @myRowCount > 0
+				Begin
+					Set @LogMessage = 'Changed MSGF SpecProb values to 10 for ' + Convert(varchar(12), @myRowCount) + ' entries for job ' + @jobStr + ' since not present in newly loaded results'
+					execute PostLogEntry 'Warning', @LogMessage, 'StoreMSGFValues'
+				End
+			End
+		End
 	End
 	--
 	if @myError <> 0
@@ -116,18 +155,17 @@ As
 	End
 	Else
 	Begin
-		Set @numAddedMSGFScores = @myRowCount
 
-		Set @LogMessage = 'Updated MSGF values in T_Score_Discriminant for ' + Convert(varchar(12), @myRowCount) + ' rows'
+		Set @LogMessage = 'Updated MSGF values for ' + Convert(varchar(12), @numAddedMSGFScores) + ' rows'
 		if @LogLevel >= 2
 			execute PostLogEntry 'Progress', @LogMessage, 'StoreMSGFValues'
 	End
 	
 	if @myError = 0
-	Begin
+	Begin -- <a>
 		-----------------------------------------------
 		-- Look for any MSGF results with an error message in the Note column
-		-- Append the errors to T_Log_Entries (up to 50 per job)
+		-- Append the errors to T_Log_Entries (up to 25 per job)
 		-- First, count the number of error rows
 		-----------------------------------------------
 		Set @myRowCount = 0
@@ -138,7 +176,8 @@ As
 			ON UR.Result_ID = TPI.Result_ID
 			INNER JOIN #Tmp_MSGF_Results MSGF
 			ON TPI.Result_ID = MSGF.Result_ID
-		WHERE MSGF.SpecProbNote LIKE '%N/A:%'
+		WHERE MSGF.SpecProbNote LIKE '%N/A:%' AND NOT
+		      (UR.Peptide LIKE '%[BOJUXZ]%' AND MSGF.SpecProbNote LIKE '%N/A: unrecognizable annotation%')		-- Skip warnings for peptides that contain the X residue and warning "unrecognizable annotation"
 		
 		If @myRowCount > 0
 		Begin
@@ -151,7 +190,7 @@ As
 			execute PostLogEntry 'Warning', @message, 'StoreMSGFValues'
 			
 			INSERT INTO T_Log_Entries( posted_by, posting_time, Type, message )
-			SELECT TOP 50 'StoreMSGFValues',
+			SELECT TOP 25 'StoreMSGFValues',
 			              GETDATE(),
 			              'Warning',
 			              SpecProbNote + '; scan ' + Convert(varchar(12), MSGF.scan) + '; charge ' + 
@@ -161,12 +200,13 @@ As
 			       ON UR.Result_ID = TPI.Result_ID
 			     INNER JOIN #Tmp_MSGF_Results MSGF
 			       ON TPI.Result_ID = MSGF.Result_ID
-			WHERE MSGF.SpecProbNote LIKE '%N/A:%'
+			WHERE MSGF.SpecProbNote LIKE '%N/A:%' AND NOT
+		          (UR.Peptide LIKE '%[BOJUXZ]%' AND MSGF.SpecProbNote LIKE '%N/A: unrecognizable annotation%')
 			ORDER BY MSGF.Scan
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 		End
-	End
+	End -- </a>
 
 	If @myError = 0 And @numAddedMSGFScores < @numAddedDiscScores
 	Begin -- <b>
@@ -193,9 +233,9 @@ As
 		       ON TPIM.Result_ID1 = MSGF.Result_ID
 		WHERE UR.Peptide_ID_New IN ( SELECT SD.Peptide_ID
 		                             FROM T_Peptides Pep
-		                                  INNER JOIN T_Score_Discriminant SD
-		                                    ON Pep.Peptide_ID = SD.Peptide_ID
-		                             WHERE (Pep.Analysis_ID = @Job) AND
+		                                 INNER JOIN T_Score_Discriminant SD
+		        ON Pep.Peptide_ID = SD.Peptide_ID
+		                       WHERE (Pep.Job = @Job) AND
 		                                   (SD.MSGF_SpecProb IS NULL) )
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -209,6 +249,7 @@ As
 			FROM T_Score_Discriminant SD
 			     INNER JOIN #Tmp_MSGF_DataByPeptideID MD
 			       ON SD.Peptide_ID = MD.Peptide_ID
+			WHERE IsNull(SD.MSGF_SpecProb,2) <> MD.SpecProb
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			--
@@ -245,5 +286,6 @@ As
 
 Done:
 	return @myError
+
 
 GO

@@ -4,35 +4,32 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW dbo.V_PeptideHit_Job_Scan_Stats_Ex
+CREATE VIEW V_PeptideHit_Job_Scan_Stats_Ex
 AS
-SELECT InnerQ.Job, TAD.Campaign, TAD.Experiment, TAD.Dataset,
-    TotalScanCount, FragScanCount, 
-    UniqueFragScanCountHighScore, 
-    UniquePeptideCountHighScore, 
-    Round(UniqueFragScanCountHighScore / CONVERT(float, 
-    FragScanCount) * 100, 2) 
-    AS PercentFragScanCountHighScore
-FROM (SELECT dbo.T_Peptides.Analysis_ID AS Job, 
-          dbo.V_PeptideHit_Job_Scan_Stats.TotalScanCount, 
-          dbo.V_PeptideHit_Job_Scan_Stats.FragScanCount, 
-          COUNT(DISTINCT dbo.T_Peptides.Scan_Number) 
-          AS UniqueFragScanCountHighScore, 
-          COUNT(DISTINCT dbo.T_Peptides.Seq_ID) 
-          AS UniquePeptideCountHighScore
-      FROM dbo.T_Peptides INNER JOIN
-          dbo.T_Score_Discriminant ON 
-          dbo.T_Peptides.Peptide_ID = dbo.T_Score_Discriminant.Peptide_ID
-           INNER JOIN
-          dbo.V_PeptideHit_Job_Scan_Stats ON 
-          dbo.T_Peptides.Analysis_ID = dbo.V_PeptideHit_Job_Scan_Stats.Job
-      WHERE (dbo.T_Score_Discriminant.DiscriminantScoreNorm >=
-           .8)
-      GROUP BY dbo.T_Peptides.Analysis_ID, 
-          dbo.V_PeptideHit_Job_Scan_Stats.TotalScanCount, 
-          dbo.V_PeptideHit_Job_Scan_Stats.FragScanCount) 
-    AS InnerQ INNER JOIN
-    T_Analysis_Description AS TAD ON TAD.Job = InnerQ.Job
-
+SELECT InnerQ.Job,
+       TAD.Campaign,
+       TAD.Experiment,
+       TAD.Dataset,
+       TotalScanCount,
+       FragScanCount,
+       UniqueFragScanCountHighScore,
+       UniquePeptideCountHighScore,
+       Round(UniqueFragScanCountHighScore / CONVERT(float, FragScanCount) * 100, 2) AS 
+         PercentFragScanCountHighScore
+FROM ( SELECT Pep.Job,
+              JSS.TotalScanCount,
+              JSS.FragScanCount,
+              COUNT(DISTINCT Pep.Scan_Number) AS UniqueFragScanCountHighScore,
+              COUNT(DISTINCT Pep.Seq_ID) AS UniquePeptideCountHighScore
+       FROM T_Peptides Pep
+            INNER JOIN T_Score_Discriminant SD
+              ON Pep.Peptide_ID = SD.Peptide_ID
+            INNER JOIN V_PeptideHit_Job_Scan_Stats JSS
+              ON Pep.Job = JSS.Job
+       WHERE (SD.DiscriminantScoreNorm >= 0.8)
+       GROUP BY Pep.Job, JSS.TotalScanCount, JSS.FragScanCount 
+     ) AS InnerQ
+     INNER JOIN T_Analysis_Description AS TAD
+       ON TAD.Job = InnerQ.Job
 
 GO

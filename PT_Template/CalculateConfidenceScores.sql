@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.CalculateConfidenceScores
+CREATE Procedure CalculateConfidenceScores
 /****************************************************
 **
 **	Desc:	Updates confidence scores for all the peptides
@@ -23,6 +23,8 @@ CREATE Procedure dbo.CalculateConfidenceScores
 **			07/05/2006 mem - Added parameter @NextProcessStateSkipPeptideProphet
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			03/19/2010 mem - Now calling CheckPeptideProphetUpdateRequired for each job in state @ProcessStateMatch
+**			09/01/2011 mem - Now checking for SkipPeptideProphetProcessing in T_Process_Step_Control
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -47,6 +49,8 @@ AS
 
 	declare @result int
 	declare @UpdateEnabled tinyint
+	Declare @SkipPeptideProphetProcessing tinyint
+	
 	declare @message varchar(255)
 	set @message = ''
 	
@@ -59,6 +63,22 @@ AS
 	declare @count int
 	set @count = 0
 
+	------------------------------------------------------------------
+	-- See if SkipPeptideProphetProcessing is enabled
+	------------------------------------------------------------------
+	
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'SkipPeptideProphetProcessing')
+	If @result <> 0
+	Begin
+		Set @SkipPeptideProphetProcessing = 1
+		Set @NextProcessState = @NextProcessStateSkipPeptideProphet
+	End
+	Else
+	Begin
+		Set @SkipPeptideProphetProcessing = 0
+	End
+	
 	------------------------------------------------------------------
 	-- See if confidence score recalculation skipping is enabled
 	------------------------------------------------------------------
@@ -85,7 +105,7 @@ AS
 				  (	SELECT TAD.Job
 					FROM T_Peptides P INNER JOIN
 						 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN
-						 T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job
+						 T_Analysis_Description TAD ON P.Job = TAD.Job
 					WHERE SD.DiscriminantScore IS NULL AND 
 						  TAD.Process_State = @ProcessStateMatch
 					GROUP BY TAD.Job
@@ -94,59 +114,77 @@ AS
 			  )
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-	
+		
 		Set @JobCountSkipped = 0
 	
 		If @myRowCount > 0
 		Begin -- <b1>
-			-- Process each job in #Tmp_JobsToPossiblySkip
-			
-			Set @Job = -1
-			set @Continue = 1
-			Set @numJobsProcessed = 0
 
-			While @Continue > 0 and @numJobsProcessed < @numJobsToProcess
-			Begin -- <c>
-			
-				SELECT TOP 1 @Job = Job
-				FROM #Tmp_JobsToPossiblySkip
-				WHERE Job > @Job
-				ORDER BY Job
+			If @SkipPeptideProphetProcessing <> 0
+			Begin
+				UPDATE T_Analysis_Description
+				SET Process_State = @NextProcessStateSkipPeptideProphet,
+					Last_Affected = GetDate()
+				FROM T_Analysis_Description TAD
+					INNER JOIN #Tmp_JobsToPossiblySkip J
+					 ON TAD.Job = J.Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 
-				if @myError <> 0 
-				begin
-					set @message = 'Error while reading next job from #Tmp_JobsToPossiblySkip'
-					goto done
-				end
+				Set @JobCountSkipped = @myRowCount
+			End
+			Else
+			Begin -- <c>
 
-				if @myRowCount = 0
-					Set @Continue = 0
-				else
+				-- Process each job in #Tmp_JobsToPossiblySkip
+				
+				Set @Job = -1
+				set @Continue = 1
+				Set @numJobsProcessed = 0
+
+				While @Continue > 0 and @numJobsProcessed < @numJobsToProcess
 				Begin -- <d>
-					-- Job is available to process
-					
-					-- Advance the job state as appropriate
-					Set @JobAdvancedToNextState = 0
-					Exec @myError = CheckPeptideProphetUpdateRequired 0, @NextProcessStateSkipPeptideProphet, @message2 OUTPUT, @JobFilter = @Job, @JobAdvancedToNextState = @JobAdvancedToNextState OUTPUT
-					
+				
+					SELECT TOP 1 @Job = Job
+					FROM #Tmp_JobsToPossiblySkip
+					WHERE Job > @Job
+					ORDER BY Job
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+
 					if @myError <> 0 
 					begin
-						set @message = 'Error calling CheckPeptideProphetUpdateRequired for job ' + Convert(varchar(12), @Job)
-						If Len(IsNull(@message2, '')) > 0
-							Set @message = @message + '; ' + @message2
-
+						set @message = 'Error while reading next job from #Tmp_JobsToPossiblySkip'
 						goto done
 					end
-					
-					If @JobAdvancedToNextState <> 0
-						Set @JobCountSkipped = @JobCountSkipped + 1
 
-					-- Increment number of jobs processed
-					Set @numJobsProcessed = @numJobsProcessed + 1
+					if @myRowCount = 0
+						Set @Continue = 0
+					else
+					Begin -- <e>
+						-- Job is available to process
+						
+						-- Advance the job state as appropriate
+						Set @JobAdvancedToNextState = 0
+						Exec @myError = CheckPeptideProphetUpdateRequired 0, @NextProcessStateSkipPeptideProphet, @message2 OUTPUT, @JobFilter = @Job, @JobAdvancedToNextState = @JobAdvancedToNextState OUTPUT
+						
+						if @myError <> 0 
+						begin
+							set @message = 'Error calling CheckPeptideProphetUpdateRequired for job ' + Convert(varchar(12), @Job)
+							If Len(IsNull(@message2, '')) > 0
+								Set @message = @message + '; ' + @message2
+
+							goto done
+						end
+						
+						If @JobAdvancedToNextState <> 0
+							Set @JobCountSkipped = @JobCountSkipped + 1
+
+						-- Increment number of jobs processed
+						Set @numJobsProcessed = @numJobsProcessed + 1
 
 
+					End -- </e>					
 				End -- </d>
 				
 			End -- </c>
@@ -155,15 +193,27 @@ AS
 			  
 		If @myError = 0 AND @JobCountSkipped > 0
 		Begin
-			Set @message = 'Discriminant score computation skipped for jobs where existing scores were already present; updated ' + convert(varchar(9), @JobCountSkipped) + ' jobs'
+			Declare @JobCountText varchar(24)
+			Set @JobCountText = convert(varchar(9), @JobCountSkipped) + ' job'
+			If @JobCountSkipped <> 0
+				Set @JobCountText = @JobCountText + 's'
+				
+			Set @message = 'Discriminant score computation skipped for jobs where existing scores were already present; updated ' + @JobCountText
+				
 			execute PostLogEntry 'Warning', @message, 'CalculateConfidenceScores'			
 			Set @message = ''
+			
+			If @SkipPeptideProphetProcessing <> 0
+			Begin
+				Set @message = 'Skipped peptide prophet processing for ' + @JobCountText
+				execute PostLogEntry 'Normal', @message, 'CalculateConfidenceScores'			
+				Set @message = ''			
+			End
 		End
     End -- </a1>
 
-
 	----------------------------------------------
-	-- Loop through T_Analysis_Description, processing jobs with Process_State = @ProcessStatematch
+	-- Loop through T_Analysis_Description, processing jobs with Process_State = @ProcessStateMatch
 	----------------------------------------------
 	Set @Job = -1
 	set @Continue = 1
@@ -225,7 +275,6 @@ Done:
 		execute PostLogEntry 'Error', @message, 'CalculateConfidenceScores'
 
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScores] TO [MTS_DB_Dev] AS [dbo]

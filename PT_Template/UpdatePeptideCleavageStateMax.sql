@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.UpdatePeptideCleavageStateMax
+CREATE PROCEDURE UpdatePeptideCleavageStateMax
 /****************************************************
 **
 **	Desc:	Updates column Cleavage_State_Max in T_Peptides 
@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.UpdatePeptideCleavageStateMax
 **			09/23/2009 mem - Added parameter @PostLogEntryOnSuccess
 **			09/24/2009 mem - Updated @JobList='All' to match jobs LIKE '%peptide_hit'
 **						   - Added new mode: @JobList='Missing'
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -95,11 +96,11 @@ As
 			ORDER BY Job
 		Else
 			INSERT INTO #Tmp_JobsToProcess (Job)
-			SELECT Analysis_ID
+			SELECT Job
 			FROM T_Peptides
 			WHERE (Cleavage_State_Max IS NULL)
-			GROUP BY Analysis_ID
-			ORDER BY Analysis_ID
+			GROUP BY Job
+			ORDER BY Job
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -195,7 +196,7 @@ As
 					INSERT INTO #Tmp_PeptideCleavageStateVals (Peptide_ID, Cleavage_State_Max)
 					SELECT Peptide_ID, NULL AS Cleavage_State_Max
 					FROM T_Peptides Pep INNER JOIN
-						#Tmp_JobsCurrentBatch JobQ ON Pep.Analysis_ID = JobQ.Job
+						#Tmp_JobsCurrentBatch JobQ ON Pep.Job = JobQ.Job
 					--
 					SELECT @myRowCount = @@rowcount, @myError = @@error
 				End
@@ -203,7 +204,7 @@ As
 				Begin
 					SELECT @myRowCount = COUNT(*)
 					FROM T_Peptides Pep INNER JOIN
-						#Tmp_JobsCurrentBatch JobQ ON Pep.Analysis_ID = JobQ.Job
+						#Tmp_JobsCurrentBatch JobQ ON Pep.Job = JobQ.Job
 				End
 				
 				If @myRowCount = 0
@@ -353,6 +354,5 @@ Done:
 	End
 
 	return @myError
-
 
 GO

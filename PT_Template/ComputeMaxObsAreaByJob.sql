@@ -29,6 +29,9 @@ CREATE Procedure dbo.ComputeMaxObsAreaByJob
 **			11/27/2006 mem - Added support for option SkipPeptidesFromReversedProteins
 **			07/29/2008 mem - Added parameter @PreviewSql
 **			01/19/2010 mem - Now setting @duplicateEntryHoldoffHours to 24 when posting error messages
+**			10/25/2011 mem - Switched to using Row_Number() when populating Max_Obs_Area_In_Job
+**			12/29/2011 mem - Switched to using a Merge statement to update T_Peptides
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -102,10 +105,10 @@ As
 	set @S = ''
 	set @SqlWhereClause = ''
 	set @S = @S + ' INSERT INTO #T_Jobs_To_Update (Job, Null_Seq_ID_Count)'
-	set @S = @S + ' SELECT Analysis_ID, SUM(CASE WHEN Seq_ID Is Null THEN 1 ELSE 0 END) AS Null_Seq_ID_Count'
+	set @S = @S + ' SELECT Job, SUM(CASE WHEN Seq_ID Is Null THEN 1 ELSE 0 END) AS Null_Seq_ID_Count'
 	set @S = @S + ' FROM T_Peptides'
 	If Len(@JobFilterList) > 0
-		Set @SqlWhereClause = 'WHERE Analysis_ID In (' + @JobFilterList + ')'
+		Set @SqlWhereClause = 'WHERE Job In (' + @JobFilterList + ')'
 		
 	If @SkipPeptidesFromReversedProteins <> 0
 	Begin
@@ -118,10 +121,10 @@ As
 	End
 	
 	Set @S = @S + ' ' + @SqlWhereClause
-	set @S = @S + ' GROUP BY Analysis_ID'
+	set @S = @S + ' GROUP BY Job'
 	If Len(@JobFilterList) = 0
 		set @S = @S + ' HAVING SUM(Max_Obs_Area_In_Job) = 0'
-	set @S = @S + ' ORDER BY Analysis_ID'
+	set @S = @S + ' ORDER BY Job'
 
 	If @PreviewSql = 1
 		Print @S
@@ -206,74 +209,60 @@ As
 		Begin -- <b>
 			Set @MaxUniqueRowID = @MinUniqueRowID + @JobBatchSize - 1
 
-			If @infoOnly = 0
-			Begin -- <c>
-				---------------------------------------------------
-				-- Reset Max_Obs_Area_In_Job to 0 for the jobs in #T_Jobs_To_Update
-				---------------------------------------------------
-				--
-				UPDATE T_Peptides
-				SET Max_Obs_Area_In_Job = 0
-				FROM T_Peptides AS Pep INNER JOIN
-					#T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job
-				WHERE (JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID) AND
-					  Max_Obs_Area_In_Job <> 0
-				--
-				SELECT @myError = @@error, @myRowCount = @@rowcount
-			End -- </c>
-
 			---------------------------------------------------
 			-- Compute the value for Max_Obs_Area_In_Job for the given jobs
-			-- Values for jobs in #T_Jobs_To_Update will have been reset to 0 above,
-			--  causing them to be processed by this query
 			---------------------------------------------------
 			--
 			
-			set @S = ''
-
 			If @infoOnly <> 0
 			Begin
 				-- Return the Job and the number of rows that would be updated
-				set @S = @S + ' SELECT TP.Analysis_ID, COUNT(TP.Peptide_ID) AS Peptide_Rows_To_Update'
+				SELECT TP.Job, COUNT(TP.Peptide_ID) AS Peptide_Rows_To_Update				
+				FROM T_Peptides TP
+					INNER JOIN ( SELECT Peptide_ID
+								FROM ( SELECT Pep.Peptide_id,
+												Row_Number() OVER ( PARTITION BY Pep.Job, Pep.Seq_ID 
+																	ORDER BY IsNull((Pep.Peak_Area * Pep.Peak_SN_Ratio), 0) DESC, Pep.Peptide_ID 
+																) AS Area_Times_SN_RowNum
+										FROM T_Peptides AS Pep
+											INNER JOIN #T_Jobs_To_Update AS JTU
+												ON Pep.Job = JTU.Job
+										WHERE NOT Pep.Seq_ID IS NULL AND
+										      JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID
+										) RankingQ
+								WHERE Area_Times_SN_RowNum = 1 
+								) FilterQ
+					ON FilterQ.Peptide_ID = TP.Peptide_ID
+				GROUP BY TP.Job
+				ORDER BY TP.Job
+			
 			End
 			Else
 			Begin
-				set @S = @S + ' UPDATE T_Peptides'
-				set @S = @S + ' SET Max_Obs_Area_In_Job = 1'
+				---------------------------------------------------
+				-- Update T_Peptides using a Merge query
+				---------------------------------------------------
+				--
+
+				MERGE T_Peptides as target
+				USING (	SELECT Peptide_ID, 
+						       CASE WHEN Area_Times_SN_RowNum = 1 Then 1 Else 0 END AS Max_Obs_Area_In_Job
+				        FROM (	SELECT Pep.Job,
+								       Peptide_ID,
+								       Row_Number() OVER ( PARTITION BY Pep.Job, Pep.Seq_ID 
+								                    ORDER BY IsNull((Pep.Peak_Area * Pep.Peak_SN_Ratio), 0) DESC, Pep.Peptide_ID ) AS Area_Times_SN_RowNum
+								FROM T_Peptides AS Pep
+								     INNER JOIN #T_Jobs_To_Update AS JTU
+								       ON Pep.Job = JTU.Job
+								WHERE NOT Pep.Seq_ID IS NULL AND
+								      JTU.Unique_Row_ID BETWEEN @MinUniqueRowID AND @MaxUniqueRowID
+				             ) RankingQ
+					) AS Source (Peptide_id, Max_Obs_Area_In_Job)
+				ON (target.Peptide_id = source.Peptide_id)
+				WHEN Matched AND IsNull(Target.Max_Obs_Area_In_Job ,10) <> source.Max_Obs_Area_In_Job THEN
+				UPDATE SET Max_Obs_Area_In_Job = source.Max_Obs_Area_In_Job;
+	            	            
 			End
-
-			set @S = @S + ' FROM T_Peptides AS TP INNER JOIN'
-			set @S = @S +      ' (	SELECT  Pep.Analysis_ID, Pep.Seq_ID, '
-			set @S = @S +                 ' MIN(Pep.Peptide_ID) AS Min_Peptide_ID'
-			set @S = @S +         ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +           ' (  SELECT Pep.Analysis_ID, Pep.Seq_ID,'
-			set @S = @S +                  ' IsNull(MAX(Peak_Area * Peak_SN_Ratio), 0) AS Max_Area_Times_SN'
-			set @S = @S +                 ' FROM T_Peptides AS Pep INNER JOIN'
-			set @S = @S +                      ' #T_Jobs_To_Update AS JTU ON Pep.Analysis_ID = JTU.Job'
-			set @S = @S +                 ' WHERE NOT Pep.Seq_ID IS NULL AND '
-			set @S = @S +                       ' (JTU.Unique_Row_ID BETWEEN ' + Convert(varchar(19), @MinUniqueRowID) + ' AND ' + Convert(varchar(19), @MaxUniqueRowID) + ')'
-			set @S = @S +                 ' GROUP BY Pep.Analysis_ID, Pep.Seq_ID'
-			set @S = @S +              ' ) AS LookupQ ON'
-			set @S = @S +              ' Pep.Analysis_ID = LookupQ.Analysis_ID AND'
-			set @S = @S +              ' Pep.Seq_ID = LookupQ.Seq_ID AND'
-			set @S = @S +              ' LookupQ.Max_Area_Times_SN = IsNull(Pep.Peak_Area * Pep.Peak_SN_Ratio, 0)'
-			set @S = @S + ' GROUP BY Pep.Analysis_ID, Pep.Seq_ID'
-			set @S = @S +  ' ) AS BestObsQ ON'
-			set @S = @S +      ' TP.Peptide_ID = BestObsQ.Min_Peptide_ID'
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-
-			If @infoOnly <> 0
-			Begin
-				set @S = @S + ' GROUP BY TP.Analysis_ID'
-				set @S = @S + ' ORDER BY TP.Analysis_ID'
-			End
-
-			If @PreviewSql <> 0
-				Print @S
-			Else
-				exec @result = sp_executesql @S
-
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 			--

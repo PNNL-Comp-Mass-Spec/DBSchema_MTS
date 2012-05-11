@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create Procedure LoadGANETObservedNETsFile
+CREATE Procedure LoadGANETObservedNETsFile
 /****************************************************
 **
 **	Desc: 
@@ -14,6 +14,7 @@ create Procedure LoadGANETObservedNETsFile
 **
 **	Auth:	mem
 **	Date:	03/17/2010 mem
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -146,7 +147,7 @@ AS
 	UPDATE T_Peptides
 	SET GANET_Obs = NULL
 	FROM T_Peptides
-	WHERE Analysis_ID IN ( SELECT DISTINCT Job
+	WHERE Job IN ( SELECT DISTINCT Job
 	                       FROM #Tmp_ObservedNETs ) AND
 	      NOT GANET_Obs IS NULL
 	
@@ -161,7 +162,7 @@ AS
 	SET GANET_Obs = Src.ObservedNET
 	FROM T_Peptides AS Target
 	     INNER JOIN #Tmp_ObservedNETs Src
-	       ON Target.Analysis_ID = Src.Job AND
+	       ON Target.Job = Src.Job AND
 	          Target.Seq_ID = Src.MassTagID AND
 	          Target.Scan_Number = Src.Scan
 	--

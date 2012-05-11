@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Analysis_Description] FOREIGN KEY([Job])
+ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map] CHECK CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Analysis_Description]

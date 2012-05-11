@@ -29,12 +29,12 @@ CREATE TABLE [dbo].[T_Joined_Job_Details](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID] FOREIGN KEY([Joined_Job_ID])
+ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID] FOREIGN KEY([Joined_Job_ID])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID]
 GO
-ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job] FOREIGN KEY([Source_Job])
+ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job] FOREIGN KEY([Source_Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job]

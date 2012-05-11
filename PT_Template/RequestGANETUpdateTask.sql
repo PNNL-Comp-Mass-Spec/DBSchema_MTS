@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RequestGANETUpdateTask
+CREATE PROCEDURE RequestGANETUpdateTask
 /****************************************************
 **
 **	Desc: 
@@ -36,6 +36,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			03/13/2010 mem - Reordered the parameters and added several new parameters (@obsNETsFile, @unmodifiedPeptidesOnly, @noCleavageRuleFilters, and @RegressionOrder)
 **			03/19/2010 mem - Added parameter @ParamFileName
 **			04/21/2010 mem - Now examining field Regression_Param_File when looking for available jobs
+**			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **
 *****************************************************/
 (
@@ -111,6 +112,7 @@ As
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 	
 		
 	---------------------------------------------------
@@ -494,7 +496,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]

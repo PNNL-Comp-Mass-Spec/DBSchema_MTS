@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ComparePeptideHitResultsXT
+CREATE Procedure ComparePeptideHitResultsXT
 /****************************************************
 **
 **	Desc:	Compares the peptide hit results for one or more datasets (specified by @Datasets and/or @DatasetIDs and/or @Jobs)
@@ -16,6 +16,7 @@ CREATE Procedure dbo.ComparePeptideHitResultsXT
 **	Auth:	mem
 **	Date:	10/31/2008
 **			01/13/2010 mem - Updated for X!Tandem
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -222,7 +223,7 @@ AS
 			     INNER JOIN T_Peptides P
 			       ON X.Peptide_ID = P.Peptide_ID
 			     INNER JOIN T_Analysis_Description TAD
-			       ON P.Analysis_ID = TAD.Job
+			       ON P.Job = TAD.Job
 			     INNER JOIN #TmpJobs 
 			       ON TAD.Job = #TmpJobs.Job
 			WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null
@@ -260,7 +261,7 @@ AS
 			       SS.XCorr
 			FROM T_Peptides P
 			     INNER JOIN T_Analysis_Description TAD
-			       ON P.Analysis_ID = TAD.Job
+			       ON P.Job = TAD.Job
 			     INNER JOIN T_Score_Sequest SS
 			       ON P.Peptide_ID = SS.Peptide_ID
 			     INNER JOIN #TmpJobs 
@@ -391,7 +392,6 @@ AS
 Done:
 
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ComparePeptideHitResultsXT] TO [DMS_SP_User] AS [dbo]

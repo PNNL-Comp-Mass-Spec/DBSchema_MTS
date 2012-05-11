@@ -21,6 +21,8 @@ CREATE Procedure SetReversedAndScrambledJobsToHolding
 **			07/23/2009 mem - Now posting log entries for the jobs that are set to holding
 **			11/07/2009 mem - Now also looking for decoy searches where all of the loaded search results are reversed/scrambled proteins
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -65,12 +67,13 @@ As
 	-- Look for jobs where all of the search results map to reversed/scrambled proteins
 	INSERT INTO #TmpJobsToHold (Job)
 	SELECT Job
-	FROM ( SELECT Pep.Analysis_ID AS Job,
+	FROM ( SELECT Pep.Job,
 	              COUNT(*) AS PeptideCount,
 	              SUM(CASE WHEN Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
 				                Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 				                Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
-				                Prot.Reference LIKE 'xxx.%'				-- Inspect reversed/scrambled proteins
+				                Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
+				                Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
 				           THEN 1
 	                       ELSE 0 END) AS DecoyCount
 	       FROM T_Peptides Pep
@@ -79,10 +82,10 @@ As
 	            INNER JOIN T_Proteins Prot
 	              ON PPM.Ref_ID = Prot.Ref_ID
 	            INNER JOIN T_Analysis_Description TAD
-	              ON Pep.Analysis_ID = TAD.Job
+	              ON Pep.Job = TAD.Job
 	       WHERE TAD.Process_State = @ProcessStateMatch AND 
 	             NOT TAD.Job IN (SELECT Job FROM #TmpJobsToHold)
-	       GROUP BY Pep.Analysis_ID 
+	       GROUP BY Pep.Job 
 	       ) LookupQ
 	WHERE PeptideCount = DecoyCount
 	--

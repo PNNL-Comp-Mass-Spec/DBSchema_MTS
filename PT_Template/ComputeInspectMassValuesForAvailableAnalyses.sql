@@ -1,14 +1,14 @@
 /****** Object:  StoredProcedure [dbo].[ComputeInspectMassValuesForAvailableAnalyses] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure ComputeInspectMassValuesForAvailableAnalyses
 /****************************************************
 **
 **	Desc: 
-**		Calls ComputeInspectMassValuesUsingSICStat for jobs in T_Analysis_Description
+**		Calls ComputeInspectMassValuesUsingSICStats for jobs in T_Analysis_Description
 **      matching state @ProcessState
 **
 **	Return values: 0: success, otherwise, error code
@@ -16,7 +16,8 @@ CREATE Procedure ComputeInspectMassValuesForAvailableAnalyses
 **	Parameters:
 **
 **	Auth:	mem
-**	Date:	10/29/2008
+**	Date:	10/29/2008 mem - Initial version
+**			08/23/2011 mem - Now only incrementing @numJobsProcessed for Inspect jobs (previously incremented for all jobs with state 37)
 **    
 *****************************************************/
 (
@@ -108,8 +109,10 @@ AS
 			-- Advance the state if no error; leave unchanged if an error
 			If @myError = 0
 			Begin
-				Exec SetProcessState @job, @NextProcessState				
-				set @numJobsProcessed = @numJobsProcessed + 1
+				Exec SetProcessState @job, @NextProcessState
+				
+				If @IsInspectJob <> 0
+					set @numJobsProcessed = @numJobsProcessed + 1
 			End
 			
 		End -- </b>
@@ -126,10 +129,11 @@ AS
 	End -- </a>
 
 	If @numJobsProcessed = 0
-		set @message = 'no analyses were available'
+		set @message = 'No Inspect jobs were available'
 
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeInspectMassValuesForAvailableAnalyses] TO [MTS_DB_Dev] AS [dbo]

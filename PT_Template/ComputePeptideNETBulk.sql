@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ComputePeptideNETBulk
+CREATE Procedure ComputePeptideNETBulk
 /********************************************************
 **	Populates the GANET_Obs field in T_Peptides for all jobs
 **  associated with the given NET Update Task
@@ -39,6 +39,7 @@ CREATE Procedure dbo.ComputePeptideNETBulk
 **							 but in certain Peptide DBs, a massive number of Lock Requests have been observed when trying to update
 **							 a group of Jobs
 **			07/25/2009 mem - Added additional logging, particularly when LogLevel is >= 2
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *********************************************************/
 (
@@ -100,7 +101,7 @@ AS
 	UPDATE T_Peptides
 	SET GANET_Obs = NULL
 	FROM T_Peptides INNER JOIN 
-		 T_NET_Update_Task_Job_Map TJM ON T_Peptides.Analysis_ID = TJM.Job
+		 T_NET_Update_Task_Job_Map TJM ON T_Peptides.Job = TJM.Job
 	WHERE TJM.Task_ID = @TaskID AND NOT T_Peptides.GANET_Obs Is NULL
 	--
 	SELECT @myError = @@error, @myRowCount = @@RowCount
@@ -182,7 +183,7 @@ AS
 				     INNER JOIN T_NET_Update_Task_Job_Map TJM
 				       ON TAD.Job = TJM.Job
 				     INNER JOIN T_Peptides Pep
-				       ON Pep.Analysis_ID = TAD.Job
+				       ON Pep.Job = TAD.Job
 				     INNER JOIN T_Dataset_Stats_SIC DSSIC
 				       ON Pep.Scan_Number = DSSIC.Frag_Scan_Number
 				     INNER JOIN T_Dataset_Stats_Scans DSS_PeakApex
@@ -244,7 +245,7 @@ AS
 						SET GANET_Obs = DSS_PeakApex.Scan_Time * TAD.ScanTime_NET_Slope + TAD.ScanTime_NET_Intercept
 						FROM T_Analysis_Description TAD
 						     INNER JOIN T_Peptides Pep
-						       ON Pep.Analysis_ID = TAD.Job
+						       ON Pep.Job = TAD.Job
 						     INNER JOIN T_Dataset_Stats_SIC DSSIC
 						       ON Pep.Scan_Number = DSSIC.Frag_Scan_Number
 						     INNER JOIN T_Dataset_Stats_Scans DSS_PeakApex
@@ -280,7 +281,7 @@ AS
 			     INNER JOIN T_NET_Update_Task_Job_Map TJM
 			       ON TAD.Job = TJM.Job
 			     INNER JOIN T_Peptides Pep
-			       ON Pep.Analysis_ID = TAD.Job
+			       ON Pep.Job = TAD.Job
 			     INNER JOIN T_Dataset_Stats_Scans DSS
 			       ON Pep.Scan_Number = DSS.Scan_Number
 			     INNER JOIN T_Datasets DS
@@ -322,7 +323,6 @@ AS
 Done:
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputePeptideNETBulk] TO [MTS_DB_Dev] AS [dbo]

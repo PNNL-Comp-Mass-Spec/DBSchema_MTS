@@ -10,7 +10,7 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **	Desc: 
 **      Calls LoadPeptidesForOneAnalysis for all jobs in 
 **		  T_Analysis_Description with Process_State = @ProcessStateMatch and 
-**		  ResultType: 'Peptide_Hit', 'XT_Peptide_Hit', or 'IN_Peptide_Hit'
+**		  ResultType: 'Peptide_Hit', 'XT_Peptide_Hit', 'IN_Peptide_Hit', or 'MSG_Peptide_Hit'
 **
 **		Calls LoadMASICResultsForOneAnalysis for all jobs with ResultType = 'SIC'
 **
@@ -40,6 +40,8 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			10/16/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			10/04/2009 mem - Added support for scripted Peptide_Hit jobs (where the tool name isn't the traditional Sequest, X!Tandem, or Inspect)
 **			11/04/2009 mem - Changed states examined when counting the number of jobs loaded to date
+**			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			12/29/2011 mem - Now passing @UpdateExistingData=0 to LoadPeptidesForOneAnalysis
 **    
 *****************************************************/
 (
@@ -125,6 +127,7 @@ AS
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')	
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 	-----------------------------------------------
@@ -189,12 +192,13 @@ AS
 			Set @ReindexDB = 0
 			Set @ReindexMessage = ''
 			
-			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect') OR @ResultType LIKE '%Peptide_Hit')
+			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect', 'MSGFDB') OR @ResultType LIKE '%Peptide_Hit')
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
 				exec @result = LoadPeptidesForOneAnalysis
 							@NextProcessStateToUse,
 							@Job, 
+							0,		-- @UpdateExistingData
 							@message output,
 							@numLoaded output,
 							@clientStoragePerspective

@@ -25,6 +25,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Results_Folder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Completed] [datetime] NULL,
 	[ResultType] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Result_File_Suffix] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Separation_Sys_Type] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[PreDigest_Internal_Std] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[PostDigest_Internal_Std] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -123,12 +124,12 @@ AS
 		ORDER BY inserted.Job
 
 GO
-ALTER TABLE [dbo].[T_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Datasets] FOREIGN KEY([Dataset_ID])
+ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Datasets] FOREIGN KEY([Dataset_ID])
 REFERENCES [T_Datasets] ([Dataset_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Datasets]
 GO
-ALTER TABLE [dbo].[T_Analysis_Description]  WITH NOCHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Process_State] FOREIGN KEY([Process_State])
+ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Process_State] FOREIGN KEY([Process_State])
 REFERENCES [T_Process_State] ([ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Process_State]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ValidateDelimitedFile
+CREATE Procedure ValidateDelimitedFile
 /****************************************************
 **
 **	Desc: 
@@ -19,6 +19,7 @@ CREATE Procedure dbo.ValidateDelimitedFile
 **			06/04/2006 mem - Added option to auto-determine the number of lines to skip by examining the column given by @ColumnToUseForNumericCheck
 **						   - Updated @LineCountToSkip to return the number of lines determined to skip
 **						   - Increased @filePath from varchar(255) to varchar(512)
+**			08/18/2011 mem - Added @HeaderLine output parameter
 **    
 *****************************************************/
 (
@@ -27,7 +28,8 @@ CREATE Procedure dbo.ValidateDelimitedFile
 	@FileExists tinyint=0 OUTPUT,
 	@ColumnCount int=0 OUTPUT,
 	@message varchar(255)='' OUTPUT,
-	@ColumnToUseForNumericCheck smallint=1		-- Only used when @LineCountToSkip is negative; set to 1 to check the first column
+	@ColumnToUseForNumericCheck smallint=1,		-- Only used when @LineCountToSkip is negative; set to 1 to check the first column
+	@HeaderLine varchar(2048)='' OUTPUT
 )
 AS
 	set nocount on
@@ -47,6 +49,8 @@ AS
 	Set @ColumnToUseForNumericCheck = IsNull(@ColumnToUseForNumericCheck, 1)
 	If @ColumnToUseForNumericCheck < 1
 		Set @ColumnToUseForNumericCheck = 1
+
+	Set @HeaderLine = ''
 
 	-----------------------------------------------
 	-- Create a FileSystemObject object.
@@ -191,10 +195,12 @@ AS
 					Else
 						Set @KeyColumnIsNumeric = 0
 				End
-				
 	 			
 				If @LineCountToSkip >= 0
 				Begin
+					If @LinesRead = @LineCountToSkip
+						Set @HeaderLine = @LineIn
+				
 					If @LinesRead > @LineCountToSkip
 						Set @continue = 0
 				End
@@ -205,6 +211,9 @@ AS
 						Set @continue = 0
 						Set @LineCountToSkip = @LinesRead-1
 					End
+					Else
+						-- Cache the header line
+						Set @HeaderLine = @LineIn
 				End
 			End -- </c>
 		End -- </b>
@@ -217,6 +226,7 @@ AS
 		Set @LineCountToSkip = @LinesRead
 		Set @ColumnCount = 0
 		Set @message = 'Warning: could not find a line with a numeric value in column ' + Convert(varchar(9), @ColumnToUseForNumericCheck)
+		set @HeaderLine = ''
 	End
 		
 	-----------------------------------------------
@@ -242,7 +252,6 @@ DestroyFSO:
 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ValidateDelimitedFile] TO [MTS_DB_Dev] AS [dbo]

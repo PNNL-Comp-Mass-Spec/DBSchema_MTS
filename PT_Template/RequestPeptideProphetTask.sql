@@ -22,6 +22,7 @@ CREATE Procedure dbo.RequestPeptideProphetTask
 **	Date:	07/05/2006
 **			07/20/2006 mem - Removed Print statement for Sql populating T_Peptide_Prophet_Task_Job_Map
 **			04/17/2007 mem - Now calling PopulatePeptideProphetResultsFolderPaths to populate column Results_Folder_Path in T_Peptide_Prophet_Task_Job_Map (Ticket #423)
+**			11/21/2011 mem - Now populating Required_File_List in #TmpResultsFolderPaths
 **
 *****************************************************/
 (
@@ -296,11 +297,12 @@ As
 	CREATE TABLE #TmpResultsFolderPaths (
 		Job INT NOT NULL,
 		Results_Folder_Path varchar(512),
-		Source_Share varchar(128)
+		Source_Share varchar(128),
+		Required_File_List varchar(max)
 	)
 	
-	INSERT INTO #TmpResultsFolderPaths (Job)
-	SELECT Job
+	INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
+	SELECT Job, '' AS Required_File_List
 	FROM T_Peptide_Prophet_Task_Job_Map
 	WHERE Task_ID = @TaskID
 	--

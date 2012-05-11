@@ -4,30 +4,38 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW dbo.V_Peptide_Export
+
+CREATE VIEW [dbo].[V_Peptide_Export]
 AS
-SELECT dbo.T_Peptides.Analysis_ID, 
-    dbo.T_Peptides.Scan_Number, 
-    dbo.T_Peptides.Number_Of_Scans, 
-    dbo.T_Peptides.Charge_State, dbo.T_Peptides.MH, 
-    dbo.T_Sequence.Monoisotopic_Mass, 
-    dbo.T_Peptides.GANET_Obs, 
-    dbo.T_Sequence.GANET_Predicted, 
-    dbo.T_Peptides.Scan_Time_Peak_Apex, 
-    dbo.T_Peptides.Multiple_ORF, dbo.T_Peptides.Peptide, 
-    dbo.T_Sequence.Clean_Sequence, 
-    dbo.T_Sequence.Mod_Count, 
-    dbo.T_Sequence.Mod_Description, dbo.T_Peptides.Seq_ID, 
-    dbo.T_Peptides.Peptide_ID, 
-    dbo.T_Peptide_Filter_Flags.Filter_ID, 
-    dbo.T_Peptides.Peak_Area, 
-    dbo.T_Peptides.Peak_SN_Ratio
-FROM dbo.T_Peptides INNER JOIN
-    dbo.T_Sequence ON 
-    dbo.T_Peptides.Seq_ID = dbo.T_Sequence.Seq_ID LEFT OUTER
-     JOIN
-    dbo.T_Peptide_Filter_Flags ON 
-    dbo.T_Peptides.Peptide_ID = dbo.T_Peptide_Filter_Flags.Peptide_ID
+SELECT Pep.Job,
+       Pep.Scan_Number,
+       Pep.Number_Of_Scans,
+       Pep.Charge_State,
+       Pep.MH,
+       S.Monoisotopic_Mass,
+       Pep.GANET_Obs,
+       S.GANET_Predicted,
+       Pep.Scan_Time_Peak_Apex,
+       Pep.Multiple_ORF,
+       Pep.Peptide,
+       S.Clean_Sequence,
+       S.Mod_Count,
+       S.Mod_Description,
+       Pep.Seq_ID,
+       Pep.Peptide_ID,
+       PFF.Filter_ID,
+       Pep.Peak_Area,
+       Pep.Peak_SN_Ratio,
+       Pep.DelM_PPM
+FROM T_Peptides Pep
+     INNER JOIN T_Sequence S
+       ON Pep.Seq_ID = S.Seq_ID
+     LEFT OUTER JOIN T_Peptide_Filter_Flags PFF
+       ON Pep.Peptide_ID = PFF.Peptide_ID
 
 
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptide_Export] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptide_Export] TO [MTS_DB_Lite] AS [dbo]
 GO

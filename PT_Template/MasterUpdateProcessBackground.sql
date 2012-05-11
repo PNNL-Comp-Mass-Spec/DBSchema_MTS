@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE Procedure dbo.MasterUpdateProcessBackground
+CREATE Procedure MasterUpdateProcessBackground
 /****************************************************
 ** 
 **	Desc: 
@@ -43,6 +42,8 @@ CREATE Procedure dbo.MasterUpdateProcessBackground
 **			11/01/2009 mem - Added call to UpdateProteinDataForAvailableAnalyses
 **			11/02/2009 mem - Added call to CalculateCleavageStateForAvailableAnalyses
 **			10/12/2010 mem - Added call to ResetLoadFailedJobs
+**			08/22/2011 mem - Removed call to CalculateCleavageStateForAvailableAnalyses
+**			12/23/2011 mem - Added call to UpdateResultsForAvailableAnalyses
 **    
 *****************************************************/
 (
@@ -319,7 +320,7 @@ As
 	--------------------------------------------------------------
 	--
 	Set @ProcessStateMatch = 30
-	Set @NextProcessState = 31
+	Set @NextProcessState = 33				-- Changed from 31 to 33 in August 2011
 
 	-- Perform this subprocess if it is enabled
 	--
@@ -347,8 +348,11 @@ As
 	-- < G2 >
 	--------------------------------------------------------------
 	-- Calculate cleavage state and terminus state
+	-- Note: disabled in August 2011 since stored procedure CalculateCleavageStateUsingProteinSequence is not complete
+	-- (this information should have already been computed by PHRP)
 	--------------------------------------------------------------
 	--
+	/*
 	Set @ProcessStateMatch = 31
 	Set @NextProcessState = 33
 
@@ -374,7 +378,8 @@ As
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
-
+	*/
+	
 	-- < H >
 	--------------------------------------------------------------
 	-- Populate Max_Obs_Area_In_Job in T_Peptides
@@ -553,7 +558,7 @@ As
 		Goto Done
 
 
-	-- < M >
+	-- < M1 >
 	--------------------------------------------------------------
 	-- Peptide Prophet processing
 	--------------------------------------------------------------
@@ -589,6 +594,40 @@ As
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
+	
+	
+	
+	-- < M2 >
+	--------------------------------------------------------------
+	-- Re-load peptide data for jobs with state 55
+	--------------------------------------------------------------
+	--
+	Set @ProcessStateMatch = 55
+	Set @NextProcessState = 60
+	
+	-- Perform this subprocess if it is enabled
+	--
+	set @result = 0
+	SELECT @result = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'UpdateResultsForAvailableAnalyses')
+	If @result = 0
+	begin
+		If @logLevel >= 2
+			execute PostLogEntry 'Normal', 'Skipped UpdateResultsForAvailableAnalyses', 'MasterUpdateProcessBackground'
+	end
+	Else
+	begin
+		EXEC @result = UpdateResultsForAvailableAnalyses @ProcessStateMatch, @NextProcessState, @numJobsToProcess, @count OUTPUT
+
+		set @message = 'Completed updating results for available analyses: ' + convert(varchar(11), @count) + ' jobs processed'
+		If @logLevel >= 1 and @count > 0
+			execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
+	end
+
+	-- Validate that updating is enabled, abort if not enabled
+	exec VerifyUpdateEnabled @CallingFunctionDescription = 'MasterUpdateProcessBackground', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+	If @UpdateEnabled = 0
+		Goto Done
+		
 	
 	-- < N >
 	--------------------------------------------------------------
@@ -780,7 +819,6 @@ Done:
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Dev] AS [dbo]

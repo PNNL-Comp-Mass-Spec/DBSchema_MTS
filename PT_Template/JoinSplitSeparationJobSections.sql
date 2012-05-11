@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.JoinSplitSeparationJobSections
+CREATE PROCEDURE JoinSplitSeparationJobSections
 /****************************************************
 **
 **	Desc: 
@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.JoinSplitSeparationJobSections
 **			11/02/2007 mem - Added field @UseExistingDatasetAndMASICJob
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **			07/13/2010 mem - Now populating Acq_Length in T_Datasets
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -664,7 +665,7 @@ As
 			FROM T_Joined_Job_Details JJD INNER JOIN
 				T_Analysis_Description TAD_JoinedJob ON JJD.Joined_Job_ID = TAD_JoinedJob.Job INNER JOIN
 				T_Analysis_Description TAD ON JJD.Source_Job = TAD.Job INNER JOIN
-				T_Peptides P ON TAD.Job = P.Analysis_ID
+				T_Peptides P ON TAD.Job = P.Job
 			WHERE JJD.Joined_Job_Id = @JoinedSequestJobNum
 			GROUP BY JJD.Joined_Job_ID, JJD.Section, TAD.Job, TAD.Dataset
 		) LookupQ INNER JOIN
@@ -820,7 +821,7 @@ As
 		P.Scan_Number + JJD.Scan_Number_Added AS Scan_New, 
 		P.Scan_Time_Peak_Apex + JJD.Scan_Time_Added AS Scan_Time_New
 	FROM T_Joined_Job_Details JJD INNER JOIN
-		T_Peptides P ON JJD.Source_Job = P.Analysis_ID
+		T_Peptides P ON JJD.Source_Job = P.Job
 	WHERE JJD.Joined_Job_ID = @JoinedSequestJobNum AND
 		(JJD.Scan_Number_Added <> 0 OR JJD.Scan_Time_Added <> 0)
 	*/
@@ -831,7 +832,7 @@ As
 	SET Scan_Number = Scan_Number + JJD.Scan_Number_Added, 
 		Scan_Time_Peak_Apex = Scan_Time_Peak_Apex + JJD.Scan_Time_Added
 	FROM T_Joined_Job_Details JJD INNER JOIN
-		T_Peptides P ON JJD.Source_Job = P.Analysis_ID
+		T_Peptides P ON JJD.Source_Job = P.Job
 	WHERE JJD.Joined_Job_ID = @JoinedSequestJobNum AND
 		 (JJD.Scan_Number_Added <> 0 OR JJD.Scan_Time_Added <> 0)
 	--
@@ -978,14 +979,14 @@ As
 	-- Update the job numbers in T_Peptides to be @JoinedSequestJobNum
 	-- This query takes a while (~2 minutes on 3.6 GHz Pogo)
 	UPDATE T_Peptides
-	SET Analysis_ID = JJD.Joined_Job_ID
+	SET Job = JJD.Joined_Job_ID
 	FROM T_Joined_Job_Details JJD INNER JOIN
-		 T_Peptides P ON JJD.Source_Job = P.Analysis_ID
+		 T_Peptides P ON JJD.Source_Job = P.Job
 	WHERE JJD.Joined_Job_ID = @JoinedSequestJobNum
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
-	Set @task = 'changing Analysis_ID to Joined Job ID in T_Peptides using T_Joined_Job_Details'
+	Set @task = 'changing Job to Joined Job ID in T_Peptides using T_Joined_Job_Details'
 	If @myError <> 0
 	Begin
 		Set @message = 'Error ' + @Task
@@ -1151,7 +1152,6 @@ Done:
 		Select @message as ErrorMessage
 		
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[JoinSplitSeparationJobSections] TO [MTS_DB_Dev] AS [dbo]

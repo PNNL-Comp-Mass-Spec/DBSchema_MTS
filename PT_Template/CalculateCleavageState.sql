@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.CalculateCleavageState
+CREATE Procedure CalculateCleavageState
 /********************************************************
 **
 **	Desc: 
@@ -18,6 +18,7 @@ CREATE Procedure dbo.CalculateCleavageState
 **
 **	Auth:	mem
 **	Date:	03/27/2005
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *********************************************************/
 (
@@ -88,16 +89,16 @@ AS
 	--
 	If @JobFilter <> 0
 		INSERT INTO #JobsToProcess
-		SELECT Analysis_ID, IsNull(COUNT(Peptide_ID), 0) AS PeptideCount
+		SELECT Job, IsNull(COUNT(Peptide_ID), 0) AS PeptideCount
 		FROM T_Peptides
-		WHERE T_Peptides.Analysis_ID = @JobFilter
-		GROUP BY Analysis_ID
+		WHERE T_Peptides.Job = @JobFilter
+		GROUP BY Job
 	Else
 		INSERT INTO #JobsToProcess
-		SELECT Analysis_ID, IsNull(COUNT(Peptide_ID), 0) AS PeptideCount
+		SELECT Job, IsNull(COUNT(Peptide_ID), 0) AS PeptideCount
 		FROM T_Peptides
-		GROUP BY Analysis_ID
-		ORDER BY Analysis_ID
+		GROUP BY Job
+		ORDER BY Job
 	--
 	SELECT @myError = @@error, @JobAvailableCount = @@rowcount
 	--
@@ -190,7 +191,7 @@ AS
 			Set @S = @S + ' FROM T_Peptide_to_Protein_Map INNER JOIN T_Peptides P ON'
 			Set @S = @S + '  T_Peptide_to_Protein_Map.Peptide_ID = P.Peptide_ID'
 			Set @S = @S + '  INNER JOIN #JobsInBatch ON'
-			Set @S = @S + '  P.Analysis_ID = #JobsInBatch.Job'
+			Set @S = @S + '  P.Job = #JobsInBatch.Job'
 				
 			If @reprocess = 0
 				Set @S = @S + ' WHERE Terminus_State Is Null'
@@ -233,7 +234,7 @@ AS
 			Set @S = @S + ' FROM T_Peptide_to_Protein_Map INNER JOIN T_Peptides P ON'
 			Set @S = @S + '  T_Peptide_to_Protein_Map.Peptide_ID = P.Peptide_ID'
 			Set @S = @S + ' INNER JOIN #JobsInBatch ON'
-			Set @S = @S + '  P.Analysis_ID = #JobsInBatch.Job'
+			Set @S = @S + '  P.Job = #JobsInBatch.Job'
 
 			If @reprocess = 0
 				Set @S = @S + ' WHERE Cleavage_State Is Null'
@@ -317,7 +318,6 @@ Done:
 	End
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CalculateCleavageState] TO [MTS_DB_Dev] AS [dbo]

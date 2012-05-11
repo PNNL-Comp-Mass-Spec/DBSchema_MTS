@@ -1,10 +1,10 @@
 /****** Object:  StoredProcedure [dbo].[LoadInspectPeptidesBulk] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadInspectPeptidesBulk
+CREATE Procedure dbo.LoadInspectPeptidesBulk
 /****************************************************
 **
 **	Desc: 
@@ -17,8 +17,6 @@ CREATE Procedure LoadInspectPeptidesBulk
 **
 **	Return values: 0: success, otherwise, error code
 **
-**	Parameters:
-**	
 **	Auth:	mem
 **	Date:	10/17/2008 mem
 **			10/21/2008 mem - Now using udfTotalPRMScoreToNormalizedScore to populate Normalized_Score in T_Score_Inspect
@@ -31,6 +29,17 @@ CREATE Procedure LoadInspectPeptidesBulk
 **			08/24/2010 mem - Fixed bug populating #Tmp_Peptide_Import_MatchedEntries
 **			02/01/2011 mem - Added support for MSGF filtering
 **			02/25/2011 mem - Expanded SpecProbNote to varchar(512) in #Tmp_MSGF_Results
+**			06/28/2011 mem - Now posting a warning if the row counts in _syn_ResultToSeqMap.txt don't agree with _inspect_syn.txt, yet they do agree when you group by scan, peptide, protein, and charge
+**			08/19/2011 mem - Added parameters @SynFileColCount and @SynFileHeader (@SynFileColCount supersedes @SynFileColumnCount)
+						   - Now populating columns RankHit and DelM_PPM
+**			08/22/2011 mem - Switched DelM_PPM from float to real
+**			09/14/2011 mem - Now using MSGF filter even if @MSGFCountLoaded = 0
+**			12/29/2011 mem - Added support for updating existing data as an alternative to loading new data
+**						   - Added switch @UpdateExistingData
+**			01/03/2012 mem - Added Inspect-specific scores when filtering the loaded data
+**						   - Now leaving Normalized_Score unchanged when updating existing data if TotalPRMScore is negative
+**						   - When updating data, now changing TotalPRMScore to -100000 for data that no longer passes filters
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **
 *****************************************************/
 (
@@ -42,8 +51,10 @@ CREATE Procedure LoadInspectPeptidesBulk
 	@MSGFResultsFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_inspect_syn_MSGF.txt',
 	@Job int,
 	@FilterSetID int,
-	@SynFileColumnCount smallint=0,		-- If this is 0, then this SP will call ValidateDelimitedFile; if non-zero, then assumes the calling procedure called ValidateDelimitedFile to get this value
 	@LineCountToSkip int=1,
+	@SynFileColCount int,
+	@SynFileHeader varchar(2048),
+	@UpdateExistingData tinyint, 
 	@numLoaded int=0 output,
 	@numSkipped int=0 output,
 	@SeqCandidateFilesFound tinyint=0 output,
@@ -67,6 +78,9 @@ As
 	set @SeqCandidateFilesFound = 0
 	set @MSGFFileFound = 0
 	set @message = ''
+
+	Set @SynFileColCount = IsNull(@SynFileColCount, 0)
+	Set @SynFileHeader = IsNull(@SynFileHeader, '')
 
 	declare @jobStr varchar(12)
 	set @jobStr = convert(varchar(12), @Job)
@@ -94,6 +108,8 @@ As
 
 	Declare @fileExists tinyint
 	Declare @result int
+
+	Declare @CreateDebugTables tinyint = 0
 	
 	-----------------------------------------------
 	-- Lookup the logging level from T_Process_Step_Control
@@ -132,10 +148,47 @@ As
 	-----------------------------------------------
 	-- Create temporary table to hold contents 
 	--  of Inspect synopsis file (_inspect_syn.txt)
-	-- Additional columns will be added to this table
-	--  if the input file has over 25 columns
+	-- Additional columns may get added to this table
 	-----------------------------------------------
-	--
+	--	
+	Declare @SynFileVersion varchar(64)
+	Set @SynFileVersion = ''
+	
+	If @SynFileColCount = 0
+	Begin
+		Set @message = '0 peptides were loaded for job ' + @jobStr + ' (synopsis file is empty)'
+		set @myError = 60002	-- Note that this error code is used in SP LoadResultsForAvailableAnalyses; do not change
+		Goto Done
+	End
+
+	If @SynFileColCount = 25
+	Begin
+		Set @SynFileVersion = '2008'
+	End
+
+	If @SynFileVersion = ''
+	Begin
+		If @SynFileColCount = 27
+			Set @SynFileVersion = '2009'
+	End
+	
+	If @SynFileVersion = ''
+	Begin
+		If @SynFileColCount = 28 And @SynFileHeader Like '%DelM[_]PPM%'
+			Set @SynFileVersion = '2011'
+	End
+
+	If @SynFileVersion = ''
+	Begin
+		-- Unrecognized version
+		if @myError = 52005
+		begin
+			set @message = 'Unrecognized Synopsis file format for Job ' + @jobStr
+			Set @message = @message + '; synopsis file contains ' + convert(varchar(12), @SynFileColCount) + ' columns (Expecting 25, 27, or 28 columns)'
+			goto Done
+		end
+	End
+	
 	CREATE TABLE #Tmp_Peptide_Import (
 		Result_ID int NOT NULL ,
 		Scan_Number int NOT NULL ,
@@ -171,6 +224,23 @@ As
 		set @message = 'Problem creating temporary table #Tmp_Peptide_Import for job ' + @jobStr
 		goto Done
 	end
+
+	If @SynFileVersion IN ('2009', '2011')
+	Begin
+		-- Add two additional columns
+
+		ALTER Table #Tmp_Peptide_Import ADD
+			PrecursorMZ float NULL,
+			PrecursorError real NULL
+	End
+	
+	If @SynFileVersion = '2011' 
+	Begin
+		-- Add column DelM_PPM
+
+		ALTER Table #Tmp_Peptide_Import ADD
+			DelM_PPM real NULL
+	End
 	
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
 	CREATE INDEX #IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
@@ -201,59 +271,6 @@ As
 
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Filter_Flags_Result_ID ON #Tmp_Peptide_Filter_Flags (Result_ID)
 
-
-	-----------------------------------------------
-	-- Verify that input file exists and count the number of columns
-	-- This step is skipped if @SynFileColumnCount is non-zero
-	-----------------------------------------------
-
-	If IsNull(@SynFileColumnCount, 0) <= 0
-	Begin
-		-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
-		Set @LineCountToSkip = -1
-		Exec @result = ValidateDelimitedFile @PeptideSynFilePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @SynFileColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 1
-	End
-	Else
-		Set @result = 0
-	
-	Set @myError = 0
-	if @result <> 0
-	Begin
-		If Len(@message) = 0
-			Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSynFilePath + ' (Code ' + Convert(varchar(11), @result) + ')'
-		
-		Set @myError = 60003
-	End
-	else
-	Begin
-		If @SynFileColumnCount = 0
-		Begin
-				Set @message = '0 peptides were loaded for job ' + @jobStr + ' (synopsis file is empty)'
-				set @myError = 60002	-- Note that this error code is used in SP LoadResultsForAvailableAnalyses; do not change
-		End
-		Else
-		Begin
-			If @SynFileColumnCount <> 25 and @SynFileColumnCount <> 27
-			Begin
-				Set @message = 'Synopsis file contains ' + convert(varchar(12), @SynFileColumnCount) + ' columns for job ' + @jobStr + ' (Expecting 25 or 27 columns)'
-				set @myError = 60003
-			End
-		End
-	End
-	
-	-- don't do any more if errors at this point
-	--
-	if @myError <> 0 goto done
-		
-
-	If @SynFileColumnCount = 27
-	Begin
-		-- Add the additional columns now so they 
-		--  will be populated during the Bulk Insert operation
-		ALTER TABLE #Tmp_Peptide_Import ADD
-			PrecursorMZ float NULL,			-- Not actually stored in the database
-			PrecursorError real NULL
-	End
 	
 	-----------------------------------------------
 	-- Bulk load contents of synopsis file into temporary table
@@ -275,12 +292,18 @@ As
 		goto Done
 	end
 
-	If @SynFileColumnCount < 27
+	-- Now that the data has been bulk-loaded, add missing columns, if necessary
+	If @SynFileVersion = '2008'
 	Begin
-		-- Add the additional columns, since they will be referenced below
-		ALTER TABLE #Tmp_Peptide_Import ADD
+		ALTER Table #Tmp_Peptide_Import ADD
 			PrecursorMZ float NULL,
 			PrecursorError real NULL
+	End
+	
+	If @SynFileVersion IN ('2008', '2009')
+	Begin
+		ALTER Table #Tmp_Peptide_Import ADD
+			DelM_PPM real NULL
 	End
 	
 	-----------------------------------------------
@@ -499,9 +522,36 @@ As
 	
 	If @ResultToSeqMapCountLoaded > 0 AND @ResultToSeqMapCountLoaded < @UnfilteredCountLoaded
 	Begin
-		Set @myError = 50002
 		Set @message = 'Row count in the _ResultToSeqMap.txt file does not match the row count in the Inspect _inspect_syn.txt file for job ' + @jobStr + ' (' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' vs. ' + Convert(varchar(12), @UnfilteredCountLoaded) + ')'
-		Goto Done
+
+		-- Job 716812 and others like it have _inspect_syn.txt files with a small number of duplicates results (the row is nearly identical; the only difference is the Result_ID column)
+		-- To check for this, group by scan, peptide, protein, and charge state, and compare that count to @ResultToSeqMapCountLoaded			
+		Declare @TPIRowCountCheck int = 0
+				
+		SELECT @TPIRowCountCheck = COUNT(*)
+		FROM ( SELECT Scan_Number, Peptide, Protein, Charge_State
+		       FROM #Tmp_Peptide_Import
+		       GROUP BY Scan_Number, Peptide, Protein, Charge_State 
+		     ) LookupQ
+		
+		Set @TPIRowCountCheck = IsNull(@TPIRowCountCheck, 0)
+		
+		If @TPIRowCountCheck = @ResultToSeqMapCountLoaded
+		Begin
+			-- Counts match; post a warning but continue
+			Set @message = @message + '; however, grouping by scan, peptide, protein, and charge state gives the expected row count of ' + Convert(varchar(12), @TPIRowCountCheck)
+			execute PostLogEntry 'Warning', @message, 'LoadInspectPeptidesBulk'
+			Set @message = ''
+		End
+		Else
+		Begin
+			Set @message = @message + '; tried grouping by scan, peptide, protein, and charge state, but that gives ' + Convert(varchar(12), @TPIRowCountCheck) + ' rows'
+			execute PostLogEntry 'Warning', @message, 'LoadInspectPeptidesBulk'
+			Set @message = ''
+			
+			Set @myError = 50002
+			Goto Done
+		End
 	End
 
 
@@ -538,10 +588,10 @@ As
 
 	-----------------------------------------------
 	-- Make sure all peptides in #Tmp_Peptide_Import have
-	-- TotalPRMScore defined; if they don't, assign a value of -1000
+	-- TotalPRMScore defined; if they don't, assign a value of -100000
 	-----------------------------------------------
 	UPDATE #Tmp_Peptide_Import
-	SET TotalPRMScore = -1000
+	SET TotalPRMScore = -100000
 	WHERE TotalPRMScore IS NULL
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -594,6 +644,14 @@ As
 			@PeptideProphetThreshold float,				-- Not used in this SP
 			@RankScoreComparison varchar(2),
 			@RankScoreThreshold smallint,
+			@InspectMQScoreComparison varchar(2),
+			@InspectMQScoreThreshold real,
+			@InspectTotalPRMScoreComparison varchar(2),
+			@InspectTotalPRMScoreThreshold real,
+			@InspectFScoreComparison varchar(2),
+			@InspectFScoreThreshold real,
+			@InspectPValueComparison varchar(2),
+			@InspectPValueThreshold real,
 			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, or Inspect results
 			@MSGFSpecProbThreshold real
 
@@ -633,6 +691,10 @@ As
 										@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 										@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
 										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
+                                        @InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
+                                        @InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
+                                        @InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
+                                        @InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
 										@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT
 		
 		if @myError <> 0
@@ -673,17 +735,14 @@ As
 		-----------------------------------------------
 
 		While @CriteriaGroupMatch > 0
-		Begin -- <CriteriaGroupMatch
+		Begin -- <CriteriaGroupMatch>
 
 			Set @UseMSGFFilter = 0
-			If @MSGFCountLoaded > 0
-			Begin
-				If @MSGFSpecProbComparison = '<' AND @MSGFSpecProbThreshold < 1
-					Set @UseMSGFFilter = 1
-				
-				If @MSGFSpecProbComparison = '<=' AND @MSGFSpecProbThreshold < 1
-					Set @UseMSGFFilter = 1					
-			End
+			If @MSGFSpecProbComparison = '<' AND @MSGFSpecProbThreshold < 1
+				Set @UseMSGFFilter = 1
+			
+			If @MSGFSpecProbComparison = '<=' AND @MSGFSpecProbThreshold < 1
+				Set @UseMSGFFilter = 1					
 			
 			-- Construct the Sql Update Query
 			--
@@ -705,11 +764,16 @@ As
 			Set @W = @W +	' STPM.Cleavage_State ' + @CleavageStateComparison + Convert(varchar(6), @CleavageStateThreshold) + ' AND '
 			Set @W = @W +	' STPM.Terminus_State ' + @TerminusStateComparison + Convert(varchar(6), @TerminusStateThreshold) + ' AND '
 			Set @W = @W +	' TPI.Charge_State ' + @ChargeStateComparison + Convert(varchar(6), @ChargeStateThreshold) + ' AND '
-			Set @W = @W +	' PSI.Monoisotopic_Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold)
+			Set @W = @W +	' PSI.Monoisotopic_Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold) + ' AND '
+
+			Set @W = @W +   ' TPI.MQScore ' +  @InspectMQScoreComparison + Convert(varchar(11), @InspectMQScoreThreshold) + ' AND '
+			Set @W = @W +   ' TPI.TotalPRMScore ' + @InspectTotalPRMScoreComparison + Convert(varchar(11), @InspectTotalPRMScoreThreshold) + ' AND '
+			Set @W = @W +   ' TPI.FScore ' +  @InspectFScoreComparison + Convert(varchar(11), @InspectFScoreThreshold) + ' AND '
+			Set @W = @W +   ' TPI.PValue ' +  @InspectPValueComparison + Convert(varchar(11), @InspectPValueThreshold)
 
 			If @UseMSGFFilter = 1
 				Set @W = @W +      ' AND IsNull(MSGF.SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
-	 
+
 			Set @W = @W +    ' ) LookupQ ON LookupQ.Result_ID = TFF.Result_ID'
 
 			-- Append the Where clause to @Sql
@@ -761,6 +825,10 @@ As
 											@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 											@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
 											@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
+											@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
+											@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
+											@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
+											@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
 											@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT
 			If @myError <> 0
 			Begin
@@ -768,7 +836,7 @@ As
 				Goto Done
 			End
 
-		End -- </CriteriaGroupMatch
+		End -- </CriteriaGroupMatch>
 
 	End -- </Filter>
 
@@ -788,6 +856,22 @@ As
 		if @LogLevel >= 2
 			execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
 	End
+
+
+	If @CreateDebugTables = 1
+	Begin
+		if exists (select * from sys.tables Where Name = 'T_Tmp_Peptide_Import')
+		drop table T_Tmp_Peptide_Import
+		
+		SELECT TFF.Valid,
+		       TPI.*
+		INTO T_Tmp_Peptide_Import
+		FROM #Tmp_Peptide_Filter_Flags TFF
+		     INNER JOIN #Tmp_Peptide_Import TPI
+		       ON TFF.Result_ID = TPI.Result_ID
+
+	End
+
 
 	-----------------------------------------------
 	-- Remove peptides falling below threshold
@@ -811,7 +895,7 @@ As
 	-- T_Score_Discriminant, etc. for this analysis job
 	-----------------------------------------------
 
-	If Exists (SELECT * FROM T_Peptides WHERE Analysis_ID = @Job)
+	If Exists (SELECT * FROM T_Peptides WHERE Job = @Job) AND @UpdateExistingData = 0
 	Begin
 		Set @LogMessage = 'Call DeletePeptidesForJobAndResetToNew for Job ' + @jobStr
 		if @LogLevel >= 2
@@ -973,6 +1057,26 @@ As
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
 
 
+	If @CreateDebugTables = 1
+	Begin
+		if exists (select * from sys.tables Where Name = 'T_Tmp_Unique_Records')
+		drop table T_Tmp_Unique_Records
+		
+		if exists (select * from sys.tables Where Name = 'T_Tmp_Peptide_ResultToSeqMap')
+		drop table T_Tmp_Peptide_ResultToSeqMap
+
+		if exists (select * from sys.tables Where Name = 'T_Tmp_Peptide_SeqInfo')
+		drop table T_Tmp_Peptide_SeqInfo
+
+		SELECT *
+		INTO T_Tmp_Peptide_ResultToSeqMap
+		FROM #Tmp_Peptide_ResultToSeqMap
+
+		SELECT *
+		INTO T_Tmp_Peptide_SeqInfo
+		FROM #Tmp_Peptide_SeqInfo
+	End						
+
 	---------------------------------------------------
 	-- Possibly create the table for caching log entries
 	-- Procedure PostLogEntryAddToCache requires this table to exist
@@ -1007,289 +1111,567 @@ As
 
 	declare @transName varchar(32)
 	set @transName = 'LoadInspectPeptidesBulk'
-	begin transaction @transName
+	declare @CallingProcName varchar(128)
+	declare @CurrentLocation varchar(128)
+	Set @CurrentLocation = 'Start peptide load'
 
-	-----------------------------------------------
-	-- Get base value for peptide ID calculation
-	-- Note that @MaxPeptideID will get added to #Tmp_Unique_Records.Peptide_ID_Base, 
-	--  which will always start at 1
-	-----------------------------------------------
-	--
-	declare @MaxPeptideID int
-	set @MaxPeptideID = 0
-	--
-	SELECT  @MaxPeptideID = IsNull(MAX(Peptide_ID), 1000)
-	FROM T_Peptides
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0 or @MaxPeptideID = 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem getting base for peptide ID for job ' + @jobStr
-		If @myError = 0
-			Set @myError = 50006
-		goto Done
-	end
-
-	-----------------------------------------------
-	-- Populate the Peptide_ID_New column in #Tmp_Unique_Records
-	-----------------------------------------------
-	UPDATE #Tmp_Unique_Records
-	SET Peptide_ID_New = Peptide_ID_Base + @MaxPeptideID
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Problem updating Peptide_ID_New column in temporary table for job ' + @jobStr
-		goto Done
-	end
-
-	Set @LogMessage = 'Updated ' + Convert(varchar(12), @myRowCount) + ' rows in #Tmp_Unique_Records'
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+	Begin Try
+		
+		begin transaction @transName
+	
+		If @UpdateExistingData = 0
+		Begin -- <a1>
+			-----------------------------------------------
+			-- Get base value for peptide ID calculation
+			-- Note that @MaxPeptideID will get added to #Tmp_Unique_Records.Peptide_ID_Base, 
+			--  which will always start at 1
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Lookup Max Peptide_ID'
+	
+			declare @MaxPeptideID int
+			set @MaxPeptideID = 0
+			--
+			SELECT  @MaxPeptideID = IsNull(MAX(Peptide_ID), 1000)
+			FROM T_Peptides
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0 or @MaxPeptideID = 0
+			begin
+				rollback transaction @transName
+				set @message = 'Problem getting base for peptide ID for job ' + @jobStr
+				If @myError = 0
+					Set @myError = 50006
+				goto Done
+			end
+		
+			-----------------------------------------------
+			-- Populate the Peptide_ID_New column in #Tmp_Unique_Records
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Populate the Peptide_ID_New'
 				
-	-----------------------------------------------
-	-- Add new proteins to T_Proteins
-	-----------------------------------------------
-	INSERT INTO T_Proteins (Reference)
-	SELECT LookupQ.Reference
-	FROM (	SELECT STPM.Reference
-			FROM #Tmp_Peptide_Import TPI INNER JOIN
+			UPDATE #Tmp_Unique_Records
+			SET Peptide_ID_New = Peptide_ID_Base + @MaxPeptideID
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Problem updating Peptide_ID_New column in temporary table for job ' + @jobStr
+				goto Done
+			end
+		
+			Set @LogMessage = 'Updated ' + Convert(varchar(12), @myRowCount) + ' rows in #Tmp_Unique_Records'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+			If @CreateDebugTables = 1
+			Begin
+				SELECT *
+				INTO T_Tmp_Unique_Records
+				FROM #Tmp_Unique_Records
+			End
+			
+			-----------------------------------------------
+			-- Add new proteins to T_Proteins
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Add new proteins to T_Proteins'
+				
+			INSERT INTO T_Proteins (Reference)
+			SELECT LookupQ.Reference
+			FROM (	SELECT STPM.Reference
+					FROM #Tmp_Peptide_Import TPI INNER JOIN
+						 #Tmp_Peptide_ResultToSeqMap RTSM ON TPI.Result_ID = RTSM.Result_ID INNER JOIN
+						 #Tmp_Peptide_SeqInfo PSI ON RTSM.Seq_ID_Local = PSI.Seq_ID_Local INNER JOIN
+						 #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local
+					GROUP BY STPM.Reference
+				 ) LookupQ LEFT OUTER JOIN 
+				 T_Proteins ON LookupQ.Reference = T_Proteins.Reference
+			WHERE T_Proteins.Ref_ID IS NULL
+			ORDER BY LookupQ.Reference
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error inserting into T_Proteins for job ' + @jobStr
+				goto Done
+			end
+		
+			Set @LogMessage = 'Populated T_Proteins with ' + Convert(varchar(12), @myRowCount) + ' rows'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+			
+			-----------------------------------------------
+			-- Copy selected contents of #Tmp_Peptide_Import
+			-- into T_Peptides
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Populate T_Peptides using #Tmp_Peptide_Import'
+				
+			SET IDENTITY_INSERT T_Peptides ON 
+			--
+			INSERT INTO T_Peptides
+			(
+				Peptide_ID, 
+				Job, 
+				Scan_Number, 
+				Number_Of_Scans, 
+				Charge_State, 
+				MH, 
+				Multiple_ORF, 
+				Peptide,
+				RankHit,
+				DelM_PPM
+			)
+			SELECT
+				UR.Peptide_ID_New,
+				@Job,					-- Job
+				TPI.Scan_Number,
+				1,						-- Number_of_Scans
+				TPI.Charge_State,
+				TPI.MH,
+				0,						-- Multiple_Protein_Count; this set to 0 for now, but we will update it below using T_Peptides and T_Peptide_to_Protein_Map
+				TPI.Peptide,
+				TPI.RankTotalPRMScore,
+				TPI.DelM_PPM																	-- Null if the file has less than 28 columns
+			FROM #Tmp_Peptide_Import TPI INNER JOIN 
+				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
+			ORDER BY UR.Peptide_ID_New
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error inserting into T_Peptides for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedPeptides = @myRowCount
+		
+			Set @LogMessage = 'Populated T_Peptides with ' + Convert(varchar(12), @myRowCount) + ' rows'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+		
+			SET IDENTITY_INSERT T_Peptides OFF 
+		
+		
+			-----------------------------------------------
+			-- Copy selected contents of #Tmp_Peptide_Import
+			-- into T_Score_Discriminant
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Populate T_Score_Discriminant using #Tmp_Peptide_Import'
+				
+			INSERT INTO T_Score_Discriminant
+				(Peptide_ID, MScore, PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability)
+			SELECT
+				UR.Peptide_ID_New, 
+				10.75,			-- MScore is set to 10.75 for all Inspect results
+				1,				-- PassFilt is set to 1 for all Inspect results
+				TPI.FScore,		-- Storing Inspect FScore in the Peptide_Prophet_FScore column of T_Score_Discriminant
+				1 - TPI.PValue	-- 1 minus Inspect PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column
+			FROM #Tmp_Peptide_Import TPI INNER JOIN 
+				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
+			ORDER BY UR.Peptide_ID_New
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error inserting into T_Score_Discriminant for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedDiscScores = @myRowCount
+		
+			Set @LogMessage = 'Populated T_Score_Discriminant with ' + Convert(varchar(12), @myRowCount) + ' rows'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+		
+		
+			-----------------------------------------------
+			-- Copy selected contents of #Tmp_Peptide_Import into T_Score_Inspect
+			-- Note that T_Score_Inspect.DelM is left as Null, since it will be populated by SP ComputeInspectMassValuesUsingSICStats
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Populate T_Score_Inspect using #Tmp_Peptide_Import'
+				
+			INSERT INTO T_Score_Inspect
+				(Peptide_ID, MQScore, TotalPRMScore, MedianPRMScore, FractionY, 
+				 FractionB, Intensity, PValue, FScore, DeltaScore, DeltaScoreOther, 
+				 DeltaNormMQScore, DeltaNormTotalPRMScore, RankTotalPRMScore, RankFScore, Normalized_Score,
+				 PrecursorError)
+			SELECT
+				UR.Peptide_ID_New,
+				TPI.MQScore, 
+				TPI.TotalPRMScore, 
+				TPI.MedianPRMScore, 
+				TPI.FractionY, 
+				TPI.FractionB, 
+				TPI.Intensity, 
+				TPI.PValue, 
+				TPI.FScore, 
+				TPI.DeltaScore, 
+				TPI.DeltaScoreOther, 
+				TPI.DeltaNormMQScore,
+				TPI.DeltaNormTotalPRMScore,
+				TPI.RankTotalPRMScore, 
+				TPI.RankFScore,
+				dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State),		-- Compute the Normalized Score using TotalPRMScore and Charge_State
+				TPI.PrecursorError																-- Null if the file has less than 27 columns		
+			FROM #Tmp_Peptide_Import TPI INNER JOIN 
+				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
+			ORDER BY UR.Peptide_ID_New
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error inserting into T_Score_Inspect for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedInspectScores = @myRowCount
+		
+			Set @LogMessage = 'Populated T_Score_Inspect with ' + Convert(varchar(12), @myRowCount) + ' rows'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+		
+		
+			-----------------------------------------------
+			-- Copy selected contents of #Tmp_Peptide_Import and 
+			--  #Tmp_Peptide_SeqToProteinMap into T_Peptide_to_Protein_Map table; 
+			-- We shouldn't have to use the Group By when inserting, but if the synopsis file 
+			--  has multiple entries for the same combination of Scan_Number,
+			--  Charge_State, MH, and Peptide pointing to the same Reference, then this 
+			--  will cause a primary key constraint error.
+			-----------------------------------------------
+			--
+			INSERT INTO T_Peptide_to_Protein_Map (Peptide_ID, Ref_ID, Cleavage_State, Terminus_State)
+			SELECT	UR.Peptide_ID_New, P.Ref_ID, 
+					MAX(IsNull(STPM.Cleavage_State, 0)), 
+					MAX(IsNull(STPM.Terminus_State, 0))
+			FROM #Tmp_Unique_Records UR INNER JOIN
+				 #Tmp_Peptide_Import TPI ON 
+					UR.Scan_Number = TPI.Scan_Number AND 
+					UR.Charge_State = TPI.Charge_State AND 
+					UR.MH = TPI.MH AND 
+					UR.Peptide = TPI.Peptide INNER JOIN
 				 #Tmp_Peptide_ResultToSeqMap RTSM ON TPI.Result_ID = RTSM.Result_ID INNER JOIN
 				 #Tmp_Peptide_SeqInfo PSI ON RTSM.Seq_ID_Local = PSI.Seq_ID_Local INNER JOIN
-				 #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local
-			GROUP BY STPM.Reference
-		 ) LookupQ LEFT OUTER JOIN 
-		 T_Proteins ON LookupQ.Reference = T_Proteins.Reference
-	WHERE T_Proteins.Ref_ID IS NULL
-	ORDER BY LookupQ.Reference
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error inserting into T_Proteins for job ' + @jobStr
-		goto Done
-	end
-
-	Set @LogMessage = 'Populated T_Proteins with ' + Convert(varchar(12), @myRowCount) + ' rows'
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-	
-	-----------------------------------------------
-	-- Copy selected contents of #Tmp_Peptide_Import
-	-- into T_Peptides
-	-----------------------------------------------
-	--
-	SET IDENTITY_INSERT T_Peptides ON 
-	--
-	INSERT INTO T_Peptides
-	(
-		Peptide_ID, 
-		Analysis_ID, 
-		Scan_Number, 
-		Number_Of_Scans, 
-		Charge_State, 
-		MH, 
-		Multiple_ORF, 
-		Peptide
-	)
-	SELECT
-		UR.Peptide_ID_New,
-		@Job,					-- Job, aka Analysis_ID
-		TPI.Scan_Number,
-		1,						-- Number_of_Scans
-		TPI.Charge_State,
-		TPI.MH,
-		0,						-- Multiple_Protein_Count; this set to 0 for now, but we will update it below using T_Peptides and T_Peptide_to_Protein_Map
-		TPI.Peptide
-	FROM #Tmp_Peptide_Import TPI INNER JOIN 
-		 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
-	ORDER BY UR.Peptide_ID_New
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error inserting into T_Peptides for job ' + @jobStr
-		goto Done
-	end
-	Set @numAddedPeptides = @myRowCount
-
-	Set @LogMessage = 'Populated T_Peptides with ' + Convert(varchar(12), @myRowCount) + ' rows'
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-
-	SET IDENTITY_INSERT T_Peptides OFF 
-
-
-	-----------------------------------------------
-	-- Copy selected contents of #Tmp_Peptide_Import
-	-- into T_Score_Discriminant
-	-----------------------------------------------
-	--
-	INSERT INTO T_Score_Discriminant
-		(Peptide_ID, MScore, PassFilt, Peptide_Prophet_FScore, Peptide_Prophet_Probability)
-	SELECT
-		UR.Peptide_ID_New, 
-		10.75,			-- MScore is set to 10.75 for all Inspect results
-		1,				-- PassFilt is set to 1 for all Inspect results
-		TPI.FScore,		-- Storing Inspect FScore in the Peptide_Prophet_FScore column of T_Score_Discriminant
-		1 - TPI.PValue	-- 1 minus Inspect PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column
-	FROM #Tmp_Peptide_Import TPI INNER JOIN 
-		 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
-	ORDER BY UR.Peptide_ID_New
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error inserting into T_Score_Discriminant for job ' + @jobStr
-		goto Done
-	end
-	Set @numAddedDiscScores = @myRowCount
-
-	Set @LogMessage = 'Populated T_Score_Discriminant with ' + Convert(varchar(12), @myRowCount) + ' rows'
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-
-
-	-----------------------------------------------
-	-- Copy selected contents of #Tmp_Peptide_Import into T_Score_Inspect
-	-- Note that T_Score_Inspect.DelM is left as Null, since it will be populated by SP ComputeInspectMassValuesUsingSICStats
-	-----------------------------------------------
-	--
-	INSERT INTO T_Score_Inspect
-		(Peptide_ID, MQScore, TotalPRMScore, MedianPRMScore, FractionY, 
-		 FractionB, Intensity, PValue, FScore, DeltaScore, DeltaScoreOther, 
-		 DeltaNormMQScore, DeltaNormTotalPRMScore, RankTotalPRMScore, RankFScore, Normalized_Score,
-		 PrecursorError)
-	SELECT
-		UR.Peptide_ID_New,
-		TPI.MQScore, 
-		TPI.TotalPRMScore, 
-		TPI.MedianPRMScore, 
-		TPI.FractionY, 
-		TPI.FractionB, 
-		TPI.Intensity, 
-		TPI.PValue, 
-		TPI.FScore, 
-		TPI.DeltaScore, 
-		TPI.DeltaScoreOther, 
-		TPI.DeltaNormMQScore,
-		TPI.DeltaNormTotalPRMScore,
-		TPI.RankTotalPRMScore, 
-		TPI.RankFScore,
-		dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State),		-- Compute the Normalized Score using TotalPRMScore and Charge_State
-		TPI.PrecursorError																-- Null if the file has less than 27 columns
-	FROM #Tmp_Peptide_Import TPI INNER JOIN 
-		 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
-	ORDER BY UR.Peptide_ID_New
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error inserting into T_Score_Inspect for job ' + @jobStr
-		goto Done
-	end
-	Set @numAddedInspectScores = @myRowCount
-
-	Set @LogMessage = 'Populated T_Score_Inspect with ' + Convert(varchar(12), @myRowCount) + ' rows'
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-
-
-	-----------------------------------------------
-	-- Copy selected contents of #Tmp_Peptide_Import and 
-	--  #Tmp_Peptide_SeqToProteinMap into T_Peptide_to_Protein_Map table; 
-	-- We shouldn't have to use the Group By when inserting, but if the synopsis file 
-	--  has multiple entries for the same combination of Scan_Number,
-	--  Charge_State, MH, and Peptide pointing to the same Reference, then this 
-	--  will cause a primary key constraint error.
-	-----------------------------------------------
-	--
-	INSERT INTO T_Peptide_to_Protein_Map (Peptide_ID, Ref_ID, Cleavage_State, Terminus_State)
-	SELECT	UR.Peptide_ID_New, P.Ref_ID, 
-			MAX(IsNull(STPM.Cleavage_State, 0)), 
-			MAX(IsNull(STPM.Terminus_State, 0))
-	FROM #Tmp_Unique_Records UR INNER JOIN
-		 #Tmp_Peptide_Import TPI ON 
-			UR.Scan_Number = TPI.Scan_Number AND 
-			UR.Charge_State = TPI.Charge_State AND 
-			UR.MH = TPI.MH AND 
-			UR.Peptide = TPI.Peptide INNER JOIN
-		 #Tmp_Peptide_ResultToSeqMap RTSM ON TPI.Result_ID = RTSM.Result_ID INNER JOIN
-		 #Tmp_Peptide_SeqInfo PSI ON RTSM.Seq_ID_Local = PSI.Seq_ID_Local INNER JOIN
-		 #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local INNER JOIN
-		 T_Proteins P ON STPM.Reference = P.Reference
-	GROUP BY UR.Peptide_ID_New, P.Ref_ID
-	ORDER BY UR.Peptide_ID_New
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	if @myError <> 0
-	begin
-		rollback transaction @transName
-		set @message = 'Error inserting into T_Peptide_to_Protein_Map for job ' + @jobStr
-		goto Done
-	end
-
-	Set @LogMessage = 'Populated T_Peptide_to_Protein_Map with ' + Convert(varchar(12), @myRowCount) + ' rows'
-	Set @LogMessage = @LogMessage + ' (used the SeqInfo file data)'
+				 #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local INNER JOIN
+				 T_Proteins P ON STPM.Reference = P.Reference
+			GROUP BY UR.Peptide_ID_New, P.Ref_ID
+			ORDER BY UR.Peptide_ID_New
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error inserting into T_Peptide_to_Protein_Map for job ' + @jobStr
+				goto Done
+			end
 		
-	if @LogLevel >= 2
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-
-
-	-----------------------------------------------
-	-- Verify that all inserts have same number of rows
-	-----------------------------------------------
-	--
-	Set @numAddedPeptides = IsNull(@numAddedPeptides, 0)
-	Set @numAddedInspectScores = IsNull(@numAddedInspectScores, 0)
-	Set @numAddedDiscScores = IsNull(@numAddedDiscScores, 0)
+			Set @LogMessage = 'Populated T_Peptide_to_Protein_Map with ' + Convert(varchar(12), @myRowCount) + ' rows'
+			Set @LogMessage = @LogMessage + ' (used the SeqInfo file data)'
+				
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
 		
-	if @numAddedPeptides <> @numAddedInspectScores
-	begin
-		rollback transaction @transName
-		set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedInspectScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedInspectScores)
-		Set @myError = 50007
-		Set @numLoaded = 0
-		goto Done
-	end
+		
+			-----------------------------------------------
+			-- Verify that all inserts have same number of rows
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Verify counts'
+				
+			Set @numAddedPeptides = IsNull(@numAddedPeptides, 0)
+			Set @numAddedInspectScores = IsNull(@numAddedInspectScores, 0)
+			Set @numAddedDiscScores = IsNull(@numAddedDiscScores, 0)
+				
+			if @numAddedPeptides <> @numAddedInspectScores
+			begin
+				rollback transaction @transName
+				set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedInspectScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedInspectScores)
+				Set @myError = 50007
+				Set @numLoaded = 0
+				goto Done
+			end
+			
+			if @numAddedPeptides <> @numAddedDiscScores
+			begin
+				rollback transaction @transName
+				set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedDiscScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedDiscScores)
+				Set @myError = 50008
+				Set @numLoaded = 0
+				goto Done
+			end
+			
+			Set @numLoaded = @numAddedPeptides
+
+		End -- </a1>
+		Else
+		Begin -- <a2>
+		
+			-----------------------------------------------
+			-- Updating existing records
+			-- Populate the Peptide_ID_New column in #Tmp_Unique_Records using T_Peptides
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Update Peptide_ID_New in #Tmp_Unique_Records'
+			--
+			UPDATE #Tmp_Unique_Records
+			SET Peptide_ID_New = P.Peptide_ID
+			FROM #Tmp_Peptide_Import TPI
+			     INNER JOIN #Tmp_Unique_Records UR
+			       ON TPI.Result_ID = UR.Result_ID
+			     INNER JOIN T_Peptides P
+			       ON P.Job = @Job AND
+			          P.Scan_Number = TPI.Scan_Number AND
+			          P.Charge_State = TPI.Charge_State AND
+			          P.Peptide = TPI.Peptide
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			
+			If @CreateDebugTables = 1
+			Begin
+				SELECT *
+				INTO T_Tmp_Unique_Records
+				FROM #Tmp_Unique_Records
+			End
+			
+			-- Examine #Tmp_Unique_Records to determine the percentage of data that didn't match to T_Peptides
+			-- If the percentage is over 5% then we likely have a problem
+			Declare @UnmatchedRowCount int = 0
+			Set @numLoaded = 0
+			
+			SELECT @numLoaded = COUNT(*),
+			       @UnmatchedRowCount = SUM(CASE WHEN Peptide_ID_New IS NULL THEN 1 ELSE 0 END)
+			FROM #Tmp_Unique_Records
+			
 	
-	if @numAddedPeptides <> @numAddedDiscScores
-	begin
-		rollback transaction @transName
-		set @message = 'Error in rowcounts for @numAddedPeptides vs @numAddedDiscScores for job ' + @jobStr + '; ' + Convert(varchar(12), @numAddedPeptides) + ' <> ' + Convert(varchar(12), @numAddedDiscScores)
-		Set @myError = 50008
-		Set @numLoaded = 0
-		goto Done
-	end
+			If @numLoaded > 0
+			Begin
+				Declare @PercentageUnmatched decimal(9,2)
+				Set @PercentageUnmatched = @UnmatchedRowCount / convert(real, @numLoaded) * 100.0
+				
+				if @PercentageUnmatched > 0
+				Begin
+					Set @LogMessage = Convert(varchar(12), @PercentageUnmatched) + '% of the loaded data for job ' + @jobStr + ' did not match existing data in T_Peptides (' + Convert(varchar(12), @UnmatchedRowCount) + ' / ' + Convert(varchar(12), @numLoaded) + ')'
+					
+					If @PercentageUnmatched > 5
+					Begin
+						Set @LogMessage = @LogMessage + '; this likely indicates a problem'						
+						exec PostLogEntry 'Error', @LogMessage, 'LoadInspectPeptidesBulk'
+					End
+					Else
+					Begin
+						exec PostLogEntry 'Warning', @LogMessage, 'LoadInspectPeptidesBulk'
+					End
+				End
+			End		
 	
-	Set @numLoaded = @numAddedPeptides
+			-----------------------------------------------
+			-- Update T_Peptides
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Update T_Peptides using #Tmp_Peptide_Import'			
 
+			UPDATE T_Peptides
+			SET MH = TPI.MH,
+			    RankHit = TPI.RankTotalPRMScore,
+			    DelM_PPM = TPI.DelM_PPM
+			FROM #Tmp_Peptide_Import TPI
+			     INNER JOIN #Tmp_Unique_Records UR
+			       ON TPI.Result_ID = UR.Result_ID
+			     INNER JOIN T_Peptides Pep
+			       ON Pep.Peptide_ID = UR.Peptide_ID_New
+			WHERE IsNull(Pep.MH, -1) <> TPI.MH OR
+			      IsNull(Pep.RankHit, 0) <> TPI.RankTotalPRMScore OR
+			      IsNull(Pep.DelM_PPM, -9999) <> TPI.DelM_PPM
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error updating T_Peptides for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedPeptides = @myRowCount
+	
+			Set @LogMessage = 'Updated ' + Convert(varchar(12), @myRowCount) + ' rows in T_Peptides'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+	
 
-	-----------------------------------------------
-	-- Commit changes to T_Peptides, T_Score_Inspect, etc. if we made it this far
-	-----------------------------------------------
-	--
-	commit transaction @transName
+			-----------------------------------------------
+			-- Update T_Score_Discriminant
+			-- Note that MScore is set to 10.75 and Passfilt is set to 1 for all Inspect results
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Update T_Score_Discriminant using #Tmp_Peptide_Import'
 
-	Set @LogMessage = 'Transaction committed'
-	if @LogLevel >= 2
-	Begin
-		execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-		execute PostLogEntryFlushCache
-	End
+			UPDATE T_Score_Discriminant
+			SET Peptide_Prophet_FScore = TPI.FScore,
+			    Peptide_Prophet_Probability = 1 - TPI.PValue		-- 1 minus Inspect PValue is Probability
+			FROM #Tmp_Peptide_Import TPI
+			     INNER JOIN #Tmp_Unique_Records UR
+			       ON TPI.Result_ID = UR.Result_ID
+			     INNER JOIN T_Score_Discriminant SD
+			       ON SD.Peptide_ID = UR.Peptide_ID_New
+			WHERE IsNull(SD.Peptide_Prophet_FScore, -999) <> TPI.FScore OR
+			      IsNull(SD.Peptide_Prophet_Probability, -1) <> 1 - TPI.PValue
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error updating T_Score_Discriminant for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedDiscScores = @myRowCount
+			
+			Set @LogMessage = 'Updated ' + Convert(varchar(12), @myRowCount) + ' rows in T_Score_Discriminant'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+
+	
+			-----------------------------------------------
+			-- Update T_Score_Inspect
+			-----------------------------------------------
+			--
+			Set @CurrentLocation = 'Update T_Score_Inspect using #Tmp_Peptide_Import'
+			
+			UPDATE T_Score_Inspect
+			SET MQScore = TPI.MQScore,
+				TotalPRMScore = TPI.TotalPRMScore,
+				MedianPRMScore = TPI.MedianPRMScore,
+				Intensity = TPI.Intensity,
+				PValue = TPI.PValue,
+				FScore = TPI.FScore,
+				DeltaScore = TPI.DeltaScore,
+				DeltaScoreOther = TPI.DeltaScoreOther, 
+				DeltaNormMQScore = TPI.DeltaNormMQScore,
+				DeltaNormTotalPRMScore = TPI.DeltaNormTotalPRMScore,
+				RankTotalPRMScore = TPI.RankTotalPRMScore, 
+				RankFScore = TPI.RankFScore,
+				Normalized_Score = Case When TPI.TotalPRMScore > -10000 
+				                        THEN dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State) 
+				                        ELSE IsNull(Ins.Normalized_Score, 0)
+				                        End,						-- Compute the Normalized Score using TotalPRMScore and Charge_State
+				PrecursorError = TPI.PrecursorError
+			FROM #Tmp_Peptide_Import TPI
+			     INNER JOIN #Tmp_Unique_Records UR
+			       ON TPI.Result_ID = UR.Result_ID
+			     INNER JOIN T_Peptides Pep
+			       ON Pep.Peptide_ID = UR.Peptide_ID_New
+			     INNER JOIN T_Score_Inspect Ins
+			       ON Pep.Peptide_ID = Ins.Peptide_ID
+			WHERE 
+				IsNull(Ins.MQScore , -999) <>  TPI.MQScore OR
+				IsNull(Ins.TotalPRMScore , -9999) <>  TPI.TotalPRMScore OR
+				IsNull(Ins.MedianPRMScore , -9999) <>  TPI.MedianPRMScore OR
+				IsNull(Ins.Intensity , -1) <>  TPI.Intensity OR
+				IsNull(Ins.PValue , -1) <>  TPI.PValue OR
+				IsNull(Ins.FScore , -999) <>  TPI.FScore OR
+				IsNull(Ins.DeltaScore , -999) <>  TPI.DeltaScore OR
+				IsNull(Ins.DeltaScoreOther , -999) <>  TPI.DeltaScoreOther OR
+				IsNull(Ins.DeltaNormMQScore , -999) <>  TPI.DeltaNormMQScore OR
+				IsNull(Ins.DeltaNormTotalPRMScore , -999) <>  TPI.DeltaNormTotalPRMScore OR
+				IsNull(Ins.RankTotalPRMScore , -1) <>  TPI.RankTotalPRMScore OR
+				IsNull(Ins.RankFScore , -1) <>  TPI.RankFScore OR
+				IsNull(Ins.Normalized_Score , -1) <> dbo.udfTotalPRMScoreToNormalizedScore(TPI.TotalPRMScore, TPI.Charge_State) OR
+				IsNull(Ins.PrecursorError, -9999) <> TPI.PrecursorError
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			--
+			if @myError <> 0
+			begin
+				rollback transaction @transName
+				set @message = 'Error updating T_Score_Inspect for job ' + @jobStr
+				goto Done
+			end
+			Set @numAddedInspectScores = @myRowCount
+	
+			Set @LogMessage = 'Updated ' + Convert(varchar(12), @myRowCount) + ' rows in T_Score_Inspect'
+			if @LogLevel >= 2
+				execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+	
+	
+			-----------------------------------------------
+			-- Change TotalPRMScore to -100000 and Normalized_Score to -Normalized_Score for peptides that are in T_Score_Inspect yet are not in #Tmp_Peptide_Import
+			-- This will commonly be the case if the data was loosely filtered when it was initially loaded but was
+			-- filtered out of #Tmp_Peptide_Import on this load
+			-----------------------------------------------
+			--
+			UPDATE T_Score_Inspect
+			SET TotalPRMScore = -100000,
+			    Normalized_Score = -ABS(Normalized_Score)			    
+			FROM T_Peptides Pep
+			     INNER JOIN T_Score_Inspect Ins
+			       ON Pep.Peptide_ID = Ins.Peptide_ID
+			     LEFT OUTER JOIN #Tmp_Unique_Records UR
+			       ON Pep.Peptide_ID = UR.Peptide_ID_New
+			WHERE Pep.Job = @Job AND
+			     (Ins.TotalPRMScore > -100000 OR Ins.Normalized_Score > 0) AND
+			      UR.Peptide_ID_New IS NULL
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			
+			If @myRowCount > 0 
+			Begin
+				Set @LogMessage = 'Changed TotalPRMScore and Normalized_Score to negative values for ' + Convert(varchar(12), @myRowCount) + ' entries for job ' + @jobStr + ' since the peptides no longer pass filters'
+				execute PostLogEntry 'Warning', @LogMessage, 'LoadInspectPeptidesBulk'
+			End
+	
+			-----------------------------------------------
+			-- Note: we do not update T_Proteins or T_Peptide_to_Protein_Map
+			-----------------------------------------------
+	
+			SELECT @numLoaded = COUNT(*)
+			FROM #Tmp_Unique_Records
+	
+		End -- </a2>
+		
+		
+		-----------------------------------------------
+		-- Commit changes to T_Peptides, T_Score_Inspect, etc. if we made it this far
+		-----------------------------------------------
+		--
+		Set @CurrentLocation = 'Commit changes'
+		
+		commit transaction @transName
+	
+		Set @LogMessage = 'Transaction committed'
+		if @LogLevel >= 2
+		Begin
+			execute PostLogEntryAddToCache 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+			execute PostLogEntryFlushCache
+		End
+	
+	End Try
+	Begin Catch
+		if @@TranCount > 0
+			rollback transaction
+				
+		-- Error caught; log the error then abort processing
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'LoadInspectPeptidesBulk')
+		Set @CurrentLocation = @CurrentLocation + '; job ' + @jobStr
+		
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList = '',
+								@ErrorNum = @myError output, @message = @message output
+			
+		If @myError = 0
+			Set @myError = 60012
+	End Catch	
 
 	-----------------------------------------------
 	-- Now that the transaction is commited, we will 
@@ -1314,14 +1696,14 @@ As
 	          TPI2.Charge_State = TPI.Charge_State AND
 	          TPI2.TotalPRMScore = TPI.TotalPRMScore AND
 	          TPI2.Peptide = TPI.Peptide AND
-	          TPI2.Result_ID <> TPI.Result_ID
+	 TPI2.Result_ID <> TPI.Result_ID
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
 	
 	Set @LogMessage = 'Populated #Tmp_Peptide_Import_MatchedEntries with ' + Convert(varchar(12), @myRowCount) + ' rows'
 	if @LogLevel >= 2
-		execute PostLogEntry 'Progress', @LogMessage, 'LoadXTandemPeptidesBulk'
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
 	
 
 	-----------------------------------------------
@@ -1335,6 +1717,7 @@ As
 		Exec StoreMSGFValues @job, @numAddedDiscScores,
 						     @LogLevel, @LogMessage,
 							 @UsingPhysicalTempTables, 
+							 @UpdateExistingData,
 							 @infoOnly=0, @message=@message output
 
 	End
@@ -1342,60 +1725,64 @@ As
 	Begin
 		Set @MSGFCountLoaded = 0
 	End
+									   
 
-	-----------------------------------------------
-	-- Update Multiple_ORF column in T_Peptides
-	-----------------------------------------------
-	UPDATE T_Peptides
-	SET Multiple_ORF = ProteinCount - 1
-	FROM T_Peptides
-	     INNER JOIN ( SELECT Pep.Peptide_ID,
-	                         COUNT(DISTINCT PPM.Ref_ID) AS ProteinCount
-	                  FROM T_Peptides Pep
-	                       INNER JOIN T_Peptide_to_Protein_Map PPM
-	                         ON Pep.Peptide_ID = PPM.Peptide_ID
-	                  WHERE (Pep.Analysis_ID = @job)
-	                  GROUP BY Pep.Analysis_ID, Pep.Peptide_ID 
-	                 ) CountQ
-	       ON T_Peptides.Peptide_ID = CountQ.Peptide_ID	
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-
-	-----------------------------------------------
-	-- See if any entries in T_Peptides now have Multiple_ORF < 0
-	-----------------------------------------------
-	Set @MatchCount = 0
-	
-	SELECT @MatchCount = COUNT(*)
-	FROM T_Peptides
-	WHERE Analysis_ID = @job AND Multiple_ORF < 0
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	
-	If @MatchCount > 0
+	If @UpdateExistingData = 0
 	Begin
-		Set @message = 'Newly imported peptides found with no mapped proteins in T_Peptide_to_Protein_Map for job ' + @jobStr + ' (' + convert(varchar(11), @MatchCount) + ' peptides)'
-		execute PostLogEntry 'Error', @message, 'LoadInspectPeptidesBulk'
+		-----------------------------------------------
+		-- Update Multiple_ORF column in T_Peptides
+		-----------------------------------------------
+		UPDATE T_Peptides
+		SET Multiple_ORF = ProteinCount - 1
+		FROM T_Peptides
+		     INNER JOIN ( SELECT Pep.Peptide_ID,
+		                         COUNT(DISTINCT PPM.Ref_ID) AS ProteinCount
+		                  FROM T_Peptides Pep
+		                       INNER JOIN T_Peptide_to_Protein_Map PPM
+		                         ON Pep.Peptide_ID = PPM.Peptide_ID
+		        WHERE (Pep.Job = @job)
+		                  GROUP BY Pep.Job, Pep.Peptide_ID 
+                         ) CountQ
+		       ON T_Peptides.Peptide_ID = CountQ.Peptide_ID
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+	
+		-----------------------------------------------
+		-- See if any entries in T_Peptides now have Multiple_ORF < 0
+		-----------------------------------------------
+		Set @MatchCount = 0
+		
+		SELECT @MatchCount = COUNT(*)
+		FROM T_Peptides
+		WHERE Job = @job AND Multiple_ORF < 0
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+		
+		If @MatchCount > 0
+		Begin
+			Set @message = 'Newly imported peptides found with no mapped proteins in T_Peptide_to_Protein_Map for job ' + @jobStr + ' (' + convert(varchar(11), @MatchCount) + ' peptides)'
+			execute PostLogEntry 'Error', @message, 'LoadInspectPeptidesBulk'
+		End
+	
+	
+		-----------------------------------------------
+		-- Update column Cleavage_State_Max in T_Peptides
+		-----------------------------------------------
+		exec @myError = UpdatePeptideCleavageStateMax @JobList = @job, @message = @message output
+		
+		if @myError <> 0
+		Begin
+			If Len(IsNull(@message, '')) = 0
+				Set @message = 'Error calling UpdatePeptideCleavageStateMax for job ' + @jobStr
+			Goto Done
+		End
+	
+		Set @LogMessage = 'Updated Cleavage_State_Max in T_Peptides'
+		if @LogLevel >= 2
+			execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
+
 	End
-
-
-	-----------------------------------------------
-	-- Update column Cleavage_State_Max in T_Peptides
-	-----------------------------------------------
-	exec @myError = UpdatePeptideCleavageStateMax @JobList = @job, @message = @message output
-	
-	if @myError <> 0
-	Begin
-		If Len(IsNull(@message, '')) = 0
-			Set @message = 'Error calling UpdatePeptideCleavageStateMax for job ' + @jobStr
-		Goto Done
-	End
-
-	Set @LogMessage = 'Updated Cleavage_State_Max in T_Peptides'
-	if @LogLevel >= 2
-		execute PostLogEntry 'Progress', @LogMessage, 'LoadInspectPeptidesBulk'
-	
-	
+		
 	-----------------------------------------------
 	-- Update column State_ID in T_Peptides
 	-----------------------------------------------
@@ -1424,7 +1811,7 @@ As
 	--  #Tmp_Peptide_ModDetails
 	-----------------------------------------------
 	--
-	If @ResultToSeqMapCountLoaded > 0
+	If @ResultToSeqMapCountLoaded > 0 And @UpdateExistingData = 0
 	Begin
 		exec @myError = LoadSeqInfoAndModsPart2 @job, @message output
 
@@ -1443,7 +1830,6 @@ As
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]

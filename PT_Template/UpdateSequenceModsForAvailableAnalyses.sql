@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdateSequenceModsForAvailableAnalyses
+CREATE Procedure UpdateSequenceModsForAvailableAnalyses
 /****************************************************
 **
 **	Desc: 
@@ -31,6 +31,7 @@ CREATE Procedure dbo.UpdateSequenceModsForAvailableAnalyses
 **			06/08/2006 mem - Now checking for 'Error calling GetOrganismDBFileInfo%' in the error string returned by the processing SPs
 **			06/09/2006 mem - Added 6 hour delay for resetting jobs that have 1 or more peptides with Seq_ID values = 0
 **			11/30/2006 mem - Updated to record a Warning in PostLogEntry for Deadlock errors
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -76,10 +77,10 @@ AS
 	SELECT Job
 	FROM T_Analysis_Description
 	WHERE Process_State >= @NextProcessState AND
-		  Job IN (	SELECT Analysis_ID
+		  Job IN (	SELECT Job
 					FROM T_Peptides
 					WHERE (Seq_ID = 0)
-					GROUP BY Analysis_ID
+					GROUP BY Job
 					HAVING COUNT(Peptide_ID) > 0
 				 )
 	--
@@ -218,7 +219,6 @@ AS
 
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateSequenceModsForAvailableAnalyses] TO [MTS_DB_Dev] AS [dbo]

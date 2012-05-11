@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.UpdatePeptideSICStats
+CREATE Procedure UpdatePeptideSICStats
 /****************************************************
 **
 **	Desc: 
@@ -27,6 +27,7 @@ CREATE Procedure dbo.UpdatePeptideSICStats
 **			10/12/2007 mem - Now calling ReindexDatabase if InitialDBReindexComplete = 0 or UpdatePeptideSICStatsHadDBReindexed = 0 in T_Process_Step_Control
 **			10/29/2008 mem - Formatting changes
 **			05/21/2009 mem - Reworked the T_Peptides Update Query to use @SICJob and not join in T_Analysis_Description or T_Datasets
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -124,7 +125,7 @@ As
 				-- And a SIC_Job defined in T_Datasets
 				SELECT TOP 1 @Job = TAD.Job, @JobCreated = TAD.Created
 				FROM	T_Analysis_Description TAD INNER JOIN
-						T_Peptides Pep ON TAD.Job = Pep.Analysis_ID INNER JOIN
+						T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN
 						T_Datasets DS on TAD.Dataset_ID = DS.Dataset_ID
 				WHERE	Pep.Scan_Time_Peak_Apex IS NULL AND 
 						TAD.Process_State >= @NextProcessState AND 
@@ -147,16 +148,16 @@ As
 					-- If any jobs are found, post an entry to the log
 					
 					If @LastJobNullSICStats > 0 
-						SELECT @myRowCount = COUNT(DISTINCT Analysis_ID)
+						SELECT @myRowCount = COUNT(DISTINCT TAD.Job)
 						FROM T_Peptides Pep INNER JOIN
-							 T_Analysis_Description TAD on TAD.Job = Pep.Analysis_ID
+							 T_Analysis_Description TAD on TAD.Job = Pep.Job
 						WHERE Pep.Scan_Time_Peak_Apex IS NULL AND
 							  TAD.Process_State >= @NextProcessState AND
 							  TAD.Job <= @LastJobNullSICStats
 					Else
-						SELECT @myRowCount = COUNT(DISTINCT Analysis_ID)
+						SELECT @myRowCount = COUNT(DISTINCT TAD.Job)
 						FROM T_Peptides Pep INNER JOIN
-							 T_Analysis_Description TAD on TAD.Job = Pep.Analysis_ID
+							 T_Analysis_Description TAD on TAD.Job = Pep.Job
 						WHERE Pep.Scan_Time_Peak_Apex IS NULL AND
 							  TAD.Process_State >= @NextProcessState
 					
@@ -283,7 +284,7 @@ As
 				     INNER JOIN T_Dataset_Stats_Scans DS_Scans
 				       ON DS_SIC.Optimal_Peak_Apex_Scan_Number = DS_Scans.Scan_Number AND
 				          DS_SIC.Job = DS_Scans.Job
-				WHERE Pep.Analysis_ID = @Job
+				WHERE Pep.Job = @Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				--
@@ -292,7 +293,7 @@ As
 				-- Make sure the number of rows updated matches the number of rows defined for this job
 				SELECT @RowCountDefined = COUNT(*)
 				FROM T_Peptides
-				WHERE Analysis_ID = @Job
+				WHERE Job = @Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
@@ -347,7 +348,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Dev] AS [dbo]

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.CheckFilterForAvailableAnalysesBulk
+CREATE PROCEDURE CheckFilterForAvailableAnalysesBulk
 /****************************************************
 **
 **	Desc: 	Compare the peptides for each of the available analyses 
@@ -35,15 +35,19 @@ CREATE PROCEDURE dbo.CheckFilterForAvailableAnalysesBulk
 **			07/04/2006 mem - Added parameter @ProcessStateAllStepsComplete
 **			06/08/2007 mem - Now calling CheckFilterForAnalysesWork for each batch of jobs to process
 **			10/10/2008 mem - Added support for result type IN_Peptide_Hit
+**			08/22/2011 mem - Added support for result type MSG_Peptide_Hit
+**			09/17/2011 mem - Now calling CheckFilterUsingCustomCriteria if @filterSetID is < 100
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
-	@filterSetID int,
+	@filterSetID int,							-- Note: If less than 100, then calls CheckFilterUsingCustomCriteria; you must supply a table name using @CustomFilterTableName
 	@ReprocessAllJobs tinyint = 0,				-- If nonzero, then will reprocess all jobs against the given filter
 	@ProcessStateMatch int = 60,
 	@ProcessStateFilterEvaluationRequired int = 65,
 	@ProcessStateAllStepsComplete int = 70,
 	@numJobsToProcess int = 50000,
+	@CustomFilterTableName varchar(128) = '',
 	@numJobsProcessed int = 0 OUTPUT,
 	@infoOnly tinyint = 0
 )
@@ -87,7 +91,9 @@ AS
 	set @TotalHitCount = 0
 	set @numJobsProcessed = 0
 
-
+	Declare @JobList varchar(max)
+	Declare @CheckFilterProcedureName varchar(64) = ''
+	
 	-----------------------------------------------------------
 	-- Create the temporary tables to hold the jobs to process
 	-----------------------------------------------------------
@@ -110,7 +116,7 @@ AS
 	-----------------------------------------------------------
 	
 	CREATE TABLE #PeptideFilterResults (
-		Analysis_ID int NOT NULL ,
+		Job int NOT NULL ,
 		Peptide_ID int NOT NULL ,
 		Pass_FilterSet tinyint NOT NULL			-- 0 or 1
 	)
@@ -128,6 +134,7 @@ AS
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
+	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 
 
 	-----------------------------------------------------------
@@ -252,7 +259,7 @@ AS
 	SELECT TAD.Job, TAD.ResultType, IsNull(COUNT(P.Peptide_ID), 0) AS PeptideCount
 	FROM T_Analysis_Description AS TAD INNER JOIN
 		 #T_ResultTypeList AS RTL ON TAD.ResultType = RTL.ResultType LEFT OUTER JOIN 
-		 T_Peptides AS P ON TAD.Job = P.Analysis_ID
+		 T_Peptides AS P ON TAD.Job = P.Job
 	WHERE TAD.Process_State = @ProcessStateMatch AND
 		 TAD.Job NOT IN (	SELECT Job
 							FROM T_Analysis_Filter_Flags
@@ -400,98 +407,134 @@ AS
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 			End
 
+			If @filterSetID < 100
+			Begin
+				Set @CheckFilterProcedureName = 'CheckFilterUsingCustomCriteria'
 
-			-----------------------------------------------------------
-			-- Call CheckFilterForAnalysesWork to do the work
-			-----------------------------------------------------------
-			--
-			Exec @myError = CheckFilterForAnalysesWork @filterSetID = @filterSetID, @message = @message output
-			If @myError <> 0
-				Goto Done
-
-			-----------------------------------------------------------
-			-- Calculate stats and update T_Peptide_Filter_Flags
-			-----------------------------------------------------------
-			--
-
-			UPDATE #JobsInBatch
-			SET MatchCount = (	SELECT COUNT(*)
-								FROM #PeptideFilterResults
-								WHERE #PeptideFilterResults.Pass_FilterSet = 1 AND
-									  #PeptideFilterResults.Analysis_ID = #JobsInBatch.Job
-							  )
-			FROM #JobsInBatch, #PeptideFilterResults
-			--
-			SELECT @myError = @@error, @myRowCount = @@RowCount
-
-
-			UPDATE #JobsInBatch
-			SET UnmatchedCount = (	SELECT COUNT(*)
-									FROM #PeptideFilterResults
-									WHERE #PeptideFilterResults.Pass_FilterSet = 0 AND
-										  #PeptideFilterResults.Analysis_ID = #JobsInBatch.Job
-								  )
-			FROM #JobsInBatch, #PeptideFilterResults
-			--
-			SELECT @myError = @@error, @myRowCount = @@RowCount
-
-
-
-			If @infoOnly = 0
-			Begin -- <e>
-				DELETE T_Peptide_Filter_Flags
-				FROM T_Peptide_Filter_Flags PFF INNER JOIN #PeptideFilterResults FR ON 
-					 PFF.Peptide_ID = FR.Peptide_ID
-				WHERE FR.Pass_FilterSet = 0 AND 
-					  PFF.Filter_ID = @filterSetID
-				--
-				SELECT @myError = @@error, @myRowCount = @@RowCount
-				--
-				If @myError <> 0
-				Begin
-					Set @Message = 'Error deleting extra peptides from T_Peptide_Filter_Flags'
-					Set @myError = 51108
-					Goto Done
-				End
-
-				INSERT INTO T_Peptide_Filter_Flags (Filter_ID, Peptide_ID)
-				SELECT @filterSetID AS Filter_ID, Peptide_ID
-				FROM #PeptideFilterResults FR
-				WHERE FR.Pass_FilterSet = 1 AND Peptide_ID NOT IN
-						(	SELECT Peptide_ID
-							FROM T_Peptide_Filter_Flags
-							WHERE Filter_ID = @filterSetID
-						)
-				--
-				SELECT @myError = @@error, @myRowCount = @@RowCount
-				--
-				If @myError <> 0
-				Begin
-					Set @Message = 'Error adding new peptides to T_Peptide_Filter_Flags'
-					Set @myError = 51109
-					Goto Done
-				End
-
-				-----------------------------------------------------------
-				-- Update state of analysis job filter flag
-				-----------------------------------------------------------
-				--
-				INSERT INTO T_Analysis_Filter_Flags (Filter_ID, Job) 
-				SELECT @filterSetID, Job
+				Set @JobList = Null
+				SELECT @JobList = Coalesce(@JobList + ', ', '') + Convert(varchar(19), Job)
 				FROM #JobsInBatch
-				--
-				SELECT @myError = @@error, @myRowCount = @@RowCount
+				ORDER BY Job
+				
+				Exec CheckFilterUsingCustomCriteria @CustomFilterTableName=@CustomFilterTableName, @FilterID=@filterSetID, @JobListFilter = @JobList, @infoOnly=0, @ShowSummaryStats=0, @PostLogEntries=0, @message = @message output
 
-				-- Update the Last_Affected value (but not Process_State since 
-				--  CheckAllFiltersForAvailableAnalyses will update it once all
-				--  possible filters have been checked)
-				UPDATE T_Analysis_Description 
-				SET Last_Affected = GETDATE()
-				FROM T_Analysis_Description INNER JOIN #JobsInBatch ON
-					 T_Analysis_Description.Job = #JobsInBatch.Job
+				UPDATE #JobsInBatch
+				SET MatchCount = UpdateQ.MatchCount,
+					UnMatchedCount = PeptideCount - UpdateQ.MatchCount
+				FROM #JobsInBatch
+					INNER JOIN ( SELECT P.Job,
+										COUNT(*) AS MatchCount
+								FROM T_Peptide_Filter_Flags PFF
+									INNER JOIN T_Peptides P
+										ON PFF.Peptide_ID = P.Peptide_ID
+									INNER JOIN #JobsInBatch JB
+										ON P.Job = JB.Job
+								WHERE (PFF.Filter_ID = @filterSetID)
+								GROUP BY P.Job 
+							 ) UpdateQ
+					ON #JobsInBatch.Job = UpdateQ.Job
 				--
 				SELECT @myError = @@error, @myRowCount = @@RowCount
 				
+			End
+			Else
+			Begin -- <e>
+
+				Set @CheckFilterProcedureName = 'CheckFilterForAnalysesWork'
+
+				-----------------------------------------------------------
+				-- Call CheckFilterForAnalysesWork to do the work
+				-----------------------------------------------------------
+				--
+				Exec @myError = CheckFilterForAnalysesWork @filterSetID = @filterSetID, @message = @message output
+				If @myError <> 0
+					Goto Done
+
+				-----------------------------------------------------------
+				-- Calculate stats and update T_Peptide_Filter_Flags
+				-----------------------------------------------------------
+				--
+
+				UPDATE #JobsInBatch
+				SET MatchCount = (	SELECT COUNT(*)
+									FROM #PeptideFilterResults
+									WHERE #PeptideFilterResults.Pass_FilterSet = 1 AND
+										#PeptideFilterResults.Job = #JobsInBatch.Job
+								)
+				FROM #JobsInBatch, #PeptideFilterResults
+				--
+				SELECT @myError = @@error, @myRowCount = @@RowCount
+
+
+				UPDATE #JobsInBatch
+				SET UnmatchedCount = (	SELECT COUNT(*)
+										FROM #PeptideFilterResults
+										WHERE #PeptideFilterResults.Pass_FilterSet = 0 AND
+											#PeptideFilterResults.Job = #JobsInBatch.Job
+									)
+				FROM #JobsInBatch, #PeptideFilterResults
+				--
+				SELECT @myError = @@error, @myRowCount = @@RowCount
+
+
+				If @infoOnly = 0
+				Begin -- <f>
+					DELETE T_Peptide_Filter_Flags
+					FROM T_Peptide_Filter_Flags PFF INNER JOIN #PeptideFilterResults FR ON 
+						PFF.Peptide_ID = FR.Peptide_ID
+					WHERE FR.Pass_FilterSet = 0 AND 
+						PFF.Filter_ID = @filterSetID
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+					--
+					If @myError <> 0
+					Begin
+						Set @Message = 'Error deleting extra peptides from T_Peptide_Filter_Flags'
+						Set @myError = 51108
+						Goto Done
+					End
+
+					INSERT INTO T_Peptide_Filter_Flags (Filter_ID, Peptide_ID)
+					SELECT @filterSetID AS Filter_ID, Peptide_ID
+					FROM #PeptideFilterResults FR
+					WHERE FR.Pass_FilterSet = 1 AND Peptide_ID NOT IN
+							(	SELECT Peptide_ID
+								FROM T_Peptide_Filter_Flags
+								WHERE Filter_ID = @filterSetID
+							)
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+					--
+					If @myError <> 0
+					Begin
+						Set @Message = 'Error adding new peptides to T_Peptide_Filter_Flags'
+						Set @myError = 51109
+						Goto Done
+					End
+
+					-----------------------------------------------------------
+					-- Update state of analysis job filter flag
+					-----------------------------------------------------------
+					--
+					INSERT INTO T_Analysis_Filter_Flags (Filter_ID, Job) 
+					SELECT @filterSetID, Job
+					FROM #JobsInBatch
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+				
+					
+					-- Update the Last_Affected value (but not Process_State since 
+					--  CheckAllFiltersForAvailableAnalyses will update it once all
+					--  possible filters have been checked)
+					UPDATE T_Analysis_Description 
+					SET Last_Affected = GETDATE()
+					FROM T_Analysis_Description INNER JOIN #JobsInBatch ON
+						T_Analysis_Description.Job = #JobsInBatch.Job
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+					
+				End -- </f>
+
 			End -- </e>
 
 			
@@ -502,6 +545,9 @@ AS
 			
 			While @intContinue = 1
 			Begin -- <f>
+				Set @peptideMatchCount = 0
+				Set @peptideUnmatchedCount = 0
+				
 				SELECT	TOP 1
 						@LastJobPolled = Job,
 						@peptideMatchCount = IsNull(MatchCount, 0), 
@@ -513,7 +559,12 @@ AS
 				
 				If @intContinue = 1
 				Begin
-					set @message = convert(varchar(11), @peptideMatchCount) + ' peptides were matched for filter set ' + @filterSetStr + ' for job ' + convert(varchar(11), @LastJobPolled)
+					set @message = convert(varchar(11), @peptideMatchCount) + ' peptides were matched for filter set ' + @filterSetStr
+					
+					if @CheckFilterProcedureName <> 'CheckFilterForAnalysesWork'
+						set @message = @message + ' using ' + @CheckFilterProcedureName
+					
+					set @message = @message + ' for job ' + convert(varchar(11), @LastJobPolled)
 					Set @message = @message + '; ' + convert(varchar(11), @peptideUnmatchedCount) + ' peptides did not pass filter'
 
 					-- bump running count of peptides that matched the filter
@@ -551,7 +602,6 @@ Done:
 		execute PostLogEntry 'Error', @message, 'CheckFilterForAvailableAnalysesBulk'
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAvailableAnalysesBulk] TO [MTS_DB_Dev] AS [dbo]

@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_State] ******/
-/****** RowCount: 33 ******/
+/****** RowCount: 34 ******/
 /****** Columns: ID, Name ******/
 INSERT INTO [T_Process_State] VALUES (0,'(na)')
 INSERT INTO [T_Process_State] VALUES (3,'Load Failed')
@@ -25,6 +25,7 @@ INSERT INTO [T_Process_State] VALUES (45,'GANET Processing ready for regression'
 INSERT INTO [T_Process_State] VALUES (46,'GANET Processing ready to load')
 INSERT INTO [T_Process_State] VALUES (48,'GANET Load Error')
 INSERT INTO [T_Process_State] VALUES (50,'GANET Calculated')
+INSERT INTO [T_Process_State] VALUES (55,'Reload and Update Peptide Scores')
 INSERT INTO [T_Process_State] VALUES (60,'Confidence Scores Calculated')
 INSERT INTO [T_Process_State] VALUES (65,'New Filter Criteria Evaluation Required')
 INSERT INTO [T_Process_State] VALUES (70,'Filter Criteria Evaluated')

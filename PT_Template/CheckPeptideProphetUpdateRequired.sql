@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.CheckPeptideProphetUpdateRequired
+CREATE Procedure CheckPeptideProphetUpdateRequired
 /****************************************************
 **
 **	Desc: Looks for jobs for which peptide prophet processing can be skipped
@@ -18,6 +18,7 @@ CREATE Procedure dbo.CheckPeptideProphetUpdateRequired
 **	Date:	07/05/2006
 **			02/06/2007 mem - Now ignoring charge states >= 6 when looking for rows with null Peptide_Prophet_Probability values
 **			04/17/2007 mem - Now also ignoring charge states >= 6 when @JobFilter is non-zero; posting a log message if any peptides with charge >= 6 have Null values (Ticket #423)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -95,7 +96,7 @@ As
 			FROM T_Peptides P INNER JOIN
 				 T_Score_Discriminant SD ON 
 				 P.Peptide_ID = SD.Peptide_ID
-			WHERE P.Analysis_ID = @JobFilter
+			WHERE P.Job = @JobFilter
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -146,7 +147,7 @@ As
 			NOT Job IN (
 				SELECT DISTINCT TAD.Job
 				FROM T_Analysis_Description TAD INNER JOIN
-					 T_Peptides P ON TAD.Job = P.Analysis_ID INNER JOIN
+					 T_Peptides P ON TAD.Job = P.Job INNER JOIN
 					 T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID
 				WHERE TAD.Process_State = @ProcessStateMatch AND
 					  SD.Peptide_Prophet_Probability IS NULL AND
@@ -161,7 +162,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CheckPeptideProphetUpdateRequired] TO [MTS_DB_Dev] AS [dbo]

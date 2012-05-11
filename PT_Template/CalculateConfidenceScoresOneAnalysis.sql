@@ -27,6 +27,9 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysis
 **			10/10/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			10/29/2008 mem - Updated to use DeltaNormTotalPRMScore for DeltaCn2 for Inspect
 **			02/19/2009 mem - Changed @ResidueCount to bigint
+**			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/02/2012 mem - Now preventing MSG_Peptide_Hit jobs from advancing to state 90
 **    
 *****************************************************/
 (
@@ -139,28 +142,32 @@ AS
 
 	If @ResultType = 'Peptide_Hit'
 	Begin
+		-- Note that, effective 8/19/2011, PassFilt and MScore are auto-assigned for Sequest data
+		-- PassFilt is set to 1
+		-- MScore is set to 10
+		
 		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
 					GANET_Predicted, RankSp, RankXc, XcRatio, Charge_State, 
 					PeptideLength, Cleavage_State_Max, 
 					PassFilt, MScore)
 		SELECT	P.Peptide_ID, S.XCorr, S.DeltaCn2, S.DelM, P.GANET_Obs, 
 				Seq.GANET_Predicted, S.RankSp, S.RankXc, S.XcRatio, P.Charge_State, 
-				LEN(Seq.Clean_Sequence) AS PeptideLength, Seq.Cleavage_State_Max, 
-				SD.PassFilt, SD.MScore
+				LEN(Seq.Clean_Sequence) AS PeptideLength, 
+				Seq.Cleavage_State_Max, SD.PassFilt, SD.MScore
 		FROM T_Score_Discriminant AS SD INNER JOIN
 			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_Sequest AS S ON SD.Peptide_ID = S.Peptide_ID INNER JOIN
 			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
-		WHERE P.Analysis_ID = @JobToProcess
+		WHERE P.Job = @JobToProcess
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 
 	If @ResultType = 'XT_Peptide_Hit'
 	Begin
-		-- Note that PassFilt and MScore are estimated for XTandem data
-		-- PassFilt was set to 1
-		-- MScore was set to 10.75
+		-- Note that PassFilt and MScore are auto-assigned for X!Tandem data
+		-- PassFilt is set to 1
+		-- MScore is set to 10.75
 		
 		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr,	DeltaCn2, DelM, GANET_Obs, 
 					GANET_Predicted, RankSp, RankXc, 
@@ -174,16 +181,16 @@ AS
 			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_XTandem AS X ON SD.Peptide_ID = X.Peptide_ID INNER JOIN
 			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
-		WHERE P.Analysis_ID = @JobToProcess
+		WHERE P.Job = @JobToProcess
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 	
 	If @ResultType = 'IN_Peptide_Hit'
 	Begin
-		-- Note that PassFilt and MScore are estimated for Inspect data
-		-- PassFilt was set to 1
-		-- MScore was set to 10.75
+		-- Note that PassFilt and MScore are auto-assigned for Inspect data
+		-- PassFilt is set to 1
+		-- MScore is set to 10.75
 		
 		INSERT INTO #TmpConfidenceScoreData (Peptide_ID, XCorr, DeltaCn2, DelM, GANET_Obs, 
 					GANET_Predicted, RankSp, RankXc, XcRatio, 
@@ -197,9 +204,46 @@ AS
 			 T_Peptides AS P ON SD.Peptide_ID = P.Peptide_ID INNER JOIN
 			 T_Score_Inspect AS I ON SD.Peptide_ID = I.Peptide_ID INNER JOIN
 			 T_Sequence AS Seq ON P.Seq_ID = Seq.Seq_ID
-		WHERE P.Analysis_ID = @JobToProcess
+		WHERE P.Job = @JobToProcess
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
+	End
+	
+	If @ResultType = 'MSG_Peptide_Hit'
+	Begin
+		-- We don't actually compute discriminant Score values for MSGF-DB results
+		-- Instead, we just update them to 1 and 0.5
+		
+		UPDATE T_Score_Discriminant
+		SET DiscriminantScore = 1,
+		    DiscriminantScoreNorm = 0.5
+		FROM T_Score_Discriminant SD INNER JOIN
+			 T_Peptides P ON SD.Peptide_ID = P.Peptide_ID
+		WHERE P.Job = @JobToProcess
+		
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		
+		if @myError <> 0 
+		begin
+			set @message = 'Error while updating T_Score_Discriminant for job ' + @jobStr
+			goto done
+		end
+		else
+			set @message = 'Discriminant scores computed for job ' + @jobStr + '; processed ' + convert(varchar(11), @myRowCount) + ' peptides'
+		
+		-- Advance the job state
+		if @NextProcessState = 90
+		Begin
+			-- MSGFDB jobs cannot have peptide prophet values computed on them; use @NextProcessStateSkipPeptideProphet
+			exec @myError = SetProcessState @JobToProcess, @NextProcessStateSkipPeptideProphet
+		End
+		Else
+		Begin
+			-- Should be safe to use @NextProcessState
+			exec @myError = SetProcessState @JobToProcess, @NextProcessState
+		End
+
 	End
 	
 	--
@@ -212,94 +256,100 @@ AS
 		goto done
 	end
 
-	------------------------------------------------------------------
-	-- Compute DiscriminantScore, then compute DiscriminantScoreNorm
-	------------------------------------------------------------------
-	UPDATE #TmpConfidenceScoreData
-	SET DiscriminantScore = dbo.calcDiscriminantScore(
-					XCorr, DeltaCn2, DelM, ISNULL(GANET_Obs, 0), 
-					CASE WHEN IsNull(GANET_Obs, -10000) > -10000 THEN GANET_Predicted ELSE 0 END, 
-					RankSp, RankXc, XcRatio, Charge_State, PeptideLength, 
-					Cleavage_State_Max, 0, PassFilt, MScore
-				)
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0 
-	begin
-		set @message = 'Error while computing #TmpConfidenceScoreData.DiscriminantScore for job ' + @jobStr
-		goto done
-	end
-
-	UPDATE #TmpConfidenceScoreData
-	SET DiscriminantScoreNorm = dbo.calcDiscriminantScoreNorm(DiscriminantScore, Charge_state, @ResidueCount)
-	FROM #TmpConfidenceScoreData
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0 
-	begin
-		set @message = 'Error while computing #TmpConfidenceScoreData.DiscriminantScoreNorm for job ' + @jobStr
-		goto done
-	end
+	If @ResultType <> 'MSG_Peptide_Hit'
+	Begin -- <a>
 	
-	------------------------------------------------------------------
-	-- Copy the data from #TmpConfidenceScoreData to T_Score_Discriminant
-	------------------------------------------------------------------
-	--
-	Begin Transaction @DiscriminantTrans
-
-	UPDATE T_Score_Discriminant
-	SET DiscriminantScore = StatsQ.DiscriminantScore,
-		DiscriminantScoreNorm = StatsQ.DiscriminantScoreNorm
-	FROM T_Score_Discriminant AS SD INNER JOIN #TmpConfidenceScoreData AS StatsQ ON
-		 SD.Peptide_ID = StatsQ.Peptide_ID
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	if @myError <> 0 
-	begin
-		set @message = 'Error while copying data from #TmpConfidenceScoreData to T_Score_Discriminant for job ' + @jobStr
-		Rollback Tran @DiscriminantTrans
-		goto done
-	end
-	else
-		set @message = 'Discriminant scores computed for job ' + @jobStr + '; processed ' + convert(varchar(11), @myRowCount) + ' peptides'
-
-	
-	-- Advance the job state as appropriate
-	Set @JobAdvancedToNextState = 0
-	Exec @myError = CheckPeptideProphetUpdateRequired 0, @NextProcessStateSkipPeptideProphet, @message2 OUTPUT, @JobFilter = @JobToProcess, @JobAdvancedToNextState = @JobAdvancedToNextState OUTPUT
-	if @myError <> 0 
-	begin
-		set @message = 'Error calling CheckPeptideProphetUpdateRequired for job ' + @jobStr
-		If Len(IsNull(@message2, '')) > 0
-			Set @message = @message + '; ' + @message2
-			
-		Rollback Tran @DiscriminantTrans
-		goto done
-	end
-	
-	If @JobAdvancedToNextState = 0
-	Begin
-		-- Job state not advanced to @NextProcessStateSkipPeptideProphet
-		-- Therefore, advance to state @NextProcessState
-		exec @myError = SetProcessState @JobToProcess, @NextProcessState
+		------------------------------------------------------------------
+		-- Compute DiscriminantScore, then compute DiscriminantScoreNorm
+		------------------------------------------------------------------
+		--
+		UPDATE #TmpConfidenceScoreData
+		SET DiscriminantScore = dbo.calcDiscriminantScore(
+						XCorr, DeltaCn2, DelM, ISNULL(GANET_Obs, 0), 
+						CASE WHEN IsNull(GANET_Obs, -10000) > -10000 THEN GANET_Predicted ELSE 0 END, 
+						RankSp, RankXc, XcRatio, Charge_State, PeptideLength, 
+						Cleavage_State_Max, 0, PassFilt, MScore
+					)
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
 		if @myError <> 0 
 		begin
-			set @message = 'Error setting next process state for job ' + @jobStr
+			set @message = 'Error while computing #TmpConfidenceScoreData.DiscriminantScore for job ' + @jobStr
+			goto done
+		end
+
+		UPDATE #TmpConfidenceScoreData
+		SET DiscriminantScoreNorm = dbo.calcDiscriminantScoreNorm(DiscriminantScore, Charge_state, @ResidueCount)
+		FROM #TmpConfidenceScoreData
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0 
+		begin
+			set @message = 'Error while computing #TmpConfidenceScoreData.DiscriminantScoreNorm for job ' + @jobStr
+			goto done
+		end
+		
+		------------------------------------------------------------------
+		-- Copy the data from #TmpConfidenceScoreData to T_Score_Discriminant
+		------------------------------------------------------------------
+		--
+		Begin Transaction @DiscriminantTrans
+
+		UPDATE T_Score_Discriminant
+		SET DiscriminantScore = StatsQ.DiscriminantScore,
+			DiscriminantScoreNorm = StatsQ.DiscriminantScoreNorm
+		FROM T_Score_Discriminant AS SD INNER JOIN #TmpConfidenceScoreData AS StatsQ ON
+			SD.Peptide_ID = StatsQ.Peptide_ID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @myError <> 0 
+		begin
+			set @message = 'Error while copying data from #TmpConfidenceScoreData to T_Score_Discriminant for job ' + @jobStr
 			Rollback Tran @DiscriminantTrans
 			goto done
 		end
-	End
+		else
+			set @message = 'Discriminant scores computed for job ' + @jobStr + '; processed ' + convert(varchar(11), @myRowCount) + ' peptides'
+
+		
+		-- Advance the job state as appropriate
+		Set @JobAdvancedToNextState = 0
+		Exec @myError = CheckPeptideProphetUpdateRequired 0, @NextProcessStateSkipPeptideProphet, @message2 OUTPUT, @JobFilter = @JobToProcess, @JobAdvancedToNextState = @JobAdvancedToNextState OUTPUT
+		if @myError <> 0 
+		begin
+			set @message = 'Error calling CheckPeptideProphetUpdateRequired for job ' + @jobStr
+			If Len(IsNull(@message2, '')) > 0
+				Set @message = @message + '; ' + @message2
+				
+			Rollback Tran @DiscriminantTrans
+			goto done
+		end
+		
+		If @JobAdvancedToNextState = 0
+		Begin
+			-- Job state not advanced to @NextProcessStateSkipPeptideProphet
+			-- Therefore, advance to state @NextProcessState
+			exec @myError = SetProcessState @JobToProcess, @NextProcessState
+			--
+			if @myError <> 0 
+			begin
+				set @message = 'Error setting next process state for job ' + @jobStr
+				Rollback Tran @DiscriminantTrans
+				goto done
+			end
+		End
+		
+		------------------------------------------------------------------
+		-- Finalize the transaction
+		------------------------------------------------------------------
+		--
+		Commit Tran @DiscriminantTrans
 	
-	------------------------------------------------------------------
-	-- Finalize the transaction
-	------------------------------------------------------------------
-	--
-	Commit Tran @DiscriminantTrans
-	
+	End -- </a>
+		
 Done:
 	Return @myError
 
