@@ -15,23 +15,61 @@
 -- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
 --
 
-ALTER PROCEDURE UpdatePMTQSUsingCustomVladFiltersHumanALZ
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+SET ANSI_PADDING ON
+GO
+
+CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
+	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
+	ExperimentFilter varchar(128) NOT NULL,
+	ChargeState smallint NOT NULL,
+	DeltaMassPPM real NOT NULL,
+	XCorr real NOT NULL,
+	DeltaCN2 real NOT NULL,
+	CleavageState smallint NOT NULL,
+	PMTQS real NOT NULL
+ CONSTRAINT [PK_T_Custom_PMT_QS_Criteria_VP] PRIMARY KEY CLUSTERED 
+(
+	[Entry_ID] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+/****** Object:  Index [IX_T_Custom_PMT_QS_Criteria_VP]    Script Date: 05/06/2010 12:42:11 ******/
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Custom_PMT_QS_Criteria_VP] ON [dbo].[T_Custom_PMT_QS_Criteria_VP] 
+(
+	ExperimentFilter ASC,
+	ChargeState, 
+	CleavageState,
+	PMTQS
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+
+GO
+
+ALTER PROCEDURE dbo.UpdatePMTQSUsingCustomVladFilters
 /****************************************************
 ** 
 **	Desc:	Updates the PMT Quality Score values for the MTs in this database
 **			using filters provided by Vlad Petyuk.  This procedure uses the
 **			data in T_User_DatasetID_Scan_MH to lookup the Parent ion MH values for
-**			a given scan.
-**
-**			This procedure is similar to UpdatePMTQSUsingCustomVladFilters, but it
-**			has new values specific for DB MT_Human_ALZ_P514.  It also includes
-**			experiment filters
+**			a given scan
 **
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
 **	Date:	11/25/2008
-**			03/20/2009 mem - Expanded the filter criteria to include Experiment and CleavageState
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
@@ -48,12 +86,10 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @ExperimentFilter varchar(128)
 	declare @ChargeState smallint
 	declare @DeltaMassPPM real
 	declare @XCorr real
 	declare @DeltaCN2 real
-	Declare @CleavageState smallint
 	declare @PMTQS real
 	declare @EntryID int
 	
@@ -86,12 +122,10 @@ As
 	
 	
 	CREATE TABLE #TmpFilterScores (
-		ExperimentFilter varchar(128),			-- Like Clause text to match against Experiment name
 		ChargeState smallint,
 		DeltaMassPPM real,
 		XCorr real,
 		DeltaCN2 real,
-		CleavageState smallint,					-- Exact cleavage state to match
 		PMTQS real,
 		MT_Match_Count int,
 		Entry_ID int Identity(1,1)
@@ -101,48 +135,30 @@ As
 	-- Populate #TmpFilterScores
 	--------------------------------------------------------------
 
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  1, 2  , 0.6, 0.06, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  1, 3  , 1  , 0.1 , 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  1, 3  , 1.4, 0.1 , 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  1, 0  , 100, 100 , 2, 2.5 , 0) -- 0.316% FDR
-
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  2, 3.5, 1.3, 0   , 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  2 , 2.5, 1.4, 0.06, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  2, 2  , 1.5, 0.11, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  2, 2.5, 1.9, 0.16, 2, 2.5 , 0) -- 0.316% FDR
-
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  3, 3  , 1.6, 0.03, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  3, 2.5, 1.9, 0.07, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  3, 2  , 2  , 0.12, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  3, 1.5, 2.3, 0.13, 2, 2.5 , 0) -- 0.316% FDR
-
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  4, 3.5, 1.8, 0.02, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  4, 3  , 2.2, 0.07, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  4, 2.5, 1.4, 0.17, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][1-9]%',  4, 1.5, 0  , 0.19, 2, 2.5 , 0) -- 0.316% FDR
-
-
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 1, 4  , 0.9, 0.03, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 1, 3.5, 1.4, 0.05, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 1, 6  , 1.6, 0.11, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 1, 3  , 1.8, 0.1 , 2, 2.5 , 0) -- 0.316% FDR
+	INSERT INTO #TmpFilterScores VALUES (1, 3.5, 0.8, 0.04, 1  , 0)	-- 10% FDR
+	INSERT INTO #TmpFilterScores VALUES (1, 3,   1.2, 0.09, 1.5, 0)	-- 3.16% FDR
+	INSERT INTO #TmpFilterScores VALUES (1, 2.5, 1.5, 0.13, 2  , 0)	-- 1% FDR
+	INSERT INTO #TmpFilterScores VALUES (1, 2,   1.7, 0.15, 2.5, 0)	-- 0.316% FDR
 	
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 2, 4.5, 1.5, 0   , 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 2, 4  , 1.7, 0.07, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 2, 3  , 1.8, 0.13, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 2, 3  , 2.1, 0.17, 2, 2.5 , 0) -- 0.316% FDR
+	INSERT INTO #TmpFilterScores VALUES (2, 3.5, 1.4, 0.02, 1  , 0)	-- 10% FDR
+	INSERT INTO #TmpFilterScores VALUES (2, 3,   1.7, 0.06, 1.5, 0)	-- 3.16% FDR
+	INSERT INTO #TmpFilterScores VALUES (2, 2.5, 1.9, 0.12, 2  , 0)	-- 1% FDR
+	INSERT INTO #TmpFilterScores VALUES (2, 2,   1.9, 0.19, 2.5, 0)	-- 0.316% FDR
 	
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 3, 3.5, 1.7, 0.02, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 3, 3  , 2  , 0.07, 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 3, 3  , 2  , 0.16, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 3, 3  , 2.5, 0.16, 2, 2.5 , 0) -- 0.316% FDR
+	INSERT INTO #TmpFilterScores VALUES (3, 3.5, 1.6, 0.1,  1  , 0)	-- 10% FDR
+	INSERT INTO #TmpFilterScores VALUES (3, 3,   2,   0.14, 1.5, 0)	-- 3.16% FDR
+	INSERT INTO #TmpFilterScores VALUES (3, 2.5, 2.2, 0.19, 2  , 0)	-- 1% FDR
+	INSERT INTO #TmpFilterScores VALUES (3, 2,   2.6, 0.18, 2.5, 0)	-- 0.316% FDR
 	
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 4, 3.5, 1.8, 0.04, 2, 1   , 0) -- 10% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 4, 2.5, 2  , 0.1 , 2, 1.5 , 0) -- 3.16% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 4, 3.5, 2.2, 0.18, 2, 2   , 0) -- 1% FDR
-	INSERT INTO #TmpFilterScores VALUES ('ALZ_VP2P101[_][C-D][_]SCX%', 4, 2.5, 2.1, 0.23, 2, 2.5 , 0) -- 0.316% FDR
-
-
+	INSERT INTO #TmpFilterScores VALUES (4, 3.5, 1.5, 0.11, 1  , 0)	-- 10% FDR
+	INSERT INTO #TmpFilterScores VALUES (4, 3,   2.1, 0.18, 1.5, 0)	-- 3.16% FDR
+	INSERT INTO #TmpFilterScores VALUES (4, 2.5, 2.2, 0.22, 2  , 0)	-- 1% FDR
+	INSERT INTO #TmpFilterScores VALUES (4, 2,   1.5, 0.3,  2.5, 0)	-- 0.316% FDR
+	
+	INSERT INTO #TmpFilterScores VALUES (5, 3.5, 1.4, 0.14, 1  , 0)	-- 10% FDR
+	INSERT INTO #TmpFilterScores VALUES (5, 3,   1.4, 0.18, 1.5, 0)	-- 3.16% FDR
+	INSERT INTO #TmpFilterScores VALUES (5, 2.5, 2.6, 0.22, 2  , 0)	-- 1% FDR
+	INSERT INTO #TmpFilterScores VALUES (5, 2,   2.6, 0.17, 2.5, 0)	-- 0.316% FDR
 
 	--------------------------------------------------------------
 	-- Populate #TmpNewMassTagScores
@@ -164,12 +180,10 @@ As
 	Set @Continue = 1
 	While @Continue = 1
 	Begin -- <a>
-		SELECT TOP 1	@ExperimentFilter = ExperimentFilter,
-						@ChargeState = ChargeState,
+		SELECT TOP 1	@ChargeState = ChargeState,
 						@DeltaMassPPM = DeltaMassPPM,
 						@XCorr = XCorr,
 						@DeltaCN2 = DeltaCN2,
-						@CleavageState = CleavageState,
 						@PMTQS = PMTQS,
 						@EntryID = Entry_ID 
 		FROM #TmpFilterScores
@@ -203,11 +217,9 @@ As
 									ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
 								INNER JOIN T_Score_Sequest SS
 									ON Pep.Peptide_ID = SS.Peptide_ID
-							WHERE TAD.Experiment LIKE @ExperimentFilter AND
-							      Pep.Charge_State = @ChargeState AND
+							WHERE Pep.Charge_State = @ChargeState AND
 								  SS.XCorr >= @XCorr AND
-								  SS.DeltaCN2 >= @DeltaCN2 AND
-								  MT.Cleavage_State_Max = @CleavageState
+								  SS.DeltaCN2 >= @DeltaCN2 
 						  ) LookupQ
 					WHERE (ABS((Parent_MH - Peptide_MH) / Peptide_MH * 1e6) <= @DeltaMassPPM ) 
 				) FilterQ ON NMTS.Mass_Tag_ID = FilterQ.Mass_Tag_ID			
@@ -220,7 +232,7 @@ As
 			WHERE Entry_ID = @EntryID			
 		
 		End -- </b>
-
+		
 	End -- </a>
 	
 	If @InfoOnly <> 0
@@ -228,12 +240,10 @@ As
 		-- Display the contents of #TmpFilterScores
 		--
 		SELECT Entry_ID,
-		       ExperimentFilter,
 		       ChargeState,
 		       DeltaMassPPM,
 		       XCorr,
 		       DeltaCN2,
-		       CleavageState,
 		       PMTQS,
 		       MT_Match_Count
 		FROM #TmpFilterScores
@@ -264,9 +274,9 @@ As
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
 		-- Log the change
-		Set @message = 'Updated the PMT_Quality_Score values in T_Mass_Tags using custom tolerances based on Experiment, Charge State, DeltaMass (ppm), XCorr, DeltaCN2, and Cleavage State; Updated scores for ' + Convert(varchar(12), @myRowCount) + ' AMTs'
+		Set @message = 'Updated the PMT_Quality_Score values in T_Mass_Tags using custom tolerances based on Charge State, DeltaMass (ppm), XCorr, and DeltaCN2; Updated scores for ' + Convert(varchar(12), @myRowCount) + ' AMTs'
 		
-		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
+		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingVladTolerances'
 
 	End
 		
@@ -274,4 +284,3 @@ As
 Done:
 	return @myError
 
-GO

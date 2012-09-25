@@ -40,6 +40,11 @@ FROM (
 	UNION
 	SELECT TOP 4 'Porky' AS Server, CA.*, 9*100 + Row_Number() OVER (Order By Began Desc) AS Sort
 	FROM Porky.mt_main.dbo.v_current_activity CA
+	UNION
+	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,950 AS Sort
+	UNION
+	SELECT TOP 4 'Proteinseqs' AS Server, CA.*, 10*100 + Row_Number() OVER (Order By Began Desc) AS Sort
+	FROM Proteinseqs.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
  ) LookupQ
 

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
+CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
 /****************************************************
 **
 **	Desc: 
@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
 **			12/13/2010 mem - Now calling RefreshCachedProteinCollectionInfo
 **			12/14/2010 mem - Now calling RefreshCachedOrganismDBInfo
 **			10/17/2011 mem - Now setting @SourceMTSServer to '' when calling 'RefreshCachedDMSAnalysisJobInfo' or 'RefreshCachedDMSDatasetInfo'
+**			08/01/2012 mem - Now calling RefreshCachedOrganisms
 **    
 *****************************************************/
 (
@@ -28,7 +29,8 @@ CREATE PROCEDURE dbo.RefreshCachedDMSInfoIfRequired
 	@DynamicMinimumCountThreshold int = 10000,		-- When updating every @UpdateInterval hours, uses the maximum cached ID value in the given T_DMS_%_Cached table to determine the minimum ID number to update; for example, for T_DMS_Analysis_Job_Info_Cached, MinimumJob = MaxJobInTable - @DynamicMinimumCountThreshold; set to 0 to update all items, regardless of ID
 	@UpdateIntervalAllItems real = 24,				-- Interval (in hours) to update all items, regardless of ID
 	@InfoOnly tinyint = 0,
- 	@message varchar(255) = '' output
+ 	@message varchar(255) = '' output,
+ 	@ShowDebugInfo tinyint = 0
 )
 As
 	Set NoCount On
@@ -63,6 +65,11 @@ As
 	Declare @HoursSinceLastRefresh decimal(9,3)
 	Declare @HoursSinceLastFullRefresh decimal(9,3)
 	
+	
+	Declare @SPStart datetime
+	Declare @SPEnd datetime
+	Declare @SPTimeMsec real
+	
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
@@ -74,6 +81,7 @@ As
 		Set @DynamicMinimumCountThreshold = IsNull(@DynamicMinimumCountThreshold, 10000)
 		Set @UpdateIntervalAllItems = IsNull(@UpdateIntervalAllItems, 24)
 		Set @InfoOnly = IsNull(@InfoOnly, 0)
+		Set @ShowDebugInfo = IsNull(@ShowDebugInfo, 0)
 		
 		Set @message = ''
 	
@@ -96,7 +104,7 @@ As
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, AddnlParamsForSP)
 		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0, '@SourceMTSServer=''''')
 		
-		-- Mass correction factors and filter sets
+		-- Mass correction factors and filter sets (AlwaysFullRefresh=1)
 		--
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Mass_Correction_Factors_Cached', 'Mass_Correction_ID', 'RefreshCachedDMSMassCorrectionFactors')
@@ -104,7 +112,7 @@ As
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Filter_Set_Overview_Cached', 'Filter_Set_ID', 'RefreshCachedDMSFilterSetInfo')
 
-		-- Residues and enzymes
+		-- Residues and enzymes (AlwaysFullRefresh=1)
 		--
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Residues_Cached', 'Residue_ID', 'RefreshCachedDMSResidues')
@@ -112,7 +120,10 @@ As
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Enzymes_Cached', 'Enzyme_ID', 'RefreshCachedDMSEnzymes')
 
-		-- Fasta Files and Protein Collections
+		-- Fasta Files and Protein Collections (AlwaysFullRefresh=1)
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
+		VALUES ('T_DMS_Organisms', 'Organism_ID', 'RefreshCachedOrganisms')
+
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Organism_DB_Info', 'ID', 'RefreshCachedOrganismDBInfo')
 
@@ -196,7 +207,7 @@ As
 					End
 
 					Set @S = 'Exec ' + @SP
-
+				
 					If @IDMinimum <> 0
 					Begin
 						If Len(@AddnlParamsForSP) > 0
@@ -209,7 +220,17 @@ As
 						Set @S = @S + ' ' + @AddnlParamsForSP
 					
 					If @InfoOnly = 0
+					Begin
+						Set @SPStart = GetDate()
 						Exec (@S)
+						Set @SPEnd = GetDate()
+						
+						Set @SPTimeMsec = DateDiff(millisecond, @SPStart, @SPEnd)
+
+						If @ShowDebugInfo <> 0
+							Print 'Call to ' + @SP + ' took ' + Convert(varchar(12), @SPTimeMsec / 1000.0) + ' msec'
+						
+					End
 					Else
 					Begin
 						If @AlwaysFullRefresh = 0
@@ -237,7 +258,6 @@ As
 			
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSInfoIfRequired] TO [MTS_DB_Dev] AS [dbo]

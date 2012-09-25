@@ -1,8 +1,8 @@
 /****** Object:  Database [Master_Sequences] ******/
 CREATE DATABASE [Master_Sequences] ON  PRIMARY 
-( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 139275072KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 153202624KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 1410112KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 1898240KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [Master_Sequences] SET COMPATIBILITY_LEVEL = 100
@@ -64,7 +64,7 @@ ALTER DATABASE [Master_Sequences] SET RECOVERY FULL
 GO
 ALTER DATABASE [Master_Sequences] SET  MULTI_USER 
 GO
-ALTER DATABASE [Master_Sequences] SET PAGE_VERIFY TORN_PAGE_DETECTION  
+ALTER DATABASE [Master_Sequences] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [Master_Sequences] SET DB_CHAINING OFF 
 GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE RequestGANETUpdateTask
+CREATE PROCEDURE dbo.RequestGANETUpdateTask
 /****************************************************
 **
 **	Desc: 
@@ -37,6 +37,7 @@ CREATE PROCEDURE RequestGANETUpdateTask
 **			03/19/2010 mem - Added parameter @ParamFileName
 **			04/21/2010 mem - Now examining field Regression_Param_File when looking for available jobs
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			07/20/2012 mem - Now calling UpdateNETRegressionParamFileName for jobs in state 44
 **
 *****************************************************/
 (
@@ -114,7 +115,15 @@ As
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 	
-		
+	---------------------------------------------------
+	-- Look for jobs that are timed out (State 44)
+	-- See if their parameter file name contains one of the label names defined in T_Process_Config
+	-- This is typically used to fix jobs where the dataset is an iTRAQ dataset and the parameter file
+	--  name contains _iTRAQ_ but the experiment Labelling field is set to None instead if iTRAQ
+	---------------------------------------------------
+	exec UpdateNETRegressionParamFileName @GANETProcessingTimeoutState, @GANETProcessingTimeoutState, @infoonly=0, @MatchLabellingToParamFileName=1
+	
+	
 	---------------------------------------------------
 	-- Look for jobs that are timed out (State 44) and for which Last_Affected
 	-- is more than 60 minutes ago; reset to state @ProcessStateMatch
@@ -496,6 +505,7 @@ As
 	--
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]

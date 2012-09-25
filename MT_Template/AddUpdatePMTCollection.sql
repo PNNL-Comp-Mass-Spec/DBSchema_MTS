@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.AddUpdatePMTCollection
 /****************************************************************
 **  Desc:	Updates T_PMT_Collection and T_PMT_Collection_Members
@@ -14,11 +15,15 @@ CREATE PROCEDURE dbo.AddUpdatePMTCollection
 **			Mass_Tag_ID int NOT NULL,
 **			Monoisotopic_Mass float NULL,
 **			NET real NULL,
+**			NET_Count int NULL,
+**			NET_StDev real NULL,
 **			PMT_QS real NULL,
 **			Conformer_ID int NULL,
 **			Conformer_Charge smallint NULL,
 **			Conformer smallint NULL,
-**			Drift_Time_Avg real NULL
+**			Drift_Time_Avg real NULL,
+**          Drift_Time_Obs_Count int NULL
+**          Drift_Time_StDev real NULL,
 **		)
 **
 **
@@ -28,6 +33,7 @@ CREATE PROCEDURE dbo.AddUpdatePMTCollection
 **	Date:	02/28/2012 mem - Initial version
 **			02/29/2012 mem - Now populating PMT_QS in T_PMT_Collection_Members
 **			03/01/2012 mem - Now exiting procedure if #Tmp_MTandConformer_Details is empty
+**			07/25/2012 mem - Now populating NET_Count, NET_StDev, Drift_Time_Obs_Count, and Drift_Time_StDev in T_PMT_Collection_Members
 **  
 ****************************************************************/
 (
@@ -237,11 +243,15 @@ As
 					Mass_Tag_ID,
 					Monoisotopic_Mass,
 					NET,
+					NET_Count,
+					NET_StDev,
 					PMT_QS,
 					Conformer_ID,
 					Conformer_Charge,
 					Conformer,
-					Drift_Time_Avg
+					Drift_Time_Avg,
+					Drift_Time_Obs_Count,
+					Drift_Time_StDev					
 				FROM #Tmp_MTandConformer_Details
 				ORDER BY Mass_Tag_ID, Conformer_ID
 			End
@@ -288,20 +298,28 @@ As
 			                                       Mass_Tag_ID,
 			                                       Monoisotopic_Mass,
 			                                       NET,
+			                                       NET_Count,
+			                                       NET_StDev,
 			                                       PMT_QS,
 			                                       Conformer_ID,
 			                                       Conformer_Charge,
 			                                       Conformer,
-			                                       Drift_Time_Avg )
+			                                       Drift_Time_Avg,
+			                                       Drift_Time_Obs_Count,
+			                                       Drift_Time_StDev)
 			SELECT @PMTCollectionID AS PMT_Collection_ID,
 			       Mass_Tag_ID,
 			       Monoisotopic_Mass,
 			       NET,
+			       NET_Count,
+			       NET_StDev,
 			       PMT_QS,
 			       Conformer_ID,
 			       Conformer_Charge,
-			       Conformer,
-			       Drift_Time_Avg
+			     Conformer,
+			       Drift_Time_Avg,
+			       Drift_Time_Obs_Count,
+			       Drift_Time_StDev		       			       
 			FROM #Tmp_MTandConformer_Details
 			ORDER BY Mass_Tag_ID, Conformer_ID
 			--

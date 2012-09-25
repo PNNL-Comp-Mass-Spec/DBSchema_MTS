@@ -18,7 +18,8 @@ SELECT PCL.Protein_Collection_ID,
         PCL.Organism_ID,
         PCL.Created,
         PCL.Last_Modified,
-        PCL.Authentication_Hash
+        PCL.Authentication_Hash,
+        PCL.Collection_RowVersion
 FROM ProteinSeqs.Protein_Sequences.dbo.V_Protein_Collection_List_Export PCL
 
 GO

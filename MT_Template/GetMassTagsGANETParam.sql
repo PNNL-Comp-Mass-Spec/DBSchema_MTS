@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.GetMassTagsGANETParam
 /****************************************************************
 **  Desc: Returns mass tags and NET values relevant for PMT peak matching
@@ -34,6 +35,7 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **			               - Added parameter @PMTCollectionID
 **			02/29/2012 mem - Updated #Tmp_MTandConformer_Details to include PMT_QS
 **			               - Added parameters @AMTCount and @infoOnly
+**			07/25/2012 mem - Updated #Tmp_MTandConformer_Details to include NET_Count, NET_StDev, Drift_Time_Obs_Count, and Drift_Time_StDev
 **  
 ****************************************************************/
 (
@@ -108,11 +110,15 @@ As
 		Mass_Tag_ID int NOT NULL,
 		Monoisotopic_Mass float NULL,
 		NET real NULL,
+		NET_Count int NULL,
+		NET_StDev real NULL,
 		PMT_QS real NULL,
 		Conformer_ID int NULL,
 		Conformer_Charge smallint NULL,
 		Conformer smallint NULL,
-		Drift_Time_Avg real NULL
+		Drift_Time_Avg real NULL,
+		Drift_Time_Obs_Count int NULL,
+		Drift_Time_StDev real NULL
 	)
 
 	CREATE CLUSTERED INDEX #IX_Tmp_MTandConformer_Details ON #Tmp_MTandConformer_Details (Mass_Tag_ID ASC, Conformer_ID ASC)
@@ -150,22 +156,30 @@ As
 		INSERT INTO #Tmp_MTandConformer_Details( Mass_Tag_ID,
 		                                         Monoisotopic_Mass,
 		                                         NET,
+		                                         NET_Count,
+		                                         NET_StDev,
 		                                         PMT_QS,
-		   Conformer_ID,
+		                                         Conformer_ID,
 		                                         Conformer_Charge,
 		                                         Conformer,
-		                                         Drift_Time_Avg )
+		                                         Drift_Time_Avg,
+		                                         Drift_Time_Obs_Count,
+		                                         Drift_Time_StDev)
 		SELECT MT.Mass_Tag_ID,
 		       MT.Monoisotopic_Mass,
 		       CASE
 		           WHEN @NETValueType = 1 THEN MTN.PNET
 		           ELSE MIN(P.GANET_Obs)
 		       END AS NET_Value_to_Use,
+		       1 AS NET_Count,
+		       0 AS NET_StDev,
 		       MT.PMT_Quality_Score,
 		       NULL AS Conformer_ID,
 		       NULL AS Conformer_Charge,
 		       NULL AS Conformer,
-		       NULL AS Drift_Time_Avg
+		       NULL AS Drift_Time_Avg,
+		       NULL AS Drift_Time_Obs_Count,
+		       NULL AS Drift_Time_StDev		       
 		FROM #TmpMassTags
 		     INNER JOIN T_Mass_Tags MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 		     INNER JOIN T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID
@@ -233,23 +247,37 @@ As
 		
 		INSERT INTO #Tmp_MTandConformer_Details( Mass_Tag_ID,
 		                                         Monoisotopic_Mass,
-		                                         NET,
+		                             NET,
+		                                         NET_Count,
+		                                         NET_StDev,
 		                                         PMT_QS,
 		                                         Conformer_ID,
 		                                         Conformer_Charge,
 		                                         Conformer,
-		                                         Drift_Time_Avg )
+		                                         Drift_Time_Avg,
+		                                         Drift_Time_Obs_Count,
+		                                         Drift_Time_StDev)
 		SELECT MT.Mass_Tag_ID,
 		       MT.Monoisotopic_Mass,
 		       CASE
 		           WHEN @NETValueType = 1 THEN MTN.PNET
 		           ELSE MTN.Avg_GANET
 		       END AS NET_Value_to_Use,
+		       CASE
+		           WHEN @NETValueType = 1 THEN 1
+		           ELSE MTN.Cnt_GANET
+		       END AS NET_Count,
+		       CASE
+		           WHEN @NETValueType = 1 THEN 0
+		           ELSE MTN.StD_GANET
+		       END AS NET_StDev,
 		       MT.PMT_Quality_Score,
 		       NULL AS Conformer_ID,
 		       NULL AS Conformer_Charge,
 		       NULL AS Conformer,
-		       NULL AS Drift_Time_Avg
+		       NULL AS Drift_Time_Avg,
+		       NULL AS Drift_Time_Obs_Count,
+		       NULL AS Drift_Time_StDev
 		FROM #TmpMassTags
 		     INNER JOIN T_Mass_Tags AS MT ON #TmpMassTags.Mass_Tag_ID = MT.Mass_Tag_ID
 		     INNER JOIN T_Mass_Tags_NET AS MTN ON #TmpMassTags.Mass_Tag_ID = MTN.Mass_Tag_ID

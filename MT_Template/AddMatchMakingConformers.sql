@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE AddMatchMakingConformers
+CREATE PROCEDURE dbo.AddMatchMakingConformers
 /****************************************************
 **
 **	Desc:	Examines the UMCs and matching AMT tags for the given MD_ID
@@ -28,6 +28,7 @@ CREATE PROCEDURE AddMatchMakingConformers
 **			02/21/2011 mem - Added parameter @FilterByExperimentMSMS
 **			03/23/2011 mem - Now updating Last_Affected in T_Mass_Tag_Conformers_Observed
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			06/26/2012 mem - Now choosing the newest job in T_Analysis_Description if an experiment has multiple datasets and/or jobs
 **    
 *****************************************************/
 (
@@ -97,6 +98,9 @@ AS
 		Set @JobFilter = 0
 		Set @Experiment = ''
 		
+		-- Note: If multiple analysis jobs existing in T_Analysis_Description for this experiment, then we're choosing the newest job
+		-- The Order By clause to select this job was added in June 2012
+		-- Prior to this, Sql Server would chose just one of the jobs, typically the largest job number, but there is no guarantee of that
 		SELECT @Experiment = FAD.Experiment,
 		       @JobFilter = IsNull(TAD.Job, 0)
 		FROM T_Match_Making_Description MMD
@@ -105,7 +109,8 @@ AS
 		     LEFT OUTER JOIN T_Analysis_Description TAD
 		       ON FAD.Experiment = TAD.Experiment
 		WHERE MMD.MD_ID = @MDID
-
+		ORDER BY TAD.Job desc
+		
 		If @JobFilter = 0
 		Begin
 			Set @message = 'MS/MS job not found for Experiment ' + IsNull(@Experiment, '???') + '; unable to filter by experiment'
@@ -395,5 +400,6 @@ AS
 Done:
 
 	Return @myError
+
 
 GO

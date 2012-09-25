@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create PROCEDURE RefreshCachedProteinCollectionInfo
+CREATE PROCEDURE RefreshCachedProteinCollectionInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Protein_Collection_Info and
@@ -15,6 +15,8 @@ create PROCEDURE RefreshCachedProteinCollectionInfo
 **
 **	Auth:	mem
 **	Date:	12/13/2010 mem - Initial version
+**			08/01/2012 mem - Now using Cached_RowVersion and Collection_RowVersion to determine new/changed protein collection entries
+**			08/02/2012 mem - Turned ANSI_WARNINGS back on since we were getting error "Heterogeneous queries require the ANSI_NULLS and ANSI_WARNINGS options to be set for the connection"
 **
 *****************************************************/
 (
@@ -23,7 +25,7 @@ create PROCEDURE RefreshCachedProteinCollectionInfo
 AS
 
 	Set NoCount On
-
+	
 	Declare @myRowCount int
 	Declare @myError int
 	Set @myRowCount = 0
@@ -63,47 +65,36 @@ AS
 		Set @CurrentLocation = 'Merge data into T_DMS_Protein_Collection_Info'
 
 		-- Use a MERGE Statement to synchronize T_DMS_Protein_Collection_Info with V_Protein_Collection_List_Export
-		--
-		
-		 MERGE T_DMS_Protein_Collection_Info AS target
-		 USING (SELECT PCL.Protein_Collection_ID, PCL.Name, PCL.Description,
+		MERGE T_DMS_Protein_Collection_Info AS target
+		USING (SELECT PCL.Protein_Collection_ID, PCL.Name, PCL.Description,
                        PCL.Collection_State, PCL.Collection_Type,
 		               PCL.Protein_Count, PCL.Residue_Count,
 		               PCL.Annotation_Naming_Authority, PCL.Annotation_Type,
 		               MIN(PCL.Organism_ID) AS Organism_ID_First,
 		               MAX(PCL.Organism_ID) AS Organism_ID_Last,
-		               PCL.Created, PCL.Last_Modified, PCL.Authentication_Hash
+		               PCL.Created, PCL.Last_Modified, PCL.Authentication_Hash,
+		               PCL.Collection_RowVersion
 		       FROM V_DMS_Protein_Collection_List_Import PCL
 		       GROUP BY PCL.Protein_Collection_ID, PCL.Name, PCL.Description,
 		              PCL.Collection_State, PCL.Collection_Type,
 		              PCL.Protein_Count, PCL.Residue_Count,
 		              PCL.Annotation_Naming_Authority, PCL.Annotation_Type,
-		              PCL.Created, PCL.Last_Modified, PCL.Authentication_Hash
+		              PCL.Created, PCL.Last_Modified, PCL.Authentication_Hash, 
+		              PCL.Collection_RowVersion
 			) AS Source (	Protein_Collection_ID, Name, Description,
 		                    Collection_State, Collection_Type,
 		                    Protein_Count, Residue_Count,
 		                    Annotation_Naming_Authority, Annotation_Type,
 		                    Organism_ID_First, Organism_ID_Last,
-		                    Created, Last_Modified, Authentication_Hash)
-		 ON (target.Protein_Collection_ID = source.Protein_Collection_ID)
-		 WHEN Matched AND (  Target.Name                              <> Source.Name OR
-		                     IsNull(Target.Description, '')           <> IsNull(Source.Description, '') OR
-		                     IsNull(Target.Collection_State, '')      <> IsNull(Source.Collection_State, '') OR
-		                     IsNull(Target.Collection_Type, '')       <> IsNull(Source.Collection_Type, '') OR
-		                     IsNull(Target.Protein_Count, 0)          <> IsNull(Source.Protein_Count, 0) OR
-		                     IsNull(Target.Residue_Count, 0)          <> IsNull(Source.Residue_Count, 0) OR
-		                     Target.Annotation_Naming_Authority       <> Source.Annotation_Naming_Authority OR
-		                     Target.Annotation_Type                   <> Source.Annotation_Type OR
-		                     IsNull(Target.Organism_ID_First, 0)      <> IsNull(Source.Organism_ID_First, 0) OR
-		                     IsNull(Target.Organism_ID_Last, 0)       <> IsNull(Source.Organism_ID_Last, 0) OR
-		                     IsNull(Target.Created, '1/2/1980')       <> IsNull(Source.Created, '1/1/1980') OR
-		                     IsNull(Target.Last_Modified, '1/2/1980') <> IsNull(Source.Last_Modified, '1/1/1980') OR
-		                     IsNull(Target.Authentication_Hash, '')   <> IsNull(Source.Authentication_Hash, '') ) THEN 
+		                    Created, Last_Modified, Authentication_Hash, 
+		                    Collection_RowVersion)
+		ON (target.Protein_Collection_ID = source.Protein_Collection_ID)
+		WHEN Matched AND (  Target.Cached_RowVersion <> Source.Collection_RowVersion ) THEN 
 			UPDATE Set
 		          Name = Source.Name,
 		          Description = Source.Description,
 		          Collection_State = Source.Collection_State,
-		          Collection_Type = Source.Collection_Type,
+		      Collection_Type = Source.Collection_Type,
 		          Protein_Count = IsNull(Source.Protein_Count, 0),
 		          Residue_Count = IsNull(Source.Residue_Count, 0),
 		          Annotation_Naming_Authority = Source.Annotation_Naming_Authority,
@@ -113,20 +104,21 @@ AS
 		          Created = IsNull(Source.Created, '1/1/1980'),
 		          Last_Modified = IsNull(Source.Last_Modified, '1/1/1980'),
 		          Authentication_Hash = Source.Authentication_Hash,
+		          Cached_RowVersion = Source.Collection_RowVersion,
 		          Last_Affected = GetDate()
-		 WHEN Not Matched THEN
+		WHEN Not Matched THEN
 			INSERT ( Protein_Collection_ID, Name, Description, Collection_State, 
 		             Collection_Type, Protein_Count, Residue_Count, 
 		             Annotation_Naming_Authority, Annotation_Type, Organism_ID_First, 
-		             Organism_ID_Last, Created, Last_Modified, Authentication_Hash, Last_Affected)
+		             Organism_ID_Last, Created, Last_Modified, Authentication_Hash, Cached_RowVersion, Last_Affected)
 			VALUES ( Source.Protein_Collection_ID, Source.Name, Source.Description, Source.Collection_State,
 		             Source.Collection_Type, Source.Protein_Count, Source.Residue_Count,
 		             Source.Annotation_Naming_Authority, Source.Annotation_Type, Source.Organism_ID_First,
-		             Source.Organism_ID_Last, Source.Created, Source.Last_Modified, Source.Authentication_Hash, GetDate())
-		 WHEN NOT MATCHED BY SOURCE THEN
+		             Source.Organism_ID_Last, Source.Created, Source.Last_Modified, Source.Authentication_Hash, Source.Collection_RowVersion, GetDate())
+		WHEN NOT MATCHED BY SOURCE THEN
 			DELETE
-		 OUTPUT $action INTO #Tmp_UpdateSummary
-		 ;
+		OUTPUT $action INTO #Tmp_UpdateSummary
+		;
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -173,15 +165,13 @@ AS
                        PCFS.Protein_Count, PCFS.Residue_Count,
                        PCFS.Archived_File_Name 
 		        FROM V_DMS_Protein_Collection_File_Stats_Import PCFS	
-			) AS Source ( Archived_File_ID, Filesize,
-                          Protein_Collection_Count,
-                          Protein_Count, Residue_Count,
-                          Archived_File_Name)
+			) AS Source ( Archived_File_ID, Filesize, Protein_Collection_Count,
+                          Protein_Count, Residue_Count, Archived_File_Name)
 		 ON (target.Archived_File_ID = source.Archived_File_ID)
 		 WHEN Matched AND ( Target.Filesize <> Source.Filesize OR
 		                    IsNull(Target.Protein_Collection_Count, 0) <> IsNull(Source.Protein_Collection_Count, 0) OR
 		                    IsNull(Target.Protein_Count, 0)            <> IsNull(Source.Protein_Count, 0) OR
-		                    IsNull(Target.Residue_Count, 0)            <> IsNull(Source.Residue_Count, 0) OR
+		      IsNull(Target.Residue_Count, 0)            <> IsNull(Source.Residue_Count, 0) OR
 		                    Target.Archived_File_Name                  <> Source.Archived_File_Name) THEN 
 			UPDATE Set 
 		          Filesize = Source.Filesize,
@@ -231,5 +221,6 @@ AS
 
 Done:
 	Return @myError
+
 
 GO

@@ -14,6 +14,10 @@ CREATE TABLE [dbo].[T_PMT_Collection_Members](
 	[Conformer_Charge] [smallint] NULL,
 	[Conformer] [smallint] NULL,
 	[Drift_Time_Avg] [real] NULL,
+	[Drift_Time_Obs_Count] [int] NULL,
+	[Drift_Time_StDev] [real] NULL,
+	[NET_Count] [int] NULL,
+	[NET_StDev] [real] NULL,
  CONSTRAINT [PK_T_PMT_Collection_Members] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC

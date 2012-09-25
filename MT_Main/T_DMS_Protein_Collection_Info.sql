@@ -19,6 +19,7 @@ CREATE TABLE [dbo].[T_DMS_Protein_Collection_Info](
 	[Last_Modified] [datetime] NULL,
 	[Authentication_Hash] [varchar](8) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Last_Affected] [datetime] NOT NULL,
+	[Cached_RowVersion] [binary](8) NOT NULL,
  CONSTRAINT [PK_T_DMS_Protein_Collection_Info] PRIMARY KEY CLUSTERED 
 (
 	[Protein_Collection_ID] ASC
@@ -34,4 +35,6 @@ CREATE UNIQUE NONCLUSTERED INDEX [IX_T_DMS_Protein_Collection_Info_Name] ON [dbo
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_DMS_Protein_Collection_Info] ADD  CONSTRAINT [DF_T_DMS_Protein_Collection_Info_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_DMS_Protein_Collection_Info] ADD  CONSTRAINT [DF_T_DMS_Protein_Collection_Info_Cached_RowVersion]  DEFAULT ((0)) FOR [Cached_RowVersion]
 GO

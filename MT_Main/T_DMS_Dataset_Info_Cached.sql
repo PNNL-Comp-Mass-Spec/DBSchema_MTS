@@ -89,13 +89,5 @@ AS
 	End
 
 GO
-GRANT DELETE ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
-GO
-GRANT INSERT ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
-GO
-GRANT SELECT ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_DMS_Dataset_Info_Cached] TO [pnl\MTSProc] AS [dbo]
-GO
 ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

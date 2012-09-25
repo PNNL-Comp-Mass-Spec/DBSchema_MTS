@@ -4,10 +4,25 @@
 --   MT_Human_Schutzer_CSF_P512      on Elmer
 --   MT_D_Melanogaster_NCI_P531      on Albert
 --	 MT_Human_BreastCancer_WRI_P582  on Elmer
+--   MT_S_cerevisiae_UPS_P641        on Daffy	(filters on Dataset names instead of Experiment names)
 --
--- UpdatePMTQSUsingCustomVladFilters            is in DB MT_Mouse_Voxel_P477
--- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in DB MT_Human_ALZ_P514
-
+-- UpdatePMTQSUsingCustomVladFilters is in these DBs
+--   MT_Mouse_Voxel_P477 on Pogo (code is in UpdatePMTQSUsingCustomVladFiltersMouseVoxel.sql)
+--   MT_C_Elegans_P618 on Albert
+--	 MT_Human_ALZ_Phospho_P720 (extended to use ParamFileFilter and ModSymbolFilter)
+--	 MT_Human_Sarcopenia_P652 on Elmer
+--	 MT_Human_Sarcopenia_P676 on Elmer
+--	 MT_Human_Sarcopenia_MixedLC_P681 on Elmer
+--	 MT_Human_Sarcopenia_MixedLC_P692 on Elmer
+--   MT_Human_Sarcopenia_P724 on Elmer (extended to use MSGF_SpecProb)
+--   MT_Human_HMEC_EGFR_P706 on Elmer
+--
+-- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
+--
+-- CheckFilterUsingCustomCriteria is used in PT_Human_ALZ_Phospho_A235
+--
+-- UpdatePMTQSUsingCustomFilters is in these DBs
+--   MT_Human_Glycated_Peptides_P742 (extended to use Peptide_Prophet_Probability to consider terminus_state)
 
 SET QUOTED_IDENTIFIER ON
 SET ANSI_PADDING ON
@@ -67,6 +82,7 @@ ALTER PROCEDURE UpdatePMTQSUsingCustomTaoFilters
 **						   - Updated to use the text-based Charge_State_Comparison column instead of the smallint Charge_State column
 **			06/04/2009 mem - Updated to support assymetric Delta Mass tolerances using fields Delta_Mass_PPM_min and Delta_Mass_PPM_max in table T_Custom_PMT_QS_Criteria
 **			01/25/2010 mem - Updated to not apply a mass filter if Delta_Mass_PPM_min and Delta_Mass_PPM_max are zero
+**			01/06/2012 mem - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -262,14 +278,14 @@ As
 	Set @S = @S + ' SELECT DISTINCT MT.Mass_Tag_ID, -1 AS Group_ID'
 	Set @S = @S + ' FROM T_Mass_Tags MT INNER JOIN '
 	Set @S = @S +      ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN '
-	Set @S = @S +      ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job INNER JOIN '
+	Set @S = @S +      ' T_Analysis_Description TAD ON P.Job = TAD.Job INNER JOIN '
 	Set @S = @S +      ' #TmpDatasetsToProcess TmpDS ON TAD.Dataset_ID = TmpDS.Dataset_ID'
 	Set @S = @S + ' WHERE (TmpDS.ProcessDataset = 0) AND '
 	Set @S = @S + '       NOT MT.Mass_Tag_ID IN ('
 	Set @S = @S +        ' SELECT DISTINCT MT.Mass_Tag_ID'
 	Set @S = @S +        ' FROM T_Mass_Tags MT INNER JOIN '
 	Set @S = @S +             ' T_Peptides P ON MT.Mass_Tag_ID = P.Mass_Tag_ID INNER JOIN '
-	Set @S = @S +             ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job INNER JOIN '
+	Set @S = @S +             ' T_Analysis_Description TAD ON P.Job = TAD.Job INNER JOIN '
 	Set @S = @S +             ' #TmpDatasetsToProcess TmpDS ON TAD.Dataset_ID = TmpDS.Dataset_ID'
 	Set @S = @S +         ' WHERE (TmpDS.ProcessDataset > 0)'	
 	Set @S = @S +         ' )'
@@ -381,7 +397,7 @@ As
 			Set @S = @S +                         ' FROM T_Peptides P INNER JOIN'
 			Set @S = @S +                              ' T_Score_Sequest SS ON P.Peptide_ID = SS.Peptide_ID INNER JOIN'
 			Set @S = @S +                              ' T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN'
-			Set @S = @S +                              ' T_Analysis_Description TAD ON P.Analysis_ID = TAD.Job INNER JOIN '
+			Set @S = @S +                              ' T_Analysis_Description TAD ON P.Job = TAD.Job INNER JOIN '
 			Set @S = @S +                              ' #TmpDatasetsToProcess TmpDS ON TAD.Dataset_ID = TmpDS.Dataset_ID'
 			Set @S = @S +                         ' WHERE (' + @ExperimentLikeClauseList + ') AND'
 			Set @S = @S +                               ' P.Charge_State ' + @ChargeStateComparison + ' AND'

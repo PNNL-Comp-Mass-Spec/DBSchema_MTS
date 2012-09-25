@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create PROCEDURE RefreshCachedOrganismDBInfo
+CREATE PROCEDURE dbo.RefreshCachedOrganismDBInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Organism_DB_Info
@@ -14,6 +14,7 @@ create PROCEDURE RefreshCachedOrganismDBInfo
 **
 **	Auth:	mem
 **	Date:	12/14/2010 mem - Initial version
+**			08/01/2012 mem - Now using Cached_RowVersion and OrgFile_RowVersion to determine new/changed protein collection entries
 **
 *****************************************************/
 (
@@ -66,17 +67,12 @@ AS
 		
 		 MERGE T_DMS_Organism_DB_Info AS target
 		 USING (SELECT ID, FileName, Organism, Description, Active, 
-		               NumProteins, NumResidues
+		               NumProteins, NumResidues, Organism_ID, OrgFile_RowVersion
                 FROM V_DMS_Organism_DB_File_Import
 			) AS Source ( ID, FileName, Organism, Description, Active, 
-		                  NumProteins, NumResidues)
+		                  NumProteins, NumResidues, Organism_ID, OrgFile_RowVersion)
 		 ON (target.ID = source.ID)
-		 WHEN Matched AND ( target.FileName <> Source.FileName OR
-							target.Organism <> Source.Organism OR
-							IsNull(target.Description, '') <> IsNull(Source.Description, '') OR
-							target.Active <> Source.Active OR
-							IsNull(target.NumProteins, 0) <> IsNull(Source.NumProteins, 0) OR
-							IsNull(target.NumResidues, 0) <> IsNull(Source.NumResidues, 0)) THEN 
+		 WHEN Matched AND ( target.Cached_RowVersion <> Source.OrgFile_RowVersion) THEN 
 			UPDATE Set
 					FileName = Source.FileName,
 					Organism = Source.Organism,
@@ -84,12 +80,14 @@ AS
 					Active = Source.Active,
 					NumProteins = IsNull(Source.NumProteins, 0),
 					NumResidues = IsNull(Source.NumResidues, 0),
+					Organism_ID = Source.Organism_ID,
+					Cached_RowVersion = Source.OrgFile_RowVersion,
 					Last_Affected = GetDate()
 		 WHEN Not Matched THEN
 			INSERT ( ID, FileName, Organism, Description, Active, 
-		             NumProteins, NumResidues, Last_Affected)
+		             NumProteins, NumResidues, Organism_ID, Cached_RowVersion, Last_Affected)
 			VALUES ( Source.ID, Source.FileName, Source.Organism, Source.Description, Source.Active, 
-		             Source.NumProteins, Source.NumResidues, GetDate())
+		             Source.NumProteins, Source.NumResidues, Source.Organism_ID, Source.OrgFile_RowVersion, GetDate())
 		 WHEN NOT MATCHED BY SOURCE THEN
 			DELETE
 		 OUTPUT $action INTO #Tmp_UpdateSummary
@@ -123,5 +121,6 @@ AS
 
 Done:
 	Return @myError
+
 
 GO

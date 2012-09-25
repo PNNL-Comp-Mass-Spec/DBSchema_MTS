@@ -8,7 +8,8 @@ CREATE VIEW [dbo].[V_DMS_Organism_DB_File_Import]
 AS
 SELECT ID, FileName, Organism,
        Description, Active,
-       NumProteins, NumResidues
+       NumProteins, NumResidues,
+       Organism_ID, OrgFile_RowVersion
 FROM GIGASAX.DMS5.dbo.V_Organism_DB_File_Export AS t1
 
 

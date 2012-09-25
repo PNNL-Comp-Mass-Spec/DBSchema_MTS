@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[UpdateNETRegressionParamFileName] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE dbo.UpdateNETRegressionParamFileName
@@ -14,11 +14,13 @@ CREATE PROCEDURE dbo.UpdateNETRegressionParamFileName
 **
 **	Auth:	mem
 **	Date:	10/12/2010 mem - Initial Version
+**			07/20/2012 mem - Added parameter @MatchLabellingToParamFileName
 **    
 *****************************************************/
 (
 	@ProcessStateMin int = 10,
 	@ProcessStateMax int = 39,
+	@MatchLabellingToParamFileName tinyint = 0,
 	@message varchar(512) = '' output,
 	@infoOnly tinyint = 0,
 	@previewSql tinyint = 0
@@ -51,6 +53,7 @@ As
 	
 	set @ProcessStateMin = IsNull(@ProcessStateMin, 10)
 	set @ProcessStateMax = IsNull(@ProcessStateMax, 39)
+	set @MatchLabellingToParamFileName = IsNull(@MatchLabellingToParamFileName, 0)
 	
 	Set @message = ''
 	Set @infoOnly = IsNull(@infoOnly, 0)
@@ -96,7 +99,11 @@ As
 			If @Iteration = 2
 			Begin
 				Set @ConfigName = 'NET_Regression_Param_File_Name_by_Sample_Label'
+				
 				Set @JoinClause = 'TAD.Labelling = #TmpConfigDefs.Value1'
+				If @MatchLabellingToParamFileName <> 0
+					Set @JoinClause = @JoinClause + ' OR TAD.Parameter_File_Name LIKE ''%[_]'' + #TmpConfigDefs.Value1 + ''[_]%'''
+					
 			End
 			
 			If @infoOnly <> 0 or @previewSql <> 0

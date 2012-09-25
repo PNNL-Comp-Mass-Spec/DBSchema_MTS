@@ -2,7 +2,7 @@
 CREATE DATABASE [Master_Seq_Scratch] ON  PRIMARY 
 ( NAME = N'Master_Seq_Scratch_Data', FILENAME = N'I:\SQLServerData\Master_Seq_Scratch.mdf' , SIZE = 2944KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 4224KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 39296KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET COMPATIBILITY_LEVEL = 100
@@ -64,7 +64,7 @@ ALTER DATABASE [Master_Seq_Scratch] SET RECOVERY SIMPLE
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET  MULTI_USER 
 GO
-ALTER DATABASE [Master_Seq_Scratch] SET PAGE_VERIFY TORN_PAGE_DETECTION  
+ALTER DATABASE [Master_Seq_Scratch] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET DB_CHAINING OFF 
 GO

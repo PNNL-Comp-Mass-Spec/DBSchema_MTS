@@ -1,8 +1,8 @@
 /****** Object:  Database [MT_HistoricLog] ******/
 CREATE DATABASE [MT_HistoricLog] ON  PRIMARY 
-( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 745600KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
+( NAME = N'MT_HistoricLog_dat', FILENAME = N'I:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 773888KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
-( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 5696KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_log', FILENAME = N'H:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 1536KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MT_HistoricLog] SET COMPATIBILITY_LEVEL = 100

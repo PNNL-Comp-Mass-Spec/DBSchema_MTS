@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE Procedure MasterUpdateProcessBackground
+
+CREATE Procedure dbo.MasterUpdateProcessBackground
 /****************************************************
 ** 
 **	Desc: 
@@ -44,6 +45,7 @@ CREATE Procedure MasterUpdateProcessBackground
 **			10/12/2010 mem - Added call to ResetLoadFailedJobs
 **			08/22/2011 mem - Removed call to CalculateCleavageStateForAvailableAnalyses
 **			12/23/2011 mem - Added call to UpdateResultsForAvailableAnalyses
+**			08/03/2012 mem - Added call to AckLoadFailedErrorMessages
 **    
 *****************************************************/
 (
@@ -158,8 +160,16 @@ As
 		Goto Done
 
 
-
 	-- < B2 >
+	--------------------------------------------------------------
+	-- Look for Jobs in state 15 that have previously failed loading but now succeded
+	-- Update the log entries for "Error calling OpenTextFile" to be "ErrorIgnore" instead of "Error"
+	--------------------------------------------------------------
+	--
+	exec @result = AckLoadFailedErrorMessages @infoonly = 0
+	
+
+	-- < B3 >
 	--------------------------------------------------------------
 	-- Update the protein data for jobs in state 15
 	--------------------------------------------------------------
@@ -819,6 +829,7 @@ Done:
 		execute PostLogEntry 'Normal', @message, 'MasterUpdateProcessBackground'
 
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MasterUpdateProcessBackground] TO [MTS_DB_Dev] AS [dbo]

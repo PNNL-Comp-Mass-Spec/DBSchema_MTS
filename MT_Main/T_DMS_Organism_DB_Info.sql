@@ -11,6 +11,8 @@ CREATE TABLE [dbo].[T_DMS_Organism_DB_Info](
 	[Active] [tinyint] NOT NULL,
 	[NumProteins] [int] NULL,
 	[NumResidues] [bigint] NULL,
+	[Organism_ID] [int] NOT NULL,
+	[Cached_RowVersion] [binary](8) NOT NULL,
 	[Last_Affected] [datetime] NOT NULL,
  CONSTRAINT [PK_T_DMS_Organism_DB_Info] PRIMARY KEY CLUSTERED 
 (
