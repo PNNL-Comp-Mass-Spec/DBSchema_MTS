@@ -8,7 +8,7 @@ CREATE TABLE [dbo].[T_DMS_Filter_Set_Overview_Cached](
 	[Filter_Type_ID] [int] NOT NULL,
 	[Filter_Type_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Filter_Set_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Filter_Set_Description] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Filter_Set_Description] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_T_DMS_Filter_Set_Overview_Cached] PRIMARY KEY CLUSTERED 
 (

@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSDatasetInfo
 **						   - Added parameter @UpdateSourceMTSServer
 **			12/13/2010 mem - Fixed the table name being sent to RefreshCachedDMSInfoFinalize and PostLogEntry
 **			03/03/2011 mem - Now populating [File Size MB]
+**			10/17/2012 mem - Now populating Instrument_Data_Purged
 **
 *****************************************************/
 (
@@ -134,7 +135,7 @@ AS
 		Set @S = @S +                 ' [Dataset Folder Path], [Storage Folder], Storage, ' 
 		Set @S = @S +                 ' [Compressed State], [Compressed Date], ID, '
 		Set @S = @S +                 ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
-		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std]'
+		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged'
 		Set @S = @S + '          FROM ' + @SourceTable
 		Set @S = @S + '          WHERE ID >= ' + Convert(varchar(12), @DatasetIDMinimum) + ' AND ID <= ' + Convert(varchar(12), @DatasetIDMaximum)
 		Set @S = @S + '	) AS Source (	Dataset, Experiment, Organism, Instrument, '
@@ -144,7 +145,7 @@ AS
 		Set @S = @S +                 ' [Dataset Folder Path], [Storage Folder], Storage, '
 		Set @S = @S +                 ' [Compressed State], [Compressed Date], ID, '
 		Set @S = @S +                 ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
-		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std])'
+		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged)'
 		Set @S = @S + ' ON (target.ID = source.ID)'
 		Set @S = @S + ' WHEN Matched AND ( 	Target.Dataset <> source.Dataset OR'
 		Set @S = @S +                     ' Target.Experiment <> source.Experiment OR'
@@ -165,16 +166,17 @@ AS
 		Set @S = @S +                     ' Target.Created <> source.Created OR '
 		Set @S = @S +                     ' IsNull(Target.[Folder Name], '''') <> IsNull(source.[Folder Name], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Dataset Folder Path], '''') <> IsNull(source.[Dataset Folder Path], '''') OR '
-		Set @S = @S +                     ' IsNull(Target.[Storage Folder], '''') <> IsNull(source.[Storage Folder], '''') OR '
-		Set @S = @S +  ' IsNull(Target.Storage, '''') <> IsNull(source.Storage, '''') OR '
-		Set @S = @S +   ' IsNull(Target.[Compressed State], -1) <> IsNull(source.[Compressed State], -1) OR '
+		Set @S = @S +          ' IsNull(Target.[Storage Folder], '''') <> IsNull(source.[Storage Folder], '''') OR '
+		Set @S = @S +                     ' IsNull(Target.Storage, '''') <> IsNull(source.Storage, '''') OR '
+		Set @S = @S +                     ' IsNull(Target.[Compressed State], -1) <> IsNull(source.[Compressed State], -1) OR '
 		Set @S = @S +                     ' IsNull(Target.[Compressed Date], '''') <> IsNull(source.[Compressed Date], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Acquisition Start], '''') <> IsNull(source.[Acquisition Start], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Acquisition End], '''') <> IsNull(source.[Acquisition End], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Scan Count], -1) <> IsNull(source.[Scan Count], -1) OR '
 		Set @S = @S +                     ' IsNull(Target.[File Size MB], -1) <> IsNull(source.[File Size MB], -1) OR '		
 		Set @S = @S +                     ' IsNull(Target.[PreDigest Int Std], '''') <> IsNull(source.[PreDigest Int Std], '''') OR '
-		Set @S = @S +                     ' IsNull(Target.[PostDigest Int Std], '''') <> IsNull(source.[PostDigest Int Std], '''') ) THEN '
+		Set @S = @S +                     ' IsNull(Target.[PostDigest Int Std], '''') <> IsNull(source.[PostDigest Int Std], '''') OR '
+		Set @S = @S +                     ' Target.Instrument_Data_Purged <> source.Instrument_Data_Purged ) THEN '
 		Set @S = @S + '	UPDATE set Dataset = source.Dataset,'
 		Set @S = @S +          ' Experiment = source.Experiment,'
 		Set @S = @S +          ' Organism = source.Organism,'
@@ -204,6 +206,7 @@ AS
 		Set @S = @S +          ' [File Size MB] = source.[File Size MB],'		
 		Set @S = @S +          ' [PreDigest Int Std] = source.[PreDigest Int Std],'
 		Set @S = @S +          ' [PostDigest Int Std] = source.[PostDigest Int Std],'
+		Set @S = @S +          ' Instrument_Data_Purged = source.Instrument_Data_Purged,'
 		Set @S = @S +          ' Last_Affected = GetDate()'
 		Set @S = @S + ' WHEN Not Matched THEN'
 		Set @S = @S + '	INSERT (Dataset, Experiment, Organism, Instrument, '
@@ -213,7 +216,7 @@ AS
 		Set @S = @S +         ' [Dataset Folder Path], [Storage Folder], Storage,' 
 		Set @S = @S +         ' [Compressed State], [Compressed Date], ID, '
 		Set @S = @S +         ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
-		Set @S = @S +         ' [PreDigest Int Std], [PostDigest Int Std], Last_Affected)'
+		Set @S = @S +         ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged, Last_Affected)'
 		Set @S = @S + '	VALUES ( source.Dataset, source.Experiment, source.Organism, source.Instrument,'
 		Set @S = @S +          ' source.[Separation Type], source.[LC Column], source.[Wellplate Number],'
 		Set @S = @S +          ' source.[Well Number], source.[Dataset Int Std], source.Type, source.Operator, source.Comment,'
@@ -221,7 +224,7 @@ AS
 		Set @S = @S +          ' source.[Dataset Folder Path], source.[Storage Folder], source.Storage,'
 		Set @S = @S +          ' source.[Compressed State], source.[Compressed Date], source.ID,'
 		Set @S = @S +          ' source.[Acquisition Start], source.[Acquisition End], source.[Scan Count], [File Size MB],'
-		Set @S = @S +          ' source.[PreDigest Int Std], source.[PostDigest Int Std], GetDate())'
+		Set @S = @S +          ' source.[PreDigest Int Std], source.[PostDigest Int Std], source.Instrument_Data_Purged, GetDate())'
 		Set @S = @S + ' WHEN NOT MATCHED BY SOURCE AND '
 		Set @S = @S + '    Target.ID >= ' + Convert(varchar(12), @DatasetIDMinimum) + ' AND Target.ID <= ' + Convert(varchar(12), @DatasetIDMaximum) + ' THEN'
 		Set @S = @S + '	DELETE'

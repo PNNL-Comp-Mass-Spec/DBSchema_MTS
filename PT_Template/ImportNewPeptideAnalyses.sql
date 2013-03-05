@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ImportNewPeptideAnalyses
+CREATE Procedure dbo.ImportNewPeptideAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -60,6 +60,8 @@ CREATE Procedure ImportNewPeptideAnalyses
 **			07/13/2010 mem - Now populating Acq_Length in T_Datasets
 **			10/12/2010 mem - Now calling UpdateNETRegressionParamFileName if any new jobs are imported
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **    
 *****************************************************/
 (
@@ -490,10 +492,10 @@ As
 			ResultType varchar(64)
 		)
 		
-		INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-		INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-		INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-		INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
+		INSERT INTO #T_ResultTypeList (ResultType)
+		SELECT ResultType 
+		FROM dbo.tblPeptideHitResultTypes()
+				
 		INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 
@@ -932,6 +934,7 @@ As
 	
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ImportNewPeptideAnalyses] TO [MTS_DB_Dev] AS [dbo]

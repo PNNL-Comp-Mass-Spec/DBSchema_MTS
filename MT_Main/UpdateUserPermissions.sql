@@ -20,6 +20,7 @@ CREATE PROCEDURE UpdateUserPermissions
 **			08/10/2006 mem - Added MTS_DB_Reader
 **			04/21/2008 mem - Updated to grant ShowPlan permissions
 **			11/04/2008 mem - Now calling UpdateUserPermissionsViewDefinitions for MTS_DB_Dev and MTS_DB_Lite
+**			10/24/2012 mem - Added DMSReader
 **    
 *****************************************************/
 AS
@@ -116,6 +117,14 @@ AS
 		
 		exec sp_addrolemember 'db_datareader', 'MTS_DB_Reader'
 		exec sp_addrolemember 'DMS_SP_User', 'MTS_DB_Reader'
+		
+		if exists (select * from sys.schemas where name = 'DMSReader')
+			drop schema DMSReader
+		if exists (select * from sys.sysusers where name = 'DMSReader')
+			drop user DMSReader
+		create user DMSReader for login DMSReader
+		exec sp_addrolemember 'db_datareader', 'DMSReader'
+			
 	End
 
 	exec sp_addrolemember 'db_datareader', 'MTUser'

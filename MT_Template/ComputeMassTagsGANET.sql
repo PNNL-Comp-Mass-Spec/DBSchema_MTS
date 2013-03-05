@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ComputeMassTagsGANET
+CREATE Procedure dbo.ComputeMassTagsGANET
 /********************************************************
 **	Synchronizes tables T_Mass_Tags_NET and T_Mass_Tags
 **
@@ -32,6 +32,8 @@ CREATE Procedure ComputeMassTagsGANET
 **			09/07/2007 mem - Now posting log entries if the stored procedure runs for more than 2 minutes
 **			11/12/2007 mem - Added parameter @infoOnly
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			11/16/2012 mem - Now excluding early-eluting peptides that have observed NET values more than 10% away from predicted NET values; these are typically carryover peptides
+**						   - Now using -Log(MSGF_SpecProb) instead of discriminant score
 **
 *********************************************************/
 (
@@ -291,10 +293,10 @@ AS
 		Dataset_ID int,							-- A given dataset could have multiple analysis jobs; we're aggregating the data across jobs by dataset
 		ScanNum_NET real NULL,
 		ScanTime_NET real NULL,
-		DiscriminantScoreNorm real,
-		Score_NET_Product float NULL,			-- Product of DiscriminantScoreNorm and NET; used in computing weighted average
-		Score_NETDiff_Product float NULL,		-- Product of DiscriminantScoreNorm and (NET - NET_Avg)^2; used in computing standard error of NET_Avg
-		SNP_Div_ScoreSumMinusScore float NULL	-- Score_NETDiff_Product divided by [Sum(DiscriminantScoreNorm) - DiscriminantScoreNorm]
+		ConfidenceScore real,
+		Score_NET_Product float NULL,			-- Product of ConfidenceScore and NET; used in computing weighted average
+		Score_NETDiff_Product float NULL,		-- Product of ConfidenceScore and (NET - NET_Avg)^2; used in computing standard error of NET_Avg
+		SNP_Div_ScoreSumMinusScore float NULL	-- Score_NETDiff_Product divided by [Sum(ConfidenceScore) - ConfidenceScore]
 	)
 	
 	CREATE UNIQUE CLUSTERED INDEX IX_TempTable_NET_Stats_by_Dataset ON #NET_Stats_by_Dataset (Mass_Tag_ID, Dataset_ID)
@@ -310,14 +312,14 @@ AS
 		Mass_Tag_ID int,
 		NET_Min real,
 		NET_Max real,
-		NET_Avg float,						-- Average or weighted average discriminant score for given mass tag
+		NET_Avg float,							-- Average or weighted average score for given mass tag
 		NET_Cnt int,
-		NET_StDev float NULL,				-- StDev if not weighting, or unbiased StDev of the Weighted Average if we are weighting
-		NET_StDev_Biased float NULL,		-- Biased StDev
+		NET_StDev float NULL,					-- StDev if not weighting, or unbiased StDev of the Weighted Average if we are weighting
+		NET_StDev_Biased float NULL,			-- Biased StDev
 		NET_StandardError float NULL,			-- Unbiased standard error
 		NET_StandardError_Biased float NULL,	-- Biased standard error
-		DiscriminantScore_Sum float NULL,	-- Sum of the discriminant scores for given mass tag; for computation of Weighted_Variance and weighted standard error
-		DiscriminantScore_Max float NULL	-- Max of the discriminant scores for the given mass tag; for computation of weighted standard error
+		ConfidenceScore_Sum float NULL,			-- Sum of the confidence scores for given mass tag; for computation of Weighted_Variance and weighted standard error
+		ConfidenceScore_Max float NULL			-- Max of the confidence scores for the given mass tag; for computation of weighted standard error
 	)
 
 	CREATE UNIQUE CLUSTERED INDEX IX_TempTable_GANET_Stats ON #NET_Stats (Mass_Tag_ID)
@@ -327,7 +329,7 @@ AS
 	-- Equations for computing weighted average NET, weighted variance, and standard error
 	--
 	-- Given normalized elution times, t1, t2, ... tn
-	-- and given discriminant scores, d1, d2, ... dn
+	-- and given confidence scores, d1, d2, ... dn
 	--
 	-- Compute a weighted average time, T_WAvg = Sum(di*ti) / Sum(di)
 	--
@@ -353,15 +355,17 @@ AS
 		Set @MaxObsAreaInJobComparison = 0
 	Else
 		Set @MaxObsAreaInJobComparison = 1
-		
+
+	/*
+	** Old Code		
 	If @UseJobSlopeAndIntercept = 1
 		INSERT INTO #NET_Stats_by_Dataset (
-			Mass_Tag_ID, Dataset_ID, ScanNum_NET, ScanTime_NET, DiscriminantScoreNorm
+			Mass_Tag_ID, Dataset_ID, ScanNum_NET, ScanTime_NET, ConfidenceScore
 			)
 		SELECT	Mass_Tag_ID, Dataset_ID, 
 				Avg(ScanNum_NET) AS ScanNum_NETAvg, 
 				Avg(ScanTime_NET) AS ScanTime_NETAvg, 
-				Max(MaxDiscriminantScoreNorm) AS MaxDiscriminantScoreNorm
+				Max(MaxConfidenceScoreNorm) AS MaxConfidenceScoreNorm
 		FROM (
 			SELECT	BestObsQ.Mass_Tag_ID,
 					TAD.Dataset_ID,
@@ -374,7 +378,7 @@ AS
 					THEN BestObsQ.BestScanTime * TAD.ScanTime_NET_Slope + TAD.ScanTime_NET_Intercept
 					ELSE NULL
 					END AS ScanTime_NET,
-					Max(IsNull(SD.DiscriminantScoreNorm, 0.001)) AS MaxDiscriminantScoreNorm
+					Max(IsNull(SD.ConfidenceScore, 0.001)) AS MaxConfidenceScoreNorm
 			FROM  (	SELECT	Job, Mass_Tag_ID, 
 							MIN(Scan_Number) AS BestScanNum, 
 							MIN(Scan_Time_Peak_Apex) AS BestScanTime
@@ -403,37 +407,60 @@ AS
 			) AS LookupQ
 		GROUP BY Mass_Tag_ID, Dataset_ID
 	Else
-		INSERT INTO #NET_Stats_by_Dataset (
-			Mass_Tag_ID, Dataset_ID, ScanNum_NET, ScanTime_NET, DiscriminantScoreNorm
-			)
-		SELECT	BestObsQ.Mass_Tag_ID,
-				TAD.Dataset_ID,
-				Null AS ScanNum_NET,
-				Avg(BestNETObs) As NETAvg,
-				Max(IsNull(SD.DiscriminantScoreNorm, 0.001)) AS MaxDiscriminantScoreNorm
-		FROM  (	SELECT	Job, Mass_Tag_ID, 
-						MIN(Scan_Number) AS BestScanNum, 
-						MIN(GANET_Obs) AS BestNETObs
-				FROM T_Peptides
-				WHERE Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND NOT GANET_Obs Is Null
-				GROUP BY Job, Mass_Tag_ID
-				) AS BestObsQ INNER JOIN T_Analysis_Description AS TAD ON
-				BestObsQ.Job = TAD.Job INNER JOIN T_Peptides ON
-				BestObsQ.Job = T_Peptides.Job AND
-				BestObsQ.Mass_Tag_ID = T_Peptides.Mass_Tag_ID AND
-				BestObsQ.BestScanNum = T_Peptides.Scan_Number
-				LEFT OUTER JOIN T_Score_Discriminant AS SD ON
-				T_Peptides.Peptide_ID = SD.Peptide_ID
-		WHERE	T_Peptides.Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND
-			    ( IsNull(TAD.GANET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-				  IsNull(TAD.GANET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-				  IsNull(TAD.GANET_Slope, 0) > 0
-				) OR
-				( IsNull(TAD.ScanTime_NET_Fit, 0) >= IsNull(@MinNETFit, -1) And 
-				  IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, -1) And
-				  IsNull(TAD.ScanTime_NET_Slope, 0) > 0
-				)
-		GROUP BY BestObsQ.Mass_Tag_ID, TAD.Dataset_ID
+	*/
+
+	INSERT INTO #NET_Stats_by_Dataset (
+	    Mass_Tag_ID, Dataset_ID, ScanNum_NET, ScanTime_NET, ConfidenceScore
+	    )
+	SELECT FilteredDataQ.Mass_Tag_ID,
+	       FilteredDataQ.Dataset_ID,
+	       NULL AS ScanNum_NET,
+	       Avg(FilteredDataQ.BestNETObs) AS NETAvg,
+	       Max(FilteredDataQ.ConfidenceScore) AS MaxConfidenceScoreNorm
+	FROM ( SELECT BestObsQ.Mass_Tag_ID,
+	              TAD.Dataset_ID,
+	              BestNETObs,
+	              CASE SD.MSGF_SpecProb 
+	                   WHEN NULL THEN 1 
+	                   WHEN 0 THEN 90 
+	                   ELSE -Log(SD.MSGF_SpecProb)
+	              END ConfidenceScore,
+	              P.Scan_Time_Peak_Apex / RangeQ.Elution_Max AS FractionElutionRange
+	    FROM ( SELECT Job,
+	                  Mass_Tag_ID,
+	                  MIN(Scan_Number) AS BestScanNum,
+	                  MIN(GANET_Obs) AS BestNETObs
+	            FROM T_Peptides
+	            WHERE Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND
+	                  NOT GANET_Obs IS NULL
+	            GROUP BY Job, Mass_Tag_ID 
+	         ) AS BestObsQ
+	         INNER JOIN T_Analysis_Description AS TAD
+	           ON BestObsQ.Job = TAD.Job
+	         INNER JOIN T_Peptides P
+	           ON BestObsQ.Job = P.Job AND
+	              BestObsQ.Mass_Tag_ID = P.Mass_Tag_ID AND
+	              BestObsQ.BestScanNum = P.Scan_Number
+	         LEFT OUTER JOIN T_Score_Discriminant AS SD
+	           ON P.Peptide_ID = SD.Peptide_ID
+	         INNER JOIN ( SELECT Job,
+	                             MAX(Scan_Time_Peak_Apex) AS Elution_Max
+	                      FROM T_Peptides
+	                      GROUP BY Job 
+	                    ) RangeQ
+	           ON BestObsQ.Job = RangeQ.Job
+	    WHERE P.Max_Obs_Area_In_Job >= @MaxObsAreaInJobComparison AND
+	            (
+	                (IsNull(TAD.GANET_Fit, 0)        >= IsNull(@MinNETFit, - 1) AND IsNull(TAD.GANET_RSquared, 0)        >= IsNull(@MinNETRSquared, - 1) AND IsNull(TAD.GANET_Slope, 0) > 0) OR
+	                (IsNull(TAD.ScanTime_NET_Fit, 0) >= IsNull(@MinNETFit, - 1) AND IsNull(TAD.ScanTime_NET_RSquared, 0) >= IsNull(@MinNETRSquared, - 1) AND IsNull(TAD.ScanTime_NET_Slope, 0) > 0)
+	            ) 
+	        ) FilteredDataQ
+	    INNER JOIN T_Mass_Tags_NET MTN
+	      ON FilteredDataQ.Mass_Tag_ID = MTN.Mass_Tag_ID
+	WHERE ( (FractionElutionRange < 0.02) AND (PNET - BestNETObs <= 0.1) ) OR                                                -- Filter out peptides that elute within the first 2% of the run and have observed NET values more than 0.1 units away from predicted NET values
+	      ( (FractionElutionRange BETWEEN 0.02 AND 0.05) AND (PNET - BestNETObs <= FractionElutionRange * 2.5 + 0.05) ) OR   -- Filter out peptides that elute within the first 2% to 5% of the run and have observed NET values more than 0.1 to 0.175 units away from predicted NET values
+	      (FractionElutionRange >= 0.05)                                                                                     -- Do not filter peptides that elute 5% into the run or later
+	GROUP BY FilteredDataQ.Mass_Tag_ID, FilteredDataQ.Dataset_ID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -443,7 +470,7 @@ AS
 		Goto Done
 	End
 
-	if DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
+	If DateDiff(second, @lastProgressUpdate, GetDate()) >= @ProgressUpdateIntervalThresholdSeconds
 	Begin
 		set @message = '...Processing: Populated #NET_Stats_by_Dataset (' + convert(varchar(19), @myRowCount) + ' total rows)'
 		execute PostLogEntry 'Progress', @message, 'ComputeMassTagsGANET'
@@ -470,7 +497,7 @@ AS
 		--
 
 		UPDATE #NET_Stats_by_Dataset
-		SET Score_NET_Product = ScanTime_NET * DiscriminantScoreNorm
+		SET Score_NET_Product = ScanTime_NET * ConfidenceScore
 		WHERE NOT ScanTime_NET IS NULL
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -482,18 +509,18 @@ AS
 		
 		INSERT INTO #NET_Stats (
 			Mass_Tag_ID, NET_Min, NET_Max,
-			NET_Avg, NET_Cnt, DiscriminantScore_Sum, DiscriminantScore_Max
+			NET_Avg, NET_Cnt, ConfidenceScore_Sum, ConfidenceScore_Max
 		)
 		SELECT	Mass_Tag_ID,
 				MIN(ScanTime_NET) AS NET_Min, 
 				MAX(ScanTime_NET) AS NET_Max, 
-				CASE WHEN SUM(DiscriminantScoreNorm) > 0
-				THEN SUM(Score_NET_Product) / SUM(DiscriminantScoreNorm)
+				CASE WHEN SUM(ConfidenceScore) > 0
+				THEN SUM(Score_NET_Product) / SUM(ConfidenceScore)
 				ELSE 0
 				END NET_Avg,
 				COUNT(ScanTime_NET) AS NET_Cnt,
-				SUM(DiscriminantScoreNorm) AS DiscriminantScore_Sum,
-				MAX(DiscriminantScoreNorm) AS DiscriminantScore_Max
+				SUM(ConfidenceScore) AS ConfidenceScore_Sum,
+				MAX(ConfidenceScore) AS ConfidenceScore_Max
 		FROM #NET_Stats_by_Dataset
 		WHERE NOT ScanTime_NET IS NULL
 		GROUP BY Mass_Tag_ID
@@ -513,7 +540,7 @@ AS
 		--
 
 		UPDATE #NET_Stats_by_Dataset
-		SET Score_NETDiff_Product = DiscriminantScoreNorm * SQUARE(ScanTime_NET - #NET_Stats.NET_Avg)
+		SET Score_NETDiff_Product = ConfidenceScore * SQUARE(ScanTime_NET - #NET_Stats.NET_Avg)
 		FROM #NET_Stats_by_Dataset INNER JOIN #NET_Stats ON
 			 #NET_Stats_by_Dataset.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID
 		WHERE NOT #NET_Stats_by_Dataset.ScanTime_NET IS NULL
@@ -526,12 +553,12 @@ AS
 		--
 		
 		UPDATE #NET_Stats_by_Dataset
-		SET SNP_Div_ScoreSumMinusScore = CASE WHEN #NET_Stats.DiscriminantScore_Sum - DiscriminantScoreNorm = 0 THEN 0
-										 ELSE Score_NETDiff_Product / (#NET_Stats.DiscriminantScore_Sum - DiscriminantScoreNorm)
+		SET SNP_Div_ScoreSumMinusScore = CASE WHEN #NET_Stats.ConfidenceScore_Sum - ConfidenceScore = 0 THEN 0
+										 ELSE Score_NETDiff_Product / (#NET_Stats.ConfidenceScore_Sum - ConfidenceScore)
 										 END
 		FROM #NET_Stats_by_Dataset INNER JOIN #NET_Stats ON
 			 #NET_Stats_by_Dataset.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID
-		WHERE NOT #NET_Stats_by_Dataset.DiscriminantScoreNorm IS NULL
+		WHERE NOT #NET_Stats_by_Dataset.ConfidenceScore IS NULL
 		--
 		SELECT @myError = @myError + @@error, @myRowCount = @@rowcount
 
@@ -558,12 +585,12 @@ AS
 				HAVING NS.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID)
 			,
 			NET_StDev_Biased = (
-				SELECT Sqrt(SUM(NSD.Score_NETDiff_Product) / NS.DiscriminantScore_Sum) AS NET_StDev_Biased
+				SELECT Sqrt(SUM(NSD.Score_NETDiff_Product) / NS.ConfidenceScore_Sum) AS NET_StDev_Biased
 				FROM #NET_Stats_by_Dataset AS NSD INNER JOIN
 					#NET_Stats AS NS ON NSD.Mass_Tag_ID = NS.Mass_Tag_ID
 				WHERE NOT NSD.ScanTime_NET IS NULL AND
-					NS.DiscriminantScore_Sum > 0
-				GROUP BY NS.Mass_Tag_ID, NS.DiscriminantScore_Sum
+					NS.ConfidenceScore_Sum > 0
+				GROUP BY NS.Mass_Tag_ID, NS.ConfidenceScore_Sum
 				HAVING NS.Mass_Tag_ID = #NET_Stats.Mass_Tag_ID)
 		WHERE NET_Cnt > 1
 		--
@@ -575,9 +602,9 @@ AS
 		--
 		
 		UPDATE #NET_Stats
-		SET NET_StandardError = Sqrt(DiscriminantScore_Max) / Sqrt(DiscriminantScore_Sum) * NET_StDev,
-			NET_StandardError_Biased = Sqrt(DiscriminantScore_Max) / Sqrt(DiscriminantScore_Sum) * NET_StDev_Biased
-		WHERE DiscriminantScore_Sum > 0 AND NET_Cnt > 1
+		SET NET_StandardError = Sqrt(ConfidenceScore_Max) / Sqrt(ConfidenceScore_Sum) * NET_StDev,
+			NET_StandardError_Biased = Sqrt(ConfidenceScore_Max) / Sqrt(ConfidenceScore_Sum) * NET_StDev_Biased
+		WHERE ConfidenceScore_Sum > 0 AND NET_Cnt > 1
 		--
 		SELECT @myError = @myError + @@error, @myRowCount = @@rowcount
 		--
@@ -814,6 +841,7 @@ AS
 Done:
 
 	Return @MyError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev] AS [dbo]

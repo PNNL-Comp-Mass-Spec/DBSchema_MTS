@@ -33,6 +33,7 @@ CREATE TABLE [dbo].[T_DMS_Dataset_Info_Cached](
 	[File Size MB] [real] NULL,
 	[PreDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[PostDigest Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Instrument_Data_Purged] [tinyint] NOT NULL,
 	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_T_DMS_Dataset_Info_Cached] PRIMARY KEY CLUSTERED 
 (
@@ -88,6 +89,8 @@ AS
 				 inserted ON DS.ID = inserted.ID
 	End
 
+GO
+ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Instrument_Data_Purged]  DEFAULT ((0)) FOR [Instrument_Data_Purged]
 GO
 ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Dataset_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

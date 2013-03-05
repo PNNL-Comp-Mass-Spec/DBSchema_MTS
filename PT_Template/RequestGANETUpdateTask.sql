@@ -38,6 +38,8 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			04/21/2010 mem - Now examining field Regression_Param_File when looking for available jobs
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			07/20/2012 mem - Now calling UpdateNETRegressionParamFileName for jobs in state 44
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **
 *****************************************************/
 (
@@ -102,18 +104,6 @@ As
 	Set @RegressionOrder = 3			-- 1 for first order, 3 for non-linear
 
 	set @taskAvailable = 0
-	
-	-----------------------------------------------
-	-- Populate a temporary table with the list of known Result Types appropriate for NET alignment
-	-----------------------------------------------
-	CREATE TABLE #T_ResultTypeList (
-		ResultType varchar(64)
-	)
-	
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
 	
 	---------------------------------------------------
 	-- Look for jobs that are timed out (State 44)
@@ -278,7 +268,7 @@ As
 
 	SELECT @MatchCount = Count(TAD.Job)
 	FROM T_Analysis_Description TAD INNER JOIN
-		 #T_ResultTypeList RTL ON TAD.ResultType = RTL.ResultType
+		 dbo.tblPeptideHitResultTypes() RTL ON TAD.ResultType = RTL.ResultType
 	WHERE TAD.Process_State = @ProcessStateMatch
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -333,7 +323,7 @@ As
 	--			
 	SELECT TOP 1 @ParamFileMatch = Regression_Param_File
 	FROM T_Analysis_Description TAD
-	     INNER JOIN #T_ResultTypeList RTL
+	     INNER JOIN dbo.tblPeptideHitResultTypes() RTL
 	       ON TAD.ResultType = RTL.ResultType
 	WHERE TAD.Process_State = @ProcessStateMatch AND
 	      IsNull(TAD.Regression_Param_File, '') <> ''
@@ -347,7 +337,7 @@ As
 	FROM ( SELECT TOP ( @BatchSize ) TAD.Job,
 	                                 IsNull(TAD.RowCount_Loaded, 0) AS PeptideCount
 	       FROM T_Analysis_Description TAD WITH ( HoldLock )
-	            INNER JOIN #T_ResultTypeList RTL
+	            INNER JOIN dbo.tblPeptideHitResultTypes() RTL
 	              ON TAD.ResultType = RTL.ResultType
 	       WHERE TAD.Process_State = @ProcessStateMatch AND
 	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
@@ -357,7 +347,7 @@ As
 	     ( SELECT TOP ( @BatchSize ) TAD.Job,
 	                                 IsNull(TAD.RowCount_Loaded, 0) AS PeptideCount
 	       FROM T_Analysis_Description TAD WITH ( HoldLock )
-	            INNER JOIN #T_ResultTypeList RTL
+	            INNER JOIN dbo.tblPeptideHitResultTypes() RTL
 	              ON TAD.ResultType = RTL.ResultType
 	       WHERE TAD.Process_State = @ProcessStateMatch AND
 	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
@@ -385,7 +375,7 @@ As
 		INSERT INTO T_NET_Update_Task_Job_Map ( Task_ID, Job )
 		SELECT TOP 1 @TaskID AS Task_ID, Job
 		FROM T_Analysis_Description TAD WITH ( HoldLock )
-		     INNER JOIN #T_ResultTypeList RTL
+		     INNER JOIN dbo.tblPeptideHitResultTypes() RTL
 		       ON TAD.ResultType = RTL.ResultType
 		WHERE TAD.Process_State = @ProcessStateMatch
 		ORDER BY Job ASC

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadSeqInfoAndModsPart2
+CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 /****************************************************
 **
 **	Desc: 
@@ -18,6 +18,7 @@ CREATE Procedure LoadSeqInfoAndModsPart2
 **			#Tmp_Peptide_ResultToSeqMap
 **			#Tmp_Peptide_SeqInfo
 **			#Tmp_Peptide_ModDetails
+**			#Tmp_Peptide_ModSummary
 **
 **		This procedure works for both Sequest and XTandem and should be called
 **		from LoadSequestPeptidesBulk or LoadXTandemPeptidesBulk.
@@ -32,6 +33,7 @@ CREATE Procedure LoadSeqInfoAndModsPart2
 **			06/28/2006 mem - Now checking for negative Position values in #Tmp_Peptide_ModDetails
 **			08/26/2008 mem - Added additional logging when LogLevel >= 2
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Now populating T_Seq_Candidate_ModSummary using #Tmp_Peptide_ModSummary
 **
 *****************************************************/
 (
@@ -69,6 +71,15 @@ As
 	Set @LogMessage = 'Populating T_Seq_Candidates using #Tmp_Peptide_Import, #Tmp_Unique_Records, and the SeqInfo tables'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
+	
+	-----------------------------------------------
+	-- Make sure the Seq_Candidate tables do not have any data for this job
+	-----------------------------------------------
+	--
+	DELETE FROM T_Seq_Candidate_to_Peptide_Map Where Job = @Job
+	DELETE FROM T_Seq_Candidate_ModDetails	 Where Job = @Job
+	DELETE FROM T_Seq_Candidates Where Job = @Job
+	DELETE FROM T_Seq_Candidate_ModSummary Where Job = @Job
 	
 
 	-----------------------------------------------
@@ -203,8 +214,10 @@ As
 		(Job, Seq_ID_Local, Mass_Correction_Tag, [Position])
 	SELECT @Job AS Job, SCMD.Seq_ID_Local, 
 		   SCMD.Mass_Correction_Tag, SCMD.[Position]
-	FROM #Tmp_Peptide_ModDetails SCMD INNER JOIN
-		 T_Seq_Candidates SC ON SCMD.Seq_ID_Local = SC.Seq_ID_Local AND SC.Job = @Job
+	FROM #Tmp_Peptide_ModDetails SCMD
+	     INNER JOIN T_Seq_Candidates SC
+	       ON SCMD.Seq_ID_Local = SC.Seq_ID_Local AND
+	          SC.Job = @Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -218,6 +231,50 @@ As
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
 
+	-----------------------------------------------
+	-- Insert new data into T_Seq_Candidate_ModSummary
+	-- We're linking into T_Seq_Candidates here to
+	-- limit the data loaded to only be for those peptides
+	-- that passed the import filters
+	-----------------------------------------------
+	--
+	INSERT INTO T_Seq_Candidate_ModSummary
+		(Job, Modification_Symbol, Modification_Mass, Target_Residues, Modification_Type, Mass_Correction_Tag, Occurrence_Count)	
+	SELECT Job,
+	       Modification_Symbol,
+	       Modification_Mass,
+	       Target_Residues,
+	       Modification_Type,
+	       Mass_Correction_Tag,
+	       Occurrence_Count
+	FROM ( SELECT @Job AS Job,
+	              SCMS.Modification_Symbol,
+	              SCMS.Modification_Mass,
+	              SCMS.Target_Residues,
+	              SCMS.Modification_Type,
+	              SCMS.Mass_Correction_Tag,
+	              SCMS.Occurrence_Count,
+	              Row_Number() OVER ( Partition BY SC.Job, SCMS.Mass_Correction_Tag ORDER BY SCMS.Occurrence_Count Desc) AS TagRank
+	       FROM #Tmp_Peptide_ModDetails SCMD
+	            INNER JOIN T_Seq_Candidates SC
+	              ON SCMD.Seq_ID_Local = SC.Seq_ID_Local AND
+	                 SC.Job = @Job
+	            INNER JOIN #Tmp_Peptide_ModSummary SCMS
+	              ON SCMD.Mass_Correction_Tag = SCMS.Mass_Correction_Tag 
+	     ) RankQ
+	WHERE TagRank = 1
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Error inserting into T_Seq_Candidate_ModSummary for job ' + @jobStr
+		goto Done
+	end
+		
+	Set @LogMessage = 'Populated T_Seq_Candidate_ModSummary with ' + Convert(varchar(12), @myRowCount) + ' rows'
+	if @LogLevel >= 2
+		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
 
 	-----------------------------------------------
 	-- Make sure the number of rows inserted equals the number of rows in T_Peptides for this job
@@ -248,6 +305,7 @@ As
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart2] TO [MTS_DB_Dev] AS [dbo]

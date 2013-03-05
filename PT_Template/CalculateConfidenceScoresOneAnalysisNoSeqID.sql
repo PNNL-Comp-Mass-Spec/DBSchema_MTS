@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE CalculateConfidenceScoresOneAnalysisNoSeqID
+CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysisNoSeqID
 /****************************************************
 **
 **	Desc: 
@@ -24,6 +24,7 @@ CREATE PROCEDURE CalculateConfidenceScoresOneAnalysisNoSeqID
 **			02/19/2009 mem - Changed @ResidueCount to bigint
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -206,9 +207,9 @@ AS
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End	
 
-	If @ResultType = 'MSG_Peptide_Hit'
+	If @ResultType IN ('MSG_Peptide_Hit', 'MSA_Peptide_Hit')
 	Begin
-		-- We don't actually compute discriminant Score values for MSGF-DB results
+		-- We don't actually compute discriminant Score values for MSGF-DB (aka MSGF+) or MSAlign results
 		-- Instead, we just update them to 1 and 0.5
 		
 		UPDATE T_Score_Discriminant
@@ -244,7 +245,7 @@ AS
 		goto done
 	end
 
-	If @ResultType <> 'MSG_Peptide_Hit'
+	If NOT @ResultType IN ('MSG_Peptide_Hit', 'MSA_Peptide_Hit')
 	Begin -- <a>
 
 		------------------------------------------------------------------
@@ -340,6 +341,7 @@ AS
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CalculateConfidenceScoresOneAnalysisNoSeqID] TO [MTS_DB_Dev] AS [dbo]

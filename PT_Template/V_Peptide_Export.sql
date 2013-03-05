@@ -26,7 +26,8 @@ SELECT Pep.Job,
        PFF.Filter_ID,
        Pep.Peak_Area,
        Pep.Peak_SN_Ratio,
-       Pep.DelM_PPM
+       Pep.DelM_PPM,
+       Pep.RankHit
 FROM T_Peptides Pep
      INNER JOIN T_Sequence S
        ON Pep.Seq_ID = S.Seq_ID

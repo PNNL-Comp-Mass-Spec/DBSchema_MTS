@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[DeletePeptidesForJobAndResetToNew] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
@@ -28,6 +28,7 @@ CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 **			11/05/2008 mem - Added support for Inspect results (type IN_Peptide_Hit)
 **			10/06/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -145,6 +146,15 @@ AS
 	DELETE T_Score_MSGFDB
 	FROM T_Peptides INNER JOIN T_Score_MSGFDB
 		 ON T_Peptides.Peptide_ID = T_Score_MSGFDB.Peptide_ID
+		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	If @myError <> 0 Goto Done
+
+	DELETE T_Score_MSAlign
+	FROM T_Peptides INNER JOIN T_Score_MSAlign
+		 ON T_Peptides.Peptide_ID = T_Score_MSAlign.Peptide_ID
 		 INNER JOIN #JobListToDelete ON T_Peptides.Job = #JobListToDelete.Job
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error

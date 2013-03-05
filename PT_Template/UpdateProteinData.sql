@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure UpdateProteinData
+CREATE Procedure dbo.UpdateProteinData
 /****************************************************
 **
 **	Desc:	Updates local copy of the Protein table
@@ -17,7 +17,8 @@ CREATE Procedure UpdateProteinData
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_Info
 **			01/06/2012 mem - Updated to use T_Peptides.Job
-**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins (MS-GFDB)
+**			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **    
 *****************************************************/
 (
@@ -369,7 +370,8 @@ As
 									Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 									Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
 									Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-									Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
+									Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
+									Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
 						           )
 						
 						If @MatchCount = 0
@@ -548,5 +550,6 @@ Done:
 DoneSkipLog:
 
 	return @myError
+
 
 GO

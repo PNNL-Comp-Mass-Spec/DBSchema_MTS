@@ -56,6 +56,7 @@ CREATE PROCEDURE dbo.MasterUpdateMassTags
 **			04/23/2008 mem - Minor changes to the status messages posted to T_Log_Entries
 **			12/08/2008 mem - Now calling RefreshMSMSJobNETs and RefreshMSMSSICJobs if 'ForceMSMSProcessingOnNextUpdate' is enabled, even if @skipImport = 1
 **			03/10/2009 mem - Now retrieving @ProteinCountAdded and @ProteinCountUpdated from RefreshLocalProteinTable
+**			11/21/2012 mem - Now passing 'Custom_SP_MSMS' to RunCustomSPs
 **    
 *****************************************************/
 (
@@ -508,7 +509,7 @@ As
 	begin
 		If @logLevel >= 2
 			execute PostLogEntry 'Normal', 'Begin RunCustomSPs', 'MasterUpdateMassTags'
-		EXEC @result = RunCustomSPs @logLevel, @message output
+		EXEC @result = RunCustomSPs @logLevel, @message output, @CustomSPConfigName='Custom_SP_MSMS'		
 		if @result = 0
 			set @message = 'Complete RunCustomSPs: ' + @message
 		else

@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[RefreshPeptideHitScores] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE Procedure RefreshPeptideHitScores
@@ -23,6 +23,7 @@ CREATE Procedure RefreshPeptideHitScores
 **	Date:	01/14/2012 mem
 **			01/17/2012 mem - Now populating T_Analysis_ToolVersion
 **			02/28/2012 mem - Added check for all entries in T_Analysis_Description having PeptideDBID = 0
+**			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -298,7 +299,8 @@ As
 				Else
 				Begin
 					Set @S = @S + ' UPDATE P_Target'
-					Set @S = @S + ' SET DelM_PPM = P_Src.DelM_PPM'
+					Set @S = @S + ' SET DelM_PPM = P_Src.DelM_PPM, '
+					Set @S = @S +     ' RankHit = P_Src.RankHit'
 				End
 
 				Set @S = @S + ' FROM T_Peptides P_Target'
@@ -310,7 +312,8 @@ As
 				Set @S = @S +           ' P_Target.Mass_Tag_ID = P_Src.Seq_ID'
 				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdate AS JTU ON'
 				Set @S = @S +         ' P_Src.Job = JTU.Job'
-				Set @S = @S + ' WHERE IsNull(P_Target.DelM_PPM, -12345) <> IsNull(P_Src.DelM_PPM, -12345)'
+				Set @S = @S + ' WHERE IsNull(P_Target.DelM_PPM, -12345) <> IsNull(P_Src.DelM_PPM, -12345) OR '
+				Set @S = @S +       ' IsNull(P_Target.RankHit, -1) <> IsNull(P_Src.RankHit, -1)'
 
 				If @infoOnly <> 0
 				Begin
@@ -482,7 +485,7 @@ As
 				Set @S = @S +         ' P_Src.Job = JTU.Job'
 				Set @S = @S + ' WHERE MSG_target.Normalized_Score <> MSG_Src.Normalized_Score OR'
 				Set @S = @S +      '  MSG_target.MSGFScore <> MSG_Src.MSGFScore OR'
-				Set @S = @S +      '  IsNull(MSG_target.PepFDR, -1234) <> IsNull(MSG_Src.PepFDR, -1230)'
+				Set @S = @S +      '  IsNull(MSG_target.PepFDR, -1234) <> IsNull(MSG_Src.PepFDR, -1234)'
 
 				If @infoOnly <> 0
 				Begin
@@ -492,6 +495,50 @@ As
 				INSERT INTO #T_Tmp_SqlStatements (UpdateTarget, S)
 				Values ('T_Score_MSGFDB', @S)
 
+
+				---------------------------------------------------
+				-- 5. Update T_Score_MSAlign
+				---------------------------------------------------
+				--
+				Set @S = ''
+
+				If @infoOnly <> 0
+				Begin
+					-- Return the Job and the number of rows that would be updated
+					Set @S = @S + @PreviewSelect + '_T_Score_MSAlign'
+				End
+				Else
+				Begin
+					Set @S = @S + ' UPDATE MSA_target'
+					Set @S = @S + ' SET Normalized_Score = MSA_Src.Normalized_Score,'
+					Set @S = @S + '     PValue = MSA_Src.PValue,'
+					Set @S = @S + '     FDR = MSA_Src.FDR'
+				End
+				
+				Set @S = @S + ' FROM T_Peptides P_Target'
+				Set @S = @S +      ' INNER JOIN ' + @PeptideDBPath + '.dbo.T_Peptides P_Src'
+				Set @S = @S +        ' ON P_Target.Job = P_Src.Job AND'
+				Set @S = @S +           ' P_Target.Scan_Number = P_Src.Scan_Number AND'
+				Set @S = @S +           ' P_Target.Number_Of_Scans = P_Src.Number_Of_Scans AND'
+				Set @S = @S +           ' P_Target.Charge_State = P_Src.Charge_State AND'
+				Set @S = @S +           ' P_Target.Mass_Tag_ID = P_Src.Seq_ID'
+				Set @S = @S +      ' INNER JOIN T_Score_MSAlign MSA_Target'
+				Set @S = @S +        ' ON P_Target.Peptide_ID = MSA_Target.Peptide_ID'
+				Set @S = @S +      ' INNER JOIN ' + @PeptideDBPath + '.dbo.T_Score_MSAlign MSA_Src'
+				Set @S = @S +        ' ON P_Src.Peptide_ID = MSA_Src.Peptide_ID'
+				Set @S = @S +      ' INNER JOIN #T_Tmp_JobsToUpdate AS JTU ON'
+				Set @S = @S +         ' P_Src.Job = JTU.Job'
+				Set @S = @S + ' WHERE MSA_target.Normalized_Score <> MSA_Src.Normalized_Score OR'
+				Set @S = @S +      '  MSA_target.PValue <> MSA_Src.PValue OR'
+				Set @S = @S +      '  IsNull(MSA_target.FDR, -1234) <> IsNull(MSA_Src.FDR, -1234)'
+
+				If @infoOnly <> 0
+				Begin
+					Set @S = @S + @PreviewSuffix
+				End
+				
+				INSERT INTO #T_Tmp_SqlStatements (UpdateTarget, S)
+				Values ('T_Score_MSAlign', @S)
 
 				---------------------------------------------------
 				-- Process each row in #T_Tmp_SqlStatements
@@ -650,6 +697,5 @@ Done:
 	End
 
 	return @myError
-
 
 GO

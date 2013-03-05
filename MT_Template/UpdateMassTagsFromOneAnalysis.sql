@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[UpdateMassTagsFromOneAnalysis] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE Procedure UpdateMassTagsFromOneAnalysis
@@ -55,6 +55,8 @@ CREATE Procedure UpdateMassTagsFromOneAnalysis
 **			08/16/2010 mem - Now populating MSGF_SpecProb in T_Score_Discriminant
 **			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			               - Now populating T_Peptides.DelM_PPM And T_Peptides.RankHit
 **
 *****************************************************/
 (
@@ -248,6 +250,8 @@ As
 		Peptide_ID_Original int NOT NULL,
 		Peak_Area float,
 		Peak_SN_Ratio real,
+		DelM_PPM real, 
+		RankHit smallint,
 		Unique_Row_ID int IDENTITY (1, 1) NOT NULL,
 		Peptide_ID_New int NULL
 	)   
@@ -369,14 +373,14 @@ As
 	set @S = @S + ' Scan_Number, Number_Of_Scans, Charge_State, MH,'
 	set @S = @S + ' Monoisotopic_Mass, GANET_Obs, GANET_Predicted, Scan_Time_Peak_Apex, Multiple_ORF,'
 	set @S = @S + ' Peptide, Clean_Sequence, Mod_Count, Mod_Description,'
-	set @S = @S + ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio'
+	set @S = @S + ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit'
 	set @S = @S + ') '
 	--
 	set @S = @S + 'SELECT '
 	set @S = @S + ' Scan_Number, Number_Of_Scans, Charge_State, MH,'
 	set @S = @S + ' Monoisotopic_Mass, GANET_Obs, GANET_Predicted,  Scan_Time_Peak_Apex, Multiple_ORF,'
 	set @S = @S + ' Peptide, Clean_Sequence, Mod_Count, Mod_Description,'
-	set @S = @S + ' Seq_ID, Peptide_ID, Peak_Area, Peak_SN_Ratio '
+	set @S = @S + ' Seq_ID, Peptide_ID, Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit '
 	set @S = @S + 'FROM '
 	set @S = @S +   ' ' + @PeptideDBPath + '.dbo.V_Peptide_Export '
 	set @S = @S + 'WHERE (Job = ' + @jobStr + ') '
@@ -697,11 +701,11 @@ As
 	INSERT INTO T_Peptides (
 		Peptide_ID, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_Proteins, Peptide, Mass_Tag_ID, GANET_Obs, State_ID, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio
+		Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit
 		)
 	SELECT Peptide_ID_New, @job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_ORF, Peptide, Seq_ID, GANET_Obs, 2 As StateCandidate, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio
+		Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit
 	FROM #Imported_Peptides
 	ORDER BY Peptide_ID_New
 	--
@@ -923,7 +927,7 @@ As
 			if @result <> 0 
 			begin
 				rollback transaction @transName
-				set @message = 'Error executing dynamic SQL for T_Score__MSGFDB for ' + @JobListMsgStr
+				set @message = 'Error executing dynamic SQL for T_Score_MSGFDB for ' + @JobListMsgStr
 				set @myError = 50022
 				goto Done
 			end
@@ -951,6 +955,62 @@ As
 		Set @ResultTypeValid = 1
 	End
 
+	If @ResultType = 'MSA_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_MSAlign
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_MSAlign ('
+		set @S = @S + ' Peptide_ID, Prsm_ID, PrecursorMZ, DelM, Unexpected_Mod_Count, Peak_Count, Matched_Peak_Count, '
+		set @S = @S +  ' Matched_Fragment_Ion_Count, PValue, EValue, FDR, Normalized_Score'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, M.Prsm_ID, M.PrecursorMZ, M.DelM, M.Unexpected_Mod_Count, M.Peak_Count, M.Matched_Peak_Count, '
+		set @S = @S +  ' M.Matched_Fragment_Ion_Count, M.PValue, M.EValue, M.FDR, M.Normalized_Score'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSAlign AS I ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		
+		If @previewSql <> 0
+			Print @S
+		Else
+		Begin
+			exec @result = sp_executesql @S
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			--
+			if @result <> 0 
+			begin
+				rollback transaction @transName
+				set @message = 'Error executing dynamic SQL for T_Score_MSAlign for ' + @JobListMsgStr
+				set @myError = 50028
+				goto Done
+			end
+			--
+			Set @numAddedPeptideHitScores = @myRowCount
+			
+			-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+			--
+			INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+			SELECT	Mass_Tag_ID, 
+					COUNT(*) AS Observation_Count, 
+					MAX(Normalized_Score_Max) AS Normalized_Score_Max
+			FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+							IP.Scan_Number, 
+							MAX(ISNULL(M.Normalized_Score, 0)) AS Normalized_Score_Max
+					FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					     T_Score_MSAlign AS M ON IP.Peptide_ID_New = M.Peptide_ID
+					GROUP BY IP.Seq_ID, IP.Scan_Number
+					) AS SubQ
+			GROUP BY SubQ.Mass_Tag_ID	
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+		End
+		
+		Set @ResultTypeValid = 1
+	End
+	
 	If @ResultTypeValid = 0
 	Begin
 		If @previewSql = 0

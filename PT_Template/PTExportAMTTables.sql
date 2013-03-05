@@ -19,7 +19,8 @@ CREATE Procedure PTExportAMTTables
 **			11/11/2009 mem - Switched to using #TmpPeptideStats_Results to determine the peptides and proteins to export
 **						   - Added parameter @ReturnPeptideToProteinMapTable
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
-**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins (MS-GFDB)
+**			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **
 ****************************************************/
 (
@@ -101,7 +102,8 @@ AS
 				             Prot.Reference LIKE 'scrambled[_]%' OR		-- MTS scrambled proteins
 				             Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
 				             Prot.Reference LIKE 'xxx.%' OR				-- Inspect reversed/scrambled proteins
-				             Prot.Reference LIKE 'rev[_]%'				-- MSGFDB reversed proteins
+				             Prot.Reference LIKE 'rev[_]%' OR			-- MSGFDB reversed proteins
+				             Prot.Reference LIKE 'xxx[_]%'				-- MSGF+ reversed proteins
 				        THEN 1
 				        ELSE 0
 				    END AS Decoy_Protein
@@ -199,5 +201,6 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
+
 
 GO

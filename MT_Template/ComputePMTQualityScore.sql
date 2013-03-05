@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[ComputePMTQualityScore] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE Procedure ComputePMTQualityScore
@@ -48,6 +48,7 @@ CREATE Procedure ComputePMTQualityScore
 **			12/04/2010 mem - Now displaying additional MT count info in the status message
 **			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **
 ****************************************************/
 (
@@ -132,11 +133,11 @@ As
 		UniqueID int IDENTITY(1,1),
 		ResultType varchar(64)
 	)
-	
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
+		
+	INSERT INTO #T_ResultTypeList (ResultType)
+	SELECT ResultType
+	FROM dbo.tblPeptideHitResultTypes()
+
 
 	-----------------------------------------------------------
 	-- Create a temporary table to store the new PMT Quality Score values
@@ -214,9 +215,11 @@ As
 			MSGFDB_SpecProb_Min float NOT NULL,		-- Only used for MSGFDB data
 			MSGFDB_PValue_Min float NOT NULL, 		-- Only used for MSGFDB data
 			MSGFDB_FDR_Min float NOT NULL,			-- Only used for MSGFDB data
+			MSAlign_PValue_Min float NOT NULL,		-- Only used for MSAlign data
+			MSAlign_FDR_Min float NOT NULL,			-- Only used for MSAlign data
 			Discriminant_Score_Max float NOT NULL,
 			Peptide_Prophet_Max float NOT NULL,
-			MSGF_SpecProb_Min float NOT NULL			-- Used for Sequest, X!Tandem, Inspect, or MSGF_DB results			
+			MSGF_SpecProb_Min float NOT NULL			-- Used for Sequest, X!Tandem, Inspect, or MSGF_DB results; ignored for MSAlign
 		)
 		
 		CREATE UNIQUE INDEX #IX_PeptideStats ON #PeptideStats (Mass_Tag_ID, Charge_State)
@@ -328,7 +331,7 @@ As
 			@InspectPValueComparison varchar(2),			-- Only used for Inspect results
 			@InspectPValueThreshold real,
 						
-			@MSGFSpecProbComparison varchar(2),				-- Used for Sequest, X!Tandem, or Inspect results
+			@MSGFSpecProbComparison varchar(2),				-- Used for Sequest, X!Tandem, or Inspect results; Ignored for MSAlign
 			@MSGFSpecProbThreshold real,
 
 			@MSGFDbSpecProbComparison varchar(2),			-- Only used for MSGFDB results
@@ -336,8 +339,13 @@ As
 			@MSGFDbPValueComparison varchar(2),				-- Only used for MSGFDB results
 			@MSGFDbPValueThreshold real,
 			@MSGFDbFDRComparison varchar(2),				-- Only used for MSGFDB results
-			@MSGFDbFDRThreshold real
+			@MSGFDbFDRThreshold real,
 
+			@MSAlignPValueComparison varchar(2),			-- Used by MSAlign
+			@MSAlignPValueThreshold real,			
+			@MSAlignFDRComparison varchar(2),				-- Used by MSAlign
+			@MSAlignFDRThreshold real
+			
 	-----------------------------------------------------------
 	-- The following hold the DeltaCn thresholds last used to populate #PeptideStats
 	-----------------------------------------------------------
@@ -520,14 +528,16 @@ As
 											@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 											@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
 											@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
-											@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
-											@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
-											@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
-											@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
-											@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT,
-											@MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold OUTPUT,
-											@MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold OUTPUT,
-											@MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold OUTPUT
+											@InspectMQScoreComparison = @InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold = @InspectMQScoreThreshold OUTPUT,
+											@InspectTotalPRMScoreComparison = @InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold = @InspectTotalPRMScoreThreshold OUTPUT,
+											@InspectFScoreComparison = @InspectFScoreComparison OUTPUT, @InspectFScoreThreshold = @InspectFScoreThreshold OUTPUT,
+											@InspectPValueComparison = @InspectPValueComparison OUTPUT, @InspectPValueThreshold = @InspectPValueThreshold OUTPUT,
+											@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT,
+											@MSGFDbSpecProbComparison = @MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold = @MSGFDbSpecProbThreshold OUTPUT,
+											@MSGFDbPValueComparison = @MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold = @MSGFDbPValueThreshold OUTPUT,
+											@MSGFDbFDRComparison = @MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold = @MSGFDbFDRThreshold OUTPUT,
+											@MSAlignPValueComparison = @MSAlignPValueComparison OUTPUT, @MSAlignPValueThreshold = @MSAlignPValueThreshold OUTPUT,
+											@MSAlignFDRComparison = @MSAlignFDRComparison OUTPUT, @MSAlignFDRThreshold = @MSAlignFDRThreshold OUTPUT
 
 						If @myError <> 0
 						Begin
@@ -587,9 +597,9 @@ As
 									Set @PopulatePeptideStats = 0
 							End
 
-							If @ResultType = 'MSG_Peptide_Hit'
+							If @ResultType IN ('MSG_Peptide_Hit', 'MSA_Peptide_Hit')
 							Begin
-								-- MSGF-DB results
+								-- MSGF-DB or MSAlign results
 								-- Do not consider DeltaCN or DeltaCn2
 								If @SavedResultType <> @ResultType OR
 									@SavedRankScoreComparison <> @RankScoreComparison OR @SavedRankScoreThreshold <> @RankScoreThreshold OR
@@ -600,7 +610,7 @@ As
 								Else
 									Set @PopulatePeptideStats = 0
 							End
-														
+
 							If @PopulatePeptideStats = -1
 							Begin
 								-- Unknown value for @ResultType
@@ -640,6 +650,7 @@ As
 								Set @S = @S +   ' ObservationCount, Charge_State, XCorr_Max, Hyperscore_Max, Log_EValue_Min,'
 								Set @S = @S +   ' MQScore_Max, TotalPRMScore_Max, FScore_Max, PValue_Min,'
 								Set @S = @S +   ' MSGFDB_SpecProb_Min, MSGFDB_PValue_Min, MSGFDB_FDR_Min,'
+								Set @S = @S +   ' MSAlign_PValue_Min, MSAlign_FDR_Min,'
 								Set @S = @S +   ' Discriminant_Score_Max, Peptide_Prophet_Max, MSGF_SpecProb_Min'
 								Set @S = @S + ' )'
 								Set @S = @S + ' SELECT	MT.Mass_Tag_ID, '
@@ -664,6 +675,9 @@ As
 								Set @S = @S +   ' MIN(StatsQ.MSGFDB_SpecProb_Min) AS MSGFDB_SpecProb_Min,'
 								Set @S = @S +   ' MIN(StatsQ.MSGFDB_PValue_Min) AS MSGFDB_PValue_Min,'
 								Set @S = @S +   ' MIN(StatsQ.MSGFDB_FDR_Min) AS MSGFDB_FDR_Min,'
+												-- MSAlign Scores
+								Set @S = @S +   ' MIN(StatsQ.MSAlign_PValue_Min) AS MSAlign_PValue_Min,'
+								Set @S = @S +   ' MIN(StatsQ.MSAlign_FDR_Min) AS MSAlign_FDR_Min,'
 												-- Discriminant, Peptide Prophet, and MSGF
 								Set @S = @S +   ' MAX(StatsQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
 								Set @S = @S +   ' MAX(StatsQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
@@ -685,6 +699,9 @@ As
 								Set @S = @S +      ' MIN(SubQ.MSGFDB_SpecProb_Min) AS MSGFDB_SpecProb_Min,'	
 								Set @S = @S +      ' MIN(SubQ.MSGFDB_PValue_Min) AS MSGFDB_PValue_Min,'	
 								Set @S = @S +      ' MIN(SubQ.MSGFDB_FDR_Min) AS MSGFDB_FDR_Min,'	
+													-- MSAlign Scores
+								Set @S = @S +      ' MIN(SubQ.MSAlign_PValue_Min) AS MSAlign_PValue_Min,'	
+								Set @S = @S +      ' MIN(SubQ.MSAlign_FDR_Min) AS MSAlign_FDR_Min,'	
 													-- Discriminant, Peptide Prophet, and MSGF	
 								Set @S = @S +      ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
 								Set @S = @S +      ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
@@ -708,6 +725,8 @@ As
 									Set @S = @S +        ' 1 AS MSGFDB_SpecProb_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_PValue_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_FDR_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_PValue_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_FDR_Min,'	
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
@@ -733,11 +752,13 @@ As
 									Set @S = @S +        ' 1 AS MSGFDB_SpecProb_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_PValue_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_FDR_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_PValue_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_FDR_Min,'	
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
 									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
-									Set @S = @S +        ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
+									Set @S = @S +    ' LEFT OUTER JOIN T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID'
 									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 									Set @S = @S +      ' WHERE TAD.ResultType = ''XT_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
 									Set @S = @S +        ' X.DeltaCn2 ' + @DeltaCn2Comparison + Convert(varchar(11), @DeltaCn2Threshold)
@@ -756,6 +777,8 @@ As
 									Set @S = @S +        ' 1 AS MSGFDB_SpecProb_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_PValue_Min,'
 									Set @S = @S +        ' 1 AS MSGFDB_FDR_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_PValue_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_FDR_Min,'	
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
@@ -780,6 +803,8 @@ As
 									Set @S = @S +        ' MIN(IsNull(M.SpecProb, 1)) AS MSGFDB_SpecProb_Min,'
 									Set @S = @S +        ' MIN(IsNull(M.PValue, 1)) AS MSGFDB_PValue_Min,'
 									Set @S = @S +        ' MIN(IsNull(M.FDR, 1)) AS MSGFDB_FDR_Min,'																		
+									Set @S = @S +        ' 1 AS MSAlign_PValue_Min,'
+									Set @S = @S +        ' 1 AS MSAlign_FDR_Min,'	
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
@@ -789,7 +814,32 @@ As
 									Set @S = @S +      ' WHERE TAD.ResultType = ''MSG_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
 									Set @S = @S +        ' M.RankSpecProb ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
 								End -- </h4>
-								
+
+								If @ResultType = 'MSA_Peptide_Hit'
+								Begin -- <h5>
+									-- MSAlign
+									Set @S = @S +        ' 0 AS XCorr_Max,'
+									Set @S = @S +        ' 0 AS Hyperscore_Max,'
+									Set @S = @S +        ' 0 AS Log_EValue_Min,'
+									Set @S = @S +        ' 0 AS MQScore_Max,'
+									Set @S = @S +        ' 0 AS TotalPRMScore_Max,'
+									Set @S = @S +        ' 0 AS FScore_Max,'
+									Set @S = @S +        ' 1 AS PValue_Min,'
+									Set @S = @S +        ' 1 AS MSGFDB_SpecProb_Min,'
+									Set @S = @S +        ' 1 AS MSGFDB_PValue_Min,'
+									Set @S = @S +        ' 1 AS MSGFDB_FDR_Min,'
+									Set @S = @S +        ' MIN(IsNull(M.PValue, 1)) AS MSAlign_PValue_Min,'
+									Set @S = @S +        ' MIN(IsNull(M.FDR, 1)) AS MSAlign_FDR_Min,'																		
+									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
+									Set @S = @S +        ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
+									Set @S = @S +        ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb'
+									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
+									Set @S = @S +        ' LEFT OUTER JOIN T_Score_MSAlign AS M ON P.Peptide_ID = M.Peptide_ID'
+									Set @S = @S +        ' LEFT OUTER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+									Set @S = @S +      ' WHERE TAD.ResultType = ''MSA_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
+									Set @S = @S +        ' P.RankHit ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold)
+								End -- </h5>
+																
 								If Len(@FilterSetExperimentFilter) > 0
 									Set @S = @S +        ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'
 								
@@ -897,7 +947,13 @@ As
 								Set @S = @S +      ' MSGFDB_PValue_Min ' +  @MSGFDbPValueComparison + Convert(varchar(11), @MSGFDbPValueThreshold) + ' AND '
 								Set @S = @S +      ' MSGFDB_FDR_Min ' +  @MSGFDbFDRComparison + Convert(varchar(11), @MSGFDbFDRThreshold) + ' AND '
 							End
-							
+
+							If @ResultType = 'MSA_Peptide_Hit'
+							Begin
+								Set @S = @S +      ' MSAlign_PValue_Min ' +  @MSAlignPValueComparison + Convert(varchar(11), @MSAlignPValueThreshold) + ' AND '
+								Set @S = @S +      ' MSAlign_FDR_Min ' +  @MSAlignFDRComparison + Convert(varchar(11), @MSAlignFDRThreshold) + ' AND '
+							End
+														
 							Set @S = @S +          ' MaxCleavageState ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
 							Set @S = @S +          ' MaxTerminusState ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
 							Set @S = @S +		   ' PeptideLength ' + @PeptideLengthComparison +    Convert(varchar(11), @PeptideLengthThreshold) + ' AND '
@@ -905,8 +961,11 @@ As
 							Set @S = @S +          ' Discriminant_Score_Max ' + @DiscriminantScoreComparison +    Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
 							Set @S = @S +          ' Peptide_Prophet_Max ' + @PeptideProphetComparison +          Convert(varchar(11), @PeptideProphetThreshold) + ' AND '
 							Set @S = @S +          ' NETDifferenceAbsolute ' + @NETDifferenceAbsoluteComparison + Convert(varchar(11), @NETDifferenceAbsoluteThreshold) + ' AND '
-							Set @S = @S +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold) + ' AND '
-							Set @S = @S +          ' MSGF_SpecProb_Min ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
+							Set @S = @S +          ' ProteinCount ' + @ProteinCountComparison +      Convert(varchar(11), @ProteinCountThreshold)
+							
+							If @ResultType <> 'MSA_Peptide_Hit'
+								Set @S = @S +          ' AND MSGF_SpecProb_Min ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
+							
 							Set @S = @S +   ' ) AS CompareQ'
 							Set @S = @S +   ' WHERE #NewMassTagScores.Mass_Tag_ID = CompareQ.Mass_Tag_ID AND '
 							Set @S = @S +     ' PMT_Quality_Score < ' + Convert(varchar(11), @FilterSetScore)
@@ -1016,6 +1075,23 @@ As
 									Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 								End -- </h6>
 
+								If @ResultType = 'MSA_Peptide_Hit'
+								Begin -- <h7>
+									Set @S = @S +      ' FROM T_Peptides AS P INNER JOIN T_Analysis_Description AS TAD ON P.Job = TAD.Job'
+									Set @S = @S +        ' INNER JOIN T_Score_MSAlign AS M ON P.Peptide_ID = M.Peptide_ID'
+									Set @S = @S +        ' INNER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
+									Set @S = @S + ' WHERE TAD.ResultType = ''MSA_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
+									Set @S = @S +        ' P.Charge_State ' +  @ChargeStateComparison + Convert(varchar(11), @ChargeStateThreshold) + ' AND '
+									Set @S = @S +        ' M.RankSpecProb ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(M.PValue, 1) ' +    @MSAlignPValueComparison +  Convert(varchar(11), @MSAlignPValueThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(M.FDR, 1) ' +       @MSAlignFDRComparison +  Convert(varchar(11), @MSAlignFDRThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(SD.DiscriminantScoreNorm, 0) ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '
+									Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) ' + @PeptideProphetComparison + Convert(varchar(11), @PeptideProphetThreshold)
+									---------------------------------------------
+									-- Note: Ignoring MSGF_SpecProb for MSAlign
+									-- Set @S = @S +        ' AND IsNull(SD.MSGF_SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
+									---------------------------------------------
+								End -- </h7>
 
 								If Len(@FilterSetExperimentFilter) > 0
 									Set @S = @S +        ' AND TAD.Experiment LIKE (''' + @FilterSetExperimentFilter + ''')'

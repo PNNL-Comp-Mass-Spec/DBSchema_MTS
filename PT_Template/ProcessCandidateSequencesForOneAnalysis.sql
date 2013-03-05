@@ -32,13 +32,17 @@ CREATE Procedure ProcessCandidateSequencesForOneAnalysis
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added parameter @infoOnly; now populating T_Sequence_Mod_Info
+**			12/06/2012 mem - No longer populating T_Sequence_Mod_Info
+**			               - Now examining DeleteCandidateSequences in T_Process_Step_Control
 **    
 *****************************************************/
 (
 	@NextProcessState int = 30,
 	@job int,
 	@count int=0 output,
-	@message varchar(512)='' output
+	@message varchar(512)='' output,
+	@infoOnly tinyint = 0
 )
 As
 	Set NoCount On
@@ -57,7 +61,8 @@ As
 	
 	set @count = 0	
 	set @message = ''
-
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	
 	declare @MasterSequencesServerName varchar(64)
 	set @MasterSequencesServerName = 'ProteinSeqs2'
 	
@@ -118,7 +123,7 @@ As
 		
 		Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
 		
-		If @SkipPeptidesFromReversedProteins <> 0
+		If @SkipPeptidesFromReversedProteins <> 0 And @infoOnly = 0
 		Begin
 			-- Need to delete entries from the T_Seq_Candidate tables that
 			-- map only to peptides with State_ID = 2 in T_Peptides
@@ -378,7 +383,7 @@ As
 			Set @Sql = @Sql + ' SET Seq_ID = MSeqData.Seq_ID'
 			Set @Sql = @Sql + ' FROM T_Seq_Candidates TSC INNER JOIN'
 			Set @Sql = @Sql +  ' ' + @MasterSequencesServerName + '.' + @CandidateSequencesTableName + ' MSeqData '
-			set @Sql = @Sql +    ' ON TSC.Seq_ID_Local = MSeqData.Seq_ID_Local AND TSC.Job = ' + @jobStr
+			set @Sql = @Sql +  ' ON TSC.Seq_ID_Local = MSeqData.Seq_ID_Local AND TSC.Job = ' + @jobStr
 			--
 			Exec (@Sql)
 			--
@@ -440,6 +445,31 @@ As
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
+		If @infoOnly <> 0
+		Begin
+			SELECT Seq_ID, Clean_Sequence, Mod_Count, Mod_Description, Monoisotopic_Mass, Add_Sequence
+			FROM T_Seq_Candidates
+			WHERE Job = @Job
+			ORDER BY Add_Sequence Desc, Seq_ID
+			
+			
+			SELECT SC.Seq_ID,
+			       SCMD.Mass_Correction_Tag,
+			       SCMD.Position,
+			       SCMS.Modification_Mass,
+			       SC.Add_Sequence
+			FROM T_Seq_Candidate_ModSummary SCMS
+			     INNER JOIN T_Seq_Candidate_ModDetails SCMD
+			       ON SCMS.Mass_Correction_Tag = SCMD.Mass_Correction_Tag
+			     INNER JOIN T_Seq_Candidates SC
+			       ON SCMD.Job = SC.Job AND
+			          SCMD.Seq_ID_Local = SC.Seq_ID_Local
+			WHERE SCMS.Job = @Job
+			ORDER BY Add_Sequence Desc, Seq_ID, Position
+			
+			Goto Done
+		End
+			
 		-----------------------------------------------------------
 		-- Add the new sequences to T_Sequence
 		-----------------------------------------------------------
@@ -457,8 +487,30 @@ As
 		SELECT @myError = @@error, @myRowcount = @@rowcount
 		--
 		Set @sequencesAdded = @myRowCount
-		
-		
+
+
+		-----------------------------------------------------------
+		-- Store the modification details
+		-----------------------------------------------------------
+		--
+		/*
+		INSERT INTO T_Sequence_Mod_Info
+			(Seq_ID, Mod_Name, Mod_Position, Modification_Mass)
+		SELECT SC.Seq_ID,
+		       SCMD.Mass_Correction_Tag,
+		       SCMD.Position,
+		       SCMS.Modification_Mass
+		FROM T_Seq_Candidate_ModSummary SCMS
+		     INNER JOIN T_Seq_Candidate_ModDetails SCMD
+		       ON SCMS.Mass_Correction_Tag = SCMD.Mass_Correction_Tag
+		     INNER JOIN T_Seq_Candidates SC
+		       ON SCMD.Job = SC.Job AND
+		          SCMD.Seq_ID_Local = SC.Seq_ID_Local
+		WHERE SCMS.Job = @Job AND SC.Add_Sequence = 1
+		--
+		SELECT @myError = @@error, @myRowcount = @@rowcount
+		*/
+
 		-----------------------------------------------------------
 		-- Update T_Peptides
 		-----------------------------------------------------------
@@ -509,44 +561,61 @@ As
 
 		-----------------------------------------------------------
 		-- Delete entries from the T_Seq_Candidate tables for this job
+		-- Skip this step if 'DeleteCandidateSequences' is disabled in T_Process_Step_Control
 		-----------------------------------------------------------
 		--	
-		set @message = 'Delete entries from the T_Seq_Candidate tables for job ' + @jobStr
-		Set @CurrentLocation = @message
-		If @logLevel >= 2
-			execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
-		--
-		DELETE FROM T_Seq_Candidate_ModDetails WHERE Job = @job
-		--
-		SELECT @myRowcount = @@rowcount, @myError = @@error
-		--
-		If @myError <> 0
+		Declare @Enabled tinyint = 1
+		SELECT @Enabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'DeleteCandidateSequences')
+		If @Enabled <> 0
 		Begin
-			set @message = 'Error deleting entries from T_Seq_Candidate_ModDetails for job ' + @jobStr
-			Goto Done
+		
+			set @message = 'Delete entries from the T_Seq_Candidate tables for job ' + @jobStr
+			Set @CurrentLocation = @message
+			If @logLevel >= 2
+				execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
+			--
+			DELETE FROM T_Seq_Candidate_ModDetails WHERE Job = @job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+			--
+			If @myError <> 0
+			Begin
+				set @message = 'Error deleting entries from T_Seq_Candidate_ModDetails for job ' + @jobStr
+				Goto Done
+			End
+
+			DELETE FROM T_Seq_Candidate_to_Peptide_Map WHERE Job = @job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+			--
+			If @myError <> 0
+			Begin
+				set @message = 'Error deleting entries from T_Seq_Candidate_to_Peptide_Map for job ' + @jobStr
+				Goto Done
+			End
+
+			DELETE FROM T_Seq_Candidates WHERE Job = @job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+			--
+			If @myError <> 0
+			Begin
+				set @message = 'Error deleting entries from T_Seq_Candidates for job ' + @jobStr
+				Goto Done
+			End
+
+			DELETE FROM T_Seq_Candidate_ModSummary WHERE Job = @job
+			--
+			SELECT @myRowcount = @@rowcount, @myError = @@error
+			--
+			If @myError <> 0
+			Begin
+				set @message = 'Error deleting entries from T_Seq_Candidate_ModSummary for job ' + @jobStr
+				Goto Done
+			End
+			
 		End
-
-		DELETE FROM T_Seq_Candidate_to_Peptide_Map WHERE Job = @job
-		--
-		SELECT @myRowcount = @@rowcount, @myError = @@error
-		--
-		If @myError <> 0
-		Begin
-			set @message = 'Error deleting entries from T_Seq_Candidate_to_Peptide_Map for job ' + @jobStr
-			Goto Done
-		End
-
-		DELETE FROM T_Seq_Candidates WHERE Job = @job
-		--
-		SELECT @myRowcount = @@rowcount, @myError = @@error
-		--
-		If @myError <> 0
-		Begin
-			set @message = 'Error deleting entries from T_Seq_Candidates for job ' + @jobStr
-			Goto Done
-		End
-
-
+		
 		-----------------------------------------------------------
 		-- Update state of analysis job
 		-----------------------------------------------------------

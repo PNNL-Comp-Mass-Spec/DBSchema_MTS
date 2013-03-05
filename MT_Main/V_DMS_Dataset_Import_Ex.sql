@@ -34,7 +34,8 @@ SELECT Src.Dataset,
        Src.[Scan Count],
        Src.[PreDigest Int Std],
        Src.[PostDigest Int Std],
-       Src.[File Size MB]
+       Src.[File Size MB],
+       Src.Instrument_Data_Purged
 FROM GIGASAX.DMS5.dbo.V_Dataset_Export Src
 
 

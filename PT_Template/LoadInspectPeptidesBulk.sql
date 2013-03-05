@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadInspectPeptidesBulk
+CREATE Procedure LoadInspectPeptidesBulk
 /****************************************************
 **
 **	Desc: 
@@ -40,6 +40,8 @@ CREATE Procedure dbo.LoadInspectPeptidesBulk
 **						   - Now leaving Normalized_Score unchanged when updating existing data if TotalPRMScore is negative
 **						   - When updating data, now changing TotalPRMScore to -100000 for data that no longer passes filters
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/04/2012 mem - Now populating #Tmp_Peptide_ModSummary
+**			12/06/2012 mem - Expanded @message to varchar(1024)
 **
 *****************************************************/
 (
@@ -59,7 +61,7 @@ CREATE Procedure dbo.LoadInspectPeptidesBulk
 	@numSkipped int=0 output,
 	@SeqCandidateFilesFound tinyint=0 output,
 	@MSGFFileFound tinyint=0 output,
-	@message varchar(512)='' output
+	@message varchar(1024)='' output
 )
 As
 	Set NoCount On
@@ -345,6 +347,9 @@ As
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_ModDetails]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_ModDetails]
 
+		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_ModSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [dbo].[#Tmp_Peptide_ModSummary]
+
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_SeqToProteinMap]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_SeqToProteinMap]
 
@@ -413,6 +418,28 @@ As
 	end
 
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
+
+
+	-- Table for contents of the ModSummary file
+	--
+	CREATE TABLE #Tmp_Peptide_ModSummary (
+		Modification_Symbol varchar(4) NULL,
+		Modification_Mass real NOT NULL,
+		Target_Residues varchar(64) NULL,
+		Modification_Type varchar(4) NOT NULL,
+		Mass_Correction_Tag varchar(8) NOT NULL,					-- Note: The mass correction tags are limited to 8 characters when storing in T_Seq_Candidate_ModSummary
+		Occurrence_Count int NULL
+	)
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem creating temporary table #Tmp_Peptide_ModSummary for job ' + @jobStr
+		goto Done
+	end
+
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModSummary (Mass_Correction_Tag)
 
 
 	-- Table for contents of the SeqToProteinMap file
@@ -511,7 +538,8 @@ As
 						@job, 
 						@RaiseErrorIfSeqInfoFilesNotFound,
 						@ResultToSeqMapCountLoaded output,
-						@message output
+						@message output,
+						@LoadModSummaryFile=1
 
 	if @myError <> 0
 	Begin
@@ -1809,6 +1837,7 @@ As
 	--  #Tmp_Peptide_ResultToSeqMap
 	--  #Tmp_Peptide_SeqInfo
 	--  #Tmp_Peptide_ModDetails
+	--  #Tmp_Peptide_ModSummary
 	-----------------------------------------------
 	--
 	If @ResultToSeqMapCountLoaded > 0 And @UpdateExistingData = 0

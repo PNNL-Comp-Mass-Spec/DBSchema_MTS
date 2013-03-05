@@ -21,6 +21,7 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Max_Obs_Area_In_Job] [tinyint] NOT NULL,
 	[PMT_Quality_Score_Local] [real] NULL,
 	[DelM_PPM] [real] NULL,
+	[RankHit] [smallint] NULL,
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_ID] ASC

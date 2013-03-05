@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure PTExportPeptidesForJobs
+CREATE Procedure dbo.PTExportPeptidesForJobs
 /****************************************************	
 **  Desc:	
 **		Exports the peptides that were observed in the given
@@ -25,6 +25,8 @@ CREATE Procedure PTExportPeptidesForJobs
 **			01/28/2011 mem - Added parameter @MSGFThreshold and now returning MSGF_SpecProb
 **			08/23/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **
 ****************************************************/
 (
@@ -78,6 +80,8 @@ AS
 	Set @CurrentLocation = 'Start'
 
 	Declare @SelectionField varchar(32)
+	Declare @SelectionRankOrder varchar(4)
+	Declare @SelectionAggregator varchar(3)
 
 	Declare @S nvarchar(max)
 
@@ -220,9 +224,10 @@ AS
 			
 			-- Populate the ResultType column in #TmpJobList
 			UPDATE #TmpJobList
-			Set ResultType = TAD.ResultType
-			FROM #TmpJobList INNER JOIN 
-			T_Analysis_Description TAD ON #TmpJobList.Job = TAD.Job
+			SET ResultType = TAD.ResultType
+			FROM #TmpJobList
+			     INNER JOIN T_Analysis_Description TAD
+			       ON #TmpJobList.Job = TAD.Job
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			
@@ -245,14 +250,14 @@ AS
 			
 			SELECT @message = @message + ', ' + Convert(varchar(12), Job)
 			FROM #TmpJobList
-			WHERE NOT ResultType IN ('Peptide_Hit', 'XT_Peptide_Hit', 'IN_Peptide_Hit', 'MSG_Peptide_Hit')
+			WHERE NOT ResultType IN (SELECT ResultType FROM dbo.tblPeptideHitResultTypes())
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			
 			If @myRowCount <> 0
 			Begin
 				DELETE #TmpJobList
-				WHERE ResultType IN ('Peptide_Hit', 'XT_Peptide_Hit', 'IN_Peptide_Hit', 'MSG_Peptide_Hit')
+				WHERE NOT ResultType IN (SELECT ResultType FROM dbo.tblPeptideHitResultTypes())
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 
@@ -277,11 +282,16 @@ AS
 
 		If @JobCount = 0
 		Begin
-		Set @Message = 'Could not find any known, valid jobs in @JobList or @JobPeptideFilterTableName; valid result types are "Peptide_Hit", "XT_Peptide_Hit", "IN_Peptide_Hit", and "MSG_Peptide_Hit" but not "SIC"; in other words, use Sequest, XTandem, Inspect, or MSGF-DB job numbers, not MASIC'
+		Set @Message = 'Could not find any known, valid jobs in @JobList or @JobPeptideFilterTableName; valid result types are "Peptide_Hit", "XT_Peptide_Hit", "IN_Peptide_Hit", "MSG_Peptide_Hit", and "MSA_Peptide_Hit", but not "SIC"; in other words, use Sequest, XTandem, Inspect, MSGF-DB (aka MSGF+), or MSAlign job numbers, not MASIC'
 			Set @myError = 20000
 			Goto Done
 		End
 
+		If @DebugMode <> 0
+			SELECT *
+			FROM #TmpJobList
+			ORDER BY Job
+		
 		--------------------------------------------------------------
 		-- Determine which ResultTypes are present
 		--------------------------------------------------------------
@@ -292,6 +302,7 @@ AS
 		Declare @XTPeptideHit tinyint = 0
 		Declare @InsPeptideHit tinyint = 0
 		Declare @MsgPeptideHit tinyint = 0
+		Declare @MsaPeptideHit tinyint = 0
 		
 		If Exists (SELECT * FROM #TmpJobList WHERE ResultType = 'Peptide_Hit')
 			Set @PeptideHit = 1
@@ -305,6 +316,9 @@ AS
 		If Exists (SELECT Job FROM #TmpJobList WHERE ResultType = 'MSG_Peptide_Hit')
 			Set @MsgPeptideHit = 1
 
+		If Exists (SELECT Job FROM #TmpJobList WHERE ResultType = 'MSA_Peptide_Hit')
+			Set @MsaPeptideHit = 1
+			
 		--------------------------------------------------------------
 		-- Retrieve the data for each job, using temporary table #TmpPeptideStats
 		-- as an interim processing table to reduce query complexity;
@@ -331,7 +345,7 @@ AS
 			Charge_State smallint NULL,
 			Discriminant real NULL ,
 			Peptide_Prophet_Prob real NULL ,
-			MSGF_SpecProb real NULL ,
+			MSGF_SpecProb real NULL ,			-- Uses PValue for MSAlign
 			Elution_Time real NULL ,			-- Scan_Time_Peak_Apex
 			Peak_SN real NULL ,					-- Peak_SN_Ratio
 			Peak_Area float NULL ,				-- Peak_Area
@@ -409,13 +423,31 @@ AS
 				MSGFDB_DeNovoScore real NULL,
 				MSGFDB_MSGFScore real NULL,
 				MSGFDB_SpecProb real NULL,
-				MSGFDB_PValue real NULL
+				MSGFDB_PValue real NULL,
+				MSGFDB_FDR real NULL,
+				MSGFDB_PepFDR real NULL
 
 			ALTER TABLE #TmpPeptideStats Add
 				MSGFDB_DeNovoScore real NULL,
 				MSGFDB_MSGFScore real NULL,
 				MSGFDB_SpecProb real NULL,
-				MSGFDB_PValue real NULL
+				MSGFDB_PValue real NULL,
+				MSGFDB_FDR real NULL,
+				MSGFDB_PepFDR real NULL
+
+		End		
+
+		If @MsaPeptideHit = 1
+		Begin
+			-- Add the MSAlign specific columns to the temporary tables
+			
+			ALTER TABLE #TmpPeptideStats_Results Add
+				MSAlign_PValue real NULL,
+				MSAlign_FDR real NULL
+
+			ALTER TABLE #TmpPeptideStats Add
+				MSAlign_PValue real NULL,
+				MSAlign_FDR real NULL			
 
 		End		
 
@@ -431,6 +463,7 @@ AS
 		--  Second loop; construct text for XT_Peptide_Hit jobs (@Iteration = 2)
 		--  Third loop; construct text for IN_Peptide_Hit jobs (@Iteration = 3)
 		--  Fourth loop; construct text for MSG_Peptide_Hit jobs (@Iteration = 4)
+		--  Fifth loop; construct text for MSA_Peptide_Hit jobs (@Iteration = 5)
 		--------------------------------------------------------------
 		Declare @Params nvarchar(2048)
 
@@ -438,16 +471,18 @@ AS
 		Declare @InsertSqlXTPeptideHit nvarchar(max) = ''
 		Declare @InsertSqlInsPeptideHit nvarchar(max) = ''
 		Declare @InsertSqlMsgPeptideHit nvarchar(max) = ''
+		Declare @InsertSqlMsaPeptideHit nvarchar(max) = ''
 		
 		Declare @ColumnNameSqlPeptideHit nvarchar(2048) = ''
 		Declare @ColumnNameSqlXTPeptideHit nvarchar(2048) = ''
 		Declare @ColumnNameSqlInsPeptideHit nvarchar(2048) = ''
 		Declare @ColumnNameSqlMsgPeptideHit nvarchar(2048) = ''
+		Declare @ColumnNameSqlMsaPeptideHit nvarchar(2048) = ''
 		
 		Declare @Iteration int
 		
 		Set @Iteration = 1
-		While @Iteration <= 4
+		While @Iteration <= 5
 		Begin -- <a1>
 
 			Set @CurrentLocation = 'Construct SQL; iteration = ' + Convert(varchar(12), @Iteration)
@@ -456,6 +491,7 @@ AS
 			-- Iteration 2 is X!Tandem jobs (XT_Peptide_Hit)
 			-- Iteration 3 is Inspect jobs  (IN_Peptide_Hit)
 			-- Iteration 4 is MSGFDB jobs  (MSG_Peptide_Hit)
+			-- Iteration 5 is MSAlign jobs  (MSA_Peptide_Hit)
 		
 			--------------------------------------------------------------
 			-- Construct the @InsertSql text
@@ -476,7 +512,9 @@ AS
 			If @Iteration = 3
 				Set @S = @S +   ' XCorr, MQScore, TotalPRMScore, FScore, DeltaCn2, RankXC, '
 			If @Iteration = 4
-				Set @S = @S +   ' XCorr, MSGFDB_DeNovoScore, MSGFDB_MSGFScore, MSGFDB_SpecProb, MSGFDB_PValue, DeltaCn2, RankXC,'
+				Set @S = @S +   ' XCorr, MSGFDB_DeNovoScore, MSGFDB_MSGFScore, MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR, MSGFDB_PepFDR, DeltaCn2, RankXC,'
+			If @Iteration = 5
+				Set @S = @S +   ' XCorr, MSAlign_PValue, MSAlign_FDR, DeltaCn2, RankXC,'
 			
 			Set @S = @S +   ' Charge_State, Discriminant, Peptide_Prophet_Prob, MSGF_SpecProb, Elution_Time, Peak_SN, Peak_Area)'
 			Set @S = @S + ' SELECT SourceQ.Job, SourceQ.Peptide_ID, SourceQ.Scan_Number, SourceQ.Cleavage_State_Max, SourceQ.RankHit, SourceQ.DelM_PPM, '
@@ -489,11 +527,18 @@ AS
 			If @Iteration = 3
 				Set @S = @S +    ' I.Normalized_Score, I.MQScore, I.TotalPRMScore, I.FScore, I.DeltaScore, RankFScore AS RankXC, '
 			If @Iteration = 4
-				Set @S = @S +    ' M.Normalized_Score, M.DeNovoScore, M.MSGFScore, M.SpecProb, M.PValue, 1 AS DelCN2, M.RankSpecProb, '
+				Set @S = @S +    ' M.Normalized_Score, M.DeNovoScore, M.MSGFScore, M.SpecProb, M.FDR, M.PepFDR, M.PValue, 1 AS DelCN2, M.RankSpecProb AS RankXC, '
+			If @Iteration = 5
+				Set @S = @S +    ' M.Normalized_Score, M.PValue, M.FDR, 1 AS DelCN2, SourceQ.RankHit AS RankXC, '
+
 
 			Set @S = @S +        ' SourceQ.Charge_State, SD.DiscriminantScoreNorm, '
 			Set @S = @S +        ' IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability, '
-			Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb, '
+			
+			If @Iteration = 5
+				Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, IsNull(M.PValue, 1)) AS MSGF_SpecProb, '
+			Else
+				Set @S = @S +        ' IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb, '
 			
 			Set @S = @S +        ' SourceQ.Scan_Time_Peak_Apex, SourceQ.Peak_SN_Ratio, SourceQ.Peak_Area '
 			Set @S = @S + ' FROM ('
@@ -521,15 +566,17 @@ AS
 				Set @S = @S +    ' T_Score_Inspect I  ON SourceQ.Peptide_ID = I.Peptide_ID INNER JOIN '
 			If @Iteration = 4
 				Set @S = @S +    ' T_Score_MSGFDB M   ON SourceQ.Peptide_ID = M.Peptide_ID INNER JOIN '
-							
+			If @Iteration = 5
+				Set @S = @S +    ' T_Score_MSAlign M   ON SourceQ.Peptide_ID = M.Peptide_ID INNER JOIN '
+								
 			Set @S = @S +     ' T_Score_Discriminant SD ON SourceQ.Peptide_ID = SD.Peptide_ID '
 			Set @S = @S + ' WHERE 1=1 AND'
 
 			If @MinimumDiscriminantScore > 0
 				Set @S = @S +   ' SD.DiscriminantScoreNorm >= @MinimumDiscriminantScore AND '
 
-			-- Note: Do not filter X!Tandem or MSGFDB data on Peptide Prophet 
-			If NOT @Iteration IN (2, 4) And @MinimumPeptideProphetProbability > 0
+			-- Note: Do not filter X!Tandem, MSGFDB, or MSAlign data on Peptide Prophet 
+			If @Iteration IN (1, 3) And @MinimumPeptideProphetProbability > 0
 				Set @S = @S +   ' IsNull(SD.Peptide_Prophet_Probability, 0) >= @MinimumPeptideProphetProbability AND '
 			
 			If @MSGFThreshold < 1
@@ -561,7 +608,7 @@ AS
 				Set @S = @S +    ' SourceQ.Charge_State >= 3 AND I.DeltaScore >= @MinDelCn2 AND I.Normalized_Score >= @MinXCorrFullyTrypticCharge3)'
 			End
 			
-			If @Iteration = 4
+			If @Iteration IN (4, 5)
 			Begin
 				Set @S = @S +    '(SourceQ.Charge_State = 1  AND M.Normalized_Score >= @MinXCorrFullyTrypticCharge1 OR'
 				Set @S = @S +    ' SourceQ.Charge_State = 2  AND M.Normalized_Score >= @MinXCorrFullyTrypticCharge2 OR'
@@ -593,7 +640,7 @@ AS
 					Set @S = @S +    ' SourceQ.Charge_State >= 3 AND I.DeltaScore >= @MinDelCn2 AND I.Normalized_Score >= @MinXCorrPartiallyTrypticCharge3)'
 				End
 				
-				If @Iteration = 4
+				If @Iteration IN (4, 5)
 				Begin
 					Set @S = @S +    '(SourceQ.Charge_State = 1  AND M.Normalized_Score >= @MinXCorrPartiallyTrypticCharge1 OR'
 					Set @S = @S +    ' SourceQ.Charge_State = 2  AND M.Normalized_Score >= @MinXCorrPartiallyTrypticCharge2 OR'
@@ -614,7 +661,9 @@ AS
 				Set @InsertSqlInsPeptideHit = @S
 			If @Iteration = 4
 				Set @InsertSqlMsgPeptideHit = @S
-		
+			If @Iteration = 5
+				Set @InsertSqlMsaPeptideHit = @S
+				
 			--------------------------------------------------------------
 			-- Construct the @ColumnNameSql text
 			--------------------------------------------------------------
@@ -630,8 +679,10 @@ AS
 			If @Iteration = 3
 				Set @S = @S +   ' XCorr, MQScore, TotalPRMScore, FScore,'
 			If @Iteration = 4
-				Set @S = @S +   ' XCorr, MSGFDB_DeNovoScore, MSGFDB_MSGFScore, MSGFDB_SpecProb, MSGFDB_PValue,'
-			
+				Set @S = @S +   ' XCorr, MSGFDB_DeNovoScore, MSGFDB_MSGFScore, MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR, MSGFDB_PepFDR,'
+			If @Iteration = 5
+				Set @S = @S +   ' XCorr, MSAlign_PValue, MSAlign_FDR,'
+				
 			Set @S = @S +   ' DeltaCn2, RankXC, Charge_State,'
 			Set @S = @S +   ' Discriminant, Peptide_Prophet_Prob, MSGF_SpecProb, '
 			Set @S = @S +   ' Elution_Time, Peak_SN, Peak_Area, Spectra_Count'
@@ -643,7 +694,9 @@ AS
 			If @Iteration = 3
 				Set @ColumnNameSqlInsPeptideHit = @S
 			If @Iteration = 4
-			Set @ColumnNameSqlMsgPeptideHit = @S
+				Set @ColumnNameSqlMsgPeptideHit = @S
+			If @Iteration = 5
+				Set @ColumnNameSqlMsaPeptideHit = @S
 		
 			Set @Iteration = @Iteration + 1
 		End -- </a1>
@@ -661,6 +714,7 @@ AS
 		Declare @JobIsXTPeptideHit tinyint
 		Declare @JobIsInsPeptideHit tinyint
 		Declare @JobIsMsgPeptideHit tinyint
+		Declare @JobIsMsaPeptideHit tinyint
 
 		Declare @JobsProcessed int
 		Set @JobsProcessed = 0
@@ -668,7 +722,7 @@ AS
 		Declare @Continue int
 
 		Set @Iteration = 1
-		While @Iteration <= 4
+		While @Iteration <= 5
 		Begin -- <a2>
 
 			-- Set @Continue to 1 for now, though it will be set to 0 if no appropriate jobs exist for this iteration
@@ -678,6 +732,7 @@ AS
 			Set @JobIsXTPeptideHit = 0
 			Set @JobIsInsPeptideHit = 0
 			Set @JobIsMsgPeptideHit = 0
+			Set @JobIsMsaPeptideHit = 0
 			
 			If @Iteration = 1
 			Begin
@@ -713,6 +768,15 @@ AS
 
 				If @MsgPeptideHit = 0
 					Set @Continue = 0		-- No MSG_Peptide_Hit jobs
+			End
+
+			If @Iteration = 5
+			Begin
+				Set @ResultType = 'MSA_Peptide_Hit'
+				Set @JobIsMsaPeptideHit = 1
+
+				If @MsaPeptideHit = 0
+					Set @Continue = 0		-- No MSA_Peptide_Hit jobs
 			End
 
 
@@ -767,6 +831,7 @@ AS
 					Set @JobIsXTPeptideHit = 0
 					Set @JobIsInsPeptideHit = 0
 					Set @JobIsMsgPeptideHit = 0
+					Set @JobIsMsaPeptideHit = 0
 					
 					-- Examine @ResultType to determine which Sql to use
 					If @ResultType = 'Peptide_Hit'
@@ -780,7 +845,10 @@ AS
 
 					If @ResultType = 'MSG_Peptide_Hit'
 						Set @JobIsMsgPeptideHit = 1
-																	
+
+					If @ResultType = 'MSA_Peptide_Hit'
+						Set @JobIsMsaPeptideHit = 1
+						
 					TRUNCATE TABLE #TmpPeptideStats
 
 					-- If @GroupByPeptide is non-zero, then we now populate the interim processing table (#TmpPeptideStats) with the data for the jobs in this batch
@@ -825,6 +893,16 @@ AS
 						--
 						SELECT @myRowCount = @@rowcount, @myError = @@error
 					End
+
+					If @JobIsMsaPeptideHit = 1
+					Begin
+						if @PreviewSql <> 0
+							Print @InsertSqlMsaPeptideHit
+						else
+							exec sp_ExecuteSql @InsertSqlMsaPeptideHit, @Params, @MinimumCleavageState, @MinimumDiscriminantScore, @MinimumPeptideProphetProbability, @MSGFThreshold, @MinDelCn2, @MinXCorrFullyTrypticCharge1, @MinXCorrFullyTrypticCharge2, @MinXCorrFullyTrypticCharge3, @MinXCorrPartiallyTrypticCharge1, @MinXCorrPartiallyTrypticCharge2, @MinXCorrPartiallyTrypticCharge3
+						--
+						SELECT @myRowCount = @@rowcount, @myError = @@error
+					End
 					
 					If @PreviewSql <> 0
 					Begin
@@ -859,6 +937,7 @@ AS
 						-- Define the Selection Field based on @MaxValueSelectionMode
 						-- Default to use Peak_Area
 						Set @SelectionField = 'Peak_Area'
+						Set @SelectionRankOrder = 'DESC'
 						
 						If @MaxValueSelectionMode = 0
 							Set @SelectionField = 'Peak_Area'
@@ -878,7 +957,10 @@ AS
 								Set @SelectionField = 'Hyperscore'
 
 							If @MaxValueSelectionMode >= 3
+							Begin
 								Set @SelectionField = 'Log_Evalue'
+								Set @SelectionRankOrder = 'ASC'
+							End
 						End
 						
 						If @JobIsInsPeptideHit = 1
@@ -893,9 +975,21 @@ AS
 						If @JobIsMsgPeptideHit = 1
 						Begin
 							If @MaxValueSelectionMode = 3
+							Begin
 								Set @SelectionField = 'MSGFDB_MSGFScore'
+								Set @SelectionRankOrder = 'ASC'
+							End
 						End
 			
+						If @JobIsMsaPeptideHit = 1
+						Begin
+							If @MaxValueSelectionMode = 3
+							Begin
+								Set @SelectionField = 'MSAlign_PValue'
+								Set @SelectionRankOrder = 'ASC'
+							End
+						End
+						
 						Set @S = ''
 						Set @S = @S + ' UPDATE #TmpPeptideStats'
 						Set @S = @S + ' SET UseValue = 1'
@@ -905,7 +999,7 @@ AS
 						Set @S = @S +                 ' Row_Number() OVER ( PARTITION BY Job, Mass_Tag_ID '
 						If @GroupByChargeState <> 0
 							Set @S = @S +			                              ', Charge_State'
-						Set @S = @S +			                          ' ORDER BY ' + @SelectionField + ' DESC, XCorr DESC, Scan_Number ) AS ScoreRank'
+						Set @S = @S +			                          ' ORDER BY ' + @SelectionField + ' ' + @SelectionRankOrder + ', XCorr DESC, Scan_Number ) AS ScoreRank'
 						Set @S = @S +          ' FROM #TmpPeptideStats '
 						Set @S = @S +    ' ) LookupQ ON S.Job = LookupQ.Job AND S.Unique_Row_ID = LookupQ.Unique_Row_ID'
 						Set @S = @S + ' WHERE ScoreRank = 1'
@@ -941,6 +1035,9 @@ AS
 						If @JobIsMsgPeptideHit = 1
 							Set @S = @S + @ColumnNameSqlMsgPeptideHit
 						
+						If @JobIsMsaPeptideHit = 1
+							Set @S = @S + @ColumnNameSqlMsaPeptideHit
+							
 						Set @S = @S + ' )'
 						Set @S = @S + ' SELECT S.Job, S.Peptide_ID, S.Scan_Number,'
 						Set @S = @S +   ' S.Cleavage_State, S.RankHit, S.DelM_PPM, S.Mass_Tag_ID, S.Peptide,'
@@ -953,8 +1050,10 @@ AS
 						If @JobIsInsPeptideHit = 1
 							Set @S = @S + ' S.XCorr, S.MQScore, S.TotalPRMScore, S.FScore,'
 						If @JobIsMsgPeptideHit = 1
-							Set @S = @S + ' S.XCorr, S.MSGFDB_DeNovoScore, S.MSGFDB_MSGFScore, S.MSGFDB_SpecProb, S.MSGFDB_PValue,'
-
+							Set @S = @S + ' S.XCorr, S.MSGFDB_DeNovoScore, S.MSGFDB_MSGFScore, S.MSGFDB_SpecProb, S.MSGFDB_PValue, S.MSGFDB_FDR, S.MSGFDB_PepFDR,'
+						If @JobIsMsaPeptideHit = 1
+							Set @S = @S + ' S.XCorr, S.MSAlign_PValue, S.MSAlign_FDR,'
+							
 						Set @S = @S +   ' S.DeltaCn2, S.RankXC, S.Charge_State,'
 						Set @S = @S +   ' S.Discriminant, S.Peptide_Prophet_Prob, S.MSGF_SpecProb, '
 						Set @S = @S +   ' S.Elution_Time, S.Peak_SN, S.Peak_Area, 1 AS Spectra_Count'
@@ -975,10 +1074,13 @@ AS
 						Begin -- <e>
 							--------------------------------------------------------------
 							-- Update the data in #TmpPeptideStats_Results for this batch to reflect the maximum scores for each peptide
-							-- This is only valid @MaxValueSelectionMode was Peak_Area or Peak_SN_Ratio
+							-- This is only valid if @MaxValueSelectionMode was Peak_Area or Peak_SN_Ratio
 							--------------------------------------------------------------
 							
 							Set @CurrentLocation = 'Lookup the maximum scores for each peptide for ' + @JobDescription
+							
+							Set @SelectionField = ''
+							Set @SelectionAggregator = 'MAX'
 							
 							If @JobIsPeptideHit = 1
 								Set @SelectionField = 'XCorr'
@@ -990,7 +1092,16 @@ AS
 								Set @SelectionField = 'MQScore'
 							
 							If @JobIsMsgPeptideHit = 1
+							Begin
 								Set @SelectionField = 'MSGFDB_MSGFScore'
+								Set @SelectionAggregator = 'MIN'
+							End
+							
+							If @JobIsMsaPeptideHit = 1
+							Begin
+								Set @SelectionField = 'MSAlign_PValue'
+								Set @SelectionAggregator = 'MIN'
+							End
 					
 							If @MaxValueSelectionMode <= 1
 							Begin -- <f>
@@ -1021,6 +1132,11 @@ AS
 								Begin
 									Set @S = @S + ' , MSGFDB_MSGFScore = MaxValuesQ.MSGFDB_MSGFScore'
 								End
+
+								If @JobIsMsaPeptideHit = 1
+								Begin
+									Set @S = @S + ' , MSAlign_PValue = MaxValuesQ.MSAlign_PValue'
+								End
 								
 								Set @S = @S + ' FROM #TmpPeptideStats_Results Target INNER JOIN'
 								Set @S = @S + ' ( SELECT S.Job, S.Peptide_ID, S.Mass_Tag_ID, S.XCorr, '
@@ -1034,11 +1150,14 @@ AS
 								
 								If @JobIsMsgPeptideHit = 1
 									Set @S = @S +    ' , S.MSGFDB_MSGFScore'
+
+								If @JobIsMsaPeptideHit = 1
+									Set @S = @S +    ' , S.MSAlign_PValue'
 						
 								Set @S = @S +   ' FROM #TmpPeptideStats S INNER JOIN'
 								Set @S = @S +      ' ( SELECT MIN(S.Unique_Row_ID) AS Unique_Row_ID_Min'
 								Set @S = @S +        ' FROM #TmpPeptideStats S INNER JOIN'
-								Set @S = @S +         ' ( SELECT Job, Mass_Tag_ID, MAX(' + @SelectionField + ') AS Value_Max'
+								Set @S = @S +         ' ( SELECT Job, Mass_Tag_ID, ' + @SelectionAggregator + '(' + @SelectionField + ') AS Value_Best'
 								If @GroupByChargeState <> 0
 									Set @S = @S +			  ', Charge_State'
 								Set @S = @S +           ' FROM #TmpPeptideStats'
@@ -1050,7 +1169,7 @@ AS
 								Set @S = @S +         ' S.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND'
 								If @GroupByChargeState <> 0
 									Set @S = @S +     ' S.Charge_State = LookupQ.Charge_State AND'
-								Set @S = @S +         ' S.' + @SelectionField + ' = LookupQ.Value_Max'
+								Set @S = @S +         ' S.' + @SelectionField + ' = LookupQ.Value_Best'
 								Set @S = @S +         ' GROUP BY S.Mass_Tag_ID'
 								If @GroupByChargeState <> 0
 									Set @S = @S +				', S.Charge_State'
@@ -1170,6 +1289,9 @@ AS
 		If @MsgPeptideHit = 1
 			Set @S = 'SELECT ' + @ColumnNameSqlMsgPeptideHit
 
+		If @MsaPeptideHit = 1
+			Set @S = 'SELECT ' + @ColumnNameSqlMsaPeptideHit
+
 		Set @S = @S + '	FROM #TmpPeptideStats_Results'
 		Set @S = @S + '	ORDER BY Job, Mass_Tag_ID, XCorr DESC'
 
@@ -1271,6 +1393,7 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[PTExportPeptidesForJobs] TO [DMS_SP_User] AS [dbo]

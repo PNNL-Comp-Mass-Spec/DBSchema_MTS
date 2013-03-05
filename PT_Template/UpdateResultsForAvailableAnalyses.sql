@@ -20,6 +20,7 @@ CREATE Procedure dbo.UpdateResultsForAvailableAnalyses
 **
 **	Auth:	mem
 **	Date:	12/23/2011 mem - Initial version (modelled after LoadResultsForAvailableAnalyses)
+**			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **    
 *****************************************************/
 (
@@ -83,17 +84,6 @@ AS
 
 	CREATE CLUSTERED INDEX #IX_Tmp_Processed_Jobs ON #Tmp_Processed_Jobs (Job)
 	
-	-----------------------------------------------
-	-- Populate a temporary table with the list of known Result Types
-	-----------------------------------------------
-	CREATE TABLE #T_ResultTypeList (
-		ResultType varchar(64)
-	)
-	
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')	
 
 	-----------------------------------------------
 	-- Lookup state of Synopsis File error ignore in T_Process_Step_Control
@@ -129,7 +119,7 @@ AS
 					 @AnalysisTool = TAD.Analysis_Tool, 
 					 @ResultType = TAD.ResultType
 		FROM T_Analysis_Description TAD INNER JOIN
-			 #T_ResultTypeList ON TAD.ResultType = #T_ResultTypeList.ResultType
+			 dbo.tblPeptideHitResultTypes() RTL ON TAD.ResultType = RTL.ResultType
 		WHERE TAD.Process_State = @ProcessStateMatch AND 
 			  NOT TAD.Job IN (SELECT Job FROM #Tmp_Processed_Jobs)
 		ORDER BY TAD.Import_Priority, TAD.Job
@@ -154,7 +144,7 @@ AS
 			-- Process the job
 			Set @jobProcessed = 0
 			
-			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect', 'MSGFDB') OR @ResultType LIKE '%Peptide_Hit')
+			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect', 'MSGFDB', 'MSAlign') OR @ResultType LIKE '%Peptide_Hit')
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
 				exec @result = LoadPeptidesForOneAnalysis

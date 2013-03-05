@@ -36,6 +36,8 @@ CREATE Procedure dbo.UpdateMassTagsFromMultipleAnalyses
 **			10/27/2011 mem - Added option to apply an MSGF SpecProb filter to the imported peptides
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			02/09/2012 mem - Now populating T_Peptides.DelM_PPM
+**			12/05/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			               - Now populating T_Peptides.RankHit
 **
 *****************************************************/
 (
@@ -383,6 +385,7 @@ As
 		Peak_Area float,
 		Peak_SN_Ratio real,
 		DelM_PPM real,
+		RankHit smallint,
 		Unique_Row_ID int IDENTITY (1, 1) NOT NULL,
 		Peptide_ID_New int NULL
 	)   
@@ -517,14 +520,14 @@ As
 	set @S = @S +   ' Job, Scan_Number, Number_Of_Scans, Charge_State, MH,'
 	set @S = @S +   ' Monoisotopic_Mass, GANET_Obs, GANET_Predicted, Scan_Time_Peak_Apex, Multiple_ORF,'
 	set @S = @S +   ' Peptide, Clean_Sequence, Mod_Count, Mod_Description,'
-	set @S = @S +   ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio, DelM_PPM'
+	set @S = @S +   ' Seq_ID, Peptide_ID_Original, Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit'
 	set @S = @S + ') '
 	--
 	set @S = @S + ' SELECT '
 	set @S = @S +   ' Src.Job, Src.Scan_Number, Src.Number_Of_Scans, Src.Charge_State, Src.MH,'
 	set @S = @S +   ' Src.Monoisotopic_Mass, Src.GANET_Obs, Src.GANET_Predicted, Src.Scan_Time_Peak_Apex, Src.Multiple_ORF,'
 	set @S = @S +   ' Src.Peptide, Src.Clean_Sequence, Src.Mod_Count, Src.Mod_Description,'
-	set @S = @S +   ' Src.Seq_ID, Src.Peptide_ID, Src.Peak_Area, Src.Peak_SN_Ratio, Src.DelM_PPM'
+	set @S = @S +   ' Src.Seq_ID, Src.Peptide_ID, Src.Peak_Area, Src.Peak_SN_Ratio, Src.DelM_PPM, Src.RankHit'
 	set @S = @S + ' FROM '
 	set @S = @S +     @PeptideDBPath + '.dbo.V_Peptide_Export Src INNER JOIN'
 	set @S = @S +   ' #TmpJobsInBatch JobList ON Src.Job = JobList.Job'
@@ -735,9 +738,17 @@ As
 		Multiple_ORF, Mod_Count, Mod_Description, 
 		GANET_Predicted, PeptideEx
 		)
-	SELECT Seq_ID, Clean_Sequence, Monoisotopic_Mass,
-		   Max(Multiple_ORF), Mod_Count, Mod_Description, 
-		   Avg(GANET_Predicted), Min(Peptide)
+	SELECT Seq_ID,
+	       Clean_Sequence,
+	       Monoisotopic_Mass,
+	       Max(Multiple_ORF),
+	       Mod_Count,
+	       Mod_Description,
+	       Avg(GANET_Predicted),
+	       Min(CASE
+	               WHEN Len(Peptide) > 512 THEN Substring(Peptide, 1, 509) + '...'
+	               ELSE Peptide
+	           END)
 	FROM #Imported_Peptides
 	GROUP BY Seq_ID, Clean_Sequence, Monoisotopic_Mass, Mod_Count, Mod_Description
 	--
@@ -952,11 +963,11 @@ As
 	INSERT INTO T_Peptides (
 		Peptide_ID, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_Proteins, Peptide, Mass_Tag_ID, GANET_Obs, State_ID, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio, DelM_PPM
+		Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit
 		)
 	SELECT Peptide_ID_New, Job, Scan_Number, Number_Of_Scans, Charge_State, MH,
 		Multiple_ORF, Peptide, Seq_ID, GANET_Obs, 2 As StateCandidate, Scan_Time_Peak_Apex,
-		Peak_Area, Peak_SN_Ratio, DelM_PPM
+		Peak_Area, Peak_SN_Ratio, DelM_PPM, RankHit
 	FROM #Imported_Peptides
 	ORDER BY Job, Peptide_ID_New
 	--
@@ -1186,6 +1197,57 @@ As
 		Set @ResultTypeValid = 1
 	End
 
+	If @ResultType = 'MSA_Peptide_Hit'
+	Begin
+		-----------------------------------------------------------
+		-- Add new entries to T_Score_MSAlign
+		-----------------------------------------------------------
+		--
+		set @S = ''
+		set @S = @S + 'INSERT INTO T_Score_MSAlign ('
+		set @S = @S +  ' Peptide_ID, Prsm_ID, PrecursorMZ, DelM, Unexpected_Mod_Count, Peak_Count, Matched_Peak_Count, '
+		set @S = @S +  ' Matched_Fragment_Ion_Count, PValue, EValue, FDR, Normalized_Score'
+		set @S = @S + ' )'
+		set @S = @S + ' SELECT IP.Peptide_ID_New, M.Prsm_ID, M.PrecursorMZ, M.DelM, M.Unexpected_Mod_Count, M.Peak_Count, M.Matched_Peak_Count, '
+		set @S = @S +  ' M.Matched_Fragment_Ion_Count, M.PValue, M.EValue, M.FDR, M.Normalized_Score'
+		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSAlign AS M ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
+		--
+		exec @result = sp_executesql @S
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+		--
+		if @result <> 0 
+		begin
+			rollback transaction @transName
+			set @message = 'Error executing dynamic SQL for T_Score_MSAlign for ' + @JobListMsgStr
+			set @myError = 50028
+			goto Done
+		end
+		--
+		Set @numAddedPeptideHitScores = @myRowCount
+		
+		-- Populate #PeptideHitStats (used below to update stats in T_Mass_Tags)
+		--
+		INSERT INTO #PeptideHitStats (Mass_Tag_ID, Observation_Count, Normalized_Score_Max)
+		SELECT	Mass_Tag_ID, 
+				COUNT(*) AS Observation_Count, 
+				MAX(Normalized_Score_Max) AS Normalized_Score_Max
+		FROM (	SELECT	IP.Seq_ID AS Mass_Tag_ID, 
+						IP.Scan_Number, 
+						MAX(ISNULL(M.Normalized_Score, 0)) AS Normalized_Score_Max
+				FROM #Imported_Peptides AS IP LEFT OUTER JOIN
+					 T_Score_MSAlign AS M ON IP.Peptide_ID_New = M.Peptide_ID
+				GROUP BY IP.Seq_ID, IP.Scan_Number
+				) AS SubQ
+		GROUP BY SubQ.Mass_Tag_ID	
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		Set @ResultTypeValid = 1
+	End
+	
 	If @ResultTypeValid = 0
 	Begin
 		rollback transaction @transName
@@ -1196,7 +1258,7 @@ As
 
 	-----------------------------------------------------------
 	-- Add new entries to T_Score_Discriminant
-	-- Note that PassFilt and MScore are estimated for XTandem, Inspect, and MSGFDB data
+	-- Note that PassFilt and MScore are estimated for XTandem, Inspect, MSGFDB, and MSAlign data
 	--  PassFilt was set to 1
 	--  MScore was set to 10.75
 	-----------------------------------------------------------

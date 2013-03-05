@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadResultsForAvailableAnalyses
+CREATE Procedure LoadResultsForAvailableAnalyses
 /****************************************************
 **
 **	Desc: 
@@ -42,6 +42,9 @@ CREATE Procedure dbo.LoadResultsForAvailableAnalyses
 **			11/04/2009 mem - Changed states examined when counting the number of jobs loaded to date
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			12/29/2011 mem - Now passing @UpdateExistingData=0 to LoadPeptidesForOneAnalysis
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
+**			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
+**			12/06/2012 mem - Expanded @message to varchar(1024)
 **    
 *****************************************************/
 (
@@ -62,7 +65,7 @@ AS
 	
 	declare @result int
 	declare @UpdateEnabled tinyint
-	declare @message varchar(255)
+	declare @message varchar(1024)
 	declare @ErrorType varchar(50)
 
 	Declare @jobAvailable int
@@ -123,11 +126,11 @@ AS
 	CREATE TABLE #T_ResultTypeList (
 		ResultType varchar(64)
 	)
-	
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')	
+		
+	INSERT INTO #T_ResultTypeList (ResultType)
+	SELECT ResultType 
+	FROM dbo.tblPeptideHitResultTypes()
+			
 	INSERT INTO #T_ResultTypeList (ResultType) Values ('SIC')
 
 	-----------------------------------------------
@@ -191,8 +194,8 @@ AS
 			Set @jobProcessed = 0
 			Set @ReindexDB = 0
 			Set @ReindexMessage = ''
-			
-			If (@AnalysisTool IN ('Sequest', 'AgilentSequest', 'XTandem', 'Inspect', 'MSGFDB') OR @ResultType LIKE '%Peptide_Hit')
+				
+			If Exists (SELECT * FROM dbo.tblPeptideHitResultTypes() Where ResultType = @ResultType)
 			Begin
 				Set @NextProcessStateToUse = @NextProcessState
 				exec @result = LoadPeptidesForOneAnalysis
@@ -343,7 +346,6 @@ Done:
 		execute PostLogEntry 'Error', @message, 'LoadResultsForAvailableAnalyses'
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadResultsForAvailableAnalyses] TO [MTS_DB_Dev] AS [dbo]

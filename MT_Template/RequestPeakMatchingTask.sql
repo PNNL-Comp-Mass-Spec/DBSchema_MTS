@@ -44,6 +44,7 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **			01/10/2008 mem - No longer including the DB_Name in the final output folder name since that can lead to path lengths over 255 characters when the .Ini file is copied over
 **			06/16/2009 mem - Now storing Exactive results in folder 'Exactive'
 **			02/02/2010 mem - Now storing Velos Orbitrap results (VOrbi) in folder 'LTQ_Orb'
+**			10/18/2012 mem - Now storing IMS results in folder 'IMS'
 **    
 *****************************************************/
 (
@@ -310,6 +311,8 @@ As
 	---------------------------------------------------
 
 	Declare @OutputFolderPrefix varchar(256)
+	Declare @OutputFolderBase varchar(256) = ''
+
 	Declare @Instrument varchar(128)
 	Declare @StoragePathClient varchar(256)
 	Declare @LegacyStoragePath varchar(256)
@@ -344,7 +347,7 @@ As
 		Begin
 			-- See if @StoragePathClient contains a server name plus a share and folder name
 			-- If it does, extract out the final folder name
-			-- For example, given "\\n2.emsl.pnl.gov\dmsarch\LTQ_FT1_2\" extract out "LTQ_FT1_2"
+			-- For example, given "\\a2.emsl.pnl.gov\dmsarch\LTQ_FT1_2\" extract out "LTQ_FT1_2"
 			set @CharLoc = CharIndex('\', Reverse(@StoragePathClient), 2)
 			
 			If @CharLoc > 0
@@ -357,40 +360,47 @@ As
 	If Len(IsNull(@OutputFolderPrefix, '')) = 0
 		Set @OutputFolderPrefix = 'Unknown'
 	
-	-- @OutputFolderPrefix matches Exact[0-9]% then change to 'Exactive'
-	If @OutputFolderPrefix Like 'Exact[0-9]%'
-		Set @OutputFolderPrefix = 'Exactive'
-	Else
+	-- Shorten @OutputFolderPrefix when possible
+	If @OutputFolderBase = '' AND @OutputFolderPrefix Like 'Exact[0-9]%'
+		Set @OutputFolderBase = 'Exactive'
+
+	If @OutputFolderBase = '' AND @OutputFolderPrefix Like '%VOrbi%'
+		Set @OutputFolderBase = 'LTQ_Orb'
+
+	If @OutputFolderBase = '' AND @OutputFolderPrefix Like 'IMS%'
+		Set @OutputFolderBase = 'IMS'
+	
+	
+	If @OutputFolderBase = ''
 	Begin
-		If @OutputFolderPrefix Like 'VOrbiETD%'
-			Set @OutputFolderPrefix = 'LTQ_Orb'
+		-- Truncate @OutputFolderPrefix following the _ (if present)
+		-- If @OutputFolderPrefix contains LTQ_FT or LTQ_Orb, then skip the first underscore
+		Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
+		If @StartPos >= 1
+			Set @StartPos = @StartPos + 5
 		Else
 		Begin
-			-- Truncate @OutputFolderPrefix following the _ (if present)
-			-- If @OutputFolderPrefix contains LTQ_FT or LTQ_Orb, then skip the first underscore
-			Set @StartPos = CharIndex('LTQ_FT', Upper(@OutputFolderPrefix))
+			Set @StartPos = CharIndex('LTQ_ORB', Upper(@OutputFolderPrefix))
 			If @StartPos >= 1
 				Set @StartPos = @StartPos + 5
 			Else
-			Begin
-				Set @StartPos = CharIndex('LTQ_ORB', Upper(@OutputFolderPrefix))
-				If @StartPos >= 1
-					Set @StartPos = @StartPos + 5
-				Else
-					Set @StartPos = 0
-			End
-
-			Set @CharLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
-			If @CharLoc > 2
-				Set @OutputFolderPrefix = SubString(@OutputFolderPrefix, 1, @CharLoc-1)
+				Set @StartPos = 0
 		End
+
+		Set @CharLoc = CharIndex('_', @OutputFolderPrefix, @StartPos)
+		If @CharLoc > 2
+			Set @OutputFolderBase = SubString(@OutputFolderPrefix, 1, @CharLoc-1)
+
 	End
+
+	If @OutputFolderBase = ''
+		Set @OutputFolderBase = @OutputFolderPrefix
 	
 	-- Construct the Output Folder Name
 	declare @Output_Folder_Name varchar(255)
 	set @Output_Folder_Name = 'Job' + convert(varchar(12), @analysisJob) + '_auto_pm_' + convert(varchar(12), @taskID)
 	
-	set @Output_Folder_Name = dbo.udfCombinePaths(@OutputFolderPrefix, @Output_Folder_Name)
+	set @Output_Folder_Name = dbo.udfCombinePaths(@OutputFolderBase, @Output_Folder_Name)
 
 	set @outputFolderPath = dbo.udfCombinePaths(dbo.udfCombinePaths(@outputFolderPath, DB_Name()), @Output_Folder_Name)
 	

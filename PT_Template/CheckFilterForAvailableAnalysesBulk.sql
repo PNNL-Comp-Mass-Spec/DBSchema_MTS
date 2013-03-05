@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE CheckFilterForAvailableAnalysesBulk
+CREATE PROCEDURE dbo.CheckFilterForAvailableAnalysesBulk
 /****************************************************
 **
 **	Desc: 	Compare the peptides for each of the available analyses 
@@ -15,7 +15,7 @@ CREATE PROCEDURE CheckFilterForAvailableAnalysesBulk
 **	Parameters:
 **
 **	Auth:	grk
-**	Date:	11/2/2001
+**	Date:	11/02/2001
 **			03/01/2004 mem - Switched from using a cursor to using temporary tables; this greatly improves efficiency of checking whether jobs need to be checked against the filter
 **								 Additionally, implemented the @ReprocessAllJobs option and added the @numJobsToProcess parameter
 **		    07/03/2004 mem - Changed to use of Process_State and ResultType fields for choosing next job
@@ -38,16 +38,19 @@ CREATE PROCEDURE CheckFilterForAvailableAnalysesBulk
 **			08/22/2011 mem - Added support for result type MSG_Peptide_Hit
 **			09/17/2011 mem - Now calling CheckFilterUsingCustomCriteria if @filterSetID is < 100
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/04/2012 mem - Added support for result type MSA_Peptide_Hit
+**			12/05/2012 mem - Added @ExperimentFilter
 **    
 *****************************************************/
 (
-	@filterSetID int,							-- Note: If less than 100, then calls CheckFilterUsingCustomCriteria; you must supply a table name using @CustomFilterTableName
-	@ReprocessAllJobs tinyint = 0,				-- If nonzero, then will reprocess all jobs against the given filter
+	@filterSetID int,								-- Note: If less than 100, then calls CheckFilterUsingCustomCriteria; you must supply a table name using @CustomFilterTableName
+	@ReprocessAllJobs tinyint = 0,					-- If nonzero, then will reprocess all jobs against the given filter (and will ignore @ExperimentFilter)
 	@ProcessStateMatch int = 60,
 	@ProcessStateFilterEvaluationRequired int = 65,
 	@ProcessStateAllStepsComplete int = 70,
 	@numJobsToProcess int = 50000,
-	@CustomFilterTableName varchar(128) = '',
+	@CustomFilterTableName varchar(128) = '',		-- Used if @filterSetID is 99 or smaller
+	@ExperimentFilter varchar(128) = '',			-- Experiment name to filter on (may contain wildcards); ignored if @ReprocessAllJobs = 1
 	@numJobsProcessed int = 0 OUTPUT,
 	@infoOnly tinyint = 0
 )
@@ -94,6 +97,31 @@ AS
 	Declare @JobList varchar(max)
 	Declare @CheckFilterProcedureName varchar(64) = ''
 	
+	Declare @S varchar(1024)
+	
+	-----------------------------------------------------------
+	-- Validate the inputs
+	-----------------------------------------------------------	
+	
+	If @filterSetID is null
+	Begin
+		set @message = '@filterSetID is null; unable to continue'
+		set @myError = 51100
+		goto Done
+	End
+	
+	Set @ReprocessAllJobs = IsNull(@ReprocessAllJobs, 0)
+	
+	Set @ProcessStateMatch = IsNull(@ProcessStateMatch, 60)
+	Set @ProcessStateFilterEvaluationRequired = IsNull(@ProcessStateFilterEvaluationRequired, 65)
+	Set @ProcessStateAllStepsComplete = IsNull(@ProcessStateAllStepsComplete, 70)
+	Set @numJobsToProcess = IsNull(@numJobsToProcess, 50000)
+	Set @CustomFilterTableName = IsNull(@CustomFilterTableName, '')
+	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
+	
+	Set @numJobsProcessed = 0
+	Set @infoOnly = IsNull(@infoOnly, 0)
+	
 	-----------------------------------------------------------
 	-- Create the temporary tables to hold the jobs to process
 	-----------------------------------------------------------
@@ -131,11 +159,9 @@ AS
 		ResultType varchar(64)
 	)
 	
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('XT_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('IN_Peptide_Hit')
-	INSERT INTO #T_ResultTypeList (ResultType) Values ('MSG_Peptide_Hit')
-
+	INSERT INTO #T_ResultTypeList (ResultType) 
+	SELECT ResultType
+	FROM dbo.tblPeptideHitResultTypes()
 
 	-----------------------------------------------------------
 	-- Set @SkipProcessedJobs to 1 when the process state to match is
@@ -151,8 +177,9 @@ AS
 
 	if @ReprocessAllJobs <> 0
 	Begin
-		-- Reprocessing all jobs, assure that @SkipProcessedJobs is 0
+		-- Reprocessing all jobs; override some settings
 		Set @SkipProcessedJobs = 0
+		Set @ExperimentFilter = ''
 		
 		-- Delete entries from T_Analysis_Filter_Flags for @filterSetID
 		DELETE FROM T_Analysis_Filter_Flags
@@ -197,14 +224,18 @@ AS
 	-- against this filter
 	-----------------------------------------------------------
 	--
-	UPDATE T_Analysis_Description
-	SET Process_State = @ProcessStateFilterEvaluationRequired,
-	    Last_Affected = GETDATE()
-	FROM T_Analysis_Description AS TAD INNER JOIN
-		 #T_ResultTypeList AS RTL ON TAD.ResultType = RTL.ResultType LEFT OUTER JOIN
-		 T_Analysis_Filter_Flags AS AFF ON TAD.Job = AFF.Job AND AFF.Filter_ID = @filterSetID
-	WHERE (TAD.Process_State BETWEEN @ProcessStateFilterEvaluationRequired+1 AND @ProcessStateAllStepsComplete) AND 
-		  AFF.Job Is Null
+	Set @S = ''
+	Set @S = @S + ' UPDATE T_Analysis_Description'
+	Set @S = @S + ' SET Process_State = ' + Convert(varchar(12), @ProcessStateFilterEvaluationRequired) + ', Last_Affected = GETDATE()'
+	Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
+	Set @S = @S +      ' #T_ResultTypeList AS RTL ON TAD.ResultType = RTL.ResultType LEFT OUTER JOIN'
+	Set @S = @S +      ' T_Analysis_Filter_Flags AS AFF ON TAD.Job = AFF.Job AND AFF.Filter_ID = ' + Convert(varchar(12), @filterSetID)
+	Set @S = @S + ' WHERE TAD.Process_State BETWEEN ' + Convert(varchar(12), @ProcessStateFilterEvaluationRequired + 1) + ' AND ' + Convert(varchar(12), @ProcessStateAllStepsComplete)
+	Set @S = @S +        ' AND AFF.Job Is Null'
+	If @ExperimentFilter <> ''
+		Set @S = @S +        ' AND Experiment Like ''' + @ExperimentFilter + ''''
+		
+	Exec (@S)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -235,11 +266,15 @@ AS
 		-- an entry in T_Analysis_Filter_Flags
 		-----------------------------------------------------------
 	
-		DELETE T_Analysis_Filter_Flags
-		FROM T_Analysis_Filter_Flags AS AFF INNER JOIN
-			 T_Analysis_Description AS TAD ON 
-			 AFF.Job = TAD.Job 
-		WHERE (TAD.Process_State = @ProcessStateMatch) AND (AFF.Filter_ID = @filterSetID)
+		Set @S = ''
+		Set @S = @S + ' DELETE T_Analysis_Filter_Flags'
+		Set @S = @S + ' FROM T_Analysis_Filter_Flags AS AFF INNER JOIN'
+		Set @S = @S +      ' T_Analysis_Description AS TAD ON AFF.Job = TAD.Job '
+		Set @S = @S + ' WHERE TAD.Process_State = ' + Convert(varchar(12), @ProcessStateMatch) + ' AND AFF.Filter_ID = ' + Convert(varchar(12), @filterSetID)
+		If @ExperimentFilter <> ''
+			Set @S = @S +        ' AND Experiment Like ''' + @ExperimentFilter + ''''
+		
+		Exec (@S)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
@@ -255,17 +290,20 @@ AS
 	-- Get list of analyses that need to be checked against @filterSetID
 	-----------------------------------------------------------
 	--
-	INSERT INTO #JobsToProcess (Job, ResultType, PeptideCount)
-	SELECT TAD.Job, TAD.ResultType, IsNull(COUNT(P.Peptide_ID), 0) AS PeptideCount
-	FROM T_Analysis_Description AS TAD INNER JOIN
-		 #T_ResultTypeList AS RTL ON TAD.ResultType = RTL.ResultType LEFT OUTER JOIN 
-		 T_Peptides AS P ON TAD.Job = P.Job
-	WHERE TAD.Process_State = @ProcessStateMatch AND
-		 TAD.Job NOT IN (	SELECT Job
-							FROM T_Analysis_Filter_Flags
-							WHERE Filter_ID = @filterSetID)
-	GROUP BY TAD.ResultType, TAD.Job
-	ORDER BY TAD.ResultType, TAD.Job
+	Set @S = ''
+	Set @S = @S + ' INSERT INTO #JobsToProcess (Job, ResultType, PeptideCount)'
+	Set @S = @S + ' SELECT TAD.Job, TAD.ResultType, IsNull(COUNT(P.Peptide_ID), 0) AS PeptideCount'
+	Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN'
+	Set @S = @S +      ' #T_ResultTypeList AS RTL ON TAD.ResultType = RTL.ResultType LEFT OUTER JOIN '
+	Set @S = @S +      ' T_Peptides AS P ON TAD.Job = P.Job'
+	Set @S = @S + ' WHERE TAD.Process_State = ' + Convert(varchar(12), @ProcessStateMatch) + ' AND '
+	Set @S = @S +       ' TAD.Job NOT IN ( SELECT Job FROM T_Analysis_Filter_Flags WHERE Filter_ID = ' + Convert(varchar(12), @filterSetID) + ')'
+	If @ExperimentFilter <> ''
+		Set @S = @S +   ' AND Experiment Like ''' + @ExperimentFilter + ''''
+	Set @S = @S + ' GROUP BY TAD.ResultType, TAD.Job'
+	Set @S = @S + ' ORDER BY TAD.ResultType, TAD.Job'	
+		
+	Exec (@S)
 	--
 	SELECT @myError = @@error, @JobAvailableCount = @@rowcount
 	--
@@ -289,7 +327,7 @@ AS
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	
 	
-	-- Loop through the available jobs, and process them in groups
+	-- Loop through the available jobs, and process them in groups with, at most, @MaxPeptidesPerBatch peptides per batch
 	-- In addition, group the jobs by ResultType
 	--
 	While Len(IsNull(@ResultType, '')) > 0 And @myError = 0 And @numJobsProcessed < @numJobsToProcess
@@ -602,6 +640,7 @@ Done:
 		execute PostLogEntry 'Error', @message, 'CheckFilterForAvailableAnalysesBulk'
 
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CheckFilterForAvailableAnalysesBulk] TO [MTS_DB_Dev] AS [dbo]

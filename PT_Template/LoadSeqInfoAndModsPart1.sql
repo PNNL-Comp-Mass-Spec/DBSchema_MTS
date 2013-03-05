@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadSeqInfoAndModsPart1
+CREATE Procedure LoadSeqInfoAndModsPart1
 /****************************************************
 **
 **	Desc: 
@@ -16,6 +16,8 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart1
 **			#Tmp_Peptide_SeqInfo
 **			#Tmp_Peptide_ModDetails
 **			#Tmp_Peptide_SeqToProteinMap
+**
+**		Will also populate #Tmp_Peptide_ModSummary if @LoadModSummaryFile = 1
 **
 **		This procedure works for both Sequest and XTandem and should be called
 **		 from LoadSequestPeptidesBulk or LoadXTandemPeptidesBulk.
@@ -35,6 +37,8 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart1
 **						   - Additionally, now populating tables #Tmp_Peptide_ResultToSeqMap and #Tmp_Peptide_SeqToProteinMap
 **			08/26/2008 mem - Added additional logging when LogLevel >= 2
 **			10/12/2010 mem - Now setting @myError to 52099 when ValidateDelimitedFile returns a result code = 63
+**			12/04/2012 mem - Added parameter @LoadModSummaryFile; now populating #Tmp_Peptide_SeqToProteinMap
+**			12/06/2012 mem - Expanded @message to varchar(1024)
 **
 *****************************************************/
 (
@@ -45,7 +49,8 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart1
 	@Job int,
 	@RaiseErrorIfSeqInfoFilesNotFound tinyint = 1,
 	@ResultToSeqMapCountLoaded int=0 output,
-	@message varchar(512)='' output
+	@message varchar(1024)='' output,
+	@LoadModSummaryFile tinyint = 0
 )
 As
 	Set NoCount On
@@ -58,18 +63,23 @@ As
 	-- Clear the output parameters
 	Set @ResultToSeqMapCountLoaded = 0
 	Set @message = ''
+	Set @LoadModSummaryFile = IsNull(@LoadModSummaryFile, 0)
 	
 	Declare @jobStr varchar(12)
 	Set @jobStr = cast(@Job as varchar(12))
 
+	Declare @PeptideSeqModSummaryFilePath varchar(512)
+	
 	Declare @ResultToSeqMapFileExists tinyint
 	Declare @SeqInfoFileExists tinyint
 	Declare @SeqModDetailsFileExists tinyint
+	Declare @SeqModSummaryFileExists tinyint
 	Declare @SeqToProteinMapFileExists tinyint
 
 	Declare @ResultToSeqMapColumnCount int
 	Declare @SeqInfoColumnCount int
 	Declare @SeqModDetailsColumnCount int
+	Declare @SeqModSummaryColumnCount int
 	Declare @SeqToProteinMapColumnCount int
 
 	Declare @ColumnCountExpected int
@@ -244,6 +254,53 @@ As
 	End
 
 	-----------------------------------------------
+	-- Now check the ModSummary file, which should have 6 columns
+	-- If no peptides are modified, then the ModSummary file may be empty
+	-----------------------------------------------
+	If @LoadModSummaryFile = 0
+	Begin
+		Set @SeqModSummaryFileExists = 0
+	End
+	Else
+	Begin
+		Set @PeptideSeqModSummaryFilePath = Replace(@PeptideSeqModDetailsFilePath, '_ModDetails.txt', '_ModSummary.txt')	
+		Set @ColumnCountExpected = 6
+		Exec @myError = ValidateDelimitedFile @PeptideSeqModSummaryFilePath, @lineCountToSkip, @SeqModSummaryFileExists OUTPUT, @SeqModSummaryColumnCount OUTPUT, @message OUTPUT
+		
+		if @myError <> 0
+		Begin
+			If Len(@message) = 0
+				Set @message = 'Error calling ValidateDelimitedFile for ' + @PeptideSeqModSummaryFilePath + ' (Code ' + Convert(varchar(11), @myError) + ')'
+			
+			if @myError = 63
+				-- OpenTextFile was unable to open the file
+				-- We need to set the completion code to 9, meaning we want to retry the load
+				-- Error code 52099 is used by LoadPeptidesForOneAnalysis
+				set @myError = 52099
+			else
+				Set @myError = 51008
+
+		End
+		else
+		Begin
+			If @SeqModSummaryFileExists = 0 Or @SeqModSummaryColumnCount = 0
+			Begin
+				-- File does not exist or file is empty; this is OK
+				Set @SeqModSummaryFileExists = 0
+			End
+			Else
+			Begin
+				If @SeqModSummaryColumnCount < @ColumnCountExpected
+				Begin
+					Set @message = 'ModSummary file only contains ' + convert(varchar(11), @SeqModSummaryColumnCount) + ' columns for job ' + @jobStr + ' (Expecting ' + Convert(varchar(12), @ColumnCountExpected) + ' columns)'
+					set @myError = 51009
+					Goto Done
+				End
+			End
+		End
+	End
+	
+	-----------------------------------------------
 	-- Now check the SeqToProteinMap file, which should have 6 columns
 	-----------------------------------------------
 	Set @ColumnCountExpected = 6
@@ -313,8 +370,9 @@ As
 	--
 	if @myError <> 0
 	begin
-		set @message = 'Problem executing bulk insert into #Tmp_Peptide_ResultToSeqMap for job ' + @jobStr
+		set @message = 'Problem executing bulk insert into #Tmp_Peptide_ResultToSeqMap for job ' + @jobStr + '; ' + @c
 		Set @myError = 51006
+		print @c
 		goto Done
 	end
 
@@ -343,8 +401,9 @@ As
 	--
 	if @myError <> 0
 	begin
-		set @message = 'Problem executing bulk insert into #Tmp_Peptide_SeqInfo for job ' + @jobStr
+		set @message = 'Problem executing bulk insert into #Tmp_Peptide_SeqInfo for job ' + @jobStr + '; ' + @c
 		Set @myError = 51006
+		print @c
 		goto Done
 	end
 
@@ -360,13 +419,14 @@ As
 	--
 	If @SeqModDetailsFileExists > 0
 	Begin
-		Set @c = 'BULK INSERT #Tmp_Peptide_ModDetails FROM ' + '''' + @PeptideSeqModDetailsFilePath + ''' WITH (FIRSTROW = 2)'
+		Set @c = 'BULK INSERT #Tmp_Peptide_ModDetails FROM ' + '''' + @PeptideSeqModDetailsFilePath + ''' WITH (FIRSTROW = 2)'		
 		exec @myError = sp_executesql @c
 		--
 		if @myError <> 0
 		begin
-			set @message = 'Problem executing bulk insert into #Tmp_Peptide_ModDetails for job ' + @jobStr
+			set @message = 'Problem executing bulk insert into #Tmp_Peptide_ModDetails for job ' + @jobStr + '; ' + @c
 			Set @myError = 51007
+			print @c
 			goto Done
 		end
 
@@ -375,6 +435,29 @@ As
 			execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
 	end
 
+	-----------------------------------------------
+	-- If @SeqModSummaryFileExists > 0, then bulk load contents 
+	-- of mod summary file into temporary table
+	-----------------------------------------------
+	--
+	If @SeqModSummaryFileExists > 0
+	Begin
+		Set @c = 'BULK INSERT #Tmp_Peptide_ModSummary FROM ' + '''' + @PeptideSeqModSummaryFilePath + ''' WITH (FIRSTROW = 2)'
+		exec @myError = sp_executesql @c
+		--
+		if @myError <> 0
+		begin
+			set @message = 'Problem executing bulk insert into #Tmp_Peptide_ModSummary for job ' + @jobStr + '; ' + @c
+			Set @myError = 51010
+			print @c
+			goto Done
+		end
+
+		Set @LogMessage = 'Populated #Tmp_Peptide_ModSummary using ' + @PeptideSeqModSummaryFilePath
+		if @LogLevel >= 2
+			execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart1'
+	end
+	
 
 	-----------------------------------------------
 	-- Bulk load contents of SeqToProteinMap file into temporary table
@@ -387,8 +470,9 @@ As
 	--
 	if @myError <> 0
 	begin
-		set @message = 'Problem executing bulk insert into #Tmp_Peptide_SeqToProteinMap for job ' + @jobStr
+		set @message = 'Problem executing bulk insert into #Tmp_Peptide_SeqToProteinMap for job ' + @jobStr + '; ' + @c
 		Set @myError = 51006
+		print @c
 		goto Done
 	end
 
@@ -414,7 +498,6 @@ As
 	
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadSeqInfoAndModsPart1] TO [MTS_DB_Dev] AS [dbo]

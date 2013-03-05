@@ -60,7 +60,7 @@ REFERENCES [T_Histogram_Mode_Name] ([Histogram_Mode])
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Mode_Name]
 GO
-ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter] CHECK  (([Result_Type_Filter] = '' or [Result_Type_Filter] = 'Peptide_Hit' or [Result_Type_Filter] = 'XT_Peptide_Hit'))
+ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter] CHECK  (([Result_Type_Filter]='' OR [Result_Type_Filter]='Peptide_Hit' OR [Result_Type_Filter]='XT_Peptide_Hit'))
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter]
 GO

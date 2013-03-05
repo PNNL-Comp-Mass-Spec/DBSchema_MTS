@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ExportGANETPeptideFile
+CREATE Procedure dbo.ExportGANETPeptideFile
 /****************************************************
 **
 **	Desc: 
@@ -39,6 +39,7 @@ CREATE Procedure ExportGANETPeptideFile
 **			08/23/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			10/25/2011 mem - Now including column MSGF_SpecProb
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -67,13 +68,11 @@ As
 	Declare @outFilePath varchar(512)
 	declare @DBName varchar(128)
 
-	Declare @S nvarchar(4000)
-	Declare @OrderBySql nvarchar(512)
-	Declare @OrderBySqlNoPrefix nvarchar(512)
-	Declare @cmd nvarchar(4000)
+	Declare @S varchar(7000)
+	Declare @OrderBySql varchar(512)
+	Declare @OrderBySqlNoPrefix varchar(512)
+	Declare @cmd varchar(4000)
 	Declare @result int
-
-	Declare @lockerCount varchar(12)
 
 	--------------------------------------------------------------
 	-- build output file path
@@ -100,19 +99,6 @@ As
 	** command must be run to update the password
 	** 
 	**************************************************************************/
-	
-	--------------------------------------------------------------
-	-- get the count of peptide lockers
-	--------------------------------------------------------------
-
-	-- (future:)
-	Set @lockerCount = '0'
-
-	--------------------------------------------------------------
-	-- dump the peptide lockers into a temporary file
-	--------------------------------------------------------------
-	--
-	-- (future:)
 	
 	--------------------------------------------------------------
 	-- Dump the peptides into a temporary file
@@ -207,7 +193,21 @@ As
 	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
 	Set @S = @S +   ' TAD.ResultType = ''MSG_Peptide_Hit'''
-	
+	Set @S = @S + ' UNION'
+	Set @S = @S + ' SELECT TOP 100 PERCENT Pep.Job, Pep.Scan_Number, Seq.Clean_Sequence,'
+	Set @S = @S +   ' CASE WHEN Len(IsNull(Seq.Mod_Description, '''')) = 0 THEN ''none'' '
+	Set @S = @S +   ' ELSE Seq.Mod_Description END AS Mod_Description, Pep.Seq_ID, Pep.Charge_State,'
+	Set @S = @S +   ' CONVERT(real, Pep.MH) AS MH, M.Normalized_Score AS Normalized_Score, 0 AS DeltaCn,'
+	Set @S = @S +   ' 500 AS Sp, Seq.Cleavage_State_Max, Pep.Scan_Time_Peak_Apex,'
+	Set @S = @S +   ' IsNull(SD.MSGF_SpecProb, M.PValue) AS MSGF_SpecProb'
+	Set @S = @S + ' FROM T_NET_Update_Task_Job_Map TJM INNER JOIN'
+	Set @S = @S +      ' T_Analysis_Description TAD ON TJM.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Peptides Pep ON Pep.Job = TAD.Job INNER JOIN'
+	Set @S = @S +      ' T_Score_MSAlign M ON Pep.Peptide_ID = M.Peptide_ID INNER JOIN'
+	Set @S = @S +      ' T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID INNER JOIN'
+	Set @S = @S +      ' T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
+	Set @S = @S + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID) + ' AND '
+	Set @S = @S +   ' TAD.ResultType = ''MSA_Peptide_Hit'''	
 	Set @S = @S + @OrderBySql
 	--
 	Exec (@S)
@@ -233,11 +233,11 @@ As
 	end
 	
 	--------------------------------------------------------------
-	-- create output file and put first line 
-	-- (containing locker row count) into it
+	-- Create output file and write out the first line.  
+	-- The number on the first line was originally intended to be a "Locker row count", but we never implemented that feature
 	--------------------------------------------------------------
 	--
-	Set @cmd = 'echo ' + @lockerCount + ' > ' + @outFilePath
+	Set @cmd = 'echo 0 > ' + @outFilePath
 	--
 	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
 	--
@@ -275,6 +275,7 @@ Done:
 	End
 	
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Dev] AS [dbo]

@@ -32,6 +32,7 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 **			08/23/2011 mem - Added parameters @MSGFDbSpecProb and @MSGFDbPValue
 **			09/16/2011 mem - Switched default PeptideProphet Threshold from >= -1 to >= -100
 **						   - Added parameter @MSGFDbFDR
+**			12/04/2012 mem - Added parameters @MSAlignPValueComparison and @MSAlignFDRComparison
 **    
 *****************************************************/
 (
@@ -114,7 +115,14 @@ CREATE PROCEDURE dbo.GetThresholdsForFilterSet
 	@MSGFDbPValueThreshold real=1 output,
 
 	@MSGFDbFDRComparison varchar(2)='<=' output,
-	@MSGFDbFDRThreshold real=1 output
+	@MSGFDbFDRThreshold real=1 output, 
+
+	@MSAlignPValueComparison varchar(2)='<=' output,
+	@MSAlignPValueThreshold real=1 output,
+
+	@MSAlignFDRComparison varchar(2)='<=' output,
+	@MSAlignFDRThreshold real=1 output
+	
 )
 As
 	Set nocount on
@@ -209,6 +217,12 @@ As
 	Set @MSGFDbFDRComparison = '<='					-- MSGFDB Search Engine
 	Set @MSGFDbFDRThreshold = 1
 
+	Set @MSAlignPValueComparison = '<='				-- MSAlign Search Engine
+	Set @MSAlignPValueThreshold = 1
+
+	Set @MSAlignFDRComparison = '<='				-- MSAlign Search Engine
+	Set @MSAlignFDRThreshold = 1
+	
 	-------------------------------------------------
 	-- Validate @FilterSetID
 	-------------------------------------------------
@@ -250,7 +264,8 @@ As
 	)
 	
 	Set @CriteriaGroupMatch = 0
-
+	Set @CriteriaGroupStart = IsNull(@CriteriaGroupStart, 0)
+	
 	INSERT INTO #T_TmpFilterSetCriteria (Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value)
 	SELECT Filter_Criteria_Group_ID, Criterion_ID, Criterion_Comparison, Criterion_Value
 	FROM MT_Main.dbo.V_DMS_Filter_Set_Details
@@ -414,6 +429,15 @@ As
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 25	-- MSGFDB FDR
 
+		SELECT TOP 1 @MSAlignPValueComparison = Criterion_Comparison,
+					 @MSAlignPValueThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 26	-- MSAlign PValue
+
+		SELECT TOP 1 @MSAlignFDRComparison = Criterion_Comparison,
+					 @MSAlignFDRThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 27	-- MSAlign FDR
 	End
 
 DoneDropTable:

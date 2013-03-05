@@ -16,10 +16,16 @@
 --	 MT_Human_Sarcopenia_MixedLC_P692 on Elmer
 --   MT_Human_Sarcopenia_P724 on Elmer (extended to use MSGF_SpecProb)
 --   MT_Human_HMEC_EGFR_P706 on Elmer
+--   MT_S_oneidensis_MR1_P777 on Daffy (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
+--   MT_Mouse_CHF_P776 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
+--   MT_Human_ALZ_O18_P836
 --
 -- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
 --
 -- CheckFilterUsingCustomCriteria is used in PT_Human_ALZ_Phospho_A235
+--
+-- UpdatePMTQSUsingCustomFilters is in these DBs
+--   MT_Human_Glycated_Peptides_P742 (extended to use Peptide_Prophet_Probability to consider terminus_state)
 
 SET QUOTED_IDENTIFIER ON
 SET ANSI_PADDING ON
@@ -28,13 +34,13 @@ GO
 CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
 	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
 	PMTQS real NOT NULL,
-	ExperimentFilter varchar(128) NOT NULL,
-	ParamFileFilter varchar(255) NOT NULL,
+	ExperimentFilter varchar(128) NOT NULL default '',
+	ParamFileFilter varchar(255) NOT NULL default '',
 	ChargeState smallint NOT NULL,
 	DeltaMassPPM real NOT NULL,
 	XCorr real NOT NULL,
 	DeltaCN2 real NOT NULL,
-	ModSymbolFilter varchar(12) NOT NULL,
+	ModSymbolFilter varchar(12) NOT NULL default '',
 	MSGF_SpecProb real NOT NULL,
 	CleavageState smallint NOT NULL
  CONSTRAINT [PK_T_Custom_PMT_QS_Criteria_VP] PRIMARY KEY CLUSTERED 
@@ -77,7 +83,9 @@ ALTER PROCEDURE dbo.UpdatePMTQSUsingCustomVladFilters
 **						   - Removed dependency on table T_User_DatasetID_Scan_MH
 **			08/25/2011 mem - Added column MSGF_SpecProb
 **			09/19/2011 mem - Added columns ParamFileFilter and ModSymbolFilter
-**			01/06/2012 mem - Updated to use T_Peptides.Job
+**			02/09/2012 mem - Updated to use T_Peptides.DelM_PPM
+**						   - Updated to left outer join to T_Score_Sequest
+**						   - Updated to use T_Peptides.Job
 **    
 *****************************************************/
 (
@@ -99,6 +107,7 @@ As
 	declare @XCorr real
 	declare @DeltaCN2 real
 	declare @ModSymbolFilter varchar(12)
+	declare @ModSymbolExclusionFilter varchar(12)
 	declare @MSGFSpecProb real
 	declare @CleavageState smallint
 	declare @PMTQS real
@@ -217,33 +226,55 @@ As
 		Else
 		Begin -- <b>
 		
+			If IsNull(@ExperimentFilter, '') = ''
+				Set @ExperimentFilter = '%'
+
+			If IsNull(@ParamFileFilter, '') = ''
+				Set @ParamFileFilter = '%'
+			
+			If ISNULL(@ModSymbolFilter, '') = ''
+				Set @ModSymbolFilter = ''				
+			
+			If @ModSymbolFilter Like 'Not[ ]%' And Len(@ModSymbolFilter) >= 5
+			Begin
+				Set @ModSymbolExclusionFilter = SUBSTRING(@ModSymbolFilter, 5, 100)
+				Set @ModSymbolFilter = ''
+			End
+			Else
+				Set @ModSymbolExclusionFilter = ''
+
+			
 			UPDATE #TmpNewMassTagScores
 			SET PMT_Quality_Score = CASE WHEN @PMTQS > PMT_Quality_Score THEN @PMTQS ELSE PMT_Quality_Score END,
 				Filter_Match_Count = Filter_Match_Count + 1
 			FROM #TmpNewMassTagScores NMTS INNER JOIN
 				(   SELECT DISTINCT Mass_Tag_ID
 					FROM ( SELECT	Pep.Mass_Tag_ID,
-					                SS.DelM / (MT.Monoisotopic_Mass / 1e6) AS DelM_PPM
+					                Pep.DelM_PPM
 							FROM T_Peptides Pep
 								INNER JOIN T_Analysis_Description TAD
 									ON Pep.Job = TAD.Job
 								INNER JOIN T_Mass_Tags MT
 									ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
-								INNER JOIN T_Score_Sequest SS
-									ON Pep.Peptide_ID = SS.Peptide_ID
                                 INNER JOIN T_Score_Discriminant SD
 									ON Pep.Peptide_ID = SD.Peptide_ID
+								LEFT OUTER JOIN T_Score_Sequest SS
+								    ON Pep.Peptide_ID = SS.Peptide_ID
 							WHERE TAD.Experiment LIKE @ExperimentFilter AND
 							      TAD.Parameter_File_Name LIKE @ParamFileFilter AND
 							      Pep.Charge_State = @ChargeState AND
-								  SS.XCorr >= @XCorr AND
-								  SS.DeltaCN2 >= @DeltaCN2 AND
-                                  SD.MSGF_SpecProb < @MSGFSpecProb AND
+								  ISNULL(SS.XCorr, 0) >= @XCorr AND
+								  ISNULL(SS.DeltaCN2, 0) >= @DeltaCN2 AND
+                                  SD.MSGF_SpecProb <= @MSGFSpecProb AND
 								  (@CleavageState < 0 Or MT.Cleavage_State_Max = @CleavageState) AND
 							      (
 							        (@ModSymbolFilter = '') OR 
 									(@ModSymbolFilter = 'NoMods' And Not Pep.Peptide Like '%[*#@!$%^&]%') OR 
 									(Len(@ModSymbolFilter) > 0 AND @ModSymbolFilter <> 'NoMods' And Pep.Peptide Like '%' + @ModSymbolFilter + '%') 
+							      ) AND
+							      (
+									(@ModSymbolExclusionFilter = '') OR
+									(Len(@ModSymbolExclusionFilter) > 0 AND Not MT.Mod_Description Like '%' + @ModSymbolExclusionFilter + '%') 
 							      )
 						  ) LookupQ
 					WHERE (ABS(DelM_PPM) <= @DeltaMassPPM ) 

@@ -16,7 +16,8 @@ CREATE PROCEDURE UpdatePeptideStateID
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **			12/23/2011 mem - Added a Where clause when updating State_ID to skip unnecessary updates
 **			01/06/2012 mem - Updated to use T_Peptides.Job
-**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins (MS-GFDB)
+**			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **
 *****************************************************/
 (
@@ -132,7 +133,8 @@ As
 										  Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 										  Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
 										  Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-										  Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
+										  Prot.Reference LIKE 'rev[_]%' OR			-- MSGFDB reversed proteins
+										  Prot.Reference LIKE 'xxx[_]%'				-- MSGF+ reversed proteins
 									THEN 1
 									ELSE 0 END) AS Rev_Protein_Count
 					FROM #Tmp_JobsToProcess JobQ INNER JOIN
@@ -170,6 +172,7 @@ As
 	--
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideStateID] TO [MTS_DB_Dev] AS [dbo]

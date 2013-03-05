@@ -1,8 +1,11 @@
 /****** Object:  StoredProcedure [dbo].[LoadMSGFDBPeptidesBulk] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
+
+
+
 CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 /****************************************************
 **
@@ -30,6 +33,11 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			01/08/2012 mem - Now populating T_Score_Discriminant.MSGF_SpecProb using the SpecProb value from MSGFDB
 **			01/18/2012 mem - Changed validation of ResultToSeqMap.txt rowcount to log a warning only if ResultToSeqMap.txt has fewer rows than the unique peptide/scan/charge count in the synopsis file
+**			10/18/2012 mem - Added support for columns IMS_Scan and IMS_Drift_Time
+**			11/26/2012 mem - Added support for MSGF+ results (IsotopeError column is present after the PepQValue column)
+**			12/04/2012 mem - Now populating #Tmp_Peptide_ModSummary
+**			12/06/2012 mem - Expanded @message to varchar(1024)
+**			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **
 *****************************************************/
 (
@@ -50,7 +58,7 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 	@numSkipped int=0 output,
 	@SeqCandidateFilesFound tinyint=0 output,
 	@MSGFFileFound tinyint=0 output,
-	@message varchar(512)='' output
+	@message varchar(1024)='' output
 )
 As
 	Set NoCount On
@@ -165,15 +173,28 @@ As
 		Set @SynFileVersion = '2011_PepFDR'
 	End
 
+	If @SynFileColCount = 20 And @SynFileHeader LIKE '%PepQValue%'
+	Begin
+		Set @SynFileVersion = '2012_MSGFPlus'
+	End
+	
+	If @SynFileColCount = 21 And @SynFileHeader LIKE '%IMS[_]Scan%'
+	Begin
+		Set @SynFileVersion = '2012_IMS'
+	End
+
+	If @SynFileColCount = 22 And @SynFileHeader LIKE '%IMS[_]Scan%'
+	Begin
+		Set @SynFileVersion = '2012_MSGFPlus_IMS'
+	End
+	
 	If @SynFileVersion = ''
 	Begin
 		-- Unrecognized version
-		if @myError = 52005
-		begin
-			set @message = 'Unrecognized Synopsis file format for Job ' + @jobStr
-			Set @message = @message + '; synopsis file contains ' + convert(varchar(12), @SynFileColCount) + ' columns (Expecting 17 or 19 columns)'
-			goto Done
-		end
+		Set @myError = 52005
+		Set @message = 'Unrecognized Synopsis file format for Job ' + @jobStr
+		Set @message = @message + '; synopsis file contains ' + convert(varchar(12), @SynFileColCount) + ' columns (Expecting 17, 19, 20, 21, or 22 columns)'
+		goto Done
 	End
 	
 	-- Create table #Tmp_Peptide_Import
@@ -206,15 +227,29 @@ As
 		goto Done
 	end
 		
-	If @SynFileVersion IN ('2011_PepFDR')
+	If @SynFileVersion IN ('2011_PepFDR', '2012_IMS', '2012_MSGFPlus', '2012_MSGFPlus_IMS')
 	Begin
-		-- Add columns FDR and PepFDR
-
+		-- Add FDR columns
 		ALTER Table #Tmp_Peptide_Import ADD
 			FDR real NULL,
 			PepFDR real NULL
 	End
 
+	If @SynFileVersion IN ('2012_MSGFPlus', '2012_MSGFPlus_IMS')
+	Begin
+		-- Add the Isotope Error column
+		ALTER Table #Tmp_Peptide_Import ADD
+			IsotopeError smallint NULL
+	End
+	
+	If @SynFileVersion IN ('2012_IMS', '2012_MSGFPlus_IMS')
+	Begin
+		-- Add IMS columns
+		ALTER Table #Tmp_Peptide_Import ADD
+			IMS_Scan int NULL,
+			IMS_DriftTime real NULL
+	End
+	
 	
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
 	CREATE INDEX #IX_Tmp_Peptide_Import_Scan_Number ON #Tmp_Peptide_Import (Scan_Number)
@@ -270,12 +305,32 @@ As
 
 	If @SynFileVersion = '2011' 
 	Begin
-		-- Add columns FDR and PepFDR
-
+		-- Add the FDR columns, Isotope Error column, and the IMS columns
 		ALTER Table #Tmp_Peptide_Import ADD
 			FDR real NULL,
-			PepFDR real NULL
+			PepFDR real NULL,
+			IsotopeError smallint NULL,
+			IMS_Scan int NULL,
+			IMS_DriftTime real NULL
+
 	End	
+
+	If @SynFileVersion IN ('2011_PepFDR', '2012_IMS')
+	Begin
+		-- Add the Isotope Error column
+		ALTER Table #Tmp_Peptide_Import ADD
+			IsotopeError smallint NULL
+	End
+
+	If @SynFileVersion IN ('2011_PepFDR', '2012_MSGFPlus')
+	Begin
+		-- Add the IMS columns
+		ALTER Table #Tmp_Peptide_Import ADD
+			IMS_Scan int NULL,
+			IMS_DriftTime real NULL
+
+	End	
+
 
 	-----------------------------------------------
 	-- Populate @UnfilteredCountLoaded; this will be compared against
@@ -315,6 +370,9 @@ As
 
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_ModDetails]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_ModDetails]
+
+		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_ModSummary]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+		drop table [dbo].[#Tmp_Peptide_ModSummary]
 
 		if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[#Tmp_Peptide_SeqToProteinMap]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		drop table [dbo].[#Tmp_Peptide_SeqToProteinMap]
@@ -387,6 +445,28 @@ As
 	end
 
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModDetails (Seq_ID_Local)
+
+
+	-- Table for contents of the ModSummary file
+	--
+	CREATE TABLE #Tmp_Peptide_ModSummary (
+		Modification_Symbol varchar(4) NULL,
+		Modification_Mass real NOT NULL,
+		Target_Residues varchar(64) NULL,
+		Modification_Type varchar(4) NOT NULL,
+		Mass_Correction_Tag varchar(8) NOT NULL,					-- Note: The mass correction tags are limited to 8 characters when storing in T_Seq_Candidate_ModSummary
+		Occurrence_Count int NULL
+	)
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
+	--
+	if @myError <> 0
+	begin
+		set @message = 'Problem creating temporary table #Tmp_Peptide_ModSummary for job ' + @jobStr
+		goto Done
+	end
+
+	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_ModDetails_Seq_ID ON #Tmp_Peptide_ModSummary (Mass_Correction_Tag)
 
 
 	-- Table for contents of the SeqToProteinMap file
@@ -522,7 +602,8 @@ As
 						@job, 
 						@RaiseErrorIfSeqInfoFilesNotFound,
 						@ResultToSeqMapCountLoaded output,
-						@message output
+						@message output,
+						@LoadModSummaryFile=1
 
 	if @myError <> 0
 	Begin
@@ -542,7 +623,7 @@ As
 		SELECT @ExpectedResultToSeqMapCount = COUNT(*)
 		FROM ( SELECT DISTINCT Scan_Number,
 		                       Charge_State,
-		                       MH,
+		     MH,
 		                       CASE WHEN Len(Peptide) > 4 
 		                            THEN Substring(Peptide, 3, Len(Peptide) - 4)
 		                            ELSE Peptide END AS Peptide
@@ -1007,7 +1088,8 @@ As
 				Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 				Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
 				Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-				Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
+				Reference LIKE 'rev[_]%' OR			-- MSGFDB reversed proteins
+				Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
 			  )
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -1257,7 +1339,9 @@ As
 				Multiple_ORF, 
 				Peptide,
 				RankHit,
-				DelM_PPM
+				DelM_PPM,
+				IMS_Scan,
+				IMS_DriftTime
 			)
 			SELECT
 				UR.Peptide_ID_New,
@@ -1269,7 +1353,9 @@ As
 				0,						-- Multiple_Protein_Count; this set to 0 for now, but we will update it below using T_Peptides and T_Peptide_to_Protein_Map
 				TPI.Peptide,
 				TPI.RankSpecProb AS RankHit,
-				TPI.DelM_PPM
+				TPI.DelM_PPM,
+				TPI.IMS_Scan,
+				TPI.IMS_DriftTime
 			FROM #Tmp_Peptide_Import TPI INNER JOIN 
 				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
 			ORDER BY UR.Peptide_ID_New
@@ -1336,7 +1422,7 @@ As
 
 			INSERT INTO T_Score_MSGFDB
 				(Peptide_ID, FragMethod, PrecursorMZ, DelM, DeNovoScore, MSGFScore, 
-				SpecProb, RankSpecProb, PValue, Normalized_Score, FDR, PepFDR)
+				SpecProb, RankSpecProb, PValue, Normalized_Score, FDR, PepFDR, IsotopeError)
 			SELECT
 				UR.Peptide_ID_New,
 				TPI.FragMethod,
@@ -1349,7 +1435,8 @@ As
 				TPI.PValue, 
 				dbo.udfMSGFDBScoreToNormalizedScore(TPI.MSGFScore, TPI.Charge_State),		-- Compute the Normalized Score using MSGFScore and Charge_State
 				TPI.FDR,
-				TPI.PepFDR
+				TPI.PepFDR,
+				TPI.IsotopeError
 			FROM #Tmp_Peptide_Import TPI INNER JOIN 
 				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
 			ORDER BY UR.Peptide_ID_New
@@ -1589,10 +1676,11 @@ As
 				PValue = TPI.PValue,
 				Normalized_Score = CASE WHEN TPI.MSGFScore > -1000
 				                        Then dbo.udfMSGFDBScoreToNormalizedScore(TPI.MSGFScore, TPI.Charge_State)
-				                        Else IsNull(Normalized_Score, 0) 
-				                        End,						-- Compute the Normalized Score using MSGFScore and Charge_State
+				                   Else IsNull(Normalized_Score, 0) 
+				                    End,						-- Compute the Normalized Score using MSGFScore and Charge_State
 				FDR = TPI.FDR,
-				PepFDR = TPI.PepFDR
+				PepFDR = TPI.PepFDR,
+				IsotopeError = TPI.IsotopeError
 			FROM #Tmp_Peptide_Import TPI
 			     INNER JOIN #Tmp_Unique_Records UR
 			       ON TPI.Result_ID = UR.Result_ID
@@ -1640,7 +1728,7 @@ As
 			    PepFDR = Case When PepFDR Is Null Then Null Else 10 End
 			FROM T_Peptides Pep
 			     INNER JOIN T_Score_MSGFDB MSG
-			       ON Pep.Peptide_ID = MSG.Peptide_ID
+			      ON Pep.Peptide_ID = MSG.Peptide_ID
 			     LEFT OUTER JOIN #Tmp_Unique_Records UR
 			       ON Pep.Peptide_ID = UR.Peptide_ID_New
 			WHERE Pep.Job = @Job AND
@@ -1760,7 +1848,7 @@ As
 		                         COUNT(DISTINCT PPM.Ref_ID) AS ProteinCount
 		                  FROM T_Peptides Pep
 		                       INNER JOIN T_Peptide_to_Protein_Map PPM
-		                         ON Pep.Peptide_ID = PPM.Peptide_ID
+		    ON Pep.Peptide_ID = PPM.Peptide_ID
 		 WHERE (Pep.Job = @job)
 		                  GROUP BY Pep.Job, Pep.Peptide_ID 
                         ) CountQ
@@ -1830,6 +1918,7 @@ As
 	--  #Tmp_Peptide_ResultToSeqMap
 	--  #Tmp_Peptide_SeqInfo
 	--  #Tmp_Peptide_ModDetails
+	--  #Tmp_Peptide_ModSummary
 	-----------------------------------------------
 	--
 	If @ResultToSeqMapCountLoaded > 0 And @UpdateExistingData = 0

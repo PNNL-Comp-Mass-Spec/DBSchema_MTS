@@ -22,6 +22,8 @@ CREATE TABLE [dbo].[T_Peptides](
 	[Cleavage_State_Max] [tinyint] NULL,
 	[DelM_PPM] [real] NULL,
 	[RankHit] [smallint] NULL,
+	[IMS_Scan] [int] NULL,
+	[IMS_DriftTime] [real] NULL,
  CONSTRAINT [PK_T_Peptides] PRIMARY KEY NONCLUSTERED 
 (
 	[Peptide_ID] ASC

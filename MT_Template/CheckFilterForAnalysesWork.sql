@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[CheckFilterForAnalysesWork] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE CheckFilterForAnalysesWork
@@ -41,6 +41,7 @@ CREATE PROCEDURE CheckFilterForAnalysesWork
 **			10/03/2011 mem - Added column MSGFDB_FDR to #PeptideStats
 **			10/13/2011 mem - Fixed bug populating #PeptideStats with MSGFDB results
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -94,7 +95,7 @@ AS
 				@DeltaCnThreshold float,
 				@DeltaCn2Comparison varchar(2),					-- Used for Sequest, X!Tandem, and Inspect results (T_Score_Sequest.DeltaCn2, T_Score_XTandem.DeltaCn2, and T_Score_Inspect.DeltaNormTotalPRMScore)
 				@DeltaCn2Threshold float,
-				@DiscriminantScoreComparison varchar(2),		-- Only accurate for Sequest; approximated for X!Tandem and Inspect; always 0.5 for MSGFDB
+				@DiscriminantScoreComparison varchar(2),		-- Only accurate for Sequest; approximated for X!Tandem and Inspect; always 0.5 for MSGFDB and MSAlign
 				@DiscriminantScoreThreshold float,
 				@NETDifferenceAbsoluteComparison varchar(2),
 				@NETDifferenceAbsoluteThreshold float,
@@ -110,7 +111,7 @@ AS
 				@XTandemLogEValueThreshold real,				
 				@PeptideProphetComparison varchar(2),			-- Note, for Inspect data, T_Score_Discriminant.Peptide_Prophet_Probability actually contains "1 minus T_Score_Inspect.PValue"
 				@PeptideProphetThreshold float,					
-				@RankScoreComparison varchar(2),				-- Used for Sequest and Inspect results (T_Score_Sequest.RankXC and T_Score_Inspect.RankFScore); ignored for X!Tandem
+				@RankScoreComparison varchar(2),				-- Used for Sequest, Inspect, MSGFDB, and MSAlign results; ignored for X!Tandem
 				@RankScoreThreshold smallint,
 				@InspectMQScoreComparison varchar(2),			-- Only used for Inspect results
 				@InspectMQScoreThreshold real,
@@ -129,7 +130,13 @@ AS
 				@MSGFDbPValueComparison varchar(2),				-- Only used for MSGFDB results
 				@MSGFDbPValueThreshold real,
 				@MSGFDbFDRComparison varchar(2),				-- Only used for MSGFDB results
-				@MSGFDbFDRThreshold real
+				@MSGFDbFDRThreshold real,								
+				
+				@MSAlignPValueComparison varchar(2),		-- Used by MSAlign
+				@MSAlignPValueThreshold real,			
+				@MSAlignFDRComparison varchar(2),			-- Used by MSAlign
+				@MSAlignFDRThreshold real
+
 
 		-----------------------------------------------------------
 		-- Validate that @FilterSetID is defined in V_Filter_Sets_Import
@@ -165,7 +172,7 @@ AS
 			PeptideLength smallint NOT NULL,
 			Charge_State smallint NOT NULL,
 			XCorr float NOT NULL,							-- Only used for Sequest data
-			RankScore int NOT NULL,							-- Used for Sequest, X!Tandem, and MSGFDB
+			RankScore int NOT NULL,							-- Used for Sequest, X!Tandem, MSGFDB, and MSAlign
 			
 			Hyperscore real NOT NULL,						-- Only used for X!Tandem data
 			Log_EValue real NOT NULL,						-- Only used for X!Tandem data
@@ -178,6 +185,9 @@ AS
 			MSGFDB_SpecProb real NOT NULL ,					-- Only used for MSGFDB data
 			MSGFDB_PValue real NOT NULL ,					-- Only used for MSGFDB data
 			MSGFDB_FDR real NOT NULL ,						-- Only used for MSGFDB data
+
+			MSAlign_PValue real NOT NULL ,					-- Only used for MSAlign data
+			MSAlign_FDR real NOT NULL ,						-- Only used for MSAlign data
 			
 			Cleavage_State tinyint NOT NULL,
 			Terminus_State tinyint NOT NULL,
@@ -185,10 +195,10 @@ AS
 			DeltaCn float NOT NULL,							-- Only used for Sequest data
 			DeltaCn2 float NOT NULL,						-- Used for Sequset, X!Tandem, and Inspect
 			Discriminant_Score real NOT NULL,
-			Peptide_Prophet_Probability real NOT NULL,		-- Note, for Inspect data, T_Score_Discriminant.Peptide_Prophet_Probability actually contains "1 minus T_Score_Inspect.PValue"; for MSGFDB, this is "1 minus T_Score_MSGFDB.PValue"
+			Peptide_Prophet_Probability real NOT NULL,		-- Note, for Inspect data, T_Score_Discriminant.Peptide_Prophet_Probability actually contains "1 minus T_Score_Inspect.PValue"; for MSGFDB and MSAlign, this is "1 minus T_Score_MSGFDB.PValue"
 			NET_Difference_Absolute float NOT NULL,
 			Pass_FilterSet_Group tinyint NOT NULL,			-- 0 or 1
-			MSGF_SpecProb real NOT NULL						-- Closer to 0 means higher confidence
+			MSGF_SpecProb real NOT NULL						-- Closer to 0 means higher confidence; ignored for MSAlign
 		)
 				
 		CREATE UNIQUE INDEX #IX_PeptideStats ON #PeptideStats ([Peptide_ID])
@@ -256,6 +266,7 @@ AS
 												XCorr, RankScore, Hyperscore, Log_EValue, 
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+												MSAlign_PValue, MSAlign_FDR,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												MSGF_SpecProb, NET_Difference_Absolute, Pass_FilterSet_Group)
@@ -263,6 +274,7 @@ AS
 							XCorr, RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
 							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							1 AS MSGFDB_SpecProb, 1 AS MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							1 AS MSAlign_PValue, 1 AS MSAlign_FDR,
 							MAX(Cleavage_State), MAX(Terminus_State), MH, 
 							DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability, 
 							MSGF_SpecProb, NET_Difference_Absolute, 0 AS Pass_FilterSet_Group
@@ -309,13 +321,15 @@ AS
 												XCorr, RankScore, Hyperscore, Log_EValue, 
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+												MSAlign_PValue, MSAlign_FDR,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												MSGF_SpecProb, NET_Difference_Absolute, Pass_FilterSet_Group)
 					SELECT  Job, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, 1 AS RankScore, Hyperscore, Log_EValue, 
 							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
-							1 as MSGFDB_SpecProb, 1 as MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							1 AS MSGFDB_SpecProb, 1 AS MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							1 AS MSAlign_PValue, 1 AS MSAlign_FDR,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							MSGF_SpecProb, NET_Difference_Absolute, 0 as Pass_FilterSet_Group
@@ -361,13 +375,15 @@ AS
 												XCorr, RankScore, Hyperscore, Log_EValue, 
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+												MSAlign_PValue, MSAlign_FDR,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												MSGF_SpecProb, NET_Difference_Absolute, Pass_FilterSet_Group)
 					SELECT  Job, Peptide_ID, PeptideLength, Charge_State,
 							0 AS XCorr, RankFScore AS RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
 							Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
-							1 as MSGFDB_SpecProb, 1 AS MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							1 AS MSGFDB_SpecProb, 1 AS MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							1 AS MSAlign_PValue, 1 AS MSAlign_FDR,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, DeltaNormTotalPRMScore AS DeltaCN2, DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							MSGF_SpecProb, NET_Difference_Absolute, 0 as Pass_FilterSet_Group
@@ -411,12 +427,13 @@ AS
 				
 
 				If @ResultType = 'MSG_Peptide_Hit'
-				Begin
+				Begin					
 					-- MSGFDB results
 					INSERT INTO #PeptideStats (	Job, Peptide_ID, PeptideLength, Charge_State,
 												XCorr, RankScore, Hyperscore, Log_EValue, 
 												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
 												MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+												MSAlign_PValue, MSAlign_FDR,
 												Cleavage_State, Terminus_State, Mass,
 												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
 												MSGF_SpecProb, NET_Difference_Absolute, Pass_FilterSet_Group)
@@ -424,6 +441,7 @@ AS
 							0 AS XCorr, RankSpecProb AS RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
 							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
 							MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+							1 AS MSAlign_PValue, 1 AS MSAlign_FDR,
 							Max(Cleavage_State), Max(Terminus_State), MH, 
 							0 AS DeltaCN, 1 AS DeltaCN2, 1 AS DiscriminantScoreNorm, Peptide_Prophet_Probability,
 							MSGF_SpecProb, NET_Difference_Absolute, 0 as Pass_FilterSet_Group
@@ -462,7 +480,60 @@ AS
 					SELECT @myError = @@error, @myRowCount = @@RowCount
 				End
 
-				--
+				If @ResultType = 'MSA_Peptide_Hit'
+				Begin
+					-- MSAlign results
+					INSERT INTO #PeptideStats (	Job, Peptide_ID, PeptideLength, Charge_State,
+												XCorr, RankScore, Hyperscore, Log_EValue, 
+												Inspect_MQScore, Inspect_TotalPRMScore, Inspect_FScore, Inspect_PValue,
+												MSGFDB_SpecProb, MSGFDB_PValue, MSGFDB_FDR,
+												MSAlign_PValue, MSAlign_FDR,
+												Cleavage_State, Terminus_State, Mass,
+												DeltaCn, DeltaCn2, Discriminant_Score, Peptide_Prophet_Probability,
+												MSGF_SpecProb, NET_Difference_Absolute, Pass_FilterSet_Group)
+					SELECT  Job, Peptide_ID, PeptideLength, Charge_State,
+							0 AS XCorr, RankScore, 0 AS Hyperscore, 0 AS Log_EValue, 
+							0 AS Inspect_MQScore, 0 AS Inspect_TotalPRMScore, 0 AS Inspect_FScore, 0 AS Inspect_PValue,
+							1 AS MSGFDB_SpecProb, 1 AS MSGFDB_PValue, 1 AS MSGFDB_FDR,
+							MSAlign_PValue, MSAlign_FDR,
+							Max(Cleavage_State), Max(Terminus_State), MH, 
+							0 AS DeltaCN, 1 AS DeltaCN2, 1 AS DiscriminantScoreNorm, Peptide_Prophet_Probability,
+							MSGF_SpecProb, NET_Difference_Absolute, 0 as Pass_FilterSet_Group
+					FROM (	SELECT	P.Job, 
+									P.Peptide_ID, 
+									Len(MT.Peptide) AS PeptideLength, 
+									IsNull(P.Charge_State, 0) AS Charge_State,
+									IsNull(P.RankHit, 1) AS RankScore,
+									IsNull(M.PValue, 1) AS MSAlign_PValue,
+									IsNull(M.FDR, 1) AS MSAlign_FDR,
+									IsNull(MTPM.Cleavage_State, 0) AS Cleavage_State, 
+									IsNull(MTPM.Terminus_State, 0) AS Terminus_State, 
+									IsNull(P.MH, 0) AS MH,
+									IsNull(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,
+									IsNull(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,
+									CASE WHEN IsNull(P.GANET_Obs, 0) = 0 AND IsNull(MTN.PNET, 0) = 0
+									     THEN 0
+									     ELSE Abs(IsNull(P.GANET_Obs - MTN.PNET, 0))
+									END AS NET_Difference_Absolute
+							FROM #JobsInBatch INNER JOIN
+									T_Analysis_Description TAD ON #JobsInBatch.Job = TAD.Job AND TAD.ResultType = @ResultType INNER JOIN
+									T_Peptides P ON #JobsInBatch.Job = P.Job INNER JOIN 
+									T_Score_MSAlign M ON P.Peptide_ID = M.Peptide_ID INNER JOIN 
+									T_Score_Discriminant SD ON P.Peptide_ID = SD.Peptide_ID INNER JOIN 
+									T_Mass_Tags MT ON P.Mass_Tag_ID = MT.Mass_Tag_ID INNER JOIN
+									T_Mass_Tags_NET MTN ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID INNER JOIN
+									T_Mass_Tag_to_Protein_Map MTPM ON MT.Mass_Tag_ID= MTPM.Mass_Tag_ID
+						) LookupQ
+					GROUP BY Job, Peptide_ID, PeptideLength, Charge_State,
+							 RankScore, MSAlign_PValue, MSAlign_FDR,
+							 MH, Peptide_Prophet_Probability,
+							 MSGF_SpecProb, NET_Difference_Absolute
+					ORDER BY Peptide_ID
+					--
+					SELECT @myError = @@error, @myRowCount = @@RowCount
+				End
+				
+				-- @myError will be non-zero if there is an error or if @ResultType was not recognized
 				If @myError <> 0 
 				Begin
 					If @myError = 51200
@@ -503,15 +574,17 @@ AS
 										@XTandemLogEValueComparison OUTPUT, @XTandemLogEValueThreshold OUTPUT,
 										@PeptideProphetComparison OUTPUT, @PeptideProphetThreshold OUTPUT,
 										@RankScoreComparison OUTPUT, @RankScoreThreshold OUTPUT,
-										@InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold OUTPUT,
-										@InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold OUTPUT,
-										@InspectFScoreComparison OUTPUT, @InspectFScoreThreshold OUTPUT,
-										@InspectPValueComparison OUTPUT, @InspectPValueThreshold OUTPUT,
-										@MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold OUTPUT,
-										@MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold OUTPUT,
-										@MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold OUTPUT,
-										@MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold OUTPUT
-
+										@InspectMQScoreComparison = @InspectMQScoreComparison OUTPUT, @InspectMQScoreThreshold = @InspectMQScoreThreshold OUTPUT,
+										@InspectTotalPRMScoreComparison = @InspectTotalPRMScoreComparison OUTPUT, @InspectTotalPRMScoreThreshold = @InspectTotalPRMScoreThreshold OUTPUT,
+										@InspectFScoreComparison = @InspectFScoreComparison OUTPUT, @InspectFScoreThreshold = @InspectFScoreThreshold OUTPUT,
+										@InspectPValueComparison = @InspectPValueComparison OUTPUT, @InspectPValueThreshold = @InspectPValueThreshold OUTPUT,
+										@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT,
+										@MSGFDbSpecProbComparison = @MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold = @MSGFDbSpecProbThreshold OUTPUT,
+										@MSGFDbPValueComparison = @MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold = @MSGFDbPValueThreshold OUTPUT,
+										@MSGFDbFDRComparison = @MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold = @MSGFDbFDRThreshold OUTPUT,
+										@MSAlignPValueComparison = @MSAlignPValueComparison OUTPUT, @MSAlignPValueThreshold = @MSAlignPValueThreshold OUTPUT,
+										@MSAlignFDRComparison = @MSAlignFDRComparison OUTPUT, @MSAlignFDRThreshold = @MSAlignFDRThreshold OUTPUT
+										
 					If @myError <> 0
 					Begin
 						Set @Message = 'Error retrieving next entry from GetThresholdsForFilterSet in CheckFilterForAnalysesWork'
@@ -558,7 +631,16 @@ AS
 							Set @S = @S +        ' RankScore ' +             @RankScoreComparison +        Convert(varchar(11), @RankScoreThreshold) + ' AND '
 						End
 						
-						Set @S = @S +        ' MSGF_SpecProb ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold) + ' AND '						
+						If @ResultType = 'MSA_Peptide_Hit'
+						Begin
+							Set @S = @S +        ' MSAlign_PValue ' +         @MSAlignPValueComparison +     Convert(varchar(11), @MSAlignPValueThreshold) + ' AND '
+							Set @S = @S +        ' MSAlign_FDR ' +            @MSAlignFDRComparison +        Convert(varchar(11), @MSAlignFDRThreshold) + ' AND '
+						End
+						
+						If @ResultType <> 'MSA_Peptide_Hit'
+						Begin
+							Set @S = @S +        ' MSGF_SpecProb ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold) + ' AND '						
+						End
 						
 						Set @S = @S +        ' Cleavage_State ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
 						Set @S = @S +        ' Terminus_State ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '

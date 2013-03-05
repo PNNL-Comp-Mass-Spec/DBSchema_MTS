@@ -30,6 +30,7 @@ CREATE PROCEDURE dbo.CalculateConfidenceScoresOneAnalysis
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			02/02/2012 mem - Now preventing MSG_Peptide_Hit jobs from advancing to state 90
+**			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **    
 *****************************************************/
 (
@@ -209,9 +210,9 @@ AS
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
 	
-	If @ResultType = 'MSG_Peptide_Hit'
+	If @ResultType IN ('MSG_Peptide_Hit', 'MSA_Peptide_Hit')
 	Begin
-		-- We don't actually compute discriminant Score values for MSGF-DB results
+		-- We don't actually compute discriminant Score values for MSGF-DB (aka MSGF+) or MSAlign results
 		-- Instead, we just update them to 1 and 0.5
 		
 		UPDATE T_Score_Discriminant
@@ -235,7 +236,7 @@ AS
 		-- Advance the job state
 		if @NextProcessState = 90
 		Begin
-			-- MSGFDB jobs cannot have peptide prophet values computed on them; use @NextProcessStateSkipPeptideProphet
+			-- MSGFDB and MSAlign jobs cannot have peptide prophet values computed on them; use @NextProcessStateSkipPeptideProphet
 			exec @myError = SetProcessState @JobToProcess, @NextProcessStateSkipPeptideProphet
 		End
 		Else
@@ -256,7 +257,7 @@ AS
 		goto done
 	end
 
-	If @ResultType <> 'MSG_Peptide_Hit'
+	If NOT @ResultType IN ('MSG_Peptide_Hit', 'MSA_Peptide_Hit')
 	Begin -- <a>
 	
 		------------------------------------------------------------------

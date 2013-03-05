@@ -62,7 +62,7 @@ CREATE PROCEDURE GenerateHistogram
 	@PMTQualityScoreMinimum real = 0,
 	@ChargeStateFilter smallint = 0,			-- If 0, then matches all charge states; set to a value > 0 to filter on a specific charge state
 	@UseDistinctPeptides tinyint = 1,			-- When 0 then all peptide observations are used, when 1 then only distinct peptide observations are used
-	@ResultTypeFilter varchar(32) = '',			-- Can be blank, Peptide_Hit, or XT_Peptide_Hit
+	@ResultTypeFilter varchar(32) = '',			-- Can be blank, Peptide_Hit, XT_Peptide_Hit, IN_Peptide_Hit, MSG_Peptide_Hit, or MSA_Peptide_Hit
 	@PeptideProphetProbabilityMinimum real = 0
 )
 AS
@@ -1144,6 +1144,7 @@ AS
 
 Done:
 	Return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[GenerateHistogram] TO [DMS_SP_User] AS [dbo]

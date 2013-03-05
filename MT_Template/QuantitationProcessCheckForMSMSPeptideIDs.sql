@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[QuantitationProcessCheckForMSMSPeptideIDs] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER ON
+SET QUOTED_IDENTIFIER OFF
 GO
 
 CREATE PROCEDURE QuantitationProcessCheckForMSMSPeptideIDs
@@ -24,6 +24,7 @@ CREATE PROCEDURE QuantitationProcessCheckForMSMSPeptideIDs
 **			10/20/2008 mem - Re-worked the #TmpQRFilterPassingMTs update query to explicitly define the table-joining order
 **						   - Added Try/Catch error handling
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			12/05/2012 mem - Added support for MSGFDB and MSAlign (types MSG_Peptide_Hit and MSA_Peptide_Hit)
 **
 ****************************************************/
 (
@@ -259,19 +260,19 @@ AS
 						FROM #UMCMatchResultsByJob UMR INNER JOIN
 							(	SELECT DISTINCT Pep.Mass_Tag_ID
 								FROM T_Analysis_Description TAD INNER JOIN 
-									 T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN 
-									 T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN 
-									 T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN 
-									 T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID
+									 T_Peptides Pep ON TAD.Job = Pep.Job 
+									 INNER JOIN T_Score_Discriminant SD  ON Pep.Peptide_ID = SD.Peptide_ID 
+									 LEFT OUTER JOIN T_Score_XTandem XT  ON Pep.Peptide_ID = XT.Peptide_ID 
+									 LEFT OUTER JOIN T_Score_Sequest SS  ON Pep.Peptide_ID = SS.Peptide_ID
+									 LEFT OUTER JOIN T_Score_MSGFDB  MSG ON Pep.Peptide_ID = MSG.Peptide_ID
+									 LEFT OUTER JOIN T_Score_MSAlign MSA ON Pep.Peptide_ID = MSA.Peptide_ID
 								WHERE (TAD.Dataset_ID = @DatasetID) AND
-									   (SD.DiscriminantScoreNorm IS NULL OR
-										SD.DiscriminantScoreNorm >= @MinimumMTHighDiscriminantScore) AND
-									   (SD.Peptide_Prophet_Probability IS NULL OR
-										SD.Peptide_Prophet_Probability >= @MinimumMTPeptideProphetProbability) AND
-									   (SS.XCorr IS NULL OR
-										SS.XCorr >= @MinimumMTHighNormalizedScore) AND
-									   (XT.Normalized_Score IS NULL OR
-										XT.Normalized_Score >= @MinimumMTHighNormalizedScore)
+									   (SD.DiscriminantScoreNorm IS NULL OR SD.DiscriminantScoreNorm >= @MinimumMTHighDiscriminantScore) AND
+									   (SD.Peptide_Prophet_Probability IS NULL OR SD.Peptide_Prophet_Probability >= @MinimumMTPeptideProphetProbability) AND
+									   (SS.XCorr IS NULL OR SS.XCorr >= @MinimumMTHighNormalizedScore) AND
+									   (XT.Normalized_Score IS NULL OR XT.Normalized_Score >= @MinimumMTHighNormalizedScore) AND
+									   (MSG.Normalized_Score IS NULL OR MSG.Normalized_Score >= @MinimumMTHighNormalizedScore) AND
+									   (MSA.Normalized_Score IS NULL OR MSA.Normalized_Score >= @MinimumMTHighNormalizedScore)
 							) LookupQ ON
 							  UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND
 							  UMR.Job = @CurrentJob
@@ -356,7 +357,7 @@ AS
 										If Len(@FilterSetInstrumentClassFilter) > 0
 											Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
 											
-										Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
+										Set @S = @S +        ' AND ResultType IN (SELECT ResultType FROM dbo.tblPeptideHitResultTypes())'
 										
 										Exec @myError = sp_executesql @S
 
@@ -468,7 +469,7 @@ AS
 									Set @S = @S + ' SELECT @MatchCount = COUNT(*)'
 									Set @S = @S + ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description'
 									Set @S = @S + ' WHERE Dataset_ID = ' + Convert(varchar(19), @DatasetID)
-									Set @S = @S +       ' AND ResultType = ''Peptide_Hit'''
+									Set @S = @S +       ' AND ResultType IN (SELECT ResultType FROM dbo.tblPeptideHitResultTypes())'
 									
 									Set @MatchCount = 0
 									Set @SParams = '@MatchCount int output'
@@ -488,17 +489,19 @@ AS
 										Set @S = @S +      ' FROM ' + @PeptideDBPath + '.dbo.T_Analysis_Description TAD INNER JOIN '
 										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Peptides Pep ON TAD.Job = Pep.Job INNER JOIN'
 										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID LEFT OUTER JOIN '
-										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_XTandem XT ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN '
-										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Sequest SS ON Pep.Peptide_ID = SS.Peptide_ID '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_XTandem XT  ON Pep.Peptide_ID = XT.Peptide_ID LEFT OUTER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_Sequest SS  ON Pep.Peptide_ID = SS.Peptide_ID LEFT OUTER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_MSGFDB  MSG ON Pep.Peptide_ID = MSG.Peptide_ID LEFT OUTER JOIN '
+										Set @S = @S +                 @PeptideDBPath + '.dbo.T_Score_MSAlign MSA ON Pep.Peptide_ID = MSA.Peptide_ID '
 										Set @S = @S +      ' WHERE TAD.Dataset_ID = ' + Convert(varchar(19), @DatasetID) + ' AND '
 										Set @S = @S +           ' (SD.DiscriminantScoreNorm IS NULL OR '
 										Set @S = @S +            ' SD.DiscriminantScoreNorm >= ' + Convert(varchar(19), @MinimumMTHighDiscriminantScore) + ') AND '
 										Set @S = @S +           ' (SD.Peptide_Prophet_Probability IS NULL OR '
 										Set @S = @S +            ' SD.Peptide_Prophet_Probability >= ' + Convert(varchar(19), @MinimumMTPeptideProphetProbability) + ') AND '
-										Set @S = @S +           ' (SS.XCorr IS NULL OR '
-										Set @S = @S +            ' SS.XCorr >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
-										Set @S = @S +           ' (XT.Normalized_Score IS NULL OR '
-										Set @S = @S +            ' XT.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ')'
+										Set @S = @S +           ' (SS.XCorr IS NULL OR SS.XCorr >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
+										Set @S = @S +           ' (XT.Normalized_Score IS NULL OR    XT.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
+										Set @S = @S +           ' (MSG.Normalized_Score IS NULL OR  MSG.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ') AND '
+										Set @S = @S +           ' (MSA.Normalized_Score IS NULL OR  MSA.Normalized_Score >= ' + Convert(varchar(19), @MinimumMTHighNormalizedScore) + ')'
 										Set @S = @S +     ' ) LookupQ ON '
 										Set @S = @S +   ' UMR.Mass_Tag_ID = LookupQ.Mass_Tag_ID AND '
 										Set @S = @S +   ' UMR.Job = ' + Convert(varchar(19), @CurrentJob)
@@ -586,7 +589,7 @@ AS
 														If Len(@FilterSetInstrumentClassFilter) > 0
 															Set @S = @S +    ' AND Instrument_Class LIKE (''' + @FilterSetInstrumentClassFilter + ''')'
 														
-														Set @S = @S +        ' AND ResultType = ''Peptide_Hit'''
+														Set @S = @S +        ' AND ResultType IN (SELECT ResultType FROM dbo.tblPeptideHitResultTypes())'
 														
 														Exec @myError = sp_executesql @S
 

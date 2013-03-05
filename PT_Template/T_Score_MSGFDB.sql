@@ -16,6 +16,7 @@ CREATE TABLE [dbo].[T_Score_MSGFDB](
 	[Normalized_Score] [real] NULL,
 	[FDR] [real] NULL,
 	[PepFDR] [real] NULL,
+	[IsotopeError] [smallint] NULL,
  CONSTRAINT [PK_T_Score_MSGFDB] PRIMARY KEY CLUSTERED 
 (
 	[Peptide_ID] ASC

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure SetReversedAndScrambledJobsToHolding
+CREATE Procedure dbo.SetReversedAndScrambledJobsToHolding
 /****************************************************
 **
 **	Desc:	Looks for jobs that were searched against a reversed or
@@ -22,7 +22,8 @@ CREATE Procedure SetReversedAndScrambledJobsToHolding
 **			11/07/2009 mem - Now also looking for decoy searches where all of the loaded search results are reversed/scrambled proteins
 **			07/23/2010 mem - Added 'xxx.%' as a potential prefix for reversed proteins
 **			01/06/2012 mem - Updated to use T_Peptides.Job
-**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins
+**			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins (MS-GFDB)
+**			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **    
 *****************************************************/
 (
@@ -73,7 +74,8 @@ As
 				                Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
 				                Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
 				                Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-				                Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins
+				                Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
+								Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
 				           THEN 1
 	                       ELSE 0 END) AS DecoyCount
 	       FROM T_Peptides Pep
@@ -132,6 +134,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetReversedAndScrambledJobsToHolding] TO [MTS_DB_Dev] AS [dbo]
