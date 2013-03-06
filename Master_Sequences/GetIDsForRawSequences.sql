@@ -6,6 +6,12 @@ GO
 CREATE PROCEDURE dbo.GetIDsForRawSequences
 /****************************************************
 ** 
+**      ==========================================================================
+**         NOTE: This is a legacy procedure that processes peptides one at a time
+**               It is preferable to process sequences in bulk using ProcessCandidateSequences
+**               Furthermore, ProcessCandidateSequences supports fuzzy matching for peptides with unknown-named modifications
+**      ==========================================================================
+**
 **	Desc:  
 **		Processes each of the peptide sequences in the given table (typically located in TempDB)
 **		Calls GetIDFromRawSequence for each, and updates the table with the appropriate information

@@ -16,7 +16,9 @@ SELECT Server_Name,
        [Description],
        Organism,
        Campaign,
-       DB_Schema_Version
+       DB_Schema_Version,
+       Peptide_DB,
+       Peptide_DB_Count
 FROM V_MTS_MT_DBs
 WHERE Server_Active = 1 AND State_ID < 15
 UNION
@@ -30,7 +32,9 @@ SELECT Server_Name,
        [Description],
        Organism,
        Campaign,
-       DB_Schema_Version
+       DB_Schema_Version,
+       Peptide_DB,
+       Peptide_DB_Count
 FROM V_MTS_MT_DBs
 WHERE (Server_Active = 1 AND State_ID >= 15 OR
        Server_Active = 0) AND

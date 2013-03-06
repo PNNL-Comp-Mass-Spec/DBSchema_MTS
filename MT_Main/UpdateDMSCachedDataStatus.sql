@@ -7,7 +7,7 @@ GO
 CREATE PROCEDURE dbo.UpdateDMSCachedDataStatus
 /****************************************************
 **
-**	Desc:	Updates the data in T_DMS_Analysis_Job_Info_Cached using DMS
+**	Desc:	Updates the data in T_DMS_Cached_Data_Status using DMS
 **
 **	Return values: 0: success, otherwise, error code
 **

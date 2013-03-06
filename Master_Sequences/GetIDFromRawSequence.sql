@@ -5,7 +5,13 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE dbo.GetIDFromRawSequence
 /****************************************************
-** 
+**
+**      ==========================================================================
+**         NOTE: This is a legacy procedure that processes a single peptide
+**               It is preferable to process sequences in bulk using ProcessCandidateSequences
+**               Furthermore, ProcessCandidateSequences supports fuzzy matching for peptides with unknown-named modifications
+**      ==========================================================================
+**
 **	Desc:  
 **		Returns the unique ID for the given peptide raw sequence
 **

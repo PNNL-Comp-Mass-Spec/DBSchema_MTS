@@ -6,7 +6,7 @@ GO
 
 CREATE VIEW [dbo].[V_Filter_Set_Overview]
 AS
-SELECT DISTINCT TOP 100 PERCENT 
+SELECT DISTINCT 
 	OuterQ.Filter_Set_ID,
     OuterQ.PMT_Quality_Score_Value,
     OuterQ.Experiment_Filter,
@@ -34,9 +34,9 @@ FROM ( SELECT CONVERT(int, LTRIM(RTRIM(SUBSTRING(Value, 1, CommaLoc - 1)))) AS F
               FROM T_Process_Config
               WHERE (Name = 'PMT_Quality_Score_Set_ID_and_Value') ) LookupQ
        WHERE (CommaLoc > 0) ) OuterQ
-     INNER JOIN MT_Main.dbo.V_DMS_Filter_Set_Overview FSO
+     LEFT OUTER JOIN MT_Main.dbo.V_DMS_Filter_Set_Overview FSO
        ON OuterQ.Filter_Set_ID = FSO.Filter_Set_ID
-ORDER BY OuterQ.PMT_Quality_Score_Value, OuterQ.Filter_Set_ID
+
 
 
 GO

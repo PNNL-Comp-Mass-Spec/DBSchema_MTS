@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.RefreshCachedGeneralStatistics
 **			08/02/2005 mem - Now checking for discrepancies between General_Statistics entries of DB_Schema_Version and the value stored in T_MTS_MT_DBs or T_MTS_Peptide_DBs
 **			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
 **			01/10/2008 mem - Expanded the field sizes in #GeneralStatisticsCached
+**			10/12/2012 mem - Now retaining old general statistics for databases that have been deleted
 **    
 *****************************************************/
 	@ServerFilter varchar(128) = '',		-- If supplied, then only examines the databases on the given Server
@@ -92,7 +93,8 @@ As
 		[Category] [varchar] (512) NULL ,
 		[Label] [varchar] (2048) NULL ,
 		[Value] [varchar] (1024) NULL ,
-		[Entry_ID] [int] NOT NULL 
+		[Entry_ID] [int] NOT NULL ,
+		[Entered] [datetime] NOT NULL DEFAULT GetDate()
 	)
 
 	---------------------------------------------------
@@ -361,6 +363,27 @@ As
 			
 	End -- </A>
 	
+	
+	---------------------------------------------------
+	-- Make a backup copy of the data currently in T_General_Statistics_Cached
+	---------------------------------------------------
+	CREATE TABLE #Tmp_PriorGeneralStatistics (
+		[Server_Name] [varchar] (64) NOT NULL ,
+		[DBName] [varchar] (128) NOT NULL ,
+		[Category] [varchar] (512) NULL ,
+		[Label] [varchar] (2048) NULL ,
+		[Value] [varchar] (1024) NULL ,
+		[Entry_ID] [int] NOT NULL,
+		[Entered] [datetime] NOT NULL
+	)
+
+	CREATE INDEX #IX_Tmp_PriorGeneralStatistics ON #Tmp_PriorGeneralStatistics ([DBName])
+
+	INSERT INTO #Tmp_PriorGeneralStatistics (Server_Name, DBName, Category, Label, Value, Entry_ID, Entered)
+	SELECT Server_Name, DBName, Category, Label, Value, Entry_ID, IsNull(Entered, GetDate())
+	FROM T_General_Statistics_Cached 
+	WHERE Server_Name = @ServerFilter OR @ProcessSingleServer = 0
+	ORDER BY Entry_ID
 
 	---------------------------------------------------
 	-- Delete the appropriate entries in T_General_Statistics_Cached,
@@ -389,8 +412,8 @@ As
 	
 	
 	INSERT INTO T_General_Statistics_Cached
-		(Server_Name, DBName, Category, Label, Value, Entry_ID)
-	SELECT Server_Name, DBName, Category, Label, Value, Entry_ID
+		(Server_Name, DBName, Category, Label, Value, Entry_ID, Entered)
+	SELECT Server_Name, DBName, Category, Label, Value, Entry_ID, Entered
 	FROM #GeneralStatisticsCached
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -401,6 +424,21 @@ As
 		Rollback Transaction @tranUpdateStats
 		Goto Done
 	End
+	
+	-- Copy data from #Tmp_PriorGeneralStatistics back to T_General_Statistics_Cached 
+	-- for databases that are in T_General_Statistics_Cached but not in T_General_Statistics_Cached 
+	
+	INSERT INTO T_General_Statistics_Cached
+		(Server_Name, DBName, Category, Label, Value, Entry_ID, Entered)
+	SELECT Server_Name, DBName, Category, Label, Value, Entry_ID, Entered
+	FROM #Tmp_PriorGeneralStatistics
+	WHERE DBName IN ( SELECT PriorStats.DBName
+	                  FROM #Tmp_PriorGeneralStatistics PriorStats
+	                       LEFT OUTER JOIN ( SELECT DISTINCT DBName
+	                                         FROM T_General_Statistics_Cached ) NewDBs
+	                         ON PriorStats.DBName = NewDBs.DBName
+	                  WHERE NewDBs.DBName IS NULL )
+
 	
 	Commit Transaction @tranUpdateStats
 

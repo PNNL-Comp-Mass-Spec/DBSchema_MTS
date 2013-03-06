@@ -1,14 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[FindMSMSPeptidesPTDB] ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 
-CREATE PROCEDURE dbo.FindMSMSPeptidesPTDB
+ALTER PROCEDURE dbo.FindMSMSPeptidesMTDB
 /****************************************************
 **
 **	Desc: 
-**		Searches one or more PT databases to find the confidently identified peptides for one or more proteins.
+**		Searches one or more AMT tag databases to find the confidently identified peptides for one or more proteins.
 **
 **		NOTE: For performance reasons, the DBs to search must reside on this server
 **		We tried allowing for cross-server querying, but the performance degraded dramatically due to the complexity of the queries
@@ -44,13 +39,14 @@ CREATE PROCEDURE dbo.FindMSMSPeptidesPTDB
 **	Auth:	mem
 **	Date:	07/11/2012 mem - Initial version
 **			01/09/2013 mem - Added column Peak_SN_Ratio_Max
+**			01/11/2013 mem - Updated to work with MTDBs
 **
 *****************************************************/
 (
 	@DBsToSearch varchar(max) = '',				-- Comma separated list, % wildcard character allowed; will only search DBs that reside on this server
 	@IncludeFrozenAndUnusedDBs tinyint = 0,		-- 0 to ignore Frozen/Unused Peptide DBs; 1 to include them (Frozen have State=3, Unused have State=10)
 	@Proteins varchar(max) = '',				-- Comma separated list, % wildcard character allowed
-	@Peptides varchar(max) = '',				-- Comma separated list, % wildcard character allowed; Do not include any modification symbols or any prefix or suffix letters since this is compared against T_Sequence.Clean_Sequence
+	@Peptides varchar(max) = '',				-- Comma separated list, % wildcard character allowed; Do not include any modification symbols or any prefix or suffix letters since this is compared against T_Mass_Tags.Clean_Sequence
 	@MinimumCleavageState tinyint = 1,			-- 0 means any peptide; 1 means partially or fully tryptic, 2 means fully tryptic
 	@MSGFSpecProb float = 1E-10,	
 	@AnalysisTool varchar(64) = '',				-- Comma separated list, % wildcard character allowed
@@ -77,7 +73,7 @@ As
 	Declare @EntryID int
 	Declare @Continue int
 	Declare @DBName varchar(256)
-	Declare @PeptideDBID int
+	Declare @MTDBID int
 
 	Declare @DBCount int = 0	
 	Declare @UsageMessage varchar(512)
@@ -119,14 +115,14 @@ As
 	
 	CREATE TABLE #Tmp_DBs_to_Search (
 	    Entry_ID                int identity(1,1) NOT NULL,
-	    Peptide_DB_Name         varchar(256) NOT NULL,
+	    MT_DB_Name         varchar(256) NOT NULL,
 	    State_ID                int NOT NULL,
-	    Peptide_DB_ID           int NOT NULL
+	    MT_DB_ID           int NOT NULL
 	)
 	
 	CREATE TABLE #Tmp_PeptideResults (
 	    Result_ID               int identity(1,1) NOT NULL,
-	    Peptide_DB_ID           int NOT NULL,
+	    MT_DB_ID           int NOT NULL,
 	    Reference               varchar(255) NOT NULL,
 	    Description             varchar(7500) NULL,
 	    Cleavage_State          tinyint NULL,
@@ -139,7 +135,7 @@ As
 	    Scan_Count              int NULL,
 	    Scan_First              int NULL,
 	    Scan_Last               int NULL,
-	    Seq_ID                  int NULL,
+	    Mass_Tag_ID                  int NULL,
 	    Mod_Count               int NULL,
 	    Mod_Description         varchar(2048) NULL,
 	    Protein_Count           int NULL,
@@ -155,18 +151,18 @@ As
 	    Last_Affected           datetime null default GetDate()
 	)
 
-	CREATE NONCLUSTERED INDEX IX_Tmp_PeptideResults_PeptideDBID_DatasetID
-	  ON #Tmp_PeptideResults ([Peptide_DB_ID])
-	  INCLUDE ([Dataset_ID],[Seq_ID])
+	CREATE NONCLUSTERED INDEX IX_Tmp_PeptideResults_MTDBID_DatasetID
+	  ON #Tmp_PeptideResults ([MT_DB_ID])
+	  INCLUDE ([Dataset_ID],[Mass_Tag_ID])
 
-	CREATE NONCLUSTERED INDEX IX_Tmp_PeptideResults_PeptideDBID_SeqID
-	  ON #Tmp_PeptideResults ([Peptide_DB_ID])
-	  INCLUDE ([Seq_ID],[PeptideID_Highest_Abundance])
+	CREATE NONCLUSTERED INDEX IX_Tmp_PeptideResults_MTDBID_SeqID
+	  ON #Tmp_PeptideResults ([MT_DB_ID])
+	  INCLUDE ([Mass_Tag_ID],[PeptideID_Highest_Abundance])
 
 
 	CREATE TABLE #Tmp_BestResultsQ (
 	    Dataset_ID              int NOT NULL,
-	    Seq_ID                  int NULL,
+	    Mass_Tag_ID                  int NULL,
 	    Scan_Number             int NULL,
 	    Scan_Time_Peak_Apex     real NULL,
 	    Normalized_Elution_Time real NULL,
@@ -178,7 +174,7 @@ As
 	)
 
 	CREATE NONCLUSTERED INDEX IX_Tmp_BestResultsQ
-	  ON #Tmp_BestResultsQ (Dataset_ID, Seq_ID)
+	  ON #Tmp_BestResultsQ (Dataset_ID, Mass_Tag_ID)
 	
 				
 	CREATE TABLE #Tmp_ExecutionTimes (
@@ -199,20 +195,20 @@ As
 
 	Set @DBNameWhereClause = ''
 
-	Exec ConvertListToWhereClause @DBsToSearch, 'PDB_Name', @entryListWhereClause = @DBNameWhereClause OUTPUT
+	Exec ConvertListToWhereClause @DBsToSearch, 'MTL_Name', @entryListWhereClause = @DBNameWhereClause OUTPUT
 
 	---------------------------------------------------
 	-- Find the location of the databases
 	---------------------------------------------------
 	
 	Set @S = ''
-	Set @S = @S + ' INSERT INTO #Tmp_DBs_to_Search (Peptide_DB_Name, State_ID, Peptide_DB_ID)'
-	Set @S = @S + ' SELECT PDB_Name, PDB_State, PDB_ID'
-	Set @S = @S + ' FROM MT_Main.dbo.T_Peptide_Database_List'
+	Set @S = @S + ' INSERT INTO #Tmp_DBs_to_Search (MT_DB_Name, State_ID, MT_DB_ID)'
+	Set @S = @S + ' SELECT MTL_Name, MTL_State, MTL_ID'
+	Set @S = @S + ' FROM MT_Main.dbo.T_MT_Database_List'
 	If @IncludeFrozenAndUnusedDBs <> 0
-		Set @S = @S + ' WHERE PDB_State < 15)'
+		Set @S = @S + ' WHERE MTL_State < 15)'
 	Else
-		Set @S = @S + ' WHERE (PDB_State < 10 And PDB_State <> 3)'
+		Set @S = @S + ' WHERE (MTL_State < 10 And MTL_State <> 3)'
 	
 	If @DBNameWhereClause <> ''
 		Set @S = @S + ' AND (' + @DBNameWhereClause + ')'
@@ -246,7 +242,7 @@ As
 	Declare @ExperimentsWhereClause varchar(max) = ''
 
 	Exec ConvertListToWhereClause @Proteins, 'Prot.Reference', @entryListWhereClause = @ProteinNameWhereClause OUTPUT
-	Exec ConvertListToWhereClause @Peptides, 'Seq.Clean_Sequence', @entryListWhereClause = @PepSequenceWhereClause OUTPUT	
+	Exec ConvertListToWhereClause @Peptides, 'MT.Clean_Sequence', @entryListWhereClause = @PepSequenceWhereClause OUTPUT	
 	
 	Exec ConvertListToWhereClause @AnalysisTool, 'TAD.Analysis_Tool', @entryListWhereClause = @AnalysisToolWhereClause OUTPUT
 	Exec ConvertListToWhereClause @Experiments, 'TAD.Experiment', @entryListWhereClause = @ExperimentsWhereClause OUTPUT
@@ -262,8 +258,8 @@ As
 	While @Continue = 1
 	Begin
 		SELECT TOP 1 @EntryID = Entry_ID,
-					@DBName = Peptide_DB_Name,
-					@PeptideDBID = Peptide_DB_ID
+					@DBName = MT_DB_Name,
+					@MTDBID = MT_DB_ID
 		FROM #Tmp_DBs_to_Search
 		WHERE Entry_ID > @EntryID
 		ORDER BY Entry_ID
@@ -283,21 +279,21 @@ As
 			--
 			Set @S = ''
 			Set @S = @S + ' INSERT INTO #Tmp_PeptideResults ('
-			Set @S = @S +    ' Peptide_DB_ID,  Reference, Description, Cleavage_State, Charge_State, Peptide, '
+			Set @S = @S +    ' MT_DB_ID,  Reference, Description, Cleavage_State, Charge_State, Peptide, '
 			Set @S = @S +    ' Experiment, Dataset, Dataset_ID, Instrument, '
 			Set @S = @S +    ' Scan_Count, Scan_First, Scan_Last, '
-			Set @S = @S +    ' Seq_ID, Mod_Count, Mod_Description)'
-			Set @S = @S + ' SELECT ' + Convert(varchar(12), @PeptideDBID) + ' AS Peptide_DB_ID, Prot.Reference, Prot.Description, PPM.Cleavage_State, Pep.Charge_State, Pep.Peptide,'
+			Set @S = @S +    ' Mass_Tag_ID, Mod_Count, Mod_Description)'
+			Set @S = @S + ' SELECT ' + Convert(varchar(12), @MTDBID) + ' AS MT_DB_ID, Prot.Reference, Prot.Description, PPM.Cleavage_State, Pep.Charge_State, Pep.Peptide,'
 			Set @S = @S +       ' TAD.Experiment, TAD.Dataset, TAD.Dataset_ID, TAD.Instrument,'
 			Set @S = @S +       ' COUNT(DISTINCT Pep.Scan_Number) AS Scan_Count,'
 			Set @S = @S +       ' MIN(Pep.Scan_Number) AS Scan_First,'
 			Set @S = @S +       ' MAX(Pep.Scan_Number) AS Scan_Last,'
-			Set @S = @S +       ' Pep.Seq_ID, Seq.Mod_Count, Seq.Mod_Description'
-			Set @S = @S + ' FROM ' + @DBPath + '.dbo.T_Peptide_to_Protein_Map PPM'
-			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Peptides Pep ON PPM.Peptide_ID = Pep.Peptide_ID'
+			Set @S = @S +       ' MT.Mass_Tag_ID, MT.Mod_Count, MT.Mod_Description'
+			Set @S = @S + ' FROM ' + @DBPath + '.dbo.T_Mass_Tag_to_Protein_Map PPM'
+			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Mass_Tags MT ON PPM.Mass_Tag_ID = MT.Mass_Tag_ID'
+			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Peptides Pep ON MT.Mass_Tag_ID = Pep.Mass_Tag_ID'
 			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Proteins Prot ON PPM.Ref_ID = Prot.Ref_ID'
 			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
-			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Sequence Seq ON Pep.Seq_ID = Seq.Seq_ID'
 			Set @S = @S +     ' INNER JOIN ' + @DBPath + '.dbo.T_Analysis_Description TAD ON Pep.Job = TAD.Job'
 			Set @S = @S + ' WHERE ( PPM.Cleavage_State >= ' + Convert(varchar(6), @MinimumCleavageState)
 			Set @S = @S +         ' AND SD.MSGF_SpecProb <= ' + Convert(varchar(24), @MSGFSpecProb) + ')'
@@ -315,7 +311,7 @@ As
 				Set @S = @S + ' AND (' + @ExperimentsWhereClause + ')'
 			      
 			Set @S = @S + ' GROUP BY Prot.Reference, Prot.Description, PPM.Cleavage_State, Pep.Charge_State, Pep.Peptide, TAD.Experiment, TAD.Dataset, TAD.Dataset_ID, TAD.Instrument,'
-			Set @S = @S +          ' Pep.Seq_ID, Seq.Mod_Count, Seq.Mod_Description'
+			Set @S = @S +          ' MT.Mass_Tag_ID, MT.Mod_Count, MT.Mod_Description'
 			Set @S = @S + ' ORDER BY Prot.Reference, Pep.Peptide'
 
 			Set @StartTime = GetDate()
@@ -344,19 +340,20 @@ As
 				
 				Set @S = ''
 				Set @S = @S +  ' INSERT INTO #Tmp_BestResultsQ ('
-				Set @S = @S +     ' Dataset_ID, Seq_ID, Scan_Number, Scan_Time_Peak_Apex, Normalized_Elution_Time, '
+				Set @S = @S +     ' Dataset_ID, Mass_Tag_ID, Scan_Number, Scan_Time_Peak_Apex, Normalized_Elution_Time, '
 				Set @S = @S +     ' Peak_Area, Peak_SN_Ratio, DelM_PPM, MSGF_SpecProb, Peptide_ID)'
-				Set @S = @S +  ' SELECT Dataset_ID, Seq_ID, Scan_Number, Scan_Time_Peak_Apex, Normalized_Elution_Time,'
+				Set @S = @S +  ' SELECT Dataset_ID, Mass_Tag_ID, Scan_Number, Scan_Time_Peak_Apex, Normalized_Elution_Time,'
 				Set @S = @S +         ' Peak_Area, Peak_SN_Ratio, DelM_PPM, MSGF_SpecProb, Peptide_ID'
-				Set @S = @S +  ' FROM ( SELECT TAD.Dataset_ID, Pep.Seq_ID, Pep.Scan_Number, Pep.Scan_Time_Peak_Apex, Pep.GANET_Obs AS Normalized_Elution_Time,'
+				Set @S = @S +  ' FROM ( SELECT TAD.Dataset_ID, MT.Mass_Tag_ID, Pep.Scan_Number, Pep.Scan_Time_Peak_Apex, Pep.GANET_Obs AS Normalized_Elution_Time,'
 				Set @S = @S +                ' Pep.Peak_Area, Pep.Peak_SN_Ratio, Pep.DelM_PPM, SD.MSGF_SpecProb, Pep.Peptide_ID,'
-				Set @S = @S +                ' Row_Number() OVER (Partition By TAD.Dataset_ID, Pep.Seq_ID Order By Pep.Peak_Area DESC, SD.MSGF_SpecProb) AS PeakAreaRank'
-				Set @S = @S +         ' FROM  '          + @DBPath + '.dbo.T_Peptide_to_Protein_Map PPM'
-				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Peptides Pep ON PPM.Peptide_ID = Pep.Peptide_ID'
+				Set @S = @S +                ' Row_Number() OVER (Partition By TAD.Dataset_ID, MT.Mass_Tag_ID Order By Pep.Peak_Area DESC, SD.MSGF_SpecProb) AS PeakAreaRank'
+				Set @S = @S +         ' FROM  '          + @DBPath + '.dbo.T_Mass_Tag_to_Protein_Map PPM'
+				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Mass_Tags MT ON PPM.Mass_Tag_ID = MT.Mass_Tag_ID'
+				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Peptides Pep ON MT.Mass_Tag_ID = Pep.Mass_Tag_ID'
 				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Proteins Prot ON PPM.Ref_ID = Prot.Ref_ID'
 				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Score_Discriminant SD ON Pep.Peptide_ID = SD.Peptide_ID'
 				Set @S = @S +             ' INNER JOIN ' + @DBPath + '.dbo.T_Analysis_Description TAD ON Pep.Job = TAD.Job'
-				Set @S = @S +         ' WHERE Pep.Seq_ID IN (SELECT DISTINCT Seq_ID FROM #Tmp_PeptideResults WHERE Peptide_DB_ID = ' + Convert(varchar(12), @PeptideDBID) + ')'
+				Set @S = @S +         ' WHERE MT.Mass_Tag_ID IN (SELECT DISTINCT Mass_Tag_ID FROM #Tmp_PeptideResults WHERE MT_DB_ID = ' + Convert(varchar(12), @MTDBID) + ')'
 				
 				If @AnalysisToolWhereClause <> ''
 					Set @S = @S + ' AND (' + @AnalysisToolWhereClause + ')'
@@ -394,8 +391,8 @@ As
 				Set @S = @S + ' FROM #Tmp_PeptideResults Target'
 				Set @S = @S +    ' INNER JOIN #Tmp_BestResultsQ BestResultsQ'
 				Set @S = @S +      ' ON BestResultsQ.Dataset_ID = Target.Dataset_ID AND'
-				Set @S = @S +         ' BestResultsQ.Seq_ID = Target.Seq_ID AND'
-				Set @S = @S +         ' Target.Peptide_DB_ID = ' + Convert(varchar(12), @PeptideDBID)	 
+				Set @S = @S +         ' BestResultsQ.Mass_Tag_ID = Target.Mass_Tag_ID AND'
+				Set @S = @S +         ' Target.MT_DB_ID = ' + Convert(varchar(12), @MTDBID)	 
 				
 				Set @StartTime = GetDate()
 				--
@@ -417,14 +414,16 @@ As
 				Set @S = @S + ' SET Protein_Count = CountQ.Protein_Count,'
 				Set @S = @S +     ' Last_Affected = GetDate()'
 				Set @S = @S + ' FROM #Tmp_PeptideResults Target'
-				Set @S = @S +      ' INNER JOIN ( SELECT PR.Seq_ID, COUNT(DISTINCT PPM.Ref_ID) AS Protein_Count'
+				Set @S = @S +      ' INNER JOIN ( SELECT PR.Mass_Tag_ID, COUNT(DISTINCT PPM.Ref_ID) AS Protein_Count'
 				Set @S = @S +                   ' FROM #Tmp_PeptideResults PR'
-				Set @S = @S +                        ' INNER JOIN ' + @DBPath + '.dbo.T_Peptide_to_Protein_Map PPM ON PR.PeptideID_Highest_Abundance = PPM.Peptide_ID'
-				Set @S = @S +                   ' WHERE PR.Peptide_DB_ID = ' + Convert(varchar(12), @PeptideDBID)	 
-				Set @S = @S +                   ' GROUP BY PR.Seq_ID '
+				Set @S = @S +                        ' INNER JOIN ' + @DBPath + '.dbo.T_Peptides Pep ON PR.PeptideID_Highest_Abundance = Pep.Peptide_ID'
+				Set @S = @S +                        ' INNER JOIN ' + @DBPath + '.dbo.T_Mass_Tags MT ON MT.Mass_Tag_ID = Pep.Mass_Tag_ID'
+				Set @S = @S +                        ' INNER JOIN ' + @DBPath + '.dbo.T_Mass_Tag_to_Protein_Map PPM ON MT.Mass_Tag_ID = PPM.Mass_Tag_ID'
+				Set @S = @S +                   ' WHERE PR.MT_DB_ID = ' + Convert(varchar(12), @MTDBID)	 
+				Set @S = @S +                   ' GROUP BY PR.Mass_Tag_ID '
 				Set @S = @S +                 ' ) CountQ'
-				Set @S = @S +                 ' ON CountQ.Seq_ID = Target.Seq_ID AND'
-				Set @S = @S +                    ' Target.Peptide_DB_ID = ' + Convert(varchar(12), @PeptideDBID)	 
+				Set @S = @S +                 ' ON CountQ.Mass_Tag_ID = Target.Mass_Tag_ID AND'
+				Set @S = @S +                    ' Target.MT_DB_ID = ' + Convert(varchar(12), @MTDBID)	 
 						
 				Set @StartTime = GetDate()
 				--		 
@@ -436,7 +435,7 @@ As
 				Set @EndTime = GetDate()
 
 				INSERT INTO #Tmp_ExecutionTimes (DBName, Step, StartTime, EndTime)
-				Values (@DBName, 'Compute Protein_Count for each Seq_ID', @StartTime, @EndTime)
+				Values (@DBName, 'Compute Protein_Count for each Mass_Tag_ID', @StartTime, @EndTime)
 			
 			End
 			
@@ -465,8 +464,8 @@ As
 		       FilterQ.Peak_SN_Ratio,
 		       FilterQ.DelM_PPM,
 		       FilterQ.MSGF_SpecProb,
-		       FilterQ.Peptide_DB_ID,
-		       FilterQ.Peptide_DB_Name,
+		       FilterQ.MT_DB_ID,
+		       FilterQ.MT_DB_Name,
 		       FilterQ.PeptideID_Highest_Abundance
 		FROM ( SELECT PR.Reference,
 		              PR.Description,
@@ -480,7 +479,7 @@ As
 		              PR.Scan_Count,
 		              PR.Scan_First,
 		              PR.Scan_Last,
-		              PR.Seq_ID,
+		              PR.Mass_Tag_ID,
 		              PR.Protein_Count,
 		              PR.Scan_Highest_Abundance,
 		              PR.Scan_Time_Peak_Apex,
@@ -489,13 +488,13 @@ As
 		              PR.Peak_SN_Ratio,
 		              PR.DelM_PPM,
 		              PR.MSGF_SpecProb,
-		              PR.Peptide_DB_ID,
-		              PTDBs.Peptide_DB_Name,
+		              PR.MT_DB_ID,
+		              MTDBs.MT_DB_Name,
 		              PR.PeptideID_Highest_Abundance,
-		       Row_Number() OVER ( PARTITION BY PR.Reference, PR.Seq_ID ORDER BY PR.Peak_Area DESC, IsNull(PR.MSGF_SpecProb, 1) ) AS PeakAreaRank
+		       Row_Number() OVER ( PARTITION BY PR.Reference, PR.Mass_Tag_ID ORDER BY PR.Peak_Area DESC, IsNull(PR.MSGF_SpecProb, 1) ) AS PeakAreaRank
 		       FROM #Tmp_PeptideResults PR
-		            INNER JOIN MT_Main.dbo.V_MTS_PT_DBs PTDBs
-		              ON PR.Peptide_DB_ID = PTDBs.Peptide_DB_ID 
+		            INNER JOIN MT_Main.dbo.V_MTS_MT_DBs MTDBs
+		              ON PR.MT_DB_ID = MTDBs.MT_DB_ID 
 		     ) FilterQ
 		     INNER JOIN ( SELECT PR.Reference,
 		                         Min(PR.Description) As Description,
@@ -504,7 +503,7 @@ As
 		                         PR.Peptide,
 		                         Count(Distinct PR.Dataset_ID) AS Dataset_Count,
 		                         Max(PR.Scan_Count) AS Scan_Count_Max,
-		                         PR.Seq_ID,
+		                         PR.Mass_Tag_ID,
 		                         PR.Mod_Count, 
 		                         PR.Mod_Description,
 		                         PR.Protein_Count,
@@ -515,16 +514,16 @@ As
 		                         Avg(PR.DelM_PPM) AS DelM_PPM_Avg,
 		                         Min(PR.MSGF_SpecProb) AS MSGF_SpecProb_Minimum
 		                  FROM #Tmp_PeptideResults PR
-		                       INNER JOIN MT_Main.dbo.V_MTS_PT_DBs PTDBs
-		                         ON PR.Peptide_DB_ID = PTDBs.Peptide_DB_ID		                       
+		                       INNER JOIN MT_Main.dbo.V_MTS_MT_DBs MTDBs
+		                         ON PR.MT_DB_ID = MTDBs.MT_DB_ID		                       
 		                  GROUP BY PR.Reference, PR.Cleavage_State, PR.Charge_State, PR.Peptide,
-		                           PR.Seq_ID, PR.Protein_Count, PR.Mod_Count, PR.Mod_Description
+		                           PR.Mass_Tag_ID, PR.Protein_Count, PR.Mod_Count, PR.Mod_Description
 		       ) TotalsQ
 		       ON FilterQ.Reference = TotalsQ.Reference AND
-		          FilterQ.Seq_ID = TotalsQ.Seq_ID AND
+		          FilterQ.Mass_Tag_ID = TotalsQ.Mass_Tag_ID AND
 		          FilterQ.Charge_State = TotalsQ.Charge_State
 		WHERE PeakAreaRank = 1
-		ORDER BY TotalsQ.Reference, TotalsQ.Scan_Count_Max Desc, TotalsQ.Seq_ID
+		ORDER BY TotalsQ.Reference, TotalsQ.Scan_Count_Max Desc, TotalsQ.Mass_Tag_ID
 		--	
 		-- Cache the row count, which is used by @usageMessage below
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -553,7 +552,7 @@ As
 				PR.Scan_Count,
 				PR.Scan_First,
 				PR.Scan_Last,
-				PR.Seq_ID,
+				PR.Mass_Tag_ID AS Seq_ID,
 				PR.Mod_Count, 
 				PR.Mod_Description,
 				PR.Protein_Count,
@@ -564,12 +563,12 @@ As
 				PR.Peak_SN_Ratio,
 				PR.DelM_PPM,
 				PR.MSGF_SpecProb,
-				PR.Peptide_DB_ID,
-				PTDBs.Peptide_DB_Name,
+				PR.MT_DB_ID,
+				MTDBs.MT_DB_Name,
 				PR.PeptideID_Highest_Abundance
 			FROM #Tmp_PeptideResults PR
-				INNER JOIN MT_Main.dbo.V_MTS_PT_DBs PTDBs
-					ON PR.Peptide_DB_ID = PTDBs.Peptide_DB_ID
+				INNER JOIN MT_Main.dbo.V_MTS_MT_DBs MTDBs
+					ON PR.MT_DB_ID = MTDBs.MT_DB_ID
 			ORDER BY PR.Reference, PR.Peptide, PR.Peak_Area Desc
 			--
 			Set @EndTime = GetDate()
@@ -614,7 +613,9 @@ Done:
 
 	return @myError
 
+GO
 
+
+GRANT EXECUTE ON [dbo].[FindMSMSPeptidesMTDB] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[FindMSMSPeptidesPTDB] TO [DMS_SP_User] AS [dbo]
-GO
+
