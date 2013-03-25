@@ -278,7 +278,7 @@ AS
 	end
 
 	-----------------------------------------------
-	-- log entry
+	-- Keep track of which jobs were processed
 	-----------------------------------------------
 
 	set @message = 'Updated predicted NETs for ' + cast(@numLoaded as varchar(12)) + ' sequences'

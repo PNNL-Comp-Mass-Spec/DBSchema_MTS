@@ -58,6 +58,7 @@ CREATE Procedure LoadPeptidesForOneAnalysis
 **			12/30/2011 mem - Added call to LoadToolVersionInfoOneJob
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/06/2012 mem - Expanded @message to varchar(1024)
+**			03/25/2013 mem - Now setting @completionCode to 5 if just one peptide is loaded
 **
 *****************************************************/
 (
@@ -652,12 +653,17 @@ AS
 				--
 				set @numLoaded = @loaded
 
-				if @numLoaded > 0
+				if @numLoaded > 1
 					set @completionCode = @NextProcessState
 				else
 				begin
-					-- All of the peptides were filtered out; load failed
-					set @completionCode = 3
+					if @numLoaded = 0
+						-- All of the peptides were filtered out; load failed
+						set @completionCode = 3
+					else
+						-- Only one peptide was loaded
+						set @completionCode = 5
+			
 					set @myError = 60004			-- Note that this error code is used in SP LoadResultsForAvailableAnalyses; do not change
 				end
 				

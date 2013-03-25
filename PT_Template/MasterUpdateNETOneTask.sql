@@ -24,6 +24,7 @@ CREATE Procedure dbo.MasterUpdateNETOneTask
 **			07/04/2006 mem - Switched to using DeleteFiles and changed error code from 8 to 7 call to SetGANETUpdateTaskState if ComputePeptideNETBulk fails
 **			03/17/2010 mem - Now calling LoadGANETObservedNETsFile
 **			04/07/2010 mem - Now deleting the _ObsNET_vs_PNET_Filtered.txt file if @DeleteNETFiles = 1
+**			03/25/2013 mem - Now keeping track of which information is loaded for each job
 **    
 *****************************************************/
 (
@@ -57,9 +58,18 @@ As
 	declare @PredNETsFileName varchar(256)
 	declare @ObsNETsFileName varchar(256)
 
-	declare @GANETProcessingTimeoutState int
-	set @GANETProcessingTimeoutState = 44
+	declare @GANETProcessingTimeoutState int = 44
 
+	---------------------------------------------------
+	-- Create temporary table to track the jobs processed by this NET update task
+	---------------------------------------------------
+
+	CREATE TABLE #Tmp_NET_Update_Jobs (
+		Job int not null,
+		RegressionInfoLoaded tinyint not null,
+		ObservedNETsLoaded tinyint not null
+	)
+	
 	---------------------------------------------------
 	-- Possibly log that we are loading NET results
 	---------------------------------------------------
@@ -94,6 +104,18 @@ As
 		goto Done
 	end
 
+	---------------------------------------------------
+	-- Populate #Tmp_NET_Update_Jobs
+	---------------------------------------------------
+	--
+	INSERT INTO #Tmp_NET_Update_Jobs (Job,
+	                                  RegressionInfoLoaded,
+	                                  ObservedNETsLoaded )
+	SELECT J.Job, 0, 0
+	FROM T_NET_Update_Task T
+	     INNER JOIN T_NET_Update_Task_Job_Map J
+	       ON T.Task_ID = J.Task_ID
+	WHERE T.Task_ID = @TaskID
 
 	---------------------------------------------------
 	-- Load contents of NET result file into analysis description table
@@ -122,7 +144,7 @@ As
 		Set @myError = @result
 		Exec SetGANETUpdateTaskState @TaskID, 7, @GANETProcessingTimeoutState, @message output
 
-		goto Done
+		goto UpdateJobStates
 	end
 
 	--------------------------------------------------------------
@@ -150,6 +172,8 @@ As
 		set @message = 'Complete LoadGANETPredictionFile: ' + @message + ' (error ' + convert(varchar(32), @result) + ')'
 		If @logLevel >= 1
 			EXEC PostLogEntry 'Error', @message, 'MasterUpdateNETOneTask'
+			
+		-- This is not a fatal error; continue loading data
 	end
 
 
@@ -188,9 +212,9 @@ As
 	***************************************************************
 	**
 	** NOTE:
-	**   Since we're now loading stuff from file ObservedNETsAfterRegression, 
+	**   Since we're now loading data from file ObservedNETsAfterRegression, 
 	**   we no longer need to call ComputePeptideNETBulk,
-	**   though we need to check for any additional steps that it performs
+	**   though we do need to check for any additional steps that it performs
 	**
 	***************************************************************
 	*/
@@ -230,9 +254,48 @@ As
 	end
 
 
+UpdateJobStates:
+
+	If @result <> 0
+	Begin
+		-- One or more jobs failed NET regression
+		-- Increment Regression_Failure_Count
+		--
+		UPDATE T_Analysis_Description
+		SET Regression_Failure_Count = Regression_Failure_Count + 1
+		WHERE Job IN ( SELECT Job
+		               FROM #Tmp_NET_Update_Jobs
+		               WHERE RegressionInfoLoaded = 0 OR
+		                     ObservedNETsLoaded = 0 )
+
+		-- Change the job state to 8 for any jobs that have failed NET regression 3 times
+		--
+		UPDATE T_Analysis_Description
+		SET Process_State = 8,		-- NET Regression failed repeatedly
+		    Last_Affected = GETDATE()
+		WHERE Regression_Failure_Count >= 3 AND
+		      Job IN ( SELECT Job
+		               FROM #Tmp_NET_Update_Jobs
+		               WHERE RegressionInfoLoaded = 0 OR
+		                     ObservedNETsLoaded = 0 )
+		                     
+		
+		-- Change the job state to @NextProcessStateForJobs for any jobs that 
+		-- successfully loaded the regression information and observed NETs
+		--
+		UPDATE T_Analysis_Description
+		SET Process_State = @NextProcessStateForJobs,
+		    Last_Affected = GETDATE()
+		WHERE Job IN ( SELECT Job
+		               FROM #Tmp_NET_Update_Jobs
+		               WHERE RegressionInfoLoaded = 1 AND
+		                     ObservedNETsLoaded = 1 )
+
+	End
+	
+
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Dev] AS [dbo]

@@ -44,6 +44,7 @@ CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 **			11/29/2011 mem - Now also clearing T_Peptide_ScanGroupInfo
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/04/2012 mem - Now also clearing T_Score_MSAlign and T_Seq_Candidate_ModSummary
+**			03/25/2013 mem - Now resetting Regression_Failure_Count to 0
 **    
 *****************************************************/
 (
@@ -452,7 +453,8 @@ AS
 			ScanTime_NET_Slope = NULL, ScanTime_NET_Intercept = NULL, 
             ScanTime_NET_RSquared = NULL, ScanTime_NET_Fit = NULL,
             Regression_Order = NULL, Regression_Filtered_Data_Count = NULL,
-            Regression_Equation = NULL, Regression_Equation_XML = NULL
+            Regression_Equation = NULL, Regression_Equation_XML = NULL,
+            Regression_Failure_Count = 0
 		FROM T_Analysis_Description TAD INNER JOIN 
 			 #JobListToDelete JobList ON TAD.Job = JobList.Job
 		--

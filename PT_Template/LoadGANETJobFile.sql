@@ -23,6 +23,7 @@ CREATE Procedure LoadGANETJobFile
 **			06/04/2006 mem - Increased size of the @filePath variable and the @c variable (used for Bulk Insert)
 **			07/04/2006 mem - Now checking for a header row in the input file; also, updated to use udfCombinePaths and to correct some comments
 **			03/17/2010 mem - Now populating Regression_Order, Regression_Filtered_Data_Count, Regression_Equation, and Regression_Equation_XML to T_Analysis_Description
+**			03/25/2013 mem - Now updating #Tmp_NET_Update_Jobs
 **
 *****************************************************/
 (
@@ -184,8 +185,17 @@ AS
 	--
 	set @numLoaded = @myRowCount
 
+
 	-----------------------------------------------
-	-- log entry
+	-- Keep track of which jobs were processed
+	-----------------------------------------------
+	--
+	UPDATE #Tmp_NET_Update_Jobs
+	SET RegressionInfoLoaded = 1
+	WHERE Job IN ( SELECT Job FROM #T_GAImport )
+
+	-----------------------------------------------
+	-- Define log message
 	-----------------------------------------------
 
 	set @message = 'Updated Analysis Job GANETs: ' + cast(@myRowCount as varchar(12))

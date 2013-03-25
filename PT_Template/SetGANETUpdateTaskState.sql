@@ -18,12 +18,15 @@ CREATE PROCEDURE dbo.SetGANETUpdateTaskState
 **		Auth: mem
 **		Date:	05/30/2005
 **				10/27/2005 mem - Now updating Task_Finish for state 4 in addition to states 3 and 5
+**				03/25/2013 mem - Reformatted Sql statements
 **
 *****************************************************/
+(
 	@TaskID int,
 	@NextTaskState int,
 	@NextProcessStateForJobs int = 44,			-- Only used if @NextTaskState is 5, 6, or 7; typically 50 if @NextTaskState is 5; otherwise typically 44
 	@message varchar(512)='' output
+)
 As
 	set nocount on
 
@@ -37,8 +40,7 @@ As
 	declare @TaskIDStr as varchar(11)
 	set @TaskIDStr = convert(varchar(11), @TaskID)
 
-	declare @UpdateJobStates tinyint
-	Set @UpdateJobStates = 0
+	declare @UpdateJobStates tinyint = 0
 
 	
 	If @NextTaskState = 6 or @NextTaskState = 7
@@ -66,7 +68,7 @@ As
 	Begin
 		---------------------------------------------------
 		-- NET Update moving on to next state
-		-- Update Task_Finish if the state is 3 = 'Results Ready' or 5 = 'Update Complete'
+		-- Update Task_Finish if the state is 3 ('Results Ready') or 5 ('Update Complete')
 		---------------------------------------------------
 		
 		If @NextTaskState = 2
@@ -79,7 +81,7 @@ As
 		Else
 		Begin		
 			-- Update the state and possibly the Finish time
-			If @NextTaskState = 3 OR @NextTaskState = 4 OR @NextTaskState = 5
+			If @NextTaskState IN (3, 4, 5)
 				UPDATE T_NET_Update_Task
 				SET Processing_State = @NextTaskState, Task_Finish = GetDate()
 				WHERE Task_ID = @TaskID
@@ -98,14 +100,15 @@ As
 
 	If @UpdateJobStates = 1
 	Begin
-		If @NextProcessStateForJobs Is Null
-			Set @NextProcessStateForJobs = 44
+		Set @NextProcessStateForJobs = IsNull(@NextProcessStateForJobs, 44)
 			
-		UPDATE T_Analysis_Description 
-		SET Process_State = @NextProcessStateForJobs, Last_Affected = GETDATE()
-		FROM T_Analysis_Description INNER JOIN T_NET_Update_Task_Job_Map ON
-			T_Analysis_Description.Job = T_NET_Update_Task_Job_Map.Job
-		WHERE T_NET_Update_Task_Job_Map.Task_ID = @TaskID
+		UPDATE T_Analysis_Description
+		SET Process_State = @NextProcessStateForJobs,
+		    Last_Affected = GETDATE()
+		FROM T_Analysis_Description TAD
+		     INNER JOIN T_NET_Update_Task_Job_Map JM
+		       ON TAD.Job = JM.Job
+		WHERE JM.Task_ID = @TaskID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End
@@ -123,7 +126,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskState] TO [MTS_DB_Dev] AS [dbo]

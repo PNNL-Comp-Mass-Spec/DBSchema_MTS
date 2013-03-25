@@ -15,6 +15,7 @@ CREATE Procedure LoadGANETObservedNETsFile
 **	Auth:	mem
 **	Date:	03/17/2010 mem
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			03/25/2013 mem - Now updating #Tmp_NET_Update_Jobs
 **    
 *****************************************************/
 (
@@ -147,8 +148,7 @@ AS
 	UPDATE T_Peptides
 	SET GANET_Obs = NULL
 	FROM T_Peptides
-	WHERE Job IN ( SELECT DISTINCT Job
-	                       FROM #Tmp_ObservedNETs ) AND
+	WHERE Job IN ( SELECT DISTINCT Job FROM #Tmp_ObservedNETs ) AND
 	      NOT GANET_Obs IS NULL
 	
 	-----------------------------------------------
@@ -179,8 +179,18 @@ AS
 	SELECT @JobCount = COUNT(DISTINCT Job)
 	FROM #Tmp_ObservedNETs
 
+
 	-----------------------------------------------
-	-- log entry
+	-- Keep track of which jobs were processed
+	-----------------------------------------------
+	--
+	UPDATE #Tmp_NET_Update_Jobs
+	SET ObservedNETsLoaded = 1
+	WHERE Job IN ( SELECT DISTINCT Job FROM #Tmp_ObservedNETs )
+
+
+	-----------------------------------------------
+	-- Define log message
 	-----------------------------------------------
 
 	set @message = 'Updated observed NETs for ' + Convert(varchar(12), @PeptidesUpdated) + ' peptides in T_Peptides (' + Convert(varchar(12), @numLoaded) + ' distinct scans in ' +  Convert(varchar(12), @JobCount)
