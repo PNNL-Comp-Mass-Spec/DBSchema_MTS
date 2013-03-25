@@ -13,16 +13,19 @@ CREATE Procedure dbo.SetGANETUpdateTaskComplete
 **
 **	Parameters:
 **
-**		Auth: grk
-**		Date: 8/26/2003   
-**		Updated: 07/05/2004 mem - Modified for use Peptide DB's
-**				 08/07/2004 mem - Added call to SetProcessState
-**				 05/30/2005 mem - Updated to process batches of jobs using T_NET_Update_Task
+**	Auth:		grk
+**	Date:		08/26/2003   
+**	Updated:	07/05/2004 mem - Modified for use Peptide DB's
+**				08/07/2004 mem - Added call to SetProcessState
+**				05/30/2005 mem - Updated to process batches of jobs using T_NET_Update_Task
+**				03/25/2013 mem - Now creating #Tmp_NET_Update_Jobs
 **
 *****************************************************/
+(
 	@TaskID int,
 	@completionCode int = 0, -- 0->Success, 1->UpdateFailed
 	@message varchar(512)='' output
+)
 As
 	set nocount on
 
@@ -39,6 +42,17 @@ As
 	declare @GANETProcessingReadyToLoad int
 	set @GANETProcessingReadyToLoad = 46
 
+	---------------------------------------------------
+	-- Create temporary table required by SetGANETUpdateTaskState
+	-- (this procedure does not utilize this temp table)
+	---------------------------------------------------
+
+	CREATE TABLE #Tmp_NET_Update_Jobs (
+		Job int not null,
+		RegressionInfoLoaded tinyint not null,
+		ObservedNETsLoaded tinyint not null
+	)
+	
 	If @completionCode = 0
 	Begin
 		-- Results are now ready; set state to 3 = 'Results Ready'
@@ -56,7 +70,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskComplete] TO [MTS_DB_Dev] AS [dbo]

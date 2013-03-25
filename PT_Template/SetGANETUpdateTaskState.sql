@@ -7,9 +7,20 @@ GO
 CREATE PROCEDURE dbo.SetGANETUpdateTaskState
 /****************************************************
 **
-**	Desc: Updates the state of the given NET Update Task
-**		  If appropriate, updates the states of the jobs associated
-**		  with the NET update task
+**	Desc: 
+**		Updates the state of the given NET Update Task
+**		If appropriate, updates the states of the jobs associated with the NET update task
+**
+**		The calling procedure must create table #Tmp_NET_Update_Jobs
+**		The table does not have to be populated; jobs associated with 
+**		  NET update task @TaskID that are not in #Tmp_NET_Update_Jobs will still get processed
+**
+**			CREATE TABLE #Tmp_NET_Update_Jobs (
+**				Job int not null,
+**				RegressionInfoLoaded tinyint not null,
+**				ObservedNETsLoaded tinyint not null
+**			)
+**
 **
 **	Return values: 0: success, otherwise, error code
 **
@@ -18,7 +29,7 @@ CREATE PROCEDURE dbo.SetGANETUpdateTaskState
 **		Auth: mem
 **		Date:	05/30/2005
 **				10/27/2005 mem - Now updating Task_Finish for state 4 in addition to states 3 and 5
-**				03/25/2013 mem - Reformatted Sql statements
+**				03/25/2013 mem - Now examining temporary table #Tmp_NET_Update_Jobs when updating job states
 **
 *****************************************************/
 (
@@ -101,14 +112,43 @@ As
 	If @UpdateJobStates = 1
 	Begin
 		Set @NextProcessStateForJobs = IsNull(@NextProcessStateForJobs, 44)
-			
-		UPDATE T_Analysis_Description
-		SET Process_State = @NextProcessStateForJobs,
-		    Last_Affected = GETDATE()
+		
+		DECLARE @tblNewJobStates table (
+			Job int not null,
+			State int not null
+		)
+		
+		-- Add jobs that did not successfully complete regression
+		--
+		INSERT INTO @tblNewJobStates (Job, State)
+		SELECT Job,
+		       44 AS State
+		FROM #Tmp_NET_Update_Jobs
+		WHERE RegressionInfoLoaded = 0 OR
+		      ObservedNETsLoaded = 0
+		
+		-- Add jobs that either did complete regression, or are not in #Tmp_NET_Update_Jobs
+		--
+		INSERT INTO @tblNewJobStates (Job, State)
+		SELECT JM.Job,
+		       @NextProcessStateForJobs AS State
 		FROM T_Analysis_Description TAD
 		     INNER JOIN T_NET_Update_Task_Job_Map JM
 		       ON TAD.Job = JM.Job
-		WHERE JM.Task_ID = @TaskID
+		     LEFT OUTER JOIN @tblNewJobStates Target
+		       ON JM.Job = Target.Job
+		WHERE JM.Task_ID = @TaskID AND
+		      Target.Job IS NULL
+		
+		-- Update the job states
+		-- Increment Regression_Failure_Count for any failed jbos
+		UPDATE T_Analysis_Description
+		SET Process_State = Src.State,
+		    Regression_Failure_Count = Regression_Failure_Count + CASE WHEN Src.State = 44 THEN 1 ELSE 0 END,
+		    Last_Affected = GETDATE()
+		FROM T_Analysis_Description TAD
+		     INNER JOIN @tblNewJobStates Src
+		       ON TAD.Job = Src.Job
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	End

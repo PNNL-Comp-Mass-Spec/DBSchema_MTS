@@ -139,9 +139,17 @@ AS
 	if @result <> 0
 	begin
 		set @message = 'Problem executing bulk insert'
+		set @myError = @result
 		goto Done
 	end
 
+	If Not Exists (SELECT * FROM #Tmp_ObservedNETs)
+	Begin
+		Set @message = 'No results in Observed NETs file: ' + @filePath
+		set @myError = 50004
+		Goto Done
+	End
+	
 	-----------------------------------------------
 	-- Clear the Observed NET values for the affected jobs
 	-----------------------------------------------

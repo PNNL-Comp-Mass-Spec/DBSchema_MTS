@@ -25,6 +25,7 @@ CREATE Procedure dbo.MasterUpdateNETOneTask
 **			03/17/2010 mem - Now calling LoadGANETObservedNETsFile
 **			04/07/2010 mem - Now deleting the _ObsNET_vs_PNET_Filtered.txt file if @DeleteNETFiles = 1
 **			03/25/2013 mem - Now keeping track of which information is loaded for each job
+**						   - Changing jobs to State 8 if regression fails repeatedly
 **    
 *****************************************************/
 (
@@ -255,44 +256,83 @@ As
 
 
 UpdateJobStates:
+	
+	--------------------------------------------------------------
+	-- Look for jobs that have failed NET regression 3 times
+	--------------------------------------------------------------
+	--
+	DECLARE @tblFailedJobs table (Job int not null)
+	--
+	INSERT INTO @tblFailedJobs (Job)
+	SELECT Job
+	FROM T_Analysis_Description
+	WHERE Regression_Failure_Count >= 3 AND
+	      Job IN ( SELECT Job
+	               FROM #Tmp_NET_Update_Jobs
+	               WHERE RegressionInfoLoaded = 0 OR ObservedNETsLoaded = 0 )
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
 
-	If @result <> 0
+	If @myRowCount > 0
 	Begin
-		-- One or more jobs failed NET regression
-		-- Increment Regression_Failure_Count
-		--
-		UPDATE T_Analysis_Description
-		SET Regression_Failure_Count = Regression_Failure_Count + 1
-		WHERE Job IN ( SELECT Job
-		               FROM #Tmp_NET_Update_Jobs
-		               WHERE RegressionInfoLoaded = 0 OR
-		                     ObservedNETsLoaded = 0 )
-
-		-- Change the job state to 8 for any jobs that have failed NET regression 3 times
-		--
+	
 		UPDATE T_Analysis_Description
 		SET Process_State = 8,		-- NET Regression failed repeatedly
 		    Last_Affected = GETDATE()
-		WHERE Regression_Failure_Count >= 3 AND
-		      Job IN ( SELECT Job
-		               FROM #Tmp_NET_Update_Jobs
-		               WHERE RegressionInfoLoaded = 0 OR
-		                     ObservedNETsLoaded = 0 )
-		                     
-		
-		-- Change the job state to @NextProcessStateForJobs for any jobs that 
-		-- successfully loaded the regression information and observed NETs
+		WHERE Job IN ( SELECT Job FROM @tblFailedJobs )
 		--
-		UPDATE T_Analysis_Description
-		SET Process_State = @NextProcessStateForJobs,
-		    Last_Affected = GETDATE()
-		WHERE Job IN ( SELECT Job
-		               FROM #Tmp_NET_Update_Jobs
-		               WHERE RegressionInfoLoaded = 1 AND
-		                     ObservedNETsLoaded = 1 )
+		SELECT @myError = @@error, @myRowCount = @@rowcount
 
+		Set @message = 'Set job state to 8 for ' + Convert(varchar(12), @myRowCount) + ' job'
+		If @myRowCount > 1
+			Set @message = @message + 's'
+		
+		Set @message = @message + ' that repeatedly failed NET regression: '
+		
+		SELECT @message = @message + Convert(varchar(12), Job) + ', '
+		FROM @tblFailedJobs
+		ORDER BY Job
+		
+		-- Remove the trailing comma
+		Set @message = Left(@message, Len(@message)-1)
+		
+		EXEC PostLogEntry 'Error', @message, 'MasterUpdateNETOneTask'
 	End
 	
+	--------------------------------------------------------------
+	-- Post warning messages for jobs that failed NET regression
+	--------------------------------------------------------------
+	--
+	DECLARE @tblFailedJobsWarn table (Job int not null)
+	--	
+	INSERT INTO @tblFailedJobsWarn (Job)
+	SELECT Job
+	FROM T_Analysis_Description
+	WHERE Process_State <> 8 AND
+	      Job IN ( SELECT Job
+	               FROM #Tmp_NET_Update_Jobs
+	               WHERE RegressionInfoLoaded = 0 OR ObservedNETsLoaded = 0 )
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+
+	If @myRowCount > 0
+	Begin
+
+		Set @message = 'NET Update Task ' + Convert(varchar(12), @TaskID) + ' has ' + Convert(varchar(12), @myRowCount) + ' job'
+		If @myRowCount > 1
+			Set @message = @message + 's'
+		
+		Set @message = @message + ' that failed NET regression: '
+		
+		SELECT @message = @message + Convert(varchar(12), Job) + ', '
+		FROM @tblFailedJobsWarn
+		ORDER BY Job
+		
+		-- Remove the trailing comma
+		Set @message = Left(@message, Len(@message)-1)
+		
+		EXEC PostLogEntry 'Warning', @message, 'MasterUpdateNETOneTask'
+	End
 
 Done:
 	return @myError

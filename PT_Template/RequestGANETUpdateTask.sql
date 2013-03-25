@@ -40,6 +40,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			07/20/2012 mem - Now calling UpdateNETRegressionParamFileName for jobs in state 44
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
+**			03/25/2013 mem - Now creating #Tmp_NET_Update_Jobs
 **
 *****************************************************/
 (
@@ -79,8 +80,19 @@ As
 	declare @MatchCount int
 	declare @ParamFileMatch varchar(256)
 	
-	set @message = ''
-		
+	set @message = ''		
+	
+	---------------------------------------------------
+	-- Create temporary table required by SetGANETUpdateTaskState
+	-- (this procedure does not utilize this temp table)
+	---------------------------------------------------
+
+	CREATE TABLE #Tmp_NET_Update_Jobs (
+		Job int not null,
+		RegressionInfoLoaded tinyint not null,
+		ObservedNETsLoaded tinyint not null
+	)
+	
 	---------------------------------------------------
 	-- clear the output arguments
 	---------------------------------------------------
@@ -495,7 +507,6 @@ As
 	--
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]
