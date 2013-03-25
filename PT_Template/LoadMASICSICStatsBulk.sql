@@ -23,6 +23,7 @@ CREATE Procedure dbo.LoadMASICSICStatsBulk
 **			11/07/2005 mem - Switched alternate SICStats column count from 22 to 25 columns, adding columns StatMoments_Area, Peak_KSStat, and StatMoments_DataCount_Used
 **			06/04/2006 mem - Added parameter @SICStatsLineCountToSkip, which is used to skip the header line, if present in the input file
 **						   - Increased size of the @c variable (used for Bulk Insert)
+**			03/25/2013 mem - No longer storing the last 9 columns from MASIC SICResults files
 **    
 *****************************************************/
 (
@@ -130,16 +131,19 @@ As
 		-- Add the additional columns now so they 
 		--  will be populated during the Bulk Insert operation
 		ALTER TABLE #T_SICStats_Import ADD
-			Parent_Ion_Intensity real NULL,
-			Peak_Baseline_Noise_Level real NULL,
-			Peak_Baseline_Noise_StDev real NULL,
-			Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-			StatMoments_Area real NULL,
-			CenterOfMass_Scan int NULL,
-			Peak_StDev real NULL,
-			Peak_Skew real NULL,
-			Peak_KSStat real NULL,
-			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			Parent_Ion_Intensity real NULL
+			/*
+			* No longer tracked by this DB: 
+				Peak_Baseline_Noise_Level real NULL,
+				Peak_Baseline_Noise_StDev real NULL,
+				Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+				StatMoments_Area real NULL,
+				CenterOfMass_Scan int NULL,
+				Peak_StDev real NULL,
+				Peak_Skew real NULL,
+				Peak_KSStat real NULL,
+				StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			*/
 	End
 		
 	-----------------------------------------------
@@ -163,16 +167,19 @@ As
 		-- Need to add the additional columns to #T_SICStats_Import now
 		--  prior to appending the data to T_Dataset_Stats_SIC
 		ALTER TABLE #T_SICStats_Import ADD
-			Parent_Ion_Intensity real NULL,
-			Peak_Baseline_Noise_Level real NULL,
-			Peak_Baseline_Noise_StDev real NULL,
-			Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-			StatMoments_Area real NULL,
-			CenterOfMass_Scan int NULL,
-			Peak_StDev real NULL,
-			Peak_Skew real NULL,
-			Peak_KSStat real NULL,
-			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			Parent_Ion_Intensity real NULL
+			/*
+			* No longer tracked by this DB: 
+				Peak_Baseline_Noise_Level real NULL,
+				Peak_Baseline_Noise_StDev real NULL,
+				Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+				StatMoments_Area real NULL,
+				CenterOfMass_Scan int NULL,
+				Peak_StDev real NULL,
+				Peak_Skew real NULL,
+				Peak_KSStat real NULL,
+				StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			*/
 	End
 
 
@@ -204,17 +211,12 @@ As
 	Set @Sql = @Sql +   ' (Job,Parent_Ion_Index,MZ,Survey_Scan_Number,Frag_Scan_Number,'
 	Set @Sql = @Sql +   ' Optimal_Peak_Apex_Scan_Number,Peak_Apex_Override_Parent_Ion_Index,Custom_SIC_Peak,'
 	Set @Sql = @Sql +   ' Peak_Scan_Start,Peak_Scan_End,Peak_Scan_Max_Intensity,Peak_Intensity,Peak_SN_Ratio,'
-	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity,Peak_Baseline_Noise_Level,Peak_Baseline_Noise_StDev,'
-	Set @Sql = @Sql +   ' Peak_Baseline_Points_Used,StatMoments_Area,CenterOfMass_Scan,Peak_StDev,Peak_Skew,'
-	Set @Sql = @Sql +   ' Peak_KSStat, StatMoments_DataCount_Used)'
+	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity)'
 	Set @Sql = @Sql + ' SELECT '
 	Set @Sql = @Sql +   Convert(varchar(19), @Job) + ',Parent_Ion_Index,MZ,Survey_Scan_Number,Frag_Scan_Number,'
 	Set @Sql = @Sql +   ' Optimal_Peak_Apex_Scan_Number,Peak_Apex_Override_Parent_Ion_Index,Custom_SIC_Peak,'
 	Set @Sql = @Sql +   ' Peak_Scan_Start,Peak_Scan_End,Peak_Scan_Max_Intensity,Peak_Intensity,Peak_SN_Ratio,'
-	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity,Peak_Baseline_Noise_Level,Peak_Baseline_Noise_StDev,'
-	Set @Sql = @Sql +   ' CASE WHEN Peak_Baseline_Points_Used > 32767 THEN 32767 ELSE Peak_Baseline_Points_Used END,'
-	Set @Sql = @Sql +   ' StatMoments_Area,CenterOfMass_Scan,Peak_StDev,Peak_Skew,'
-	Set @Sql = @Sql +   ' Peak_KSStat, CASE WHEN StatMoments_DataCount_Used > 32767 THEN 32767 ELSE StatMoments_DataCount_Used END'
+	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity'
 	Set @Sql = @Sql + ' FROM #T_SICStats_Import'
 	Set @Sql = @Sql + ' ORDER BY Parent_Ion_Index'
 	--
@@ -232,7 +234,6 @@ As
 
 Done:
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadMASICSICStatsBulk] TO [MTS_DB_Dev] AS [dbo]
