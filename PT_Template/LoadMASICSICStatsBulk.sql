@@ -131,19 +131,18 @@ As
 		-- Add the additional columns now so they 
 		--  will be populated during the Bulk Insert operation
 		ALTER TABLE #T_SICStats_Import ADD
-			Parent_Ion_Intensity real NULL
-			/*
-			* No longer tracked by this DB: 
-				Peak_Baseline_Noise_Level real NULL,
-				Peak_Baseline_Noise_StDev real NULL,
-				Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-				StatMoments_Area real NULL,
-				CenterOfMass_Scan int NULL,
-				Peak_StDev real NULL,
-				Peak_Skew real NULL,
-				Peak_KSStat real NULL,
-				StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-			*/
+			Parent_Ion_Intensity real NULL,
+
+			-- Note that the following 9 columns are not stored in T_Dataset_Stats_SIC
+			Peak_Baseline_Noise_Level real NULL,
+			Peak_Baseline_Noise_StDev real NULL,
+			Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			StatMoments_Area real NULL,
+			CenterOfMass_Scan int NULL,
+			Peak_StDev real NULL,
+			Peak_Skew real NULL,
+			Peak_KSStat real NULL,
+			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
 	End
 		
 	-----------------------------------------------
@@ -167,19 +166,18 @@ As
 		-- Need to add the additional columns to #T_SICStats_Import now
 		--  prior to appending the data to T_Dataset_Stats_SIC
 		ALTER TABLE #T_SICStats_Import ADD
-			Parent_Ion_Intensity real NULL
-			/*
-			* No longer tracked by this DB: 
-				Peak_Baseline_Noise_Level real NULL,
-				Peak_Baseline_Noise_StDev real NULL,
-				Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-				StatMoments_Area real NULL,
-				CenterOfMass_Scan int NULL,
-				Peak_StDev real NULL,
-				Peak_Skew real NULL,
-				Peak_KSStat real NULL,
-				StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
-			*/
+			Parent_Ion_Intensity real NULL,
+
+			-- Note that the following 9 columns are not stored in T_Dataset_Stats_SIC
+			Peak_Baseline_Noise_Level real NULL,
+			Peak_Baseline_Noise_StDev real NULL,
+			Peak_Baseline_Points_Used int NULL,			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+			StatMoments_Area real NULL,
+			CenterOfMass_Scan int NULL,
+			Peak_StDev real NULL,
+			Peak_Skew real NULL,
+			Peak_KSStat real NULL,
+			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
 	End
 
 

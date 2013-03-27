@@ -29,7 +29,7 @@ CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 **			01/15/2006 mem - Now also clearing T_Seq_Candidates, T_Seq_Candidate_ModDetails, and T_Seq_Candidate_to_Peptide_Map
 **			02/14/2006 mem - Now pre-determining which jobs have entries in T_Peptides; if they don't have an entry in T_Peptides, then there is no need to try to delete entries from the tables with foreign keys to T_Peptides
 **			07/03/2006 mem - Now clearing RowCount_Loaded in T_Analysis_Description
-**			07/18/2006 mem - Updated the ALTER TABLE ADD CONSTRAINT queries to use WITH NOCHECK
+**			07/18/2006 mem - Updated the ALTER TABLE ADD CONSTRAINT queries to use WITH CHECK
 **			08/26/2006 mem - Now also clearing T_NET_Update_Task_Job_Map and T_Peptide_Prophet_Task_Job_Map
 **			09/05/2006 mem - Updated to use dbo.udfParseDelimitedList and to check for invalid job numbers
 **						   - Now posting a log entry for the processed jobs
@@ -45,6 +45,7 @@ CREATE PROCEDURE DeletePeptidesForJobAndResetToNew
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/04/2012 mem - Now also clearing T_Score_MSAlign and T_Seq_Candidate_ModSummary
 **			03/25/2013 mem - Now resetting Regression_Failure_Count to 0
+**			03/25/2013 mem - Restored "WITH CHECK" when adding back constraints
 **    
 *****************************************************/
 (
@@ -474,48 +475,48 @@ AS
 DefineConstraints:
 	If @DropAndAddConstraints = 1
 	Begin
-		ALTER TABLE dbo.T_Peptide_Filter_Flags WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_Filter_Flags WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_Filter_Flags_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Proteins FOREIGN KEY(Ref_ID) REFERENCES dbo.T_Proteins(Ref_ID)
-		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Peptide_Cleavage_State_Name FOREIGN KEY(Cleavage_State) REFERENCES dbo.T_Peptide_Cleavage_State_Name(Cleavage_State)
-		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_to_Protein_Map WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_to_Protein_Map_T_Peptide_Terminus_State_Name FOREIGN KEY(Terminus_State) REFERENCES dbo.T_Peptide_Terminus_State_Name(Terminus_State)
 					
-		ALTER TABLE dbo.T_Peptides WITH NOCHECK
+		ALTER TABLE dbo.T_Peptides WITH CHECK
 			ADD CONSTRAINT FK_T_Peptides_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
-		ALTER TABLE dbo.T_Peptides WITH NOCHECK
+		ALTER TABLE dbo.T_Peptides WITH CHECK
 			ADD CONSTRAINT FK_T_Peptides_T_Sequence FOREIGN KEY(Seq_ID) REFERENCES dbo.T_Sequence(Seq_ID)
-		ALTER TABLE dbo.T_Peptides WITH NOCHECK
+		ALTER TABLE dbo.T_Peptides WITH CHECK
 			ADD CONSTRAINT FK_T_Peptides_T_Peptide_State_Name FOREIGN KEY(State_ID) REFERENCES dbo.T_Peptide_State_Name(State_ID)
 			
-		ALTER TABLE dbo.T_Score_Discriminant WITH NOCHECK
+		ALTER TABLE dbo.T_Score_Discriminant WITH CHECK
 			ADD CONSTRAINT FK_T_Score_Discriminant_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Score_Sequest WITH NOCHECK
+		ALTER TABLE dbo.T_Score_Sequest WITH CHECK
 			ADD CONSTRAINT FK_T_Score_Sequest_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Score_XTandem WITH NOCHECK
+		ALTER TABLE dbo.T_Score_XTandem WITH CHECK
 			ADD CONSTRAINT FK_T_Score_XTandem_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Score_Inspect WITH NOCHECK
+		ALTER TABLE dbo.T_Score_Inspect WITH CHECK
 			ADD CONSTRAINT FK_T_Score_Inspect_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Score_MSGFDB WITH NOCHECK
+		ALTER TABLE dbo.T_Score_MSGFDB WITH CHECK
 			ADD CONSTRAINT FK_T_Score_MSGFDB_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
-		ALTER TABLE dbo.T_Score_MSAlign WITH NOCHECK
+		ALTER TABLE dbo.T_Score_MSAlign WITH CHECK
 			ADD CONSTRAINT FK_T_Score_MSAlign_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides(Peptide_ID)
 			
-		ALTER TABLE dbo.T_Peptide_ScanGroupInfo WITH NOCHECK
+		ALTER TABLE dbo.T_Peptide_ScanGroupInfo WITH CHECK
 			ADD CONSTRAINT FK_T_Peptide_ScanGroupInfo_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
 
-		ALTER TABLE dbo.T_Seq_Candidate_to_Peptide_Map WITH NOCHECK
+		ALTER TABLE dbo.T_Seq_Candidate_to_Peptide_Map WITH CHECK
 			ADD CONSTRAINT FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides FOREIGN KEY(Peptide_ID) REFERENCES dbo.T_Peptides (Peptide_ID)
 
-		ALTER TABLE dbo.T_Dataset_Stats_Scans WITH NOCHECK
+		ALTER TABLE dbo.T_Dataset_Stats_Scans WITH CHECK
 			ADD CONSTRAINT FK_T_Dataset_Stats_Scans_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
-		ALTER TABLE dbo.T_Dataset_Stats_Scans WITH NOCHECK
+		ALTER TABLE dbo.T_Dataset_Stats_Scans WITH CHECK
 			ADD CONSTRAINT FK_T_Dataset_Stats_Scans_T_Dataset_Scan_Type_Name FOREIGN KEY(Scan_Type) REFERENCES dbo.T_Dataset_Scan_Type_Name(Scan_Type)
-		ALTER TABLE dbo.T_Dataset_Stats_SIC WITH NOCHECK
+		ALTER TABLE dbo.T_Dataset_Stats_SIC WITH CHECK
 			ADD CONSTRAINT FK_T_Dataset_Stats_SIC_T_Analysis_Description FOREIGN KEY(Job) REFERENCES dbo.T_Analysis_Description(Job)
 	End
 

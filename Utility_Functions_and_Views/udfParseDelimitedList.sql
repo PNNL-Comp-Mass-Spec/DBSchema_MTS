@@ -12,6 +12,8 @@ ALTER FUNCTION dbo.udfParseDelimitedList
 **	Date:	06/06/2006
 **			11/10/2006 mem - Updated to prevent blank values from being returned in the table
 **			03/14/2007 mem - Changed @DelimitedList parameter from varchar(8000) to varchar(max)
+**			04/02/2012 mem - Now removing Tab characters
+**			03/27/2013 mem - Now replacing Tab characters, carriage returns and line feeds with @Delimiter
 **  
 ****************************************************/
 (
@@ -27,11 +29,26 @@ BEGIN
 	Declare @DelimiterPos int
 	
 	Declare @Value varchar(2048)
-	
+
 	Set @DelimitedList = IsNull(@DelimitedList, '')
 	
 	If Len(@DelimitedList) > 0
 	Begin -- <a>
+	
+		-- Replace any CR or LF characters with @Delimiter
+		If @DelimitedList Like '%' + Char(13) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(13),  @Delimiter)))
+
+		If @DelimitedList Like '%' + Char(10) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(10),  @Delimiter)))
+
+		If @Delimiter <> Char(9)
+		Begin
+			-- Replace any tab characters with @Delimiter
+			If @DelimitedList Like '%' + Char(9)  + '%'
+				Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(9),  @Delimiter)))
+		End
+					
 		Set @StartPosition = 1
 		Set @continue = 1
 		While @continue = 1
@@ -46,11 +63,14 @@ BEGIN
 			If @DelimiterPos > @StartPosition
 			Begin -- <c>
 				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))
-				
+			
 				If Len(@Value) > 0 
+				Begin
 					INSERT INTO @tmpValues (Value)
 					VALUES (@Value)
-			end -- </c>
+				End
+				
+			End -- </c>
 
 			Set @StartPosition = @DelimiterPos + 1
 		End -- </b>
