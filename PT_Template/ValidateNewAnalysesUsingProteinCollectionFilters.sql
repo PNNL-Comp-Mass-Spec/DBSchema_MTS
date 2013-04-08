@@ -24,6 +24,7 @@ CREATE PROCEDURE dbo.ValidateNewAnalysesUsingProteinCollectionFilters
 **	Date:	06/10/2006
 **			10/07/2007 mem - Increased size of @ProteinCollectionList to varchar(max)
 **			11/05/2007 mem - Updated to allow use all analysis jobs if T_Process_Config doesn't have any entries for Protein_Collection_Filter or Protein_Collection_and_Protein_Options_Combo
+**			04/08/2013 mem - Now using CROSS APPLY to create lists of protein collections and protein options for each job (removing the need for a while loop)
 **    
 *****************************************************/
 (
@@ -40,12 +41,6 @@ As
 
 	Declare @MatchCount int
 	Declare @FilterMatchCount int
-
-	Declare @CurrentJob int
-	Declare @CurrentProcessConfigID int
-	Declare @continue tinyint
-	Declare @ProteinCollectionList varchar(max)
-	Declare @ProteinOptionsList varchar(256)
 
 	Declare @NewAnalysisJobsLookupTableName varchar(256)
 	Declare @SAddnl varchar(256)
@@ -71,8 +66,7 @@ As
 		---------------------------------------------------
 		--					
 		Set @MatchCount = 0
-		SELECT @MatchCount = COUNT(*), 
-				@CurrentProcessConfigID = MIN(Process_Config_ID)-1
+		SELECT @MatchCount = COUNT(*)
 		FROM T_Process_Config
 		WHERE [Name] = 'Protein_Collection_and_Protein_Options_Combo'
 		
@@ -81,12 +75,10 @@ As
 
 			Set @ProteinCollectionFilterDefined = 1
 
-			if exists (select * from dbo.sysobjects where id = object_id(N'[#TmpJobsMatchingProteinCollectionCriteria]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-				TRUNCATE TABLE #TmpJobsMatchingProteinCollectionCriteria
-			ELSE
-				CREATE TABLE #TmpJobsMatchingProteinCollectionCriteria (
-					Job int
-				)
+			CREATE TABLE #TmpJobsMatchingProteinCollectionCriteria (
+				Job int
+			)
+
 
 			---------------------------------------------------
 			-- Define the lookup table name
@@ -168,19 +160,13 @@ As
 			--  compare the Protein_Option Keywords and Values vs. the filters defined in T_Process_Config
 			---------------------------------------------------
 			
-			if exists (select * from dbo.sysobjects where id = object_id(N'[#TmpNewAnalysisJobProteinCollectionNames]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-				TRUNCATE TABLE #TmpNewAnalysisJobProteinCollectionNames
-			Else
-				-- Create the table that will hold the protein collection names defined for each job		
-				CREATE TABLE #TmpNewAnalysisJobProteinCollectionNames (
-					[Job] int NOT NULL ,
-					[ProteinCollection] varchar(256) NOT NULL,
-					[Valid] tinyint NOT NULL DEFAULT (0)
-				)	
+			-- Create the table that will hold the protein collection names defined for each job		
+			CREATE TABLE #TmpNewAnalysisJobProteinCollectionNames (
+				[Job] int NOT NULL ,
+				[ProteinCollection] varchar(256) NOT NULL,
+				[Valid] tinyint NOT NULL DEFAULT (0)
+			)	
 
-			if exists (select * from dbo.sysobjects where id = object_id(N'[#TmpNewAnalysisJobProteinOptions]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-				TRUNCATE TABLE #TmpNewAnalysisJobProteinOptions
-			Else
 			-- Create the table that will hold the Keywords and Values for the protein options defined for each job		
 			CREATE TABLE #TmpNewAnalysisJobProteinOptions (
 				[Job] int NOT NULL ,
@@ -189,46 +175,26 @@ As
 				[Valid] tinyint NOT NULL DEFAULT (0)
 			)	
 
-			-- Determine the initial value for @CurrentJob
-			Set @CurrentJob = -1
-			SELECT @CurrentJob = MIN(Job)-1
-			FROM #TmpNewAnalysisJobs
+
+			-- Parse out the protein collections for each job
+			--
+			INSERT INTO #TmpNewAnalysisJobProteinCollectionNames (Job, ProteinCollection)
+			SELECT Job, PCL.Value
+			FROM #TmpNewAnalysisJobs CROSS APPLY dbo.udfParseDelimitedList(Protein_Collection_List, ',') as PCL
 			WHERE Valid = 0
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 
+			
+			-- Parse out the protein options for each job
+			--
+			INSERT INTO #TmpNewAnalysisJobProteinOptions (Job, Keyword, Value)
+			SELECT Job, PCO.Keyword, PCO.Value
+			FROM #TmpNewAnalysisJobs CROSS APPLY dbo.udfParseKeyValueList(Protein_Options_List, ',', '=') as PCO
+			WHERE Valid = 0
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
 
-			Set @continue = 1
-			While @continue = 1
-			Begin -- <d1>
-				-- Select the next job from #TmpNewAnalysisJobs
-				SELECT TOP 1 @CurrentJob = Job, 
-							 @ProteinCollectionList = Protein_Collection_List,
-							 @ProteinOptionsList = Protein_Options_List
-				FROM #TmpNewAnalysisJobs
-				WHERE Valid = 0 AND Job > @CurrentJob
-				ORDER BY Job
-				--
-				SELECT @myRowCount = @@rowcount, @myError = @@error
-				
-				If @myRowCount <> 1
-					Set @continue = 0
-				Else
-				Begin
-					INSERT INTO #TmpNewAnalysisJobProteinCollectionNames (Job, ProteinCollection)
-					SELECT @CurrentJob, Value
-					FROM dbo.udfParseDelimitedList(@ProteinCollectionList, ',')
-					--
-					SELECT @myRowCount = @@rowcount, @myError = @@error
-
-					
-					INSERT INTO #TmpNewAnalysisJobProteinOptions (Job, Keyword, Value)
-					SELECT @CurrentJob, Keyword, Value
-					FROM dbo.udfParseKeyValueList(@ProteinOptionsList, ',', '=')
-					--
-					SELECT @myRowCount = @@rowcount, @myError = @@error
-				End
-			End -- </d1>
 
 			---------------------------------------------------
 			-- Count number of Protein_Collection_Filter
@@ -354,7 +320,6 @@ As
 
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ValidateNewAnalysesUsingProteinCollectionFilters] TO [MTS_DB_Dev] AS [dbo]

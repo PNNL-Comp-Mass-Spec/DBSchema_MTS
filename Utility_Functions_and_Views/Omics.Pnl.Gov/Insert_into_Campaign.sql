@@ -19,6 +19,16 @@ FROM (SELECT DISTINCT Campaign_ID as id, Campaign_Num as Campaign, CM_created As
             FROM S_V_Data_Package_Datasets_Export
             WHERE data_package_id = 767))) LookupQ
 
+-- Lookup by dataset ID
+SELECT 'INSERT INTO campaign (id, campaign_name, created, comment)
+VALUES (' + Convert(varchar(12), id) + ',''' + Campaign + ''', ''' + Convert(varchar(32), Created, 120) + ''', ''' + Comment + ''')'
+FROM (SELECT DISTINCT Campaign_ID as id, Campaign_Num as Campaign, CM_created As Created, ISNULL(CM_Comment, '') as Comment
+      FROM V_Experiment_Detail_Report_Ex EDR INNER JOIN
+          T_Campaign C ON EDR.Campaign = C.Campaign_Num INNER JOIN
+          T_Dataset DS ON EDR.ID = DS.Exp_ID
+      WHERE (DS.Dataset_ID IN (209001, 208992, 208990, 208986, 208982, 208967, 208961, 208952, 208824, 208748))
+     ) LookupQ
+
 
 INSERT INTO campaign (id, campaign_name, created, comment)
 VALUES (2653,'Topdown_method_development', '2011-05-11 12:31:27', '')
