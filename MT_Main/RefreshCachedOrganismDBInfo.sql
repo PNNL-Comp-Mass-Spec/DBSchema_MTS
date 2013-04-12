@@ -15,9 +15,11 @@ CREATE PROCEDURE dbo.RefreshCachedOrganismDBInfo
 **	Auth:	mem
 **	Date:	12/14/2010 mem - Initial version
 **			08/01/2012 mem - Now using Cached_RowVersion and OrgFile_RowVersion to determine new/changed protein collection entries
+**			04/12/2013 mem - Added parameter @UpdateCachedDataStatusTable
 **
 *****************************************************/
 (
+	@UpdateCachedDataStatusTable tinyint = 1,
 	@message varchar(255) = '' output
 )
 AS
@@ -43,6 +45,8 @@ AS
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
+	
+	Set @UpdateCachedDataStatusTable= IsNull(@UpdateCachedDataStatusTable, 1)
 	
 	---------------------------------------------------
 	-- Create the temporary table that will be used to
@@ -103,11 +107,14 @@ AS
 		Else
 		Begin
 
-			-- Update the stats in T_DMS_Cached_Data_Status
-			exec RefreshCachedDMSInfoFinalize 'RefreshCachedOrganismDBInfo', 'V_DMS_Organism_DB_File_Import', 'T_DMS_Organism_DB_Info',
-												@IncrementRefreshCount = 1, 
-												@FullRefreshPerformed = 1, 
-												@LastRefreshMinimumID = 0
+			If @UpdateCachedDataStatusTable <> 0
+			Begin
+				-- Update the stats in T_DMS_Cached_Data_Status
+				exec RefreshCachedDMSInfoFinalize 'RefreshCachedOrganismDBInfo', 'V_DMS_Organism_DB_File_Import', 'T_DMS_Organism_DB_Info',
+													@IncrementRefreshCount = 1, 
+													@FullRefreshPerformed = 1, 
+													@LastRefreshMinimumID = 0
+			End
 		End
 
 	End Try
@@ -121,6 +128,5 @@ AS
 
 Done:
 	Return @myError
-
 
 GO
