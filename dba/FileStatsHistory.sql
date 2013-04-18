@@ -28,7 +28,7 @@ CREATE TABLE [dbo].[FileStatsHistory](
 	[KBytesWritten] [numeric](20, 2) NULL,
 	[IoStallReadMS] [nvarchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[IoStallWriteMS] [nvarchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Cum_IO_GB] [numeric](12, 2) NULL,
+	[Cum_IO_GB] [numeric](20, 2) NULL,
 	[IO_Percent] [numeric](12, 2) NULL,
  CONSTRAINT [pk_FileStatsHistory] PRIMARY KEY CLUSTERED 
 (

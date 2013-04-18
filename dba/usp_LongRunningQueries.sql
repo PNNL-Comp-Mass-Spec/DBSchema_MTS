@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROC dbo.usp_LongRunningQueries
+CREATE PROC [dbo].[usp_LongRunningQueries]
 AS
 
 /**************************************************************************************************************
@@ -16,7 +16,8 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
-**	04/15/2013		Matthew Monroe			1.11				Now using table T_Alert_Exclusions to optionally ignore some long running queries
+**	04/15/2013		Matthew Monroe			1.1.1				Now using table T_Alert_Exclusions to optionally ignore some long running queries
+**	04/17/2013		Matthew Monroe			1.1.2				Now checking for @EmailList and @CellList being empty
 ***************************************************************************************************************/
 
 BEGIN
@@ -114,12 +115,15 @@ BEGIN
 
 		SELECT @EmailSubject = 'Long Running QUERIES on ' + @ServerName + '!'
 
-		EXEC msdb.dbo.sp_send_dbmail
-			@recipients= @EmailList,
-			@subject = @EmailSubject,
-			@body = @HTML,
-			@body_format = 'HTML'
-
+		If ISNULL(@EmailList, '') <> ''
+		BEGIN
+			EXEC msdb.dbo.sp_send_dbmail
+				@recipients= @EmailList,
+				@subject = @EmailSubject,
+				@body = @HTML,
+				@body_format = 'HTML'
+		END
+		
 		IF IsNull(@CellList, '') <> ''
 		BEGIN
 
@@ -167,5 +171,6 @@ BEGIN
 		DROP TABLE #TEMP
 	END
 END
+
 
 GO

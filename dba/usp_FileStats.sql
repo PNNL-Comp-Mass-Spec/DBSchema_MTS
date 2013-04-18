@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE PROC [dbo].[usp_FileStats] (@InsertFlag BIT = 0)
 AS
 /**************************************************************************************************************
@@ -22,6 +21,7 @@ AS
 **	01/07/2012		Michael Rounds			2.1.3				Fixed Divide by zero bug
 **	04/07/2013		Michael Rounds			2.1.4				Extended the lengths of KBytesRead and KBytesWritte in temp table FILESTATS - NUMERIC(12,2) to (20,2)
 **	04/12/2013		Michael Rounds			2.1.5				Added SQL Server 2012 compatibility
+**	04/15/2013		Michael Rounds			2.1.6				Expanded Cum_IO_GB
 ***************************************************************************************************************/
 
 BEGIN
@@ -48,7 +48,7 @@ CREATE TABLE #FILESTATS (
 	KBytesWritten NUMERIC(20,2),
 	IoStallReadMS NVARCHAR(30),
 	IoStallWriteMS NVARCHAR(30),
-	Cum_IO_GB NUMERIC(12,2),
+	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
 

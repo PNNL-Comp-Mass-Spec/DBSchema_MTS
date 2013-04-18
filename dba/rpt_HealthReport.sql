@@ -4,9 +4,8 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @IncludePerfStats BIT = 0, @EmailFlag BIT = 1)
+CREATE PROCEDURE dbo.rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @IncludePerfStats BIT = 0, @EmailFlag BIT = 1)
 AS
-
 /**************************************************************************************************************
 **  Purpose: This procedure generates and emails (using DBMail) an HMTL formatted health report of the server
 **
@@ -44,7 +43,8 @@ AS
 **	04/11/2013		Michael Rounds			2.3					Changed the File Stats section to only display last 24 hours of data instead of since last restart
 **	04/12/2013		Michael Rounds			2.3.1				Added SQL Server 2012 Compatibility, Changed #TEMPDATES from SELECT INTO - > CREATE, INSERT INTO
 **	04/13/2013		Matthew Monroe			2.3.2				Adjusted job status sort order
-**	04/15/2013		Matthew Monroe			2.3.3				No longer flagging large .LDF files if less than 100 MB in size
+**	04/15/2013		Michael Rounds			2.3.2				Expanded Cum_IO_GB, added COALESCE to columns in HTML output to avoid blank HTML blobs, CHANGED CASTs to BIGINT
+**	04/15/2013		Matthew Monroe			2.3.3				No longer flagging large .LDF files if less than 100 MB in size.  Updated #BACKUPS.filename to nvarchar(255).  No longer explicitly naming Primary Key constraints on temp tables
 ***************************************************************************************************************/
     
 BEGIN
@@ -282,7 +282,7 @@ BEGIN
 		KBytesWritten NUMERIC(20,2),
 		IoStallReadMS NVARCHAR(30),
 		IoStallWriteMS NVARCHAR(30),
-		Cum_IO_GB NUMERIC(12,2),
+		Cum_IO_GB NUMERIC(20,2),
 		IO_Percent NUMERIC(12,2)
 		)
 		
@@ -310,12 +310,12 @@ BEGIN
 	SELECT @LongQueriesQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
 	SELECT @BlockingQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'BlockingAlert'	
 	
-	IF @Recepients IS NULL
+	IF ISNULL(@Recepients,'') <> ''
 	BEGIN
 		SELECT @Recepients = EmailList FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
 	END
 	
-	IF @CC IS NULL
+	IF ISNULL(@CC, '') <> ''
 	BEGIN
 		SELECT @CC = EmailList2 FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
 	END
@@ -612,12 +612,12 @@ BEGIN
 	JOIN (SELECT
 			b.dbname,
 			b.[FileName],
-			SUM(CAST(b.NumberReads AS INT) - CAST(a.NumberReads AS INT)) AS NumberReads,
+			SUM(CAST(b.NumberReads AS BIGINT) - CAST(a.NumberReads AS BIGINT)) AS NumberReads,
 			SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
-			SUM(CAST(b.NumberWrites AS INT) - CAST(a.NumberWrites AS INT)) AS NumberWrites,
+			SUM(CAST(b.NumberWrites AS BIGINT) - CAST(a.NumberWrites AS BIGINT)) AS NumberWrites,
 			SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
-			SUM(CAST(b.IoStallReadMS AS INT) - CAST(a.IoStallReadMS AS INT)) AS IoStallReadMS,
-			SUM(CAST(b.IoStallWriteMS AS INT) - CAST(a.IoStallWriteMS AS INT)) AS IoStallWriteMS,
+			SUM(CAST(b.IoStallReadMS AS BIGINT) - CAST(a.IoStallReadMS AS BIGINT)) AS IoStallReadMS,
+			SUM(CAST(b.IoStallWriteMS AS BIGINT) - CAST(a.IoStallWriteMS AS BIGINT)) AS IoStallWriteMS,
 			SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
 			FROM [dba].dbo.FileStatsHistory a
 			LEFT OUTER
@@ -877,7 +877,6 @@ BEGIN
 	
 	CREATE TABLE #ERRORLOG (
 		ID INT IDENTITY(1,1) NOT NULL
-			CONSTRAINT PK_ERRORLOGTEMP
 				PRIMARY KEY CLUSTERED (ID),
 		LogDate DATETIME, 
 		ProcessInfo NVARCHAR(100), 
@@ -941,11 +940,10 @@ BEGIN
 	/* BackupStats */
 	CREATE TABLE #BACKUPS (
 		ID INT IDENTITY(1,1) NOT NULL
-			CONSTRAINT PK_BACKUPS
 				PRIMARY KEY CLUSTERED (ID),
 		[DBName] NVARCHAR(128),
 		[Type] NVARCHAR(50),
-		[Filename] NVARCHAR(128),
+		[Filename] NVARCHAR(255),
 		Backup_Set_Name NVARCHAR(128),
 		Backup_Start_Date DATETIME,
 		Backup_Finish_Date DATETIME,
@@ -1221,7 +1219,7 @@ BEGIN
 			<th width="75">IO %</th>				
 		 </tr>'
 	SELECT @HTML = @HTML +
-		'<tr><td width="200" class="c1">' + [FileName] +'</td>' +
+		'<tr><td width="200" class="c1">' + COALESCE([FileName],'N/A') +'</td>' +
 		'<td width="75" class="c2">' + COALESCE(NumberReads,'0') +'</td>' +
 		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesRead),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesRead / 1024 AS NUMERIC(18,2))),'') +
 			  ' MB)' +'</td>' +
@@ -1253,14 +1251,14 @@ BEGIN
 			</tr>'	
 		SELECT
 			@HTML = @HTML +   
-			'<tr><td width="150" class="c1">' + [DBName] +'</td>' +
-			'<td width="150" class="c2">' + [State] +'</td>' +  
-			'<td width="150" class="c1">' + [ServerRole] +'</td>' +  
-			'<td width="150" class="c2">' + [PartnerInstance] +'</td>' +  
-			'<td width="150" class="c1">' + [SafetyLevel] +'</td>' +  
-			'<td width="200" class="c2">' + [AutomaticFailover] +'</td>' +  
-			'<td width="250" class="c1">' + [WitnessServer] +'</td>' +  
-			 '</tr>'
+			'<tr><td width="150" class="c1">' + COALESCE([DBName],'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE([State],'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE([ServerRole],'N/A') +'</td>' +  
+			'<td width="150" class="c2">' + COALESCE([PartnerInstance],'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE([SafetyLevel],'N/A') +'</td>' +  
+			'<td width="200" class="c2">' + COALESCE([AutomaticFailover],'N/A') +'</td>' +  
+			'<td width="250" class="c1">' + COALESCE([WitnessServer],'N/A') +'</td>' +  
+			'</tr>'
 		FROM #MIRRORING
 		ORDER BY [DBName]
 		
@@ -1295,13 +1293,13 @@ BEGIN
 			</tr>'
 		SELECT
 			@HTML = @HTML +   
-			'<tr><td width="150" class="c1">' + primary_server +'</td>' +
-			'<td width="150" class="c2">' + primary_database +'</td>' +  
-			'<td width="150" class="c1">' + monitor_server +'</td>' +  
-			'<td width="150" class="c2">' + secondary_server +'</td>' +  
-			'<td width="150" class="c1">' + secondary_database +'</td>' +  
-			'<td width="200" class="c2">' + CAST(last_backup_date AS NVARCHAR) +'</td>' +  
-			'<td width="250" class="c1">' + backup_share +'</td>' +  
+			'<tr><td width="150" class="c1">' + COALESCE(primary_server,'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE(primary_database,'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE(monitor_server,'N/A') +'</td>' +  
+			'<td width="150" class="c2">' + COALESCE(secondary_server,'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE(secondary_database,'N/A') +'</td>' +  
+			'<td width="200" class="c2">' + COALESCE(CAST(last_backup_date AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="250" class="c1">' + COALESCE(backup_share,'N/A') +'</td>' +  
 			 '</tr>'
 		FROM #LOGSHIP
 		ORDER BY Primary_Database
@@ -1335,11 +1333,11 @@ BEGIN
 				</tr>'
 		SELECT
 			@HTML = @HTML +   
-			'<tr><td width="150" class="c1">' + Distributor +'</td>' +
-			'<td width="150" class="c2">' + [distribution database] +'</td>' +  
-			'<td width="500" class="c1">' + CAST(directory AS NVARCHAR) +'</td>' +  
-			'<td width="200" class="c2">' + CAST(account AS NVARCHAR) +'</td>' +  
-			'<td width="150" class="c1">' + CAST(publisher_type AS NVARCHAR) +'</td></tr>'
+			'<tr><td width="150" class="c1">' + COALESCE(Distributor,'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE([distribution database],'N/A') +'</td>' +  
+			'<td width="500" class="c1">' + COALESCE(CAST(directory AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="200" class="c2">' + COALESCE(CAST(account AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE(CAST(publisher_type AS NVARCHAR),'N/A') +'</td></tr>'
 		FROM #REPLINFO
 		
 		SELECT @HTML = @HTML + '</table></div>'
@@ -1376,8 +1374,8 @@ BEGIN
 		SELECT
 			@HTML = @HTML +   
 			'<tr> 
-			<td width="150" class="c1">' + publisher_db +'</td>' +
-			'<td width="150" class="c2">' + publication +'</td>' +  
+			<td width="150" class="c1">' + COALESCE(publisher_db,'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE(publication,'N/A') +'</td>' +  
 			CASE
 				WHEN publication_type = 0 THEN '<td width="150" class="c1">' + 'Transactional Publication' +'</td>'
 				WHEN publication_type = 1 THEN '<td width="150" class="c1">' + 'Snapshot Publication' +'</td>'
@@ -1449,11 +1447,11 @@ BEGIN
 			</tr>'
 		SELECT
 			@HTML = @HTML +   
-			'<tr><td width="150" class="c1">' + Publisher +'</td>' +
-			'<td width="150" class="c2">' + Publisher_DB +'</td>' +  
-			'<td width="150" class="c1">' + Publication +'</td>' +  
-			'<td width="450" class="c2">' + Distribution_Agent +'</td>' +  
-			'<td width="150" class="c1">' + CAST([time] AS NVARCHAR) +'</td>' +  
+			'<tr><td width="150" class="c1">' + COALESCE(Publisher,'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE(Publisher_DB,'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE(Publication,'N/A') +'</td>' +  
+			'<td width="450" class="c2">' + COALESCE(Distribution_Agent,'N/A') +'</td>' +  
+			'<td width="150" class="c1">' + COALESCE(CAST([time] AS NVARCHAR),'N/A') +'</td>' +  
 			CASE [Immediate_sync]
 				WHEN 0 THEN '<td width="100" class="c2">' + 'No'  +'</td>'
 				WHEN 1 THEN '<td width="100" class="c2">' + 'Yes'  +'</td>'
@@ -1592,7 +1590,7 @@ BEGIN
 			</tr>'
 		SELECT @HTML = @HTML +   
 			'<tr><td width="275" class="c1">' + LEFT(JobName,60) +'</td>' +    
-			'<td width="150" class="c2">' + Category +'</td>' +    
+			'<td width="150" class="c2">' + COALESCE(Category,'N/A') +'</td>' +    
 			CASE [Enabled]
 				WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
 				WHEN 1 THEN '<td width="75" class="c1">True</td>'  
@@ -1634,11 +1632,11 @@ BEGIN
 		SELECT @HTML = @HTML +   
 			'<tr>
 			<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>	
-			<td width="150" class="c2">' + [DBName] +'</td>
+			<td width="150" class="c2">' + COALESCE([DBName],'N/A') +'</td>
 			<td width="75" class="c1">' + CAST([ElapsedTime(ss)] AS NVARCHAR) +'</td>
 			<td width="75" class="c2">' + CAST(Session_id AS NVARCHAR) +'</td>
-			<td width="175" class="c1">' + login_name +'</td>	
-			<td width="425" class="c2">' + LEFT(sql_text,100) +'</td>			
+			<td width="175" class="c1">' + COALESCE(login_name,'N/A') +'</td>	
+			<td width="425" class="c2">' + COALESCE(LEFT(sql_text,100),'N/A') +'</td>			
 			</tr>'
 		FROM #LONGQUERIES
 		ORDER BY DateStamp
@@ -1676,13 +1674,13 @@ BEGIN
 		SELECT @HTML = @HTML +   
 			'<tr>
 			<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>
-			<td width="130" class="c2">' + [DBName] + '</td>
+			<td width="130" class="c2">' + COALESCE([DBName],'N/A') + '</td>
 			<td width="60" class="c1">' + CAST(Blocked_WaitTime_Seconds AS NVARCHAR) +'</td>
 			<td width="60" class="c2">' + CAST(Blocked_SPID AS NVARCHAR) +'</td>
-			<td width="145" class="c1">' + Blocked_Login +'</td>		
+			<td width="145" class="c1">' + COALESCE(Blocked_Login,'NA') +'</td>		
 			<td width="200" class="c2">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Blocked_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>
 			<td width="60" class="c1">' + CAST(Blocking_SPID AS NVARCHAR) +'</td>
-			<td width="145" class="c2">' + Offending_Login +'</td>
+			<td width="145" class="c2">' + COALESCE(Offending_Login,'NA') +'</td>
 			<td width="200" class="c1">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Offending_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>	
 			</tr>'
 		FROM #BLOCKING
@@ -1722,7 +1720,7 @@ BEGIN
 		SELECT @HTML = @HTML +   
 			'<tr>
 			<td width="150" class="c1">' + CAST(DeadlockDate AS NVARCHAR) +'</td>
-			<td width="150" class="c2">' + [DBName] + '</td>' +
+			<td width="150" class="c2">' + COALESCE([DBName],'N/A') + '</td>' +
 			CASE 
 				WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimHostname,'NA') +'</td>'
 			ELSE '<td width="75" class="c1">NA</td>' 
@@ -1732,11 +1730,11 @@ BEGIN
 				WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimSPID,'NA') +'</td>'
 			ELSE '<td width="75" class="c1">NA</td>' 
 			END +	
-			'<td width="200" class="c2">' + COALESCE(VictimSQL,'NA') +'</td>
-			<td width="75" class="c1">' + COALESCE(LockingHostname,'NA') +'</td>
-			<td width="75" class="c2">' + COALESCE(LockingLogin,'NA') +'</td>
-			<td width="75" class="c1">' + COALESCE(LockingSPID,'NA') +'</td>		
-			<td width="200" class="c2">' + COALESCE(LockingSQL,'NA') +'</td>
+			'<td width="200" class="c2">' + COALESCE(VictimSQL,'N/A') +'</td>
+			<td width="75" class="c1">' + COALESCE(LockingHostname,'N/A') +'</td>
+			<td width="75" class="c2">' + COALESCE(LockingLogin,'N/A') +'</td>
+			<td width="75" class="c1">' + COALESCE(LockingSPID,'N/A') +'</td>		
+			<td width="200" class="c2">' + COALESCE(LockingSQL,'N/A') +'</td>
 			</tr>'
 		FROM #DEADLOCKINFO 
 		WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
@@ -1772,7 +1770,7 @@ BEGIN
 		SELECT @HTML = @HTML +   
 			'<tr><td width="150" class="c1">' + CAST(CreateDate AS NVARCHAR) +'</td>' +  
 			'<td width="150" class="c2">' + COALESCE([DBName],'N/A') +'</td>' +
-			'<td width="150" class="c1">' + SQLEvent +'</td>' +
+			'<td width="150" class="c1">' + COALESCE(SQLEvent,'N/A') +'</td>' +
 			'<td width="350" class="c2">' + COALESCE(ObjectName,'N/A') +'</td>' +  
 			'<td width="175" class="c1">' + COALESCE(LoginName,'N/A') +'</td>' +  
 			'<td width="175" class="c2">' + COALESCE(ComputerName,'N/A') +'</td></tr>'
@@ -1869,7 +1867,10 @@ BEGIN
 	
 	/* STEP 3: SEND REPORT */
 	
-	IF @EmailFlag = 1
+	Set @Recepients = IsNull(@Recepients, '')
+	Set @CC = IsNull(@CC, '')
+	
+	IF @EmailFlag = 1 And (@Recepients <> '' OR @CC <> '')
 	BEGIN
 		EXEC msdb..sp_send_dbmail
 			@recipients=@Recepients,
@@ -1915,6 +1916,7 @@ BEGIN
 	DROP TABLE #TEMPDATES
 
 END
+
 
 
 GO
