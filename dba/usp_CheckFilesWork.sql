@@ -7,7 +7,8 @@ GO
 CREATE PROC dbo.usp_CheckFilesWork
 (
 	@CheckTempDB tinyint = 0,					-- Must be 0 or 1
-	@WarnGrowingLogFiles tinyint = 0
+	@WarnGrowingLogFiles tinyint = 0,
+	@MinimumFileSizeMB int = 200				-- Log files smaller than this threshold will be ignored
 )
 AS
 
@@ -58,6 +59,7 @@ BEGIN
 		)
 
 	-- Find log files that have grown
+	-- and are at least @MinimumFileSizeMB in size
 	INSERT INTO #TEMPLogFiles
 	SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
 	FROM #TEMP t
@@ -66,7 +68,7 @@ BEGIN
 		AND t.[Filename] = t2.[FileName] 
 		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-	WHERE t2.FileMBSize > 200
+	WHERE t2.FileMBSize > @MinimumFileSizeMB
 	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
 	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
@@ -162,8 +164,8 @@ BEGIN
 		FilePercentEmpty NUMERIC(12,2)		
 		)
 	
-	-- Find log files that are at least 200 MB in size
-	-- and are less than @QueryValue percent empty	
+	-- Find log files that are less than @QueryValue percent empty	
+	-- and are at least @MinimumFileSizeMB in size
 	INSERT INTO #TEMP3
 	SELECT t.[DBName],t.[Filename],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
 	FROM #TEMP t
@@ -173,7 +175,7 @@ BEGIN
 		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
 	WHERE t2.FilePercentEmpty < @QueryValue
-	      AND t2.FileMBSize > 200
+	      AND t2.FileMBSize > @MinimumFileSizeMB
 	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
 	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize

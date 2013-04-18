@@ -58,10 +58,10 @@ BEGIN
 	WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
 
 	/* LOG FILES */
-	exec usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0
+	exec usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0, @MinimumFileSizeMB=200
 
 	/* TEMP DB */
-	exec usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1
+	exec usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1, @MinimumFileSizeMB=100
 	
 	DROP TABLE #TEMP
 
