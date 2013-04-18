@@ -17,6 +17,7 @@ AS
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
 **	04/12/2013		Michael Rounds			1.2					Added SQL Server 2012 compatibility - column differences in sys.dm_os_sys_info
+**	04/17/2013		Michael Rounds			1.2.1				Fixed Buffer Hit Cache and Buffer Page Life showing 0 for SQL Server 2012
 ***************************************************************************************************************/
 
 BEGIN
@@ -57,24 +58,24 @@ SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
 
 IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
 BEGIN
--- (SQL 2008R2 And Below)
-EXEC sp_executesql
-	N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
-	SELECT physical_memory_in_bytes/1048576.0 as [SystemPhysicalMemoryMB],
-		 virtual_memory_in_bytes/1048576.0 as [SystemVirtualMemoryMB],
-		 (bpool_committed*8)/1024.0 as [BufferPoolCommitMB],
-		 (bpool_commit_target*8)/1024.0 as [BufferPoolCommitTgtMB]
-	FROM sys.dm_os_sys_info'	
+	-- (SQL 2008R2 And Below)
+	EXEC sp_executesql
+		N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
+		SELECT physical_memory_in_bytes/1048576.0 as [SystemPhysicalMemoryMB],
+			 virtual_memory_in_bytes/1048576.0 as [SystemVirtualMemoryMB],
+			 (bpool_committed*8)/1024.0 as [BufferPoolCommitMB],
+			 (bpool_commit_target*8)/1024.0 as [BufferPoolCommitTgtMB]
+		FROM sys.dm_os_sys_info'	
 END
 ELSE BEGIN
--- (SQL 2012 And Above)
-EXEC sp_executesql
-	N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
-	SELECT physical_memory_kb/1024.0 as [SystemPhysicalMemoryMB],
-		virtual_memory_kb/1024.0 as [SystemVirtualMemoryMB],
-		(committed_kb)/1024.0 as [BufferPoolCommitMB],
-		(committed_target_kb)/1024.0 as [BufferPoolCommitTgtMB]
-FROM sys.dm_os_sys_info'
+	-- (SQL 2012 And Above)
+	EXEC sp_executesql
+		N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
+		SELECT physical_memory_kb/1024.0 as [SystemPhysicalMemoryMB],
+			virtual_memory_kb/1024.0 as [SystemVirtualMemoryMB],
+			(committed_kb)/1024.0 as [BufferPoolCommitMB],
+			(committed_target_kb)/1024.0 as [BufferPoolCommitTgtMB]
+	FROM sys.dm_os_sys_info'
 END
 
 UPDATE #TEMP
@@ -153,16 +154,16 @@ FROM sys.dm_os_performance_counters  a
 JOIN  (SELECT cntr_value,OBJECT_NAME 
 		FROM sys.dm_os_performance_counters  
 		WHERE counter_name = 'Buffer cache hit ratio base'
-		AND OBJECT_NAME = 'SQLServer:Buffer Manager') b 
+		AND OBJECT_NAME = @Instancename+'Buffer Manager') b 
 ON  a.OBJECT_NAME = b.OBJECT_NAME
 WHERE a.counter_name = 'Buffer cache hit ratio'
-AND a.OBJECT_NAME = 'SQLServer:Buffer Manager'
+AND a.OBJECT_NAME = @Instancename+'Buffer Manager'
 
 UPDATE #TEMP
 SET [BufferPageLifeExpectancy] = cntr_value
 FROM sys.dm_os_performance_counters  
 WHERE counter_name = 'Page life expectancy'
-AND OBJECT_NAME = 'SQLServer:Buffer Manager'
+AND OBJECT_NAME = @Instancename+'Buffer Manager'
 
 SELECT SystemPhysicalMemoryMB, SystemVirtualMemoryMB, DBUsageMB, DBMemoryRequiredMB, BufferCacheHitRatio, BufferPageLifeExpectancy, BufferPoolCommitMB, BufferPoolCommitTgtMB, BufferPoolTotalPagesMB, BufferPoolDataPagesMB, BufferPoolFreePagesMB, BufferPoolReservedPagesMB, BufferPoolStolenPagesMB, BufferPoolPlanCachePagesMB, DynamicMemConnectionsMB, DynamicMemLocksMB, DynamicMemSQLCacheMB, DynamicMemQueryOptimizeMB, DynamicMemHashSortIndexMB, CursorUsageMB FROM #TEMP
 
@@ -176,5 +177,4 @@ END
 
 DROP TABLE #TEMP
 END
-
 GO

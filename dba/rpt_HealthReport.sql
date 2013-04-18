@@ -12,10 +12,10 @@ AS
 **	EXAMPLE USAGE:
 **
 **	SEND EMAIL WITHOUT RETAINING DATA
-**		EXEC dbo.rpt_HealthReport @Recepients = 'mrounds@quiktrak.com', @CC ='mrounds@quiktrak.com', @InsertFlag = 0, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 0, @IncludePerfStats = 1
 **	
 **	TO POPULATE THE TABLES
-**		EXEC dbo.rpt_HealthReport @Recepients = 'mrounds@quiktrak.com', @CC ='mrounds@quiktrak.com', @InsertFlag = 1, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 1, @IncludePerfStats = 1
 **
 **	PULL EMAIL ADDRESSES FROM ALERTSETTINGS TABLE:
 **		EXEC dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1, @IncludePerfStats = 1
@@ -45,6 +45,9 @@ AS
 **	04/13/2013		Matthew Monroe			2.3.2				Adjusted job status sort order
 **	04/15/2013		Michael Rounds			2.3.2				Expanded Cum_IO_GB, added COALESCE to columns in HTML output to avoid blank HTML blobs, CHANGED CASTs to BIGINT
 **	04/15/2013		Matthew Monroe			2.3.3				No longer flagging large .LDF files if less than 100 MB in size.  Updated #BACKUPS.filename to nvarchar(255).  No longer explicitly naming Primary Key constraints on temp tables
+**	04/16/2013		Michael Rounds			2.3.3				Expanded LogSize, TotalExtents and UsedExtents
+**	04/17/2013		Michael Rounds			2.3.4				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize, FileMBUsed and FileMBEmpty
+**																Hopefully fixed the "File Stats - Last 24 hours" section to show accurate data
 ***************************************************************************************************************/
     
 BEGIN
@@ -268,20 +271,20 @@ BEGIN
 		[LogicalFileName] NVARCHAR(255),
 		[VLFCount] INT,
 		DriveLetter NCHAR(1),
-		FileMBSize NVARCHAR(30),
+		FileMBSize INT,
 		[FileMaxSize] NVARCHAR(30),
 		FileGrowth NVARCHAR(30),
-		FileMBUsed NVARCHAR(30),
-		FileMBEmpty NVARCHAR(30),
+		FileMBUsed INT,
+		FileMBEmpty INT,
 		FilePercentEmpty NUMERIC(12,2),
 		LargeLDF INT,
 		[FileGroup] NVARCHAR(100),
-		NumberReads NVARCHAR(30),
+		NumberReads BIGINT,
 		KBytesRead NUMERIC(20,2),
-		NumberWrites NVARCHAR(30),
+		NumberWrites BIGINT,
 		KBytesWritten NUMERIC(20,2),
-		IoStallReadMS NVARCHAR(30),
-		IoStallWriteMS NVARCHAR(30),
+		IoStallReadMS BIGINT,
+		IoStallWriteMS BIGINT,
 		Cum_IO_GB NUMERIC(20,2),
 		IO_Percent NUMERIC(12,2)
 		)
@@ -394,7 +397,7 @@ BEGIN
 	/* FileStats */
 	CREATE TABLE #LOGSPACE (
 		[DBName] NVARCHAR(128) NOT NULL,
-		[LogSize] NUMERIC(12,2) NOT NULL,
+		[LogSize] NUMERIC(20,2) NOT NULL,
 		[LogPercentUsed] NUMERIC(12,2) NOT NULL,
 		[LogStatus] INT NOT NULL
 		)
@@ -403,8 +406,8 @@ BEGIN
 		[DBName] NVARCHAR(128) NULL,
 		[Fileid] INT NOT NULL,
 		[FileGroup] INT NOT NULL,
-		[TotalExtents] NUMERIC(12,2) NOT NULL,
-		[UsedExtents] NUMERIC(12,2) NOT NULL,
+		[TotalExtents] NUMERIC(20,2) NOT NULL,
+		[UsedExtents] NUMERIC(20,2) NOT NULL,
 		[FileLogicalName] NVARCHAR(128) NULL,
 		[Filename] NVARCHAR(255) NOT NULL
 		)
@@ -475,7 +478,7 @@ BEGIN
 				LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
 				SF.name AS LogicalFileName,
 				COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-				CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
+				(SF.size * 8)/1024 AS [FileMBSize], 
 				CASE SF.maxsize 
 					WHEN -1 THEN N''Unlimited'' 
 					ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
@@ -529,7 +532,7 @@ BEGIN
 	-- Look for databases where the log file is larger than the primary database file and the log file is larger than 100 MB
 	UPDATE b
 	SET b.LargeLDF = 
-		CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) AND b.FileMBSize > 100 THEN 1
+		CASE WHEN b.FileMBSize > a.FileMBSize AND b.FileMBSize > 100 THEN 1
 		ELSE 2 
 		END
 	FROM #FILESTATS a
@@ -597,37 +600,40 @@ BEGIN
 	FROM #FILESTATS a
 	WHERE COALESCE(a.[FileGroup],'') = ''
 	
-	SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp <= DateAdd(hh, -24, GETDATE())
+	SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp >= DateAdd(hh, -24, GETDATE())
 	
-	UPDATE c
-	SET c.NumberReads = d.NumberReads,
-		c.KBytesRead = d.KBytesRead,
-		c.NumberWrites = d.NumberWrites,
-		c.KBytesWritten = d.KBytesWritten,
-		c.IoStallReadMS = d.IoStallReadMS,
-		c.IoStallWriteMS = d.IoStallWriteMS,
-		c.Cum_IO_GB = d.Cum_IO_GB
-	FROM #FILESTATS c
-	LEFT OUTER
-	JOIN (SELECT
-			b.dbname,
-			b.[FileName],
-			SUM(CAST(b.NumberReads AS BIGINT) - CAST(a.NumberReads AS BIGINT)) AS NumberReads,
-			SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
-			SUM(CAST(b.NumberWrites AS BIGINT) - CAST(a.NumberWrites AS BIGINT)) AS NumberWrites,
-			SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
-			SUM(CAST(b.IoStallReadMS AS BIGINT) - CAST(a.IoStallReadMS AS BIGINT)) AS IoStallReadMS,
-			SUM(CAST(b.IoStallWriteMS AS BIGINT) - CAST(a.IoStallWriteMS AS BIGINT)) AS IoStallWriteMS,
-			SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
-			FROM [dba].dbo.FileStatsHistory a
-			LEFT OUTER
-			JOIN #FILESTATS b
-				ON a.dbname = b.dbname 
-				AND a.[FileName] = b.[FileName]
-			WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
-			GROUP BY b.DBName,b.[FileName]) d
-		ON c.dbname = d.dbname 
-		AND c.[FileName] = d.[FileName]
+	IF @MinFileStatsDateStamp IS NOT NULL
+	BEGIN
+		UPDATE c
+		SET c.NumberReads = d.NumberReads,
+			c.KBytesRead = d.KBytesRead,
+			c.NumberWrites = d.NumberWrites,
+			c.KBytesWritten = d.KBytesWritten,
+			c.IoStallReadMS = d.IoStallReadMS,
+			c.IoStallWriteMS = d.IoStallWriteMS,
+			c.Cum_IO_GB = d.Cum_IO_GB
+		FROM #FILESTATS c
+		LEFT OUTER
+		JOIN (SELECT
+				b.dbname,
+				b.[FileName],
+				SUM(b.NumberReads - a.NumberReads) AS NumberReads,
+				SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
+				SUM(b.NumberWrites - a.NumberWrites) AS NumberWrites,
+				SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
+				SUM(b.IoStallReadMS - a.IoStallReadMS) AS IoStallReadMS,
+				SUM(b.IoStallWriteMS - a.IoStallWriteMS) AS IoStallWriteMS,
+				SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
+			FROM #FILESTATS b
+				LEFT OUTER
+			JOIN [dba].dbo.FileStatsHistory a
+					ON a.dbname = b.dbname 
+					AND a.[FileName] = b.[FileName]
+				WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
+				GROUP BY b.DBName,b.[FileName]) d
+			ON c.dbname = d.dbname 
+			AND c.[FileName] = d.[FileName]
+	END
 	
 	/* JobStats */
 	SELECT sj.job_id, 
@@ -1193,12 +1199,12 @@ BEGIN
 			END +
 		'<td width="75" class="c2">' + CAST(COALESCE(VLFCount,'') AS NVARCHAR) +'</td>' +
 		CASE
-			WHEN (LargeLDF = 1 AND [FileName] LIKE '%ldf') THEN '<td width="75" bgColor="#FFFF00">' + FileMBSize +'</td>'
-			ELSE '<td width="75" class="c1">' + FileMBSize +'</td>'
+			WHEN (LargeLDF = 1 AND [FileName] LIKE '%ldf') THEN '<td width="75" bgColor="#FFFF00">' + CAST(FileMBSize AS NVARCHAR) +'</td>'
+			ELSE '<td width="75" class="c1">' + CAST(FileMBSize AS NVARCHAR) +'</td>'
 			END +
 		'<td width="75" class="c2">' + FileGrowth +'</td>' +
-		'<td width="75" class="c1">' + FileMBUsed +'</td>' +
-		'<td width="75" class="c2">' + FileMBEmpty +'</td>' +
+		'<td width="75" class="c1">' + CAST(FileMBUsed AS NVARCHAR) +'</td>' +
+		'<td width="75" class="c2">' + CAST(FileMBEmpty AS NVARCHAR) +'</td>' +
 		'<td width="75" class="c1">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>' + '</tr>'
 	FROM #FILESTATS
 	
@@ -1220,16 +1226,16 @@ BEGIN
 		 </tr>'
 	SELECT @HTML = @HTML +
 		'<tr><td width="200" class="c1">' + COALESCE([FileName],'N/A') +'</td>' +
-		'<td width="75" class="c2">' + COALESCE(NumberReads,'0') +'</td>' +
+		'<td width="75" class="c2">' + CAST(COALESCE(NumberReads,'0') AS NVARCHAR) +'</td>' +
 		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesRead),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesRead / 1024 AS NUMERIC(18,2))),'') +
 			  ' MB)' +'</td>' +
-		'<td width="75" class="c2">' + COALESCE(NumberWrites,'0') +'</td>' +
+		'<td width="75" class="c2">' + CAST(COALESCE(NumberWrites,'0') AS NVARCHAR) +'</td>' +
 		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesWritten),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesWritten / 1024 AS NUMERIC(18,2)) ),'') +
 			  ' MB)' +'</td>' +
-		'<td width="125" class="c2">' + COALESCE(IoStallReadMS,'0') +'</td>' +
-		'<td width="125" class="c1">' + COALESCE(IoStallWriteMS,'0') + '</td>' +
-		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS VARCHAR) + '</td>' +
-		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS VARCHAR) + '</td>' + '</tr>'	
+		'<td width="125" class="c2">' + CAST(COALESCE(IoStallReadMS,'0') AS NVARCHAR) +'</td>' +
+		'<td width="125" class="c1">' + CAST(COALESCE(IoStallWriteMS,'0') AS NVARCHAR) + '</td>' +
+		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS NVARCHAR) + '</td>' +
+		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS NVARCHAR) + '</td>' + '</tr>'	
 	FROM #FILESTATS
 	
 	SELECT @HTML = @HTML + '</table></div>'
@@ -1916,7 +1922,6 @@ BEGIN
 	DROP TABLE #TEMPDATES
 
 END
-
 
 
 GO

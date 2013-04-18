@@ -1,15 +1,19 @@
 /*******************************************************************************************************************************************************
-**  Purpose: This script creates a dba database and all objects necessary to setup a database monitoring solution that notifies via email/texting. 
+**  Purpose: This script creates a dbWarden database and all objects necessary to setup a database monitoring and alerting solution that notifies via email/texting. 
 **			Historical data is kept for future trending/reporting.
 **
-**  Requirements: SQL Server 2005 and above. This script assumes you already have DBMail setup. It will create two new Operators which are used to populate the AlertSettings table.
+**  Requirements: SQL Server 2005, 2008 and 2012. This script assumes you already have DBMail setup (with a Global Public profile available.)
+				It will create two new Operators which are used to populate the AlertSettings table.
 **				These INSERTS will need to be modified if you are planning on using existing Operators already on your system.
 **
 **		*****MUST CHANGE*****
 **
-**		The TABLE INSERTS FOR DATABASESETTINGS MUST BE EDITED PRIOR TO RUNNING THIS SCRIPT (List of Databases)!!!
-**		The TABLE INSERTS FOR DBMail OPERATORS MUST BE EDITED PRIOR TO RUNNING THIS SCRIPT (Email Addresses)!!!
-**			**** SEARCH/REPLACE "CHANGEME" ****
+**		1. The DATABASESETTINGS table will be populated by DEFAULT with everything OFF. You MUST change the UPDATE STATEMENT to ENABLE the databases you wish to be included in the alerts.
+**		2. The SQL that creates the OPERATORS MUST BE EDITED PRIOR TO RUNNING THIS SCRIPT. You will need to supply valid email addresses and/or cell text addresses in order to receive alerts
+**			and the Health Report
+**		3  SEARCH/REPLACE "CHANGEME"
+**
+**		*****If you want to change the default database name from "dbWarden", you'll need to FIND/REPLACE "dbWarden" with the new name
 **
 **  
 **  Revision History  
@@ -42,6 +46,14 @@
 **	04/14/2013		Michael Rounds			2.3.3				Expanded Cum_IO_GB in FileStatsHistory, usp_FileStats and rpt_HealthReport to NUMERIC(20,2) FROM NUMERIC(12,2)																
 **																REMOVED gen_GetHealthReport stored procs for now. BCP has different behaviour in 2012 that needs tweaking															
 **																Fixed update in rpt_HealthReport, CASTing as INT by mistake
+**	04/16/2013		Michael Rounds			2.3.4				Renamed created database from dba to dbWarden
+**																Changed defaults of DatabaseSettings table to OFF for everything. REPLACE CHANGEME in Update to DatabaseSettings to enable
+**																	databases you wish to track (this also fixes issues when trying to track a database that is OFFLINE
+**	04/17/2013		Michael Rounds			2.3.5				Updated Instructions at the top
+**																usp_MemoryUsageStats - Fixed Buffer Hit Cache and Buffer Page Life showing 0 for SQL Server 2012
+**																dbo.FileStatsHistory table, usp_FileStats and rpt_HealthReport procs- Changed NVARCHAR(30) to BIGINT for Read/Write columns, FileMBSize, FileMBUsed, FileMBEmpty in #FILESTATS
+**																rpt_HealthReport - hopefully fixed the "File Stats - Last 24 hours" section to show accurate data
+**																usp_CheckFiles - Added database names "[model]" and "[tempdb]"
 ********************************************************************************************************************************************************
 **
 **		:::::CONTENTS:::::
@@ -70,50 +82,47 @@
 **
 **				==Job Category:
 **					Database Monitoring
-**
-**				====DATABASE(S) TO MONITOR:
-**				==Tables:
-**				dbo.SchemaChangeLog
 **				
 **				==Triggers:
+**				dbo.ti_blockinghistory
 **				dbo.tr_DDL_SchemaChangeLog
 **
 **				====DBA DB:
 **				==Tabes:
 **				dbo.AlertSettings
-**				dbo.DatabaseSettings
 **				dbo.BlockingHistory
-**				dbo.HealthReport
-**				dbo.JobStatsHistory
+**				dbo.CPUStatsHistory
+**				dbo.DatabaseSettings
 **				dbo.FileStatsHistory
+**				dbo.HealthReport - Originally based on a script by Ritesh Medhe - http://www.sqlservercentral.com/articles/Automating+SQL+Server+Health+Checks/68910/
+**				dbo.JobStatsHistory
 **				dbo.MemoryUsageHistory
 **				dbo.PerfStatsHistory
 **				dbo.QueryHistory
-**				dbo.CPUStatsHistory
+**				dbo.SchemaChangeLog
+**
+**				By David Pool - http://www.sqlservercentral.com/articles/Documentation/72473/
 **				dbo.DataDictionary_Fields
 **				dbo.DataDictionary_Tables
 **
-**				==Triggers:
-**				ti_blockinghistory
-**
 **				==Procs:
-**				dbo.usp_CheckBlocking
-**				dbo.usp_CheckFiles
-**				dbo.usp_FileStats (@InsertFlag BIT = 0)
-**				dbo.usp_JobStats (@InsertFlag BIT = 0)
-**				dbo.usp_LongRunningJobs
-**				dbo.usp_LongRunningQueries
-**				dbo.usp_MemoryUsageStats (@InsertFlag BIT = 0)
-**				dbo.usp_PerfStats (@InsertFlag BIT = 0) == Autor: Unknown
-**				dbo.usp_CPUStats
-**				dbo.usp_CPUProcessAlert
 **				dbo.rpt_Blocking (@DateRangeInDays INT)
-**				dbo.rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0)
+**				dbo.rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT Default = 0)
 **				dbo.rpt_JobHistory (@JobName NVARCHAR(50), @DateRangeInDays INT)
 **				dbo.rpt_Queries (@DateRangeInDays INT)
-**				dbo.gen_GetHealthReportHTML (@DateStamp NVARCHAR(20))
-**				dbo.gen_GetHealthReportToEmail (@DateStamp NVARCHAR(20))
-**				dbo.gen_GetHealthReportToFile (@DateStamp NVARCHAR(20))
+**				dbo.usp_CheckBlocking
+**				dbo.usp_CheckFiles
+**				dbo.usp_CPUProcessAlert
+**				dbo.usp_CPUStats
+**				dbo.usp_FileStats (@InsertFlag BIT Default = 0)
+**				dbo.usp_JobStats (@InsertFlag BIT Default = 0)
+**				dbo.usp_LongRunningJobs
+**				dbo.usp_LongRunningQueries
+**				dbo.usp_MemoryUsageStats (@InsertFlag BIT Default = 0)
+**				dbo.usp_PerfStats (@InsertFlag BIT Default = 0) == Autor: Unknown
+**				dbo.usp_TodaysDeadlocks
+**				
+**				By David Pool - http://www.sqlservercentral.com/articles/Documentation/72473/
 **				dbo.dd_ApplyDataDictionary
 **				dbo.dd_PopulateDataDictionary
 **				dbo.dd_ScavengeDataDictionaryFields
@@ -123,7 +132,6 @@
 **				dbo.dd_UpdateDataDictionaryField
 **				dbo.dd_UpdateDataDictionaryTable
 **				dbo.sp_ViewTableExtendedProperties
-**				dbo.usp_TodaysDeadlocks
 **
 **				==Jobs: (ALL JOBS DISABLED BY DEFAULT)
 **				dba_BlockingAlert (DEFAULT Schedule: Runs every 15 seconds)
@@ -479,23 +487,77 @@ CREATE TABLE dbo.FileStatsHistory (
 	[LogicalFileName] NVARCHAR(255),
 	[VLFCount] INT,
 	DriveLetter NCHAR(1),
-	FileMBSize NVARCHAR(30),
-	[FileMaxSize] NVARCHAR(30),
+	FileMBSize INT,
+	FileMaxSize NVARCHAR(30),
 	FileGrowth NVARCHAR(30),
-	FileMBUsed NVARCHAR(30),
-	FileMBEmpty NVARCHAR(30),
+	FileMBUsed INT,
+	FileMBEmpty INT,
 	FilePercentEmpty NUMERIC(12,2),
 	LargeLDF INT,
 	[FileGroup] NVARCHAR(100),
-	NumberReads NVARCHAR(30),
+	NumberReads BIGINT,
 	KBytesRead NUMERIC(20,2),
-	NumberWrites NVARCHAR(30),
+	NumberWrites BIGINT,
 	KBytesWritten NUMERIC(20,2),
-	IoStallReadMS NVARCHAR(30),
-	IoStallWriteMS NVARCHAR(30),
+	IoStallReadMS BIGINT,
+	IoStallWriteMS BIGINT,
 	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
+END
+GO
+
+
+--This was added on 4/17/2013
+USE [dba]
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'FileMBSize' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN FileMBSize INT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'FileMBUsed' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN FileMBUsed INT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'FileMBEmpty' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN FileMBEmpty INT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'NumberReads' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN NumberReads BIGINT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'NumberWrites' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN NumberWrites BIGINT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'IoStallReadMS' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN IoStallReadMS BIGINT
+END
+GO
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'IoStallWriteMS' AND DATA_TYPE='nvarchar')
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN IoStallWriteMS BIGINT
 END
 GO
 
@@ -1109,6 +1171,7 @@ AS
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
 **	04/12/2013		Michael Rounds			1.2					Added SQL Server 2012 compatibility - column differences in sys.dm_os_sys_info
+**	04/17/2013		Michael Rounds			1.2.1				Fixed Buffer Hit Cache and Buffer Page Life showing 0 for SQL Server 2012
 ***************************************************************************************************************/
 
 BEGIN
@@ -1149,24 +1212,24 @@ SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
 
 IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
 BEGIN
--- (SQL 2008R2 And Below)
-EXEC sp_executesql
-	N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
-	SELECT physical_memory_in_bytes/1048576.0 as [SystemPhysicalMemoryMB],
-		 virtual_memory_in_bytes/1048576.0 as [SystemVirtualMemoryMB],
-		 (bpool_committed*8)/1024.0 as [BufferPoolCommitMB],
-		 (bpool_commit_target*8)/1024.0 as [BufferPoolCommitTgtMB]
-	FROM sys.dm_os_sys_info'	
+	-- (SQL 2008R2 And Below)
+	EXEC sp_executesql
+		N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
+		SELECT physical_memory_in_bytes/1048576.0 as [SystemPhysicalMemoryMB],
+			 virtual_memory_in_bytes/1048576.0 as [SystemVirtualMemoryMB],
+			 (bpool_committed*8)/1024.0 as [BufferPoolCommitMB],
+			 (bpool_commit_target*8)/1024.0 as [BufferPoolCommitTgtMB]
+		FROM sys.dm_os_sys_info'	
 END
 ELSE BEGIN
--- (SQL 2012 And Above)
-EXEC sp_executesql
-	N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
-	SELECT physical_memory_kb/1024.0 as [SystemPhysicalMemoryMB],
-		virtual_memory_kb/1024.0 as [SystemVirtualMemoryMB],
-		(committed_kb)/1024.0 as [BufferPoolCommitMB],
-		(committed_target_kb)/1024.0 as [BufferPoolCommitTgtMB]
-FROM sys.dm_os_sys_info'
+	-- (SQL 2012 And Above)
+	EXEC sp_executesql
+		N'INSERT INTO #TEMP (SystemPhysicalMemoryMB, SystemVirtualMemoryMB, BufferPoolCommitMB, BufferPoolCommitTgtMB)
+		SELECT physical_memory_kb/1024.0 as [SystemPhysicalMemoryMB],
+			virtual_memory_kb/1024.0 as [SystemVirtualMemoryMB],
+			(committed_kb)/1024.0 as [BufferPoolCommitMB],
+			(committed_target_kb)/1024.0 as [BufferPoolCommitTgtMB]
+	FROM sys.dm_os_sys_info'
 END
 
 UPDATE #TEMP
@@ -1245,16 +1308,16 @@ FROM sys.dm_os_performance_counters  a
 JOIN  (SELECT cntr_value,OBJECT_NAME 
 		FROM sys.dm_os_performance_counters  
 		WHERE counter_name = 'Buffer cache hit ratio base'
-		AND OBJECT_NAME = 'SQLServer:Buffer Manager') b 
+		AND OBJECT_NAME = @Instancename+'Buffer Manager') b 
 ON  a.OBJECT_NAME = b.OBJECT_NAME
 WHERE a.counter_name = 'Buffer cache hit ratio'
-AND a.OBJECT_NAME = 'SQLServer:Buffer Manager'
+AND a.OBJECT_NAME = @Instancename+'Buffer Manager'
 
 UPDATE #TEMP
 SET [BufferPageLifeExpectancy] = cntr_value
 FROM sys.dm_os_performance_counters  
 WHERE counter_name = 'Page life expectancy'
-AND OBJECT_NAME = 'SQLServer:Buffer Manager'
+AND OBJECT_NAME = @Instancename+'Buffer Manager'
 
 SELECT SystemPhysicalMemoryMB, SystemVirtualMemoryMB, DBUsageMB, DBMemoryRequiredMB, BufferCacheHitRatio, BufferPageLifeExpectancy, BufferPoolCommitMB, BufferPoolCommitTgtMB, BufferPoolTotalPagesMB, BufferPoolDataPagesMB, BufferPoolFreePagesMB, BufferPoolReservedPagesMB, BufferPoolStolenPagesMB, BufferPoolPlanCachePagesMB, DynamicMemConnectionsMB, DynamicMemLocksMB, DynamicMemSQLCacheMB, DynamicMemQueryOptimizeMB, DynamicMemHashSortIndexMB, CursorUsageMB FROM #TEMP
 
@@ -1916,6 +1979,8 @@ AS
 **	04/07/2013		Michael Rounds			2.1.4				Extended the lengths of KBytesRead and KBytesWritte in temp table FILESTATS - NUMERIC(12,2) to (20,2)
 **	04/12/2013		Michael Rounds			2.1.5				Added SQL Server 2012 compatibility
 **	04/15/2013		Michael Rounds			2.1.6				Expanded Cum_IO_GB
+**	04/16/2013		Michael Rounds			2.1.7				Expanded LogSize, TotalExtents and UsedExtents
+**	04/17/2013		Michael Rounds			2.1.8				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize,FileMBUsed,FileMBEmpty
 ***************************************************************************************************************/
 
 BEGIN
@@ -1928,27 +1993,27 @@ CREATE TABLE #FILESTATS (
 	[LogicalFileName] NVARCHAR(255),
 	[VLFCount] INT,
 	DriveLetter NCHAR(1),
-	FileMBSize NVARCHAR(30),
+	FileMBSize INT,
 	[FileMaxSize] NVARCHAR(30),
 	FileGrowth NVARCHAR(30),
-	FileMBUsed NVARCHAR(30),
-	FileMBEmpty NVARCHAR(30),
+	FileMBUsed INT,
+	FileMBEmpty INT,
 	FilePercentEmpty NUMERIC(12,2),
 	LargeLDF INT,
 	[FileGroup] NVARCHAR(100),
-	NumberReads NVARCHAR(30),
+	NumberReads BIGINT,
 	KBytesRead NUMERIC(20,2),
-	NumberWrites NVARCHAR(30),
+	NumberWrites BIGINT,
 	KBytesWritten NUMERIC(20,2),
-	IoStallReadMS NVARCHAR(30),
-	IoStallWriteMS NVARCHAR(30),
+	IoStallReadMS BIGINT,
+	IoStallWriteMS BIGINT,
 	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
 
 CREATE TABLE #LOGSPACE (
 	[DBName] NVARCHAR(128) NOT NULL,
-	[LogSize] NUMERIC(12,2) NOT NULL,
+	[LogSize] NUMERIC(20,2) NOT NULL,
 	[LogPercentUsed] NUMERIC(12,2) NOT NULL,
 	[LogStatus] INT NOT NULL
 	)
@@ -1957,8 +2022,8 @@ CREATE TABLE #DATASPACE (
 	[DBName] NVARCHAR(128) NULL,
 	[Fileid] INT NOT NULL,
 	[FileGroup] INT NOT NULL,
-	[TotalExtents] NUMERIC(12,2) NOT NULL,
-	[UsedExtents] NUMERIC(12,2) NOT NULL,
+	[TotalExtents] NUMERIC(20,2) NOT NULL,
+	[UsedExtents] NUMERIC(20,2) NOT NULL,
 	[FileLogicalName] NVARCHAR(128) NULL,
 	[Filename] NVARCHAR(255) NOT NULL
 	)
@@ -2033,7 +2098,7 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 		LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
 		SF.name AS LogicalFileName,
 		COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-		CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
+		(SF.size * 8)/1024 AS [FileMBSize], 
 		CASE SF.maxsize 
 			WHEN -1 THEN N''Unlimited'' 
 			ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
@@ -2041,8 +2106,8 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((growth * 8192)/(1024.0*1024.0))) + '' MB''
 			ELSE CONVERT (NVARCHAR, growth) + '' %'' 
 			END) AS FileGrowth,
-		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
-		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
+		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBUsed],
+		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBEmpty],
 		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
 			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
 FROM sys.sysfiles SF
@@ -2086,7 +2151,7 @@ ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
 
 UPDATE b
 SET b.LargeLDF = 
-	CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) THEN 1
+	CASE WHEN b.FileMBSize > a.FileMBSize THEN 1
 	ELSE 2 
 	END
 FROM #FILESTATS a
@@ -2203,6 +2268,7 @@ AS
 **  06/10/2012		Michael Rounds			1.1					Updated to use new FileStatsHistory table
 **	08/31/2012		Michael Rounds			1.2					Changed VARCHAR to NVARCHAR
 **	04/15/2013		Matthew Monroe			1.2.1				Now ignoring log files less than 200 MB in size.  Now also looking for '[tempdb]' and '[model]' in addition to 'tempdb' and 'model'.  Fixed bug that was performing a text compare of #TEMP.FileMBSize
+**	04/17/2013		Matthew Monroe			1.3					Factored out duplicate code into usp_CheckFilesWork
 ***************************************************************************************************************/
 
 BEGIN
@@ -2220,63 +2286,82 @@ BEGIN
 
 	SET @FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
 
-	CREATE TABLE #TEMP (
-		[FileStatsHistoryID] [int] NOT NULL,
-		[FileStatsID] [int] NOT NULL,
-		[FileStatsDateStamp] [datetime] NOT NULL,
-		[DBName] [nvarchar](128) NULL,
-		[FileName] [nvarchar](255) NULL,
-		[DriveLetter] [nchar](1) NULL,
-		[FileMBSize] BIGINT NULL,
-		[FileGrowth] [nvarchar](30) NULL,
-		[FileMBUsed] BIGINT NULL,
-		[FileMBEmpty] BIGINT NULL,
-		[FilePercentEmpty] [numeric](12, 2) NULL	
-	)
-
-
 	/*Populate Main TEMP table*/
-	INSERT INTO #TEMP (FileStatsHistoryID, FileStatsID, FileStatsDateStamp, DBName, FileName, DriveLetter, FileMBSize, FileGrowth, FileMBUsed, FileMBEmpty, FilePercentEmpty)
-	SELECT  FileStatsHistoryID, FileStatsID, FileStatsDateStamp, [DBName], [FileName], DriveLetter, CAST(FileMBSize as BIGINT), FileGrowth, CAST(FileMBUsed AS BIGINT), CAST(FileMBEmpty AS BIGINT), FilePercentEmpty
+	SELECT FileStatsHistoryID, FileStatsID, FileStatsDateStamp, [DBName], [FileName], DriveLetter, FileMBSize, FileGrowth, FileMBUsed, FileMBEmpty, FilePercentEmpty
+	INTO #TEMP
 	FROM [dba].dbo.FileStatsHistory
 	WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
 
 	/* LOG FILES */
+	exec usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0, @MinimumFileSizeMB=200
 
-	/*Grab AlertSettings for LogFiles*/
+	/* TEMP DB */
+	exec usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1, @MinimumFileSizeMB=100
+	
+	DROP TABLE #TEMP
+
+END
+GO
+
+USE [dba]
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'usp_CheckFilesWork' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.usp_CheckFilesWork AS SELECT 1')
+END
+GO
+
+ALTER PROC [dbo].[usp_CheckFilesWork]
+(
+	@CheckTempDB tinyint = 0,					-- Must be 0 or 1
+	@WarnGrowingLogFiles tinyint = 0,
+	@MinimumFileSizeMB int = 200				-- Log files smaller than this threshold will be ignored
+)
+AS
+
+/**************************************************************************************************************
+**  Purpose: 
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**	04/17/2013		Matthew Monroe			1.0					Re-factored code out of usp_CheckFiles
+***************************************************************************************************************/
+
+BEGIN
+
+	SET NOCOUNT ON
+
+	DECLARE @QueryValue INT, @QueryValue2 INT, @HTML NVARCHAR(MAX), @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(128), @EmailSubject NVARCHAR(100)
+	
+	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
+
+	DECLARE @ReportTitle NVARCHAR(128)
+	
+	Set @CheckTempDB = IsNull(@CheckTempDB, 0)
+	If @CheckTempDB <> 0
+		Set @CheckTempDB = 1
+		
+	Set @WarnGrowingLogFiles = IsNull(@WarnGrowingLogFiles, 0)
+
+
+	/*Grab AlertSettings for the specified DB category*/
 	SELECT @QueryValue = QueryValue,
 			@QueryValue2 = QueryValue2,
 			@EmailList = EmailList,
 			@CellList = CellList
-	FROM [dba].dbo.AlertSettings WHERE Name = 'LogFiles'
+	FROM [dba].dbo.AlertSettings 
+	WHERE @CheckTempDB = 0 And Name = 'LogFiles' OR
+	      @CheckTempDB = 1 And Name = 'TempDB'
 
-	CREATE TABLE #TEMP2 (
-		[DBName] NVARCHAR(128),
-		FileMBSize BIGINT,
-		FileMBUsed BIGINT,
-		FileMBEmpty BIGINT,
-		FilePercentEmpty NUMERIC(12,2)
-		)
-
-	-- Find log files that are at least 200 MB in size
-	-- and are less than @QueryValue percent empty
-	INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
-	SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-	FROM #TEMP t
-	JOIN #TEMP t2
-		ON t.[DBName] = t2.[DBName] 
-		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-	WHERE t2.FilePercentEmpty < @QueryValue
-	      AND t2.FileMBSize > 200
-	      AND t2.[Filename] like '%ldf'
-	      AND t.FileMBSize <> t2.FileMBSize
-	      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
-
-	/*Populate TEMPLogFiles table used for Already Grown LOG files*/
-
+	/*Populate TEMPLogFiles table with Already Grown Log Files or Already Grown TEMPDB files*/
 	CREATE TABLE #TEMPLogFiles (
 		[DBName] NVARCHAR(128),
 		[Filename] NVARCHAR(255),
@@ -2286,7 +2371,9 @@ BEGIN
 		CurrPercentEmpty NUMERIC(12,2)	
 		)
 
-	INSERT INTO #TEMPLogFiles ([DBName],[Filename],PreviousFileSize,PrevPercentEmpty,CurrentFileSize,CurrPercentEmpty)
+	-- Find log files that have grown
+	-- and are at least @MinimumFileSizeMB in size
+	INSERT INTO #TEMPLogFiles
 	SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
 	FROM #TEMP t
 	JOIN #TEMP t2
@@ -2294,98 +2381,24 @@ BEGIN
 		AND t.[Filename] = t2.[FileName] 
 		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-	WHERE t2.[Filename] like '%ldf'
+	WHERE t2.FileMBSize > @MinimumFileSizeMB
+	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
+	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
-	      AND t2.FileMBSize > 200
-	      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
-
-	/*Start of Growing Log files*/
-	IF EXISTS (SELECT * FROM #TEMP2)
-	BEGIN
-		SET	@HTML =
-			'<html><head><style type="text/css">
-			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-			</style></head><body>
-			<table width="725"> <tr><th class="header" width="725">Growing Log Files</th></tr></table>
-			<table width="725" >
-			<tr>  
-			<th width="250">Database</th>
-			<th width="250">FileMBSize</th>
-			<th width="250">FileMBUsed</th> 
-			<th width="250">FileMBEmpty</th>
-			<th width="250">FilePercentEmpty</th>
-			</tr>'
-		SELECT @HTML =  @HTML +   
-			'<tr>
-			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBSize AS NVARCHAR) + '</td>	
-			<td bgcolor="#E0E0E0" width="250">' + CAST(FileMBUsed AS NVARCHAR) + '</td>	
-			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBEmpty AS NVARCHAR) + '</td>	
-			<td bgcolor="#E0E0E0" width="250">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>			
-			</tr>'
-		FROM #TEMP2
-
-		SELECT @HTML =  @HTML + '</table></body></html>'
-
-		SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
-
-		EXEC msdb.dbo.sp_send_dbmail
-		@recipients= @EmailList,
-		@subject = @EmailSubject,
-		@body = @HTML,
-		@body_format = 'HTML'
-
-		IF @CellList IS NOT NULL
-		BEGIN
-
-			IF @QueryValue2 IS NOT NULL
-			BEGIN
-			TRUNCATE TABLE #TEMP2
-				INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
-				SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-				FROM #TEMP t
-				JOIN #TEMP t2
-					ON t.[DBName] = t2.[DBName] 
-					AND t.[Filename] = t2.[FileName] 
-					AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-					AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-				WHERE t2.FilePercentEmpty < @QueryValue2
-				      AND t2.FileMBSize > 200
-				      AND t2.[Filename] like '%ldf'
-				      AND t.FileMBSize <> t2.FileMBSize
-				      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-				      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
-			END
-
-			/*TEXT MESSAGE*/
-			IF EXISTS (SELECT * FROM #TEMP2)
-			BEGIN
-				SET	@HTML =
-					'<html><head></head><body><table><tr><td>Database,</td><td>FileSize,</td><td>Percent</td></tr>'
-				SELECT @HTML =  @HTML +   
-					'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
-				FROM #TEMP2
-				SELECT @HTML =  @HTML + '</table></body></html>'
-
-				SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
-
-				EXEC msdb.dbo.sp_send_dbmail
-				@recipients= @CellList,
-				@subject = @EmailSubject,
-				@body = @HTML,
-				@body_format = 'HTML'
-
-			END
-		END
-	END
-	/*Stop of Growing Log files*/
-	/*Start of Already Grown Log files*/
+	      AND ( @CheckTempDB = 0 And t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	                             And t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	            OR
+	            @CheckTempDB = 1 And t2.[DBName] IN ('tempdb', '[tempdb]')
+	           )
+	
+	/*Start of Files Already Grown*/
 	IF EXISTS (SELECT * FROM #TEMPLogFiles)
 	BEGIN
+		If @CheckTempDB = 0		
+			Set @ReportTitle = 'Recent Log File Auto-Growth'
+		Else
+			Set @ReportTitle = 'Recent TempDB Auto-Growth'
+
 		SET	@HTML =
 			'<html><head><style type="text/css">
 			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
@@ -2393,7 +2406,7 @@ BEGIN
 			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
 			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
 			</style></head><body>
-			<table width="725"> <tr><th class="header" width="725">Recent Log File Auto-Growth</th></tr></table>
+			<table width="725"> <tr><th class="header" width="725">' + @ReportTitle + '</th></tr></table>
 			<table width="725" >
 			<tr>  
 			<th width="250">Database</th>
@@ -2414,15 +2427,21 @@ BEGIN
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
-		SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
+		If @CheckTempDB = 0		
+			SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
+		Else
+			SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
 
-		EXEC msdb.dbo.sp_send_dbmail
-		@recipients= @EmailList,
-		@subject = @EmailSubject,
-		@body = @HTML,
-		@body_format = 'HTML'
-
-		IF @CellList IS NOT NULL
+		IF ISNULL(@EmailList, '') <> ''
+		BEGIN
+			EXEC msdb.dbo.sp_send_dbmail
+			@recipients= @EmailList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
+		END
+		
+		IF ISNULL(@CellList, '') <> ''
 		BEGIN
 			/*TEXT MESSAGE*/
 			SET	@HTML =
@@ -2432,7 +2451,10 @@ BEGIN
 			FROM #TEMPLogFiles
 			SELECT @HTML =  @HTML + '</table></body></html>'
 
-			SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
+			If @CheckTempDB = 0		
+				SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
+			Else
+				SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
 
 			EXEC msdb.dbo.sp_send_dbmail
 			@recipients= @CellList,
@@ -2440,29 +2462,25 @@ BEGIN
 			@body = @HTML,
 			@body_format = 'HTML'
 
+		END
 	END
-	END
-	/*Stop of Already Grown Log files*/
-
-	/* TEMP DB */
-
-	/*Grab AlertSettings for TEMPDB*/
-	SELECT @QueryValue = QueryValue,
-			@QueryValue2 = QueryValue2,
-			@EmailList = EmailList,
-			@CellList = CellList
-FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
-
+	/*Stop of Files Already Grown*/	
+	
+	
+	/* Populate TEMP3 table with log files that are likely to grow (since the amount of free space is below a threshold) */
 	CREATE TABLE #TEMP3 (
 		[DBName] NVARCHAR(128),
-		FileMBSize BIGINT,
-		FileMBUsed BIGINT,
-		FileMBEmpty BIGINT,
-		FilePercentEmpty NUMERIC(12,2)
+		[FileName] [nvarchar](255),
+		FileMBSize INT,
+		FileMBUsed INT,
+		FileMBEmpty INT,
+		FilePercentEmpty NUMERIC(12,2)		
 		)
-
+	
+	-- Find log files that are less than @QueryValue percent empty	
+	-- and are at least @MinimumFileSizeMB in size
 	INSERT INTO #TEMP3
-	SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+	SELECT t.[DBName],t.[Filename],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
 	FROM #TEMP t
 	JOIN #TEMP t2
 		ON t.[DBName] = t2.[DBName] 
@@ -2470,37 +2488,31 @@ FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
 		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
 	WHERE t2.FilePercentEmpty < @QueryValue
-	      AND t2.FileMBSize > 200
-	      AND t2.[Filename] like '%mdf'
+	      AND t2.FileMBSize > @MinimumFileSizeMB
+	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
+	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize
-	      AND t2.[DBName] IN ('tempdb', '[tempdb]')
-
-	/*Populate TEMPdb table used for Already Grown TEMPDB files*/
-	CREATE TABLE #TEMPdb (
-		[DBName] NVARCHAR(128),
-		[Filename] NVARCHAR(255),
-		PreviousFileSize BIGINT,
-		PrevPercentEmpty NUMERIC(12,2),
-		CurrentFileSize BIGINT,
-		CurrPercentEmpty NUMERIC(12,2)	
-		)
-
-	INSERT INTO #TEMPdb
-	SELECT t2.[DBName],t2.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
-	FROM #TEMP t
-	JOIN #TEMP t2
-		ON t.[DBName] = t2.[DBName] 
-		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-	WHERE t2.[Filename] like '%mdf'
-	     AND t.FileMBSize < t2.FileMBSize
-	     AND t2.FileMBSize > 200
-	     AND t2.[DBName] IN ('tempdb', '[tempdb]')
-
-	/*Start of TempDB Growing*/
-	IF EXISTS (SELECT * FROM #TEMP3)
+	      AND ( @CheckTempDB = 0 And t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	                             And t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	            OR
+	            @CheckTempDB = 1 And t2.[DBName] IN ('tempdb', '[tempdb]')
+	           )
+	
+	-- Delete any entries from #TEMP3 that are in #TEMPLogFiles (and thus were already reported)
+	DELETE #TEMP3
+	FROM #TEMP3
+	     INNER JOIN #TEMPLogFiles
+	       ON #TEMP3.[DBName] = #TEMPLogFiles.[DBName] AND
+	          #TEMP3.[Filename] = #TEMPLogFiles.[Filename]
+	
+	/*Start of Growing Log Files or Growing TempDB*/
+	IF EXISTS (SELECT * FROM #TEMP3) And @WarnGrowingLogFiles <> 0
 	BEGIN
+		If @CheckTempDB = 0		
+			Set @ReportTitle = 'Growing Log Files'
+		Else
+			Set @ReportTitle = 'TempDB Growth'
+		
 		SET	@HTML =
 			'<html><head><style type="text/css">
 			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
@@ -2508,7 +2520,7 @@ FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
 			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
 			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
 			</style></head><body>
-			<table width="725"> <tr><th class="header" width="725">TempDB Growth</th></tr></table>
+			<table width="725"> <tr><th class="header" width="725">' + @ReportTitle + '</th></tr></table>
 			<table width="725" >
 			<tr>  
 			<th width="250">Database</th>
@@ -2529,48 +2541,58 @@ FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
-		SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
+		If @CheckTempDB = 0		
+			SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
+		Else
+			SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
 
-		EXEC msdb.dbo.sp_send_dbmail
-		@recipients= @EmailList,
-		@subject = @EmailSubject,
-		@body = @HTML,
-		@body_format = 'HTML'
-
-		IF @CellList IS NOT NULL
+		IF ISNULL(@EmailList, '') <> ''
+		BEGIN
+			EXEC msdb.dbo.sp_send_dbmail
+			@recipients= @EmailList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
+		END
+		
+		IF ISNULL(@CellList, '') <> ''
 		BEGIN
 
 			IF @QueryValue2 IS NOT NULL
 			BEGIN
-				TRUNCATE TABLE #TEMP3
-				INSERT INTO #TEMP3
-				SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-				FROM #TEMP t
-				JOIN #TEMP t2
-					ON t.[DBName] = t2.[DBName] 
-					AND t.[Filename] = t2.[FileName] 
-					AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-					AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-				WHERE t2.FilePercentEmpty < @QueryValue
-				      AND t2.FileMBSize > 200
-				      AND t2.[Filename] like '%mdf'
-				      AND t.FileMBSize <> t2.FileMBSize
-				      AND t2.[DBName] IN ('tempdb', '[tempdb]')
+				-- Remove extra entries from #TEMP3 by filtering on @QueryValue2
+				DELETE FROM #TEMP3
+				WHERE t2.FilePercentEmpty > @QueryValue2
 			END
 
 			/*TEXT MESSAGE*/
 			IF EXISTS (SELECT * FROM #TEMP3)
 			BEGIN
-				SET	@HTML =
-					'<html><head></head><body><table><tr><td>FileSize,</td><td>FileEmpty,</td><td>Percent</td></tr>'
-				SELECT @HTML =  @HTML +   
-					'<tr><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FileMBEmpty AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
-				FROM #TEMP3
+				If @CheckTempDB = 0
+				Begin
+					SET	@HTML =
+						'<html><head></head><body><table><tr><td>Database,</td><td>FileSize,</td><td>Percent</td></tr>'
+					SELECT @HTML =  @HTML +   
+						'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
+					FROM #TEMP3
+					SELECT @HTML =  @HTML + '</table></body></html>'
 
-				SELECT @HTML =  @HTML + '</table></body></html>'
+					SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
 
-				SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
+				End
+				Else
+				Begin
+					SET	@HTML =
+						'<html><head></head><body><table><tr><td>FileSize,</td><td>FileEmpty,</td><td>Percent</td></tr>'
+					SELECT @HTML =  @HTML +   
+						'<tr><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FileMBEmpty AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
+					FROM #TEMP3
 
+					SELECT @HTML =  @HTML + '</table></body></html>'
+
+					SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
+				End
+				
 				EXEC msdb.dbo.sp_send_dbmail
 				@recipients= @CellList,
 				@subject = @EmailSubject,
@@ -2580,77 +2602,11 @@ FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
 			END
 		END
 	END
-	/*Stop of TempDB Growing*/
-	/*Start of TempDB Already Grown*/
+	/*Stop of Files Growing*/
 
-	/*TempDB */
-	IF EXISTS (SELECT * FROM #TEMPdb)
-	BEGIN
-		SET	@HTML =
-			'<html><head><style type="text/css">
-			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-			</style></head><body>
-			<table width="725"> <tr><th class="header" width="725">Recent TempDB Auto-Growth</th></tr></table>
-			<table width="725" >
-			<tr>  
-			<th width="250">Database</th>
-			<th width="250">PreviousFileSize</th>
-			<th width="250">PrevPercentEmpty</th>
-			<th width="250">CurrentFileSize</th>
-			<th width="250">CurrPercentEmpty</th>
-			</tr>'
-		SELECT @HTML =  @HTML +   
-			'<tr>
-			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-			<td bgcolor="#F0F0F0" width="250">' + CAST(PreviousFileSize AS NVARCHAR) + '</td>	
-			<td bgcolor="#E0E0E0" width="250">' + CAST(PrevPercentEmpty AS NVARCHAR) + '</td>	
-			<td bgcolor="#F0F0F0" width="250">' + CAST(CurrentFileSize AS NVARCHAR) + '</td>	
-			<td bgcolor="#E0E0E0" width="250">' + CAST(CurrPercentEmpty AS NVARCHAR) + '</td>			
-			</tr>'
-		FROM #TEMPdb
-
-		SELECT @HTML =  @HTML + '</table></body></html>'
-
-		SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
-
-		EXEC msdb.dbo.sp_send_dbmail
-		@recipients= @EmailList,
-		@subject = @EmailSubject,
-		@body = @HTML,
-		@body_format = 'HTML'
-
-		IF @CellList IS NOT NULL
-		BEGIN
-			/*TEXT MESSAGE*/
-			SET	@HTML =
-				'<html><head></head><body><table><tr><td>Database,</td><td>PrevFileSize,</td><td>CurrFileSize</td></tr>'
-			SELECT @HTML =  @HTML +   
-				'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(PreviousFileSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(CurrentFileSize AS NVARCHAR), '') +'</td></tr>'
-			FROM #TEMPdb
-			SELECT @HTML =  @HTML + '</table></body></html>'
-
-			SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
-
-			EXEC msdb.dbo.sp_send_dbmail
-			@recipients= @CellList,
-			@subject = @EmailSubject,
-			@body = @HTML,
-			@body_format = 'HTML'
-
-		END
-	END
-	
 	DROP TABLE #TEMPLogFiles
-	DROP TABLE #TEMPdb
-	DROP TABLE #TEMP
-	DROP TABLE #TEMP2
-	DROP TABLE #TEMP3
-
+	DROP TABLE #TEMP3		
 END
-GO
 
 USE [dba]
 GO
@@ -3534,10 +3490,10 @@ AS
 **	EXAMPLE USAGE:
 **
 **	SEND EMAIL WITHOUT RETAINING DATA
-**		EXEC dbo.rpt_HealthReport @Recepients = 'mrounds@quiktrak.com', @CC ='mrounds@quiktrak.com', @InsertFlag = 0, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 0, @IncludePerfStats = 1
 **	
 **	TO POPULATE THE TABLES
-**		EXEC dbo.rpt_HealthReport @Recepients = 'mrounds@quiktrak.com', @CC ='mrounds@quiktrak.com', @InsertFlag = 1, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 1, @IncludePerfStats = 1
 **
 **	PULL EMAIL ADDRESSES FROM ALERTSETTINGS TABLE:
 **		EXEC dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1, @IncludePerfStats = 1
@@ -3567,6 +3523,9 @@ AS
 **	04/13/2013		Matthew Monroe			2.3.2				Adjusted job status sort order
 **	04/15/2013		Michael Rounds			2.3.2				Expanded Cum_IO_GB, added COALESCE to columns in HTML output to avoid blank HTML blobs, CHAGNED CASTs to BIGINT
 **	04/15/2013		Matthew Monroe			2.3.3				No longer flagging large .LDF files if less than 100 MB in size.  Updated #BACKUPS.filename to nvarchar(255)
+**	04/16/2013		Michael Rounds			2.3.3				Expanded LogSize, TotalExtents and UsedExtents
+**	04/17/2013		Michael Rounds			2.3.4				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize, FileMBUsed and FileMBEmpty
+**																Hopefully fixed the "File Stats - Last 24 hours" section to show accurate data
 ***************************************************************************************************************/
     
 BEGIN
@@ -3790,21 +3749,21 @@ BEGIN
 		[LogicalFileName] NVARCHAR(255),
 		[VLFCount] INT,
 		DriveLetter NCHAR(1),
-		FileMBSize NVARCHAR(30),
+		FileMBSize INT,
 		[FileMaxSize] NVARCHAR(30),
 		FileGrowth NVARCHAR(30),
-		FileMBUsed NVARCHAR(30),
-		FileMBEmpty NVARCHAR(30),
+		FileMBUsed INT,
+		FileMBEmpty INT,
 		FilePercentEmpty NUMERIC(12,2),
 		LargeLDF INT,
 		[FileGroup] NVARCHAR(100),
-		NumberReads NVARCHAR(30),
+		NumberReads BIGINT,
 		KBytesRead NUMERIC(20,2),
-		NumberWrites NVARCHAR(30),
+		NumberWrites BIGINT,
 		KBytesWritten NUMERIC(20,2),
-		IoStallReadMS NVARCHAR(30),
-		IoStallWriteMS NVARCHAR(30),
-	Cum_IO_GB NUMERIC(20,2),
+		IoStallReadMS BIGINT,
+		IoStallWriteMS BIGINT,
+		Cum_IO_GB NUMERIC(20,2),
 		IO_Percent NUMERIC(12,2)
 		)
 		
@@ -3916,7 +3875,7 @@ BEGIN
 	/* FileStats */
 	CREATE TABLE #LOGSPACE (
 		[DBName] NVARCHAR(128) NOT NULL,
-		[LogSize] NUMERIC(12,2) NOT NULL,
+		[LogSize] NUMERIC(20,2) NOT NULL,
 		[LogPercentUsed] NUMERIC(12,2) NOT NULL,
 		[LogStatus] INT NOT NULL
 		)
@@ -3925,8 +3884,8 @@ BEGIN
 		[DBName] NVARCHAR(128) NULL,
 		[Fileid] INT NOT NULL,
 		[FileGroup] INT NOT NULL,
-		[TotalExtents] NUMERIC(12,2) NOT NULL,
-		[UsedExtents] NUMERIC(12,2) NOT NULL,
+		[TotalExtents] NUMERIC(20,2) NOT NULL,
+		[UsedExtents] NUMERIC(20,2) NOT NULL,
 		[FileLogicalName] NVARCHAR(128) NULL,
 		[Filename] NVARCHAR(255) NOT NULL
 		)
@@ -3997,7 +3956,7 @@ BEGIN
 				LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
 				SF.name AS LogicalFileName,
 				COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-				CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
+				(SF.size * 8)/1024 AS [FileMBSize], 
 				CASE SF.maxsize 
 					WHEN -1 THEN N''Unlimited'' 
 					ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
@@ -4051,7 +4010,7 @@ BEGIN
 	-- Look for databases where the log file is larger than the primary database file and the log file is larger than 100 MB
 	UPDATE b
 	SET b.LargeLDF = 
-		CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) AND b.FileMBSize > 100 THEN 1
+		CASE WHEN b.FileMBSize > a.FileMBSize AND b.FileMBSize > 100 THEN 1
 		ELSE 2 
 		END
 	FROM #FILESTATS a
@@ -4119,37 +4078,40 @@ BEGIN
 	FROM #FILESTATS a
 	WHERE COALESCE(a.[FileGroup],'') = ''
 	
-	SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp <= DateAdd(hh, -24, GETDATE())
+	SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp >= DateAdd(hh, -24, GETDATE())
 	
-	UPDATE c
-	SET c.NumberReads = d.NumberReads,
-		c.KBytesRead = d.KBytesRead,
-		c.NumberWrites = d.NumberWrites,
-		c.KBytesWritten = d.KBytesWritten,
-		c.IoStallReadMS = d.IoStallReadMS,
-		c.IoStallWriteMS = d.IoStallWriteMS,
-		c.Cum_IO_GB = d.Cum_IO_GB
-	FROM #FILESTATS c
-	LEFT OUTER
-	JOIN (SELECT
-			b.dbname,
-			b.[FileName],
-		SUM(CAST(b.NumberReads AS BIGINT) - CAST(a.NumberReads AS BIGINT)) AS NumberReads,
-		SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
-		SUM(CAST(b.NumberWrites AS BIGINT) - CAST(a.NumberWrites AS BIGINT)) AS NumberWrites,
-		SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
-		SUM(CAST(b.IoStallReadMS AS BIGINT) - CAST(a.IoStallReadMS AS BIGINT)) AS IoStallReadMS,
-		SUM(CAST(b.IoStallWriteMS AS BIGINT) - CAST(a.IoStallWriteMS AS BIGINT)) AS IoStallWriteMS,
-			SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
-			FROM [dba].dbo.FileStatsHistory a
-			LEFT OUTER
-			JOIN #FILESTATS b
-				ON a.dbname = b.dbname 
-				AND a.[FileName] = b.[FileName]
-			WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
-			GROUP BY b.DBName,b.[FileName]) d
-		ON c.dbname = d.dbname 
-		AND c.[FileName] = d.[FileName]
+	IF @MinFileStatsDateStamp IS NOT NULL
+	BEGIN
+		UPDATE c
+		SET c.NumberReads = d.NumberReads,
+			c.KBytesRead = d.KBytesRead,
+			c.NumberWrites = d.NumberWrites,
+			c.KBytesWritten = d.KBytesWritten,
+			c.IoStallReadMS = d.IoStallReadMS,
+			c.IoStallWriteMS = d.IoStallWriteMS,
+			c.Cum_IO_GB = d.Cum_IO_GB
+		FROM #FILESTATS c
+		LEFT OUTER
+		JOIN (SELECT
+				b.dbname,
+				b.[FileName],
+				SUM(b.NumberReads - a.NumberReads) AS NumberReads,
+				SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
+				SUM(b.NumberWrites - a.NumberWrites) AS NumberWrites,
+				SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
+				SUM(b.IoStallReadMS - a.IoStallReadMS) AS IoStallReadMS,
+				SUM(b.IoStallWriteMS - a.IoStallWriteMS) AS IoStallWriteMS,
+				SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
+			FROM #FILESTATS b
+				LEFT OUTER
+			JOIN [dba].dbo.FileStatsHistory a
+					ON a.dbname = b.dbname 
+					AND a.[FileName] = b.[FileName]
+				WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
+				GROUP BY b.DBName,b.[FileName]) d
+			ON c.dbname = d.dbname 
+			AND c.[FileName] = d.[FileName]
+	END
 	
 	/* JobStats */
 	SELECT sj.job_id, 
@@ -4718,11 +4680,11 @@ BEGIN
 		'<td width="75" class="c2">' + CAST(COALESCE(VLFCount,'') AS NVARCHAR) +'</td>' +
 		CASE
 			WHEN (LargeLDF = 1 AND [FileName] LIKE '%ldf') THEN '<td width="75" bgColor="#FFFF00">' + FileMBSize +'</td>'
-			ELSE '<td width="75" class="c1">' + FileMBSize +'</td>'
+			ELSE '<td width="75" class="c1">' + CAST(FileMBSize AS NVARCHAR) +'</td>'
 			END +
 		'<td width="75" class="c2">' + FileGrowth +'</td>' +
-		'<td width="75" class="c1">' + FileMBUsed +'</td>' +
-		'<td width="75" class="c2">' + FileMBEmpty +'</td>' +
+		'<td width="75" class="c1">' + CAST(FileMBUsed AS NVARCHAR) +'</td>' +
+		'<td width="75" class="c2">' + CAST(FileMBEmpty AS NVARCHAR) +'</td>' +
 		'<td width="75" class="c1">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>' + '</tr>'
 	FROM #FILESTATS
 	
@@ -4743,17 +4705,17 @@ BEGIN
 			<th width="75">IO %</th>				
 		 </tr>'
 	SELECT @HTML = @HTML +
-	'<tr><td width="200" class="c1">' + COALESCE([FileName],'N/A') +'</td>' +
-		'<td width="75" class="c2">' + COALESCE(NumberReads,'0') +'</td>' +
+		'<tr><td width="200" class="c1">' + COALESCE([FileName],'N/A') +'</td>' +
+		'<td width="75" class="c2">' + CAST(COALESCE(NumberReads,'0') AS NVARCHAR) +'</td>' +
 		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesRead),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesRead / 1024 AS NUMERIC(18,2))),'') +
 			  ' MB)' +'</td>' +
-		'<td width="75" class="c2">' + COALESCE(NumberWrites,'0') +'</td>' +
+		'<td width="75" class="c2">' + CAST(COALESCE(NumberWrites,'0') AS NVARCHAR) +'</td>' +
 		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesWritten),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesWritten / 1024 AS NUMERIC(18,2)) ),'') +
 			  ' MB)' +'</td>' +
-		'<td width="125" class="c2">' + COALESCE(IoStallReadMS,'0') +'</td>' +
-		'<td width="125" class="c1">' + COALESCE(IoStallWriteMS,'0') + '</td>' +
-		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS VARCHAR) + '</td>' +
-		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS VARCHAR) + '</td>' + '</tr>'	
+		'<td width="125" class="c2">' + CAST(COALESCE(IoStallReadMS,'0') AS NVARCHAR) +'</td>' +
+		'<td width="125" class="c1">' + CAST(COALESCE(IoStallWriteMS,'0') AS NVARCHAR) + '</td>' +
+		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS NVARCHAR) + '</td>' +
+		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS NVARCHAR) + '</td>' + '</tr>'	
 	FROM #FILESTATS
 	
 	SELECT @HTML = @HTML + '</table></div>'
@@ -5650,7 +5612,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_CheckBlocking', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -5707,8 +5669,8 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_attempts=0, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
-		@command=N'EXEC [dba].dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1', 
-		@database_name=N'dba', 
+		@command=N'EXEC [dba].dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1, @IncludePerfStats = 1', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -5766,7 +5728,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_LongRunningJobs', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -5824,7 +5786,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_CheckFiles', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -5882,7 +5844,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_LongRunningQueries', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -5953,7 +5915,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run exec
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_PerfStats 1', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -6011,7 +5973,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_MemoryUsageStats 1', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
@@ -6070,7 +6032,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
 		@command=N'EXEC [dba].dbo.usp_CPUProcessAlert', 
-		@database_name=N'dba', 
+		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1

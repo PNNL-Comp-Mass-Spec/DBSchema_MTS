@@ -22,6 +22,8 @@ AS
 **	04/07/2013		Michael Rounds			2.1.4				Extended the lengths of KBytesRead and KBytesWritte in temp table FILESTATS - NUMERIC(12,2) to (20,2)
 **	04/12/2013		Michael Rounds			2.1.5				Added SQL Server 2012 compatibility
 **	04/15/2013		Michael Rounds			2.1.6				Expanded Cum_IO_GB
+**	04/16/2013		Michael Rounds			2.1.7				Expanded LogSize, TotalExtents and UsedExtents
+**	04/17/2013		Michael Rounds			2.1.8				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize,FileMBUsed,FileMBEmpty
 ***************************************************************************************************************/
 
 BEGIN
@@ -34,27 +36,27 @@ CREATE TABLE #FILESTATS (
 	[LogicalFileName] NVARCHAR(255),
 	[VLFCount] INT,
 	DriveLetter NCHAR(1),
-	FileMBSize NVARCHAR(30),
+	FileMBSize INT,
 	[FileMaxSize] NVARCHAR(30),
 	FileGrowth NVARCHAR(30),
-	FileMBUsed NVARCHAR(30),
-	FileMBEmpty NVARCHAR(30),
+	FileMBUsed INT,
+	FileMBEmpty INT,
 	FilePercentEmpty NUMERIC(12,2),
 	LargeLDF INT,
 	[FileGroup] NVARCHAR(100),
-	NumberReads NVARCHAR(30),
+	NumberReads BIGINT,
 	KBytesRead NUMERIC(20,2),
-	NumberWrites NVARCHAR(30),
+	NumberWrites BIGINT,
 	KBytesWritten NUMERIC(20,2),
-	IoStallReadMS NVARCHAR(30),
-	IoStallWriteMS NVARCHAR(30),
+	IoStallReadMS BIGINT,
+	IoStallWriteMS BIGINT,
 	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
 
 CREATE TABLE #LOGSPACE (
 	[DBName] NVARCHAR(128) NOT NULL,
-	[LogSize] NUMERIC(12,2) NOT NULL,
+	[LogSize] NUMERIC(20,2) NOT NULL,
 	[LogPercentUsed] NUMERIC(12,2) NOT NULL,
 	[LogStatus] INT NOT NULL
 	)
@@ -63,8 +65,8 @@ CREATE TABLE #DATASPACE (
 	[DBName] NVARCHAR(128) NULL,
 	[Fileid] INT NOT NULL,
 	[FileGroup] INT NOT NULL,
-	[TotalExtents] NUMERIC(12,2) NOT NULL,
-	[UsedExtents] NUMERIC(12,2) NOT NULL,
+	[TotalExtents] NUMERIC(20,2) NOT NULL,
+	[UsedExtents] NUMERIC(20,2) NOT NULL,
 	[FileLogicalName] NVARCHAR(128) NULL,
 	[Filename] NVARCHAR(255) NOT NULL
 	)
@@ -139,7 +141,7 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 		LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
 		SF.name AS LogicalFileName,
 		COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-		CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
+		(SF.size * 8)/1024 AS [FileMBSize], 
 		CASE SF.maxsize 
 			WHEN -1 THEN N''Unlimited'' 
 			ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
@@ -147,8 +149,8 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((growth * 8192)/(1024.0*1024.0))) + '' MB''
 			ELSE CONVERT (NVARCHAR, growth) + '' %'' 
 			END) AS FileGrowth,
-		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
-		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
+		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBUsed],
+		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBEmpty],
 		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
 			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
 FROM sys.sysfiles SF
@@ -192,7 +194,7 @@ ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
 
 UPDATE b
 SET b.LargeLDF = 
-	CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) THEN 1
+	CASE WHEN b.FileMBSize > a.FileMBSize THEN 1
 	ELSE 2 
 	END
 FROM #FILESTATS a

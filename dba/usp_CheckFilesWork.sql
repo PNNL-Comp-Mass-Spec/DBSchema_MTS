@@ -20,6 +20,7 @@ AS
 **  Date			Author					Version				Revision  
 **  ----------		--------------------	-------------		-------------
 **	04/17/2013		Matthew Monroe			1.0					Re-factored code out of usp_CheckFiles
+**	04/18/2013		Matthew Monroe			1.0.1				Changed FileMBSize, FileMBUsed, and FileMBEmpty from BIGINT to INT in table #TEMP3
 ***************************************************************************************************************/
 
 BEGIN
@@ -158,9 +159,9 @@ BEGIN
 	CREATE TABLE #TEMP3 (
 		[DBName] NVARCHAR(128),
 		[FileName] [nvarchar](255),
-		FileMBSize BIGINT,
-		FileMBUsed BIGINT,
-		FileMBEmpty BIGINT,
+		FileMBSize INT,
+		FileMBUsed INT,
+		FileMBEmpty INT,
 		FilePercentEmpty NUMERIC(12,2)		
 		)
 	
