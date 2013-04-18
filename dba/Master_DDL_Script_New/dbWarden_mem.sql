@@ -38,7 +38,10 @@
 **																Expanded lengths in temp table in usp_FileStats and rpt_HealthReport
 **	04/11/2013		Michael Rounds			2.3.1				Changed Health Report to only show last 24 hours worth of File Stats instead of since server restart																
 **	04/12/2013		Michael Rounds			2.3.2				Modified usp_MemoryUsageStats, usp_FileStats and rpt_HealthReport to be SQL Server 2012 compatible.
-																Fixed bug in rpt_HealthReport - Changed #TEMPDATES from SELECT INTO - > CREATE, INSERT INTO
+**																Fixed bug in rpt_HealthReport - Changed #TEMPDATES from SELECT INTO - > CREATE, INSERT INTO
+**	04/14/2013		Michael Rounds			2.3.3				Expanded Cum_IO_GB in FileStatsHistory, usp_FileStats and rpt_HealthReport to NUMERIC(20,2) FROM NUMERIC(12,2)																
+**																REMOVED gen_GetHealthReport stored procs for now. BCP has different behaviour in 2012 that needs tweaking															
+**																Fixed update in rpt_HealthReport, CASTing as INT by mistake
 ********************************************************************************************************************************************************
 **
 **		:::::CONTENTS:::::
@@ -203,7 +206,7 @@ SET SchemaTracking = 0,
 	Reindex = 0
 WHERE [DBName] Like 'DMS%t3' or 
       [DBName] Like 'DMS%Test' or
-      [DBName] Like 'DMS%Beta' or
+      [DBName] Like 'DMS%Beta'
 
 END
 GO
@@ -490,9 +493,21 @@ CREATE TABLE dbo.FileStatsHistory (
 	KBytesWritten NUMERIC(20,2),
 	IoStallReadMS NVARCHAR(30),
 	IoStallWriteMS NVARCHAR(30),
-	Cum_IO_GB NUMERIC(12,2),
+	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
+END
+GO
+
+--This was added on 4/14/2013
+USE [dba]
+GO
+
+IF NOT EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FileStatsHistory' AND TABLE_SCHEMA = 'dbo' 
+AND COLUMN_NAME = 'Cum_IO_GB' AND NUMERIC_PRECISION=20)
+BEGIN
+ALTER TABLE dbo.FileStatsHistory
+ALTER COLUMN Cum_IO_GB NUMERIC(20,2)
 END
 GO
 
@@ -617,6 +632,19 @@ CREATE TABLE dbo.DataDictionary_Fields(
 			PRIMARY KEY CLUSTERED (SchemaName,TableName,FieldName)
 )
 END
+
+IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='T_Alert_Exclusions')
+BEGIN
+CREATE TABLE dbo.T_Alert_Exclusions(
+  Category_Name    nvarchar(50) not null,
+  FilterLikeClause varchar(255) not null,
+
+  constraint PK_T_Alert_Exclusions primary key(Category_Name,FilterLikeClause)
+)
+alter table T_Alert_Exclusions add
+  constraint FK_T_Alert_Exclusions_AlertSettings foreign key(Category_Name) references AlertSettings([Name]);
+END
+
 GO
 /*========================================================================================================================
 ====================================================DBA INDEXES===========================================================
@@ -1635,149 +1663,156 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
+**	04/15/2013		Matthew Monroe			1.11				Now using table T_Alert_Exclusions to optionally ignore some long running queries
 ***************************************************************************************************************/
 
 BEGIN
 
-EXEC master..sp_WhoIsActive
-        @format_output = 0,
-        @output_column_list = '[Collection_Time][Start_Time][Login_Time][Session_ID][CPU][Reads][Writes][Physical_Reads][Host_Name][Database_Name][Login_Name][SQL_Text][Program_Name]',
-        @destination_table = '[dba].dbo.QueryHistory'       
+	EXEC master..sp_WhoIsActive
+			@format_output = 0,
+			@output_column_list = '[Collection_Time][Start_Time][Login_Time][Session_ID][CPU][Reads][Writes][Physical_Reads][Host_Name][Database_Name][Login_Name][SQL_Text][Program_Name]',
+			@destination_table = '[dba].dbo.QueryHistory'       
 
-DECLARE @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
+	DECLARE @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
 
-SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
+	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
 
-SELECT @QueryValue = QueryValue,
-	@QueryValue2 = QueryValue2,
-	@EmailList = EmailList,
-	@CellList = CellList
-FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
+	SELECT @QueryValue = QueryValue,
+		@QueryValue2 = QueryValue2,
+		@EmailList = EmailList,
+		@CellList = CellList
+	FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
 
-DECLARE @LastQueryHistoryID INT, @LastCollectionTime DATETIME
+	DECLARE @LastQueryHistoryID INT, @LastCollectionTime DATETIME
 
-SELECT @LastQueryHistoryID =  MIN(a.queryhistoryID) -1
-FROM [dba].dbo.queryhistory a
-WHERE a.collection_time = (SELECT MAX(collection_time) FROM [dba].dbo.QueryHistory WHERE collection_time > GETDATE() -1) 
+	SELECT @LastQueryHistoryID =  MIN(a.queryhistoryID) -1
+	FROM [dba].dbo.queryhistory a
+	WHERE a.collection_time = (SELECT MAX(collection_time) FROM [dba].dbo.QueryHistory WHERE collection_time > GETDATE() -1) 
 
-SELECT @LastCollectionTime = Collection_Time FROM [dba].dbo.QueryHistory WHERE QueryHistoryID = @LastQueryHistoryID
+	SELECT @LastCollectionTime = Collection_Time FROM [dba].dbo.QueryHistory WHERE QueryHistoryID = @LastQueryHistoryID
 
-CREATE TABLE #TEMP (
-	QueryHistoryID INT,
-	Collection_time DATETIME,
-	Start_Time DATETIME,
-	Login_Time DATETIME,
-	Session_ID SMALLINT,
-	CPU INT,
-	Reads BIGINT,
-	Writes BIGINT,
-	Physical_reads BIGINT,
-	[Host_Name] NVARCHAR(128),
-	[DBName] NVARCHAR(128),
-	Login_name NVARCHAR(128),
-	SQL_Text NVARCHAR(MAX),
-	[Program_name] NVARCHAR(128)
-	)
+	CREATE TABLE #TEMP (
+		QueryHistoryID INT,
+		Collection_time DATETIME,
+		Start_Time DATETIME,
+		Login_Time DATETIME,
+		Session_ID SMALLINT,
+		CPU INT,
+		Reads BIGINT,
+		Writes BIGINT,
+		Physical_reads BIGINT,
+		[Host_Name] NVARCHAR(128),
+		[DBName] NVARCHAR(128),
+		Login_name NVARCHAR(128),
+		SQL_Text NVARCHAR(MAX),
+		[Program_name] NVARCHAR(128)
+		)
 
-INSERT INTO #TEMP (QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [DBName], login_name, sql_text, [program_name])
-SELECT QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [Database_Name], login_name, sql_text, [program_name]
-FROM [dba].dbo.QueryHistory 
-WHERE (DATEDIFF(ss,start_time,collection_time)) >= @QueryValue
-AND (DATEDIFF(mi,collection_time,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, collection_time))
-AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-AND sql_text NOT LIKE 'BACKUP DATABASE%'
-AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
-AND sql_text NOT LIKE 'ALTER INDEX%'
-AND sql_text NOT LIKE 'DECLARE @BlobEater%'
-AND sql_text NOT LIKE 'DBCC%'
-AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
+	INSERT INTO #TEMP (QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [DBName], login_name, sql_text, [program_name])
+	SELECT QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [Database_Name], login_name, sql_text, [program_name]
+	FROM [dba].dbo.QueryHistory QH
+		LEFT OUTER JOIN [dba].dbo.T_Alert_Exclusions AlertEx 
+			ON AlertEx.Category_Name = 'LongRunningQueries' AND QH.sql_text LIKE AlertEx.FilterLikeClause
+	WHERE (DATEDIFF(ss,start_time,collection_time)) >= @QueryValue
+		AND (DATEDIFF(mi,collection_time,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, collection_time))
+		AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+		AND sql_text NOT LIKE 'BACKUP DATABASE%'
+		AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
+		AND sql_text NOT LIKE 'ALTER INDEX%'
+		AND sql_text NOT LIKE 'DECLARE @BlobEater%'
+		AND sql_text NOT LIKE 'DBCC%'
+		AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
+		AND AlertEx.Category_Name Is Null
 
-IF EXISTS (SELECT * FROM #TEMP)
-BEGIN
+	IF EXISTS (SELECT * FROM #TEMP)
+	BEGIN
 
-DECLARE @HTML NVARCHAR(MAX)
+		DECLARE @HTML NVARCHAR(MAX)
 
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="900"> <tr><th class="header" width="900">Long Running Queries</th></tr></table>
-	<table width="900">
-	<tr>  
-	<th width="100">DateStamp</th>
-	<th width="100">ElapsedTime(ss)</th>
-	<th width="50">SPID</th>
-	<th width="75">Database</th>
-	<th width="100">Login</th> 	
-	<th width="475">QueryText</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="100">' + CAST(collection_time AS NVARCHAR) +'</td>	
-	<td bgcolor="#F0F0F0" width="100">' + CAST(DATEDIFF(ss,start_time,collection_time) AS NVARCHAR) +'</td>
-	<td bgcolor="#E0E0E0" width="50">' + CAST(Session_id AS NVARCHAR) +'</td>
-	<td bgcolor="#F0F0F0" width="75">' + CAST([DBName] AS NVARCHAR) +'</td>	
-	<td bgcolor="#E0E0E0" width="100">' + CAST(login_name AS NVARCHAR) +'</td>	
-	<td bgcolor="#F0F0F0" width="475">' + LEFT(sql_text,100) +'</td>			
-	</tr>'
-FROM #TEMP
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="900"> <tr><th class="header" width="900">Long Running Queries</th></tr></table>
+			<table width="900">
+			<tr>  
+			<th width="100">DateStamp</th>
+			<th width="100">ElapsedTime(ss)</th>
+			<th width="50">SPID</th>
+			<th width="75">Database</th>
+			<th width="100">Login</th> 	
+			<th width="475">QueryText</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="100">' + CAST(collection_time AS NVARCHAR) +'</td>	
+			<td bgcolor="#F0F0F0" width="100">' + CAST(DATEDIFF(ss,start_time,collection_time) AS NVARCHAR) +'</td>
+			<td bgcolor="#E0E0E0" width="50">' + CAST(Session_id AS NVARCHAR) +'</td>
+			<td bgcolor="#F0F0F0" width="75">' + CAST([DBName] AS NVARCHAR) +'</td>	
+			<td bgcolor="#E0E0E0" width="100">' + CAST(login_name AS NVARCHAR) +'</td>	
+			<td bgcolor="#F0F0F0" width="475">' + LEFT(sql_text,100) +'</td>			
+			</tr>'
+		FROM #TEMP
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'Long Running QUERIES on ' + @ServerName + '!'
+		SELECT @EmailSubject = 'Long Running QUERIES on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+		EXEC msdb.dbo.sp_send_dbmail
+			@recipients= @EmailList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
 
-IF @CellList IS NOT NULL
-BEGIN
+		IF IsNull(@CellList, '') <> ''
+		BEGIN
 
-IF @QueryValue2 IS NOT NULL
-BEGIN
-TRUNCATE TABLE #TEMP
-INSERT INTO #TEMP (QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [DBName], login_name, sql_text, [program_name])
-SELECT QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [Database_Name], login_name, sql_text, [program_name]
-FROM [dba].dbo.QueryHistory 
-WHERE (DATEDIFF(ss,start_time,collection_time)) >= @QueryValue2
-AND (DATEDIFF(mi,collection_time,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, collection_time))
-AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-AND sql_text NOT LIKE 'BACKUP DATABASE%'
-AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
-AND sql_text NOT LIKE 'ALTER INDEX%'
-AND sql_text NOT LIKE 'DECLARE @BlobEater%'
-AND sql_text NOT LIKE 'DBCC%'
-AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
-END
+			IF IsNull(@QueryValue2, '') <> ''
+			BEGIN
+				TRUNCATE TABLE #TEMP
+				INSERT INTO #TEMP (QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [DBName], login_name, sql_text, [program_name])
+				SELECT QueryHistoryID, collection_time, start_time, login_time, session_id, CPU, reads, writes, physical_reads, [host_name], [Database_Name], login_name, sql_text, [program_name]
+				FROM [dba].dbo.QueryHistory QH
+					LEFT OUTER JOIN [dba].dbo.T_Alert_Exclusions AlertEx 
+						ON AlertEx.Category_Name = 'LongRunningQueries' AND QH.sql_text LIKE AlertEx.FilterLikeClause
+				WHERE (DATEDIFF(ss,start_time,collection_time)) >= @QueryValue2
+					AND (DATEDIFF(mi,collection_time,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, collection_time))
+					AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+					AND sql_text NOT LIKE 'BACKUP DATABASE%'
+					AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
+					AND sql_text NOT LIKE 'ALTER INDEX%'
+					AND sql_text NOT LIKE 'DECLARE @BlobEater%'
+					AND sql_text NOT LIKE 'DBCC%'
+					AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
+					AND AlertEx.Category_Name Is Null
+			END
 
-/*TEXT MESSAGE*/
-IF EXISTS (SELECT * FROM #TEMP)
-BEGIN
-SET	@HTML =
-	'<html><head></head><body><table><tr><td>Time,</td><td>SPID,</td><td>Login</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + CAST(DATEDIFF(ss,start_time,collection_time) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
-FROM #TEMP
+			/*TEXT MESSAGE*/
+			IF EXISTS (SELECT * FROM #TEMP)
+			BEGIN
+				SET	@HTML =
+					'<html><head></head><body><table><tr><td>Time,</td><td>SPID,</td><td>Login</td></tr>'
+				SELECT @HTML =  @HTML +   
+					'<tr><td>' + CAST(DATEDIFF(ss,start_time,collection_time) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
+				FROM #TEMP
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+				SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'LongQueries-' + @ServerName
+				SELECT @EmailSubject = 'LongQueries-' + @ServerName
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+				EXEC msdb.dbo.sp_send_dbmail
+					@recipients= @CellList,
+					@subject = @EmailSubject,
+					@body = @HTML,
+					@body_format = 'HTML'
 
-END
-END
-DROP TABLE #TEMP
-END
+			END
+		END
+		DROP TABLE #TEMP
+	END
 END
 GO
 
@@ -1880,6 +1915,7 @@ AS
 **	01/07/2012		Michael Rounds			2.1.3				Fixed Divide by zero bug
 **	04/07/2013		Michael Rounds			2.1.4				Extended the lengths of KBytesRead and KBytesWritte in temp table FILESTATS - NUMERIC(12,2) to (20,2)
 **	04/12/2013		Michael Rounds			2.1.5				Added SQL Server 2012 compatibility
+**	04/15/2013		Michael Rounds			2.1.6				Expanded Cum_IO_GB
 ***************************************************************************************************************/
 
 BEGIN
@@ -1906,7 +1942,7 @@ CREATE TABLE #FILESTATS (
 	KBytesWritten NUMERIC(20,2),
 	IoStallReadMS NVARCHAR(30),
 	IoStallWriteMS NVARCHAR(30),
-	Cum_IO_GB NUMERIC(12,2),
+	Cum_IO_GB NUMERIC(20,2),
 	IO_Percent NUMERIC(12,2)
 	)
 
@@ -2166,427 +2202,452 @@ AS
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **  06/10/2012		Michael Rounds			1.1					Updated to use new FileStatsHistory table
 **	08/31/2012		Michael Rounds			1.2					Changed VARCHAR to NVARCHAR
+**	04/15/2013		Matthew Monroe			1.2.1				Now ignoring log files less than 200 MB in size.  Now also looking for '[tempdb]' and '[model]' in addition to 'tempdb' and 'model'.  Fixed bug that was performing a text compare of #TEMP.FileMBSize
 ***************************************************************************************************************/
 
 BEGIN
 
-SET NOCOUNT ON
+	SET NOCOUNT ON
 
-/* GET STATS */
+	/* GET STATS */
 
-/*Populate File Stats tables*/
-EXEC [dba].dbo.usp_FileStats @InsertFlag=1
+	/*Populate File Stats tables*/
+	EXEC [dba].dbo.usp_FileStats @InsertFlag=1
 
-DECLARE @FileStatsID INT, @QueryValue INT, @QueryValue2 INT, @HTML NVARCHAR(MAX), @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(128), @EmailSubject NVARCHAR(100)
+	DECLARE @FileStatsID INT, @QueryValue INT, @QueryValue2 INT, @HTML NVARCHAR(MAX), @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(128), @EmailSubject NVARCHAR(100)
 
-SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
+	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
 
-SET @FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
+	SET @FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
 
-/*Populate Main TEMP table*/
-SELECT FileStatsHistoryID, FileStatsID, FileStatsDateStamp, [DBName], [FileName], DriveLetter, FileMBSize, FileGrowth, FileMBUsed, FileMBEmpty, FilePercentEmpty
-INTO #TEMP
-FROM [dba].dbo.FileStatsHistory
-WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
-
-/* LOG FILES */
-
-/*Grab AlertSettings for LogFiles*/
-SELECT @QueryValue = QueryValue,
-		@QueryValue2 = QueryValue2,
-		@EmailList = EmailList,
-		@CellList = CellList
-FROM [dba].dbo.AlertSettings WHERE Name = 'LogFiles'
-
-CREATE TABLE #TEMP2 (
-	[DBName] NVARCHAR(128),
-	FileMBSize BIGINT,
-	FileMBUsed BIGINT,
-	FileMBEmpty BIGINT,
-	FilePercentEmpty NUMERIC(12,2)
+	CREATE TABLE #TEMP (
+		[FileStatsHistoryID] [int] NOT NULL,
+		[FileStatsID] [int] NOT NULL,
+		[FileStatsDateStamp] [datetime] NOT NULL,
+		[DBName] [nvarchar](128) NULL,
+		[FileName] [nvarchar](255) NULL,
+		[DriveLetter] [nchar](1) NULL,
+		[FileMBSize] BIGINT NULL,
+		[FileGrowth] [nvarchar](30) NULL,
+		[FileMBUsed] BIGINT NULL,
+		[FileMBEmpty] BIGINT NULL,
+		[FilePercentEmpty] [numeric](12, 2) NULL	
 	)
 
-INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
-SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,CAST(t2.FilePercentEmpty AS NUMERIC(12,2))
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE CAST(t2.FilePercentEmpty AS NUMERIC(12,2)) < @QueryValue
-AND t2.[Filename] like '%ldf'
-AND t.FileMBSize <> t2.FileMBSize
-AND t2.[DBName] NOT IN ('model','tempdb')
-AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
 
-/*Populate TEMPLogFiles table used for Already Grown LOG files*/
+	/*Populate Main TEMP table*/
+	INSERT INTO #TEMP (FileStatsHistoryID, FileStatsID, FileStatsDateStamp, DBName, FileName, DriveLetter, FileMBSize, FileGrowth, FileMBUsed, FileMBEmpty, FilePercentEmpty)
+	SELECT  FileStatsHistoryID, FileStatsID, FileStatsDateStamp, [DBName], [FileName], DriveLetter, CAST(FileMBSize as BIGINT), FileGrowth, CAST(FileMBUsed AS BIGINT), CAST(FileMBEmpty AS BIGINT), FilePercentEmpty
+	FROM [dba].dbo.FileStatsHistory
+	WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
 
-CREATE TABLE #TEMPLogFiles (
-	[DBName] NVARCHAR(128),
-	[Filename] NVARCHAR(255),
-	PreviousFileSize BIGINT,
-	PrevPercentEmpty NUMERIC(12,2),
-	CurrentFileSize BIGINT,
-	CurrPercentEmpty NUMERIC(12,2)	
-	)
+	/* LOG FILES */
 
-INSERT INTO #TEMPLogFiles ([DBName],[Filename],PreviousFileSize,PrevPercentEmpty,CurrentFileSize,CurrPercentEmpty)
-SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE t2.[Filename] like '%ldf'
-AND t.FileMBSize < t2.FileMBSize
-AND t2.[DBName] NOT IN ('model','tempdb')
-AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
+	/*Grab AlertSettings for LogFiles*/
+	SELECT @QueryValue = QueryValue,
+			@QueryValue2 = QueryValue2,
+			@EmailList = EmailList,
+			@CellList = CellList
+	FROM [dba].dbo.AlertSettings WHERE Name = 'LogFiles'
 
-/*Start of Growing Log files*/
-IF EXISTS (SELECT * FROM #TEMP2)
-BEGIN
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="725"> <tr><th class="header" width="725">Growing Log Files</th></tr></table>
-	<table width="725" >
-	<tr>  
-	<th width="250">Database</th>
-	<th width="250">FileMBSize</th>
-	<th width="250">FileMBUsed</th> 
-	<th width="250">FileMBEmpty</th>
-	<th width="250">FilePercentEmpty</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-	<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(FileMBUsed AS NVARCHAR) + '</td>	
-	<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBEmpty AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>			
-	</tr>'
-FROM #TEMP2
+	CREATE TABLE #TEMP2 (
+		[DBName] NVARCHAR(128),
+		FileMBSize BIGINT,
+		FileMBUsed BIGINT,
+		FileMBEmpty BIGINT,
+		FilePercentEmpty NUMERIC(12,2)
+		)
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+	-- Find log files that are at least 200 MB in size
+	-- and are less than @QueryValue percent empty
+	INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
+	SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+	FROM #TEMP t
+	JOIN #TEMP t2
+		ON t.[DBName] = t2.[DBName] 
+		AND t.[Filename] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+	WHERE t2.FilePercentEmpty < @QueryValue
+	      AND t2.FileMBSize > 200
+	      AND t2.[Filename] like '%ldf'
+	      AND t.FileMBSize <> t2.FileMBSize
+	      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
 
-SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
+	/*Populate TEMPLogFiles table used for Already Grown LOG files*/
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+	CREATE TABLE #TEMPLogFiles (
+		[DBName] NVARCHAR(128),
+		[Filename] NVARCHAR(255),
+		PreviousFileSize BIGINT,
+		PrevPercentEmpty NUMERIC(12,2),
+		CurrentFileSize BIGINT,
+		CurrPercentEmpty NUMERIC(12,2)	
+		)
 
-IF @CellList IS NOT NULL
-BEGIN
+	INSERT INTO #TEMPLogFiles ([DBName],[Filename],PreviousFileSize,PrevPercentEmpty,CurrentFileSize,CurrPercentEmpty)
+	SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
+	FROM #TEMP t
+	JOIN #TEMP t2
+		ON t.[DBName] = t2.[DBName] 
+		AND t.[Filename] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+	WHERE t2.[Filename] like '%ldf'
+	      AND t.FileMBSize < t2.FileMBSize
+	      AND t2.FileMBSize > 200
+	      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
 
-IF @QueryValue2 IS NOT NULL
-BEGIN
-TRUNCATE TABLE #TEMP2
-INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
-SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE t2.FilePercentEmpty < @QueryValue2
-AND t2.[Filename] like '%ldf'
-AND t.FileMBSize <> t2.FileMBSize
-AND t2.[DBName] NOT IN ('model','tempdb')
-AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
-END
+	/*Start of Growing Log files*/
+	IF EXISTS (SELECT * FROM #TEMP2)
+	BEGIN
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="725"> <tr><th class="header" width="725">Growing Log Files</th></tr></table>
+			<table width="725" >
+			<tr>  
+			<th width="250">Database</th>
+			<th width="250">FileMBSize</th>
+			<th width="250">FileMBUsed</th> 
+			<th width="250">FileMBEmpty</th>
+			<th width="250">FilePercentEmpty</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
+			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(FileMBUsed AS NVARCHAR) + '</td>	
+			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBEmpty AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>			
+			</tr>'
+		FROM #TEMP2
 
-/*TEXT MESSAGE*/
-IF EXISTS (SELECT * FROM #TEMP2)
-BEGIN
-SET	@HTML =
-	'<html><head></head><body><table><tr><td>Database,</td><td>FileSize,</td><td>Percent</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
-FROM #TEMP2
-SELECT @HTML =  @HTML + '</table></body></html>'
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
+		SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+		EXEC msdb.dbo.sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
 
-END
-END
-END
-/*Stop of Growing Log files*/
-/*Start of Already Grown Log files*/
-IF EXISTS (SELECT * FROM #TEMPLogFiles)
-BEGIN
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="725"> <tr><th class="header" width="725">Recent Log File Auto-Growth</th></tr></table>
-	<table width="725" >
-	<tr>  
-	<th width="250">Database</th>
-	<th width="250">PreviousFileSize</th>
-	<th width="250">PrevPercentEmpty</th>
-	<th width="250">CurrentFileSize</th>
-	<th width="250">CurrPercentEmpty</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-	<td bgcolor="#F0F0F0" width="250">' + CAST(PreviousFileSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(PrevPercentEmpty AS NVARCHAR) + '</td>	
-	<td bgcolor="#F0F0F0" width="250">' + CAST(CurrentFileSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(CurrPercentEmpty AS NVARCHAR) + '</td>			
-	</tr>'
-FROM #TEMPLogFiles
+		IF @CellList IS NOT NULL
+		BEGIN
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+			IF @QueryValue2 IS NOT NULL
+			BEGIN
+			TRUNCATE TABLE #TEMP2
+				INSERT INTO #TEMP2 ([DBName],FileMBSize,FileMBUsed,FileMBEmpty,FilePercentEmpty)
+				SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+				FROM #TEMP t
+				JOIN #TEMP t2
+					ON t.[DBName] = t2.[DBName] 
+					AND t.[Filename] = t2.[FileName] 
+					AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+					AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+				WHERE t2.FilePercentEmpty < @QueryValue2
+				      AND t2.FileMBSize > 200
+				      AND t2.[Filename] like '%ldf'
+				      AND t.FileMBSize <> t2.FileMBSize
+				      AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+				      AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0)
+			END
 
-SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
+			/*TEXT MESSAGE*/
+			IF EXISTS (SELECT * FROM #TEMP2)
+			BEGIN
+				SET	@HTML =
+					'<html><head></head><body><table><tr><td>Database,</td><td>FileSize,</td><td>Percent</td></tr>'
+				SELECT @HTML =  @HTML +   
+					'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
+				FROM #TEMP2
+				SELECT @HTML =  @HTML + '</table></body></html>'
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+				SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
 
-IF @CellList IS NOT NULL
-BEGIN
-/*TEXT MESSAGE*/
-SET	@HTML =
-	'<html><head></head><body><table><tr><td>Database,</td><td>PrevFileSize,</td><td>CurrFileSize</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(PreviousFileSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(CurrentFileSize AS NVARCHAR), '') +'</td></tr>'
-FROM #TEMPLogFiles
-SELECT @HTML =  @HTML + '</table></body></html>'
+				EXEC msdb.dbo.sp_send_dbmail
+				@recipients= @CellList,
+				@subject = @EmailSubject,
+				@body = @HTML,
+				@body_format = 'HTML'
 
-SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
+			END
+		END
+	END
+	/*Stop of Growing Log files*/
+	/*Start of Already Grown Log files*/
+	IF EXISTS (SELECT * FROM #TEMPLogFiles)
+	BEGIN
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="725"> <tr><th class="header" width="725">Recent Log File Auto-Growth</th></tr></table>
+			<table width="725" >
+			<tr>  
+			<th width="250">Database</th>
+			<th width="250">PreviousFileSize</th>
+			<th width="250">PrevPercentEmpty</th>
+			<th width="250">CurrentFileSize</th>
+			<th width="250">CurrPercentEmpty</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
+			<td bgcolor="#F0F0F0" width="250">' + CAST(PreviousFileSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(PrevPercentEmpty AS NVARCHAR) + '</td>	
+			<td bgcolor="#F0F0F0" width="250">' + CAST(CurrentFileSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(CurrPercentEmpty AS NVARCHAR) + '</td>			
+			</tr>'
+		FROM #TEMPLogFiles
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-END
-END
-/*Stop of Already Grown Log files*/
+		SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
 
-/* TEMP DB */
+		EXEC msdb.dbo.sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
 
-/*Grab AlertSettings for TEMPDB*/
-SELECT @QueryValue = QueryValue,
-		@QueryValue2 = QueryValue2,
-		@EmailList = EmailList,
-		@CellList = CellList
+		IF @CellList IS NOT NULL
+		BEGIN
+			/*TEXT MESSAGE*/
+			SET	@HTML =
+				'<html><head></head><body><table><tr><td>Database,</td><td>PrevFileSize,</td><td>CurrFileSize</td></tr>'
+			SELECT @HTML =  @HTML +   
+				'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(PreviousFileSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(CurrentFileSize AS NVARCHAR), '') +'</td></tr>'
+			FROM #TEMPLogFiles
+			SELECT @HTML =  @HTML + '</table></body></html>'
+
+			SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
+
+			EXEC msdb.dbo.sp_send_dbmail
+			@recipients= @CellList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
+
+	END
+	END
+	/*Stop of Already Grown Log files*/
+
+	/* TEMP DB */
+
+	/*Grab AlertSettings for TEMPDB*/
+	SELECT @QueryValue = QueryValue,
+			@QueryValue2 = QueryValue2,
+			@EmailList = EmailList,
+			@CellList = CellList
 FROM [dba].dbo.AlertSettings WHERE Name = 'TempDB'
 
-CREATE TABLE #TEMP3 (
-	[DBName] NVARCHAR(128),
-	FileMBSize BIGINT,
-	FileMBUsed BIGINT,
-	FileMBEmpty BIGINT,
-	FilePercentEmpty NUMERIC(12,2)
-	)
+	CREATE TABLE #TEMP3 (
+		[DBName] NVARCHAR(128),
+		FileMBSize BIGINT,
+		FileMBUsed BIGINT,
+		FileMBEmpty BIGINT,
+		FilePercentEmpty NUMERIC(12,2)
+		)
 
-INSERT INTO #TEMP3
-SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,CAST(t2.FilePercentEmpty AS NUMERIC(12,2))
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE CAST(t2.FilePercentEmpty AS NUMERIC(12,2)) < @QueryValue
-AND t2.[Filename] like '%mdf'
-AND t.FileMBSize <> t2.FileMBSize
-AND t2.[DBName] = 'tempdb'
+	INSERT INTO #TEMP3
+	SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+	FROM #TEMP t
+	JOIN #TEMP t2
+		ON t.[DBName] = t2.[DBName] 
+		AND t.[Filename] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+	WHERE t2.FilePercentEmpty < @QueryValue
+	      AND t2.FileMBSize > 200
+	      AND t2.[Filename] like '%mdf'
+	      AND t.FileMBSize <> t2.FileMBSize
+	      AND t2.[DBName] IN ('tempdb', '[tempdb]')
 
-/*Populate TEMPdb table used for Already Grown TEMPDB files*/
-CREATE TABLE #TEMPdb (
-	[DBName] NVARCHAR(128),
-	[Filename] NVARCHAR(255),
-	PreviousFileSize BIGINT,
-	PrevPercentEmpty NUMERIC(12,2),
-	CurrentFileSize BIGINT,
-	CurrPercentEmpty NUMERIC(12,2)	
-	)
+	/*Populate TEMPdb table used for Already Grown TEMPDB files*/
+	CREATE TABLE #TEMPdb (
+		[DBName] NVARCHAR(128),
+		[Filename] NVARCHAR(255),
+		PreviousFileSize BIGINT,
+		PrevPercentEmpty NUMERIC(12,2),
+		CurrentFileSize BIGINT,
+		CurrPercentEmpty NUMERIC(12,2)	
+		)
 
-INSERT INTO #TEMPdb
-SELECT t2.[DBName],t2.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE t2.[Filename] like '%mdf'
-AND t.FileMBSize < t2.FileMBSize
-AND t2.[DBName] = 'tempdb'
+	INSERT INTO #TEMPdb
+	SELECT t2.[DBName],t2.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
+	FROM #TEMP t
+	JOIN #TEMP t2
+		ON t.[DBName] = t2.[DBName] 
+		AND t.[Filename] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+	WHERE t2.[Filename] like '%mdf'
+	     AND t.FileMBSize < t2.FileMBSize
+	     AND t2.FileMBSize > 200
+	     AND t2.[DBName] IN ('tempdb', '[tempdb]')
 
-/*Start of TempDB Growing*/
-IF EXISTS (SELECT * FROM #TEMP3)
-BEGIN
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="725"> <tr><th class="header" width="725">TempDB Growth</th></tr></table>
-	<table width="725" >
-	<tr>  
-	<th width="250">Database</th>
-	<th width="250">FileMBSize</th>
-	<th width="250">FileMBUsed</th> 
-	<th width="250">FileMBEmpty</th>
-	<th width="250">FilePercentEmpty</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-	<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(FileMBUsed AS NVARCHAR) + '</td>	
-	<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBEmpty AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>			
-	</tr>'
-FROM #TEMP3
+	/*Start of TempDB Growing*/
+	IF EXISTS (SELECT * FROM #TEMP3)
+	BEGIN
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="725"> <tr><th class="header" width="725">TempDB Growth</th></tr></table>
+			<table width="725" >
+			<tr>  
+			<th width="250">Database</th>
+			<th width="250">FileMBSize</th>
+			<th width="250">FileMBUsed</th> 
+			<th width="250">FileMBEmpty</th>
+			<th width="250">FilePercentEmpty</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
+			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(FileMBUsed AS NVARCHAR) + '</td>	
+			<td bgcolor="#F0F0F0" width="250">' + CAST(FileMBEmpty AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>			
+			</tr>'
+		FROM #TEMP3
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
+		SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+		EXEC msdb.dbo.sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
 
-IF @CellList IS NOT NULL
-BEGIN
+		IF @CellList IS NOT NULL
+		BEGIN
 
-IF @QueryValue2 IS NOT NULL
-BEGIN
-TRUNCATE TABLE #TEMP3
-INSERT INTO #TEMP3
-SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-FROM #TEMP t
-JOIN #TEMP t2
-	ON t.[DBName] = t2.[DBName] 
-	AND t.[Filename] = t2.[FileName] 
-	AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-	AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-WHERE t2.FilePercentEmpty < @QueryValue
-AND t2.[Filename] like '%mdf'
-AND t.FileMBSize <> t2.FileMBSize
-AND t2.[DBName] = 'tempdb'
-END
+			IF @QueryValue2 IS NOT NULL
+			BEGIN
+				TRUNCATE TABLE #TEMP3
+				INSERT INTO #TEMP3
+				SELECT t2.[DBName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+				FROM #TEMP t
+				JOIN #TEMP t2
+					ON t.[DBName] = t2.[DBName] 
+					AND t.[Filename] = t2.[FileName] 
+					AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
+					AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+				WHERE t2.FilePercentEmpty < @QueryValue
+				      AND t2.FileMBSize > 200
+				      AND t2.[Filename] like '%mdf'
+				      AND t.FileMBSize <> t2.FileMBSize
+				      AND t2.[DBName] IN ('tempdb', '[tempdb]')
+			END
 
-/*TEXT MESSAGE*/
-IF EXISTS (SELECT * FROM #TEMP3)
-BEGIN
-SET	@HTML =
-	'<html><head></head><body><table><tr><td>FileSize,</td><td>FileEmpty,</td><td>Percent</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FileMBEmpty AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
-FROM #TEMP3
+			/*TEXT MESSAGE*/
+			IF EXISTS (SELECT * FROM #TEMP3)
+			BEGIN
+				SET	@HTML =
+					'<html><head></head><body><table><tr><td>FileSize,</td><td>FileEmpty,</td><td>Percent</td></tr>'
+				SELECT @HTML =  @HTML +   
+					'<tr><td>' + COALESCE(CAST(FileMBSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FileMBEmpty AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(FilePercentEmpty AS NVARCHAR), '') +'</td></tr>'
+				FROM #TEMP3
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+				SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
+				SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+				EXEC msdb.dbo.sp_send_dbmail
+				@recipients= @CellList,
+				@subject = @EmailSubject,
+				@body = @HTML,
+				@body_format = 'HTML'
 
-END
-END
-END
-/*Stop of TempDB Growing*/
-/*Start of TempDB Already Grown*/
+			END
+		END
+	END
+	/*Stop of TempDB Growing*/
+	/*Start of TempDB Already Grown*/
 
-/*TempDB */
-IF EXISTS (SELECT * FROM #TEMPdb)
-BEGIN
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="725"> <tr><th class="header" width="725">Recent TempDB Auto-Growth</th></tr></table>
-	<table width="725" >
-	<tr>  
-	<th width="250">Database</th>
-	<th width="250">PreviousFileSize</th>
-	<th width="250">PrevPercentEmpty</th>
-	<th width="250">CurrentFileSize</th>
-	<th width="250">CurrPercentEmpty</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
-	<td bgcolor="#F0F0F0" width="250">' + CAST(PreviousFileSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(PrevPercentEmpty AS NVARCHAR) + '</td>	
-	<td bgcolor="#F0F0F0" width="250">' + CAST(CurrentFileSize AS NVARCHAR) + '</td>	
-	<td bgcolor="#E0E0E0" width="250">' + CAST(CurrPercentEmpty AS NVARCHAR) + '</td>			
-	</tr>'
-FROM #TEMPdb
+	/*TempDB */
+	IF EXISTS (SELECT * FROM #TEMPdb)
+	BEGIN
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="725"> <tr><th class="header" width="725">Recent TempDB Auto-Growth</th></tr></table>
+			<table width="725" >
+			<tr>  
+			<th width="250">Database</th>
+			<th width="250">PreviousFileSize</th>
+			<th width="250">PrevPercentEmpty</th>
+			<th width="250">CurrentFileSize</th>
+			<th width="250">CurrPercentEmpty</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="250">' + [DBName] +'</td>
+			<td bgcolor="#F0F0F0" width="250">' + CAST(PreviousFileSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(PrevPercentEmpty AS NVARCHAR) + '</td>	
+			<td bgcolor="#F0F0F0" width="250">' + CAST(CurrentFileSize AS NVARCHAR) + '</td>	
+			<td bgcolor="#E0E0E0" width="250">' + CAST(CurrPercentEmpty AS NVARCHAR) + '</td>			
+			</tr>'
+		FROM #TEMPdb
 
-SELECT @HTML =  @HTML + '</table></body></html>'
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
+		SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+		EXEC msdb.dbo.sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
 
-IF @CellList IS NOT NULL
-BEGIN
-/*TEXT MESSAGE*/
-SET	@HTML =
-	'<html><head></head><body><table><tr><td>Database,</td><td>PrevFileSize,</td><td>CurrFileSize</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(PreviousFileSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(CurrentFileSize AS NVARCHAR), '') +'</td></tr>'
-FROM #TEMPdb
-SELECT @HTML =  @HTML + '</table></body></html>'
+		IF @CellList IS NOT NULL
+		BEGIN
+			/*TEXT MESSAGE*/
+			SET	@HTML =
+				'<html><head></head><body><table><tr><td>Database,</td><td>PrevFileSize,</td><td>CurrFileSize</td></tr>'
+			SELECT @HTML =  @HTML +   
+				'<tr><td>' + COALESCE([DBName], '') +',</td><td>' + COALESCE(CAST(PreviousFileSize AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(CurrentFileSize AS NVARCHAR), '') +'</td></tr>'
+			FROM #TEMPdb
+			SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
+			SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
 
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+			EXEC msdb.dbo.sp_send_dbmail
+			@recipients= @CellList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
 
-END
-END
-DROP TABLE #TEMPLogFiles
-DROP TABLE #TEMPdb
-DROP TABLE #TEMP
-DROP TABLE #TEMP2
-DROP TABLE #TEMP3
+		END
+	END
+	
+	DROP TABLE #TEMPLogFiles
+	DROP TABLE #TEMPdb
+	DROP TABLE #TEMP
+	DROP TABLE #TEMP2
+	DROP TABLE #TEMP3
 
 END
 GO
@@ -3467,7 +3528,6 @@ GO
 
 ALTER PROCEDURE [dbo].[rpt_HealthReport] (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @IncludePerfStats BIT = 0, @EmailFlag BIT = 1)
 AS
-
 /**************************************************************************************************************
 **  Purpose: This procedure generates and emails (using DBMail) an HMTL formatted health report of the server
 **
@@ -3504,1873 +3564,1880 @@ AS
 **	04/07/2013		Michael Rounds			2.2.4				Extended the lengths of KBytesRead and KBytesWritte in temp table FILESTATS - NUMERIC(12,2) to (20,2)
 **	04/11/2013		Michael Rounds			2.3					Changed the File Stats section to only display last 24 hours of data instead of since last restart
 **	04/12/2013		Michael Rounds			2.3.1				Added SQL Server 2012 Compatibility, Changed #TEMPDATES from SELECT INTO - > CREATE, INSERT INTO
+**	04/13/2013		Matthew Monroe			2.3.2				Adjusted job status sort order
+**	04/15/2013		Michael Rounds			2.3.2				Expanded Cum_IO_GB, added COALESCE to columns in HTML output to avoid blank HTML blobs, CHAGNED CASTs to BIGINT
+**	04/15/2013		Matthew Monroe			2.3.3				No longer flagging large .LDF files if less than 100 MB in size.  Updated #BACKUPS.filename to nvarchar(255)
 ***************************************************************************************************************/
     
 BEGIN
-
-SET NOCOUNT ON 
-SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
-
-DECLARE @HTML NVARCHAR(MAX),    
-		@ReportTitle NVARCHAR(255),  
-		@ServerName NVARCHAR(128),
-		@Processor NVARCHAR(255),
-		@ServerOS NVARCHAR(100),
-		@SystemMemory NVARCHAR(20),
-		@Days NVARCHAR(5),
-		@Hours NVARCHAR(5),
-		@Minutes NVARCHAR(5),
-		@ISClustered NVARCHAR(10),		
-		@SQLVersion NVARCHAR(500),
-		@ServerStartDate DATETIME,
-		@ServerMemory NVARCHAR(20),
-		@ServerCollation NVARCHAR(128),
-		@SingleUser NVARCHAR(5),
-		@SQLAgent NVARCHAR(10),
-		@StartDate DATETIME,
-		@EndDate DATETIME,
-		@LongQueriesQueryValue INT,
-		@BlockingQueryValue INT,
-		@DBName NVARCHAR(128),
-		@SQL NVARCHAR(MAX),
-		@Distributor NVARCHAR(128),
-		@DistributionDB NVARCHAR(128),
-		@DistSQL NVARCHAR(MAX),
-		@MinFileStatsDateStamp DATETIME,
-		@SQLVer NVARCHAR(20)
-
-/* STEP 1: GATHER DATA */
-IF @@Language <> 'us_english'
-BEGIN
-SET LANGUAGE us_english
-END
-
-SELECT @ReportTitle = 'Database Health Report ('+ CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName')) + ')'
-SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName'))
-
-CREATE TABLE #SYSTEMMEMORY (SystemMemory NUMERIC(12,2))
-
-SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
-
-IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
-BEGIN
--- (SQL 2008R2 And Below)
-EXEC sp_executesql
-	N'INSERT INTO #SYSTEMMEMORY (SystemMemory)
-	SELECT CAST((physical_memory_in_bytes/1048576.0) / 1024 AS NUMERIC(12,2)) AS SystemMemory FROM sys.dm_os_sys_info'	
-END
-ELSE BEGIN
--- (SQL 2012 And Above)
-EXEC sp_executesql
-	N'INSERT INTO #SYSTEMMEMORY (SystemMemory)
-	SELECT CAST((physical_memory_kb/1024.0) / 1024 AS NUMERIC(12,2)) AS SystemMemory FROM sys.dm_os_sys_info'
-END
-
-SELECT @SystemMemory = SystemMemory FROM #SYSTEMMEMORY
-
-DROP TABLE #SYSTEMMEMORY
-
-CREATE TABLE #SYSINFO (
-	[Index] INT,
-	Name NVARCHAR(100),
-	Internal_Value BIGINT,
-	Character_Value NVARCHAR(1000)
-	)
-
-INSERT INTO #SYSINFO
-EXEC master.dbo.xp_msver
-
-SELECT @ServerOS = 'Windows ' + a.[Character_Value] + ' Version ' + b.[Character_Value] 
-FROM #SYSINFO a
-CROSS APPLY #SYSINFO b
-WHERE a.Name = 'Platform'
-AND b.Name = 'WindowsVersion'
-
-CREATE TABLE #PROCESSOR (Value NVARCHAR(128), DATA NVARCHAR(255))
-
-INSERT INTO #PROCESSOR
-EXEC xp_instance_regread N'HKEY_LOCAL_MACHINE',
-            N'HARDWARE\DESCRIPTION\System\CentralProcessor\0',
-            N'ProcessorNameString';
-            
-SELECT @Processor = Data FROM #Processor
-
-SELECT @ISClustered = CASE SERVERPROPERTY('IsClustered')
-						WHEN 0 THEN 'No'
-						WHEN 1 THEN 'Yes'
-						ELSE 
-						'NA' END
-
-SELECT @ServerStartDate = crdate FROM master..sysdatabases WHERE NAME='tempdb'
-SELECT @EndDate = GETDATE()
-SELECT @Days = DATEDIFF(hh, @ServerStartDate, @EndDate) / 24
-SELECT @Hours = DATEDIFF(hh, @ServerStartDate, @EndDate) % 24
-SELECT @Minutes = DATEDIFF(mi, @ServerStartDate, @EndDate) % 60
-
-SELECT @SQLVersion = 'Microsoft SQL Server ' + CONVERT(NVARCHAR(128), SERVERPROPERTY('productversion')) + ' ' + 
-	CONVERT(NVARCHAR(128), SERVERPROPERTY('productlevel')) + ' ' + CONVERT(NVARCHAR(128), SERVERPROPERTY('edition'))
-
-SELECT @ServerMemory = cntr_value/1024.0 FROM sys.dm_os_performance_counters WHERE counter_name = 'Total Server Memory (KB)'
-SELECT @ServerCollation = CONVERT(NVARCHAR(128), SERVERPROPERTY('Collation')) 
-
-SELECT @SingleUser = CASE SERVERPROPERTY ('IsSingleUser')
-						WHEN 1 THEN 'Single'
-						WHEN 0 THEN 'Multi'
-						ELSE
-						'NA' END
-
-IF EXISTS (SELECT 1 FROM master..sysprocesses WHERE program_name LIKE N'SQLAgent%')
-BEGIN
-SET @SQLAgent = 'Up'
-END ELSE
-BEGIN
-SET @SQLAgent = 'Down'
-END
-
-/* Cluster Info */
-CREATE TABLE #CLUSTER (
-	NodeName NVARCHAR(50), 
-	Active BIT
-	)
-
-IF @ISClustered = 'Yes'
-BEGIN
-
-INSERT INTO #CLUSTER (NodeName)
-SELECT NodeName FROM sys.dm_os_cluster_nodes 
-
-UPDATE #CLUSTER
-SET Active = 1
-WHERE NodeName = (SELECT SERVERPROPERTY('ComputerNamePhysicalNetBIOS'))
-END
-
-/* Trace Flag Status */
-CREATE TABLE #TRACESTATUS (TraceFlag INT,[Status] BIT,[Global] BIT,[Session] BIT)
-
-INSERT INTO #TRACESTATUS (TraceFlag, [Status], [Global], [Session])
-EXEC ('DBCC TRACESTATUS(-1) WITH NO_INFOMSGS')
-
-/* Disk Stats */
-CREATE TABLE #DRIVES ([DriveLetter] NVARCHAR(5),[FreeSpace] BIGINT, ClusterShare BIT)
-
-INSERT INTO #DRIVES (DriveLetter,Freespace)
-EXEC master..xp_fixeddrives
-
-IF @ISClustered = 'Yes'
-BEGIN
-UPDATE #DRIVES
-SET ClusterShare = 0
-
-UPDATE #DRIVES
-SET ClusterShare = 1
-WHERE DriveLetter IN (SELECT DriveName FROM sys.dm_io_cluster_shared_drives)
-END
-
-CREATE TABLE #PERFSTATS (
-	PerfStatsHistoryID INT, 
-	BufferCacheHitRatio NUMERIC(38,13), 
-	PageLifeExpectency BIGINT, 
-	BatchRequestsPerSecond BIGINT, 
-	CompilationsPerSecond BIGINT, 
-	ReCompilationsPerSecond BIGINT, 
-	UserConnections BIGINT, 
-	LockWaitsPerSecond BIGINT, 
-	PageSplitsPerSecond BIGINT, 
-	ProcessesBlocked BIGINT, 
-	CheckpointPagesPerSecond BIGINT, 
-	StatDate DATETIME
-	)
 	
-CREATE TABLE #CPUSTATS (
-	CPUStatsHistoryID INT, 
-	SQLProcessPercent INT, 
-	SystemIdleProcessPercent INT, 
-	OtherProcessPerecnt INT, 
-	DateStamp DATETIME
-	)
+	SET NOCOUNT ON 
+	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
 	
-CREATE TABLE #LONGQUERIES (
-	DateStamp DATETIME,
-	[ElapsedTime(ss)] INT,
-	session_id SMALLINT, 
-	[DBName] NVARCHAR(128), 
-	login_name NVARCHAR(128), 
-	sql_text NVARCHAR(MAX)
-	)
+	DECLARE @HTML NVARCHAR(MAX),    
+			@ReportTitle NVARCHAR(255),  
+			@ServerName NVARCHAR(128),
+			@Processor NVARCHAR(255),
+			@ServerOS NVARCHAR(100),
+			@SystemMemory NVARCHAR(20),
+			@Days NVARCHAR(5),
+			@Hours NVARCHAR(5),
+			@Minutes NVARCHAR(5),
+			@ISClustered NVARCHAR(10),		
+			@SQLVersion NVARCHAR(500),
+			@ServerStartDate DATETIME,
+			@ServerMemory NVARCHAR(20),
+			@ServerCollation NVARCHAR(128),
+			@SingleUser NVARCHAR(5),
+			@SQLAgent NVARCHAR(10),
+			@StartDate DATETIME,
+			@EndDate DATETIME,
+			@LongQueriesQueryValue INT,
+			@BlockingQueryValue INT,
+			@DBName NVARCHAR(128),
+			@SQL NVARCHAR(MAX),
+			@Distributor NVARCHAR(128),
+			@DistributionDB NVARCHAR(128),
+			@DistSQL NVARCHAR(MAX),
+			@MinFileStatsDateStamp DATETIME,
+			@SQLVer NVARCHAR(20)
 	
-CREATE TABLE #BLOCKING (
-	DateStamp DATETIME,
-	[DBName] NVARCHAR(128),
-	Blocked_Spid SMALLINT,
-	Blocking_Spid SMALLINT,
-	Blocked_Login NVARCHAR(128),
-	Blocked_Waittime_Seconds NUMERIC(12,2),
-	Blocked_SQL_Text NVARCHAR(MAX),
-	Offending_Login NVARCHAR(128),
-	Offending_SQL_Text NVARCHAR(MAX)
-	)
-
-CREATE TABLE #SCHEMACHANGES (
-	ObjectName NVARCHAR(128), 
-	CreateDate DATETIME, 
-	LoginName NVARCHAR(128), 
-	ComputerName NVARCHAR(128), 
-	SQLEvent NVARCHAR(255), 
-	[DBName] NVARCHAR(128)
-	)
-	
-CREATE TABLE #FILESTATS (
-	[DBName] NVARCHAR(128),
-	[DBID] INT,
-	[FileID] INT,
-	[FileName] NVARCHAR(255),
-	[LogicalFileName] NVARCHAR(255),
-	[VLFCount] INT,
-	DriveLetter NCHAR(1),
-	FileMBSize NVARCHAR(30),
-	[FileMaxSize] NVARCHAR(30),
-	FileGrowth NVARCHAR(30),
-	FileMBUsed NVARCHAR(30),
-	FileMBEmpty NVARCHAR(30),
-	FilePercentEmpty NUMERIC(12,2),
-	LargeLDF INT,
-	[FileGroup] NVARCHAR(100),
-	NumberReads NVARCHAR(30),
-	KBytesRead NUMERIC(20,2),
-	NumberWrites NVARCHAR(30),
-	KBytesWritten NUMERIC(20,2),
-	IoStallReadMS NVARCHAR(30),
-	IoStallWriteMS NVARCHAR(30),
-	Cum_IO_GB NUMERIC(12,2),
-	IO_Percent NUMERIC(12,2)
-	)
-	
-CREATE TABLE #JOBSTATUS (
-	JobName NVARCHAR(255),
-	Category NVARCHAR(255),
-	[Enabled] INT,
-	StartTime DATETIME,
-	StopTime DATETIME,
-	AvgRunTime NUMERIC(12,2),
-	LastRunTime NUMERIC(12,2),
-	RunTimeStatus NVARCHAR(30),
-	LastRunOutcome NVARCHAR(20)
-	)	
-
-IF EXISTS (SELECT TOP 1 * FROM [dba].dbo.HealthReport)
-BEGIN
-	SELECT @StartDate = MAX(DateStamp) FROM [dba].dbo.HealthReport
-END
-ELSE BEGIN
-	SELECT @StartDate = GETDATE() -1
-END
-
-SELECT @LongQueriesQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
-SELECT @BlockingQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'BlockingAlert'	
-
-IF @Recepients IS NULL
-BEGIN
-SELECT @Recepients = EmailList FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
-END
-
-IF @CC IS NULL
-BEGIN
-SELECT @CC = EmailList2 FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
-END
-
-/* PerfStats */
-IF @IncludePerfStats = 1
-BEGIN
-	INSERT INTO #PERFSTATS (PerfStatsHistoryID, BufferCacheHitRatio, PageLifeExpectency, BatchRequestsPerSecond, CompilationsPerSecond, ReCompilationsPerSecond, 
-		UserConnections, LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate)
-	SELECT PerfStatsHistoryID, BufferCacheHitRatio, PageLifeExpectency, BatchRequestsPerSecond, CompilationsPerSecond, ReCompilationsPerSecond, UserConnections, 
-		LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate
-	FROM [dba].dbo.PerfStatsHistory WHERE StatDate >= GETDATE() -1
-	AND DATEPART(mi,StatDate) = 0
-
-	INSERT INTO #CPUSTATS (CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp)
-	SELECT CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp
-	FROM [dba].dbo.CPUStatsHistory WHERE DateStamp >= GETDATE() -1
-	AND DATEPART(mi,DateStamp) = 0
-END
-
-/* LongQueries */
-INSERT INTO #LONGQUERIES (DateStamp, [ElapsedTime(ss)], Session_ID, [DBName], Login_Name, SQL_Text)
-SELECT MAX(collection_time) AS DateStamp,MAX(CAST(DATEDIFF(ss,start_time,collection_time) AS INT)) AS [ElapsedTime(ss)],Session_ID,
-	[Database_Name] AS [DBName],Login_Name,SQL_Text
-FROM [dba].dbo.QueryHistory
-WHERE (DATEDIFF(ss,start_time,collection_time)) >= @LongQueriesQueryValue 
-AND (DATEDIFF(dd,collection_time,@StartDate)) < 1
-AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-AND sql_text NOT LIKE 'BACKUP DATABASE%'
-AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
-AND sql_text NOT LIKE 'ALTER INDEX%'
-AND sql_text NOT LIKE 'DECLARE @BlobEater%'
-AND sql_text NOT LIKE 'DBCC%'
-AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
-GROUP BY Session_ID, [Database_Name], Login_Name, SQL_Text
-
-/* Blocking */
-INSERT INTO #BLOCKING (DateStamp,[DBName],Blocked_Spid,Blocking_Spid,Blocked_Login,Blocked_Waittime_Seconds,Blocked_SQL_Text,Offending_Login,Offending_SQL_Text)
-SELECT DateStamp,[DBName],Blocked_Spid,Blocking_Spid,Blocked_Login,Blocked_Waittime_Seconds,Blocked_SQL_Text,Offending_Login,Offending_SQL_Text
-FROM [dba].dbo.BlockingHistory
-WHERE DateStamp > @StartDate
-AND Blocked_Waittime_Seconds >= @BlockingQueryValue
-
-/* SchemaChanges */
-CREATE TABLE #TEMP ([DBName] NVARCHAR(128), [Status] INT)
-
-INSERT INTO #TEMP ([DBName], [Status])
-SELECT [DBName], 0
-FROM [dba].dbo.DatabaseSettings WHERE SchemaTracking = 1 AND [DBName] NOT LIKE 'AdventureWorks%'
-
-SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
-
-WHILE @DBName IS NOT NULL
-BEGIN
-
-SET @SQL = 
-
-'SELECT ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName]
-FROM '+ '[' + @DBName + ']' +'.dbo.SchemaChangeLog
-WHERE CreateDate >'''+CONVERT(NVARCHAR(30),@StartDate,121)+'''
-AND SQLEvent <> ''UPDATE_STATISTICS''
-ORDER BY CreateDate DESC'
-
-INSERT INTO #SCHEMACHANGES (ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName])
-EXEC(@SQL)
-
-UPDATE #TEMP
-SET [Status] = 1
-WHERE [DBName] = @DBName
-
-SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
-
-END
-DROP TABLE #TEMP
-
-/* FileStats */
-CREATE TABLE #LOGSPACE (
-	[DBName] NVARCHAR(128) NOT NULL,
-	[LogSize] NUMERIC(12,2) NOT NULL,
-	[LogPercentUsed] NUMERIC(12,2) NOT NULL,
-	[LogStatus] INT NOT NULL
-	)
-
-CREATE TABLE #DATASPACE (
-	[DBName] NVARCHAR(128) NULL,
-	[Fileid] INT NOT NULL,
-	[FileGroup] INT NOT NULL,
-	[TotalExtents] NUMERIC(12,2) NOT NULL,
-	[UsedExtents] NUMERIC(12,2) NOT NULL,
-	[FileLogicalName] NVARCHAR(128) NULL,
-	[Filename] NVARCHAR(255) NOT NULL
-	)
-
-CREATE TABLE #TMP_DB (
-	[DBName] NVARCHAR(128)
-	) 
-
-SET @SQL = 'DBCC SQLPERF (LOGSPACE) WITH NO_INFOMSGS' 
-
-INSERT INTO #LOGSPACE ([DBName],LogSize,LogPercentUsed,LogStatus)
-EXEC(@SQL)
-
-CREATE INDEX IDX_tLogSpace_Database ON #LOGSPACE ([DBName])
-
-INSERT INTO #TMP_DB 
-SELECT LTRIM(RTRIM(name)) AS [DBName]
-FROM master..sysdatabases 
-WHERE category IN ('0', '1','16')
-AND DATABASEPROPERTYEX(name,'STATUS')='ONLINE'
-ORDER BY name
-
-CREATE INDEX IDX_TMPDB_Database ON #TMP_DB ([DBName])
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
-
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-DBCC SHOWFILESTATS WITH NO_INFOMSGS'
-
-INSERT INTO #DATASPACE ([Fileid],[FileGroup],[TotalExtents],[UsedExtents],[FileLogicalName],[Filename])
-EXEC (@SQL)
-
-UPDATE #DATASPACE
-SET [DBName] = @DBName
-WHERE COALESCE([DBName],'') = ''
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-
-END
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
- 
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #FILESTATS (
-	[DBName],
-	[DBID],
-	[FileID],	
-	[DriveLetter],
-	[Filename],
-	[LogicalFileName],
-	[Filegroup],
-	[FileMBSize],
-	[FileMaxSize],
-	[FileGrowth],
-	[FileMBUsed],
-	[FileMBEmpty],
-	[FilePercentEmpty])
-SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
-		DB_ID() AS [DBID],
-		SF.FileID AS [FileID],
-		LEFT(SF.[FileName], 1) AS DriveLetter,		
-		LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
-		SF.name AS LogicalFileName,
-		COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-		CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
-		CASE SF.maxsize 
-			WHEN -1 THEN N''Unlimited'' 
-			ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
-			END AS FileMaxSize, 
-		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((growth * 8192)/(1024.0*1024.0))) + '' MB''
-			ELSE CONVERT (NVARCHAR, growth) + '' %'' 
-			END) AS FileGrowth,
-		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
-		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
-		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
-			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
-FROM sys.sysfiles SF
-JOIN master..sysdatabases SDB
-	ON db_id() = SDB.[dbid]
-JOIN sys.dm_io_virtual_file_stats(NULL,NULL) b
-	ON db_id() = b.[database_id] AND SF.fileid = b.[file_id]
-LEFT OUTER 
-JOIN #DATASPACE DSP
-	ON DSP.[Filename] COLLATE DATABASE_DEFAULT = SF.[Filename] COLLATE DATABASE_DEFAULT
-LEFT OUTER 
-JOIN #LOGSPACE LSP
-	ON LSP.[DBName] = SDB.Name
-GROUP BY SDB.Name,SF.FileID,SF.[FileName],SF.name,SF.groupid,SF.size,SF.maxsize,SF.[status],growth,DSP.UsedExtents,LSP.LogSize,LSP.LogPercentUsed'
-
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-
-DROP TABLE #LOGSPACE
-DROP TABLE #DATASPACE
-
-UPDATE f
-SET f.NumberReads = b.num_of_reads,
-	f.KBytesRead = b.num_of_bytes_read / 1024,
-	f.NumberWrites = b.num_of_writes,
-	f.KBytesWritten = b.num_of_bytes_written / 1024,
-	f.IoStallReadMS = b.io_stall_read_ms,
-	f.IoStallWriteMS = b.io_stall_write_ms,
-	f.Cum_IO_GB = b.CumIOGB,
-	f.IO_Percent = b.IOPercent
-FROM #FILESTATS f
-JOIN (SELECT database_ID, [file_id], num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms, 
-			CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024 AS CumIOGB,
-			CAST(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024 / 
-				SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
-		FROM sys.dm_io_virtual_file_stats(NULL,NULL)
-		GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
-ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
-
-UPDATE b
-SET b.LargeLDF = 
-	CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) THEN 1
-	ELSE 2 
+	/* STEP 1: GATHER DATA */
+	IF @@Language <> 'us_english'
+	BEGIN
+		SET LANGUAGE us_english
 	END
-FROM #FILESTATS a
-JOIN #FILESTATS b
-ON a.[DBName] = b.[DBName] 
-AND a.[FileName] LIKE '%mdf' 
-AND b.[FileName] LIKE '%ldf'
-
-/* VLF INFO - USES SAME TMP_DB TO GATHER STATS */
-CREATE TABLE #VLFINFO (
-	[DBName] NVARCHAR(128) NULL,
-	RecoveryUnitId NVARCHAR(3),
-	FileID NVARCHAR(3), 
-	FileSize NUMERIC(20,0),
-	StartOffset BIGINT, 
-	FSeqNo BIGINT, 
-	[Status] CHAR(1),
-	Parity NVARCHAR(4),
-	CreateLSN NUMERIC(25,0)
-	)
-
-IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
-BEGIN
--- (SQL 2008R2 And Below)
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
-
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #VLFINFO (FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
-EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
-EXEC(@SQL)
-
-SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-END
-ELSE BEGIN
--- (SQL 2012 And Above)
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
- 
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #VLFINFO (RecoveryUnitID, FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
-EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
-EXEC(@SQL)
-
-SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-END
-
-DROP TABLE #TMP_DB
-
-UPDATE a
-SET a.VLFCount = (SELECT COUNT(1) FROM #VLFINFO WHERE [DBName] = REPLACE(REPLACE(a.DBName,'[',''),']',''))
-FROM #FILESTATS a
-WHERE COALESCE(a.[FileGroup],'') = ''
-
-SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp <= DateAdd(hh, -24, GETDATE())
-
-UPDATE c
-SET c.NumberReads = d.NumberReads,
-	c.KBytesRead = d.KBytesRead,
-	c.NumberWrites = d.NumberWrites,
-	c.KBytesWritten = d.KBytesWritten,
-	c.IoStallReadMS = d.IoStallReadMS,
-	c.IoStallWriteMS = d.IoStallWriteMS,
-	c.Cum_IO_GB = d.Cum_IO_GB
-FROM #FILESTATS c
-LEFT OUTER
-JOIN (SELECT
-		b.dbname,
-		b.[FileName],
-		SUM(CAST(b.NumberReads AS INT) - CAST(a.NumberReads AS INT)) AS NumberReads,
+	
+	SELECT @ReportTitle = 'Database Health Report ('+ CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName')) + ')'
+	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName'))
+	
+	CREATE TABLE #SYSTEMMEMORY (SystemMemory NUMERIC(12,2))
+	
+	SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
+	
+	IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
+	BEGIN
+		-- (SQL 2008R2 And Below)
+		EXEC sp_executesql
+			N'INSERT INTO #SYSTEMMEMORY (SystemMemory)
+			SELECT CAST((physical_memory_in_bytes/1048576.0) / 1024 AS NUMERIC(12,2)) AS SystemMemory FROM sys.dm_os_sys_info'	
+	END
+	ELSE BEGIN
+		-- (SQL 2012 And Above)
+		EXEC sp_executesql
+			N'INSERT INTO #SYSTEMMEMORY (SystemMemory)
+			SELECT CAST((physical_memory_kb/1024.0) / 1024 AS NUMERIC(12,2)) AS SystemMemory FROM sys.dm_os_sys_info'
+	END
+	
+	SELECT @SystemMemory = SystemMemory FROM #SYSTEMMEMORY
+	
+	DROP TABLE #SYSTEMMEMORY
+	
+	CREATE TABLE #SYSINFO (
+		[Index] INT,
+		Name NVARCHAR(100),
+		Internal_Value BIGINT,
+		Character_Value NVARCHAR(1000)
+		)
+	
+	INSERT INTO #SYSINFO
+	EXEC master.dbo.xp_msver
+	
+	SELECT @ServerOS = 'Windows ' + a.[Character_Value] + ' Version ' + b.[Character_Value] 
+	FROM #SYSINFO a
+	CROSS APPLY #SYSINFO b
+	WHERE a.Name = 'Platform'
+	AND b.Name = 'WindowsVersion'
+	
+	CREATE TABLE #PROCESSOR (Value NVARCHAR(128), DATA NVARCHAR(255))
+	
+	INSERT INTO #PROCESSOR
+	EXEC xp_instance_regread N'HKEY_LOCAL_MACHINE',
+	            N'HARDWARE\DESCRIPTION\System\CentralProcessor\0',
+	            N'ProcessorNameString';
+	            
+	SELECT @Processor = Data FROM #Processor
+	
+	SELECT @ISClustered = CASE SERVERPROPERTY('IsClustered')
+							WHEN 0 THEN 'No'
+							WHEN 1 THEN 'Yes'
+							ELSE 
+							'NA' END
+	
+	SELECT @ServerStartDate = crdate FROM master..sysdatabases WHERE NAME='tempdb'
+	SELECT @EndDate = GETDATE()
+	SELECT @Days = DATEDIFF(hh, @ServerStartDate, @EndDate) / 24
+	SELECT @Hours = DATEDIFF(hh, @ServerStartDate, @EndDate) % 24
+	SELECT @Minutes = DATEDIFF(mi, @ServerStartDate, @EndDate) % 60
+	
+	SELECT @SQLVersion = 'Microsoft SQL Server ' + CONVERT(NVARCHAR(128), SERVERPROPERTY('productversion')) + ' ' + 
+		CONVERT(NVARCHAR(128), SERVERPROPERTY('productlevel')) + ' ' + CONVERT(NVARCHAR(128), SERVERPROPERTY('edition'))
+	
+	SELECT @ServerMemory = cntr_value/1024.0 FROM sys.dm_os_performance_counters WHERE counter_name = 'Total Server Memory (KB)'
+	SELECT @ServerCollation = CONVERT(NVARCHAR(128), SERVERPROPERTY('Collation')) 
+	
+	SELECT @SingleUser = CASE SERVERPROPERTY ('IsSingleUser')
+							WHEN 1 THEN 'Single'
+							WHEN 0 THEN 'Multi'
+							ELSE
+							'NA' END
+	
+	IF EXISTS (SELECT 1 FROM master..sysprocesses WHERE program_name LIKE N'SQLAgent%')
+	BEGIN
+		SET @SQLAgent = 'Up'
+	END ELSE
+	BEGIN
+		SET @SQLAgent = 'Down'
+	END
+	
+	/* Cluster Info */
+	CREATE TABLE #CLUSTER (
+		NodeName NVARCHAR(50), 
+		Active BIT
+		)
+	
+	IF @ISClustered = 'Yes'
+	BEGIN
+		
+		INSERT INTO #CLUSTER (NodeName)
+		SELECT NodeName FROM sys.dm_os_cluster_nodes 
+		
+		UPDATE #CLUSTER
+		SET Active = 1
+		WHERE NodeName = (SELECT SERVERPROPERTY('ComputerNamePhysicalNetBIOS'))
+	END
+	
+	/* Trace Flag Status */
+	CREATE TABLE #TRACESTATUS (TraceFlag INT,[Status] BIT,[Global] BIT,[Session] BIT)
+	
+	INSERT INTO #TRACESTATUS (TraceFlag, [Status], [Global], [Session])
+	EXEC ('DBCC TRACESTATUS(-1) WITH NO_INFOMSGS')
+	
+	/* Disk Stats */
+	CREATE TABLE #DRIVES ([DriveLetter] NVARCHAR(5),[FreeSpace] BIGINT, ClusterShare BIT)
+	
+	INSERT INTO #DRIVES (DriveLetter,Freespace)
+	EXEC master..xp_fixeddrives
+	
+	IF @ISClustered = 'Yes'
+	BEGIN
+		UPDATE #DRIVES
+		SET ClusterShare = 0
+		
+		UPDATE #DRIVES
+		SET ClusterShare = 1
+		WHERE DriveLetter IN (SELECT DriveName FROM sys.dm_io_cluster_shared_drives)
+	END
+	
+	CREATE TABLE #PERFSTATS (
+		PerfStatsHistoryID INT, 
+		BufferCacheHitRatio NUMERIC(38,13), 
+		PageLifeExpectency BIGINT, 
+		BatchRequestsPerSecond BIGINT, 
+		CompilationsPerSecond BIGINT, 
+		ReCompilationsPerSecond BIGINT, 
+		UserConnections BIGINT, 
+		LockWaitsPerSecond BIGINT, 
+		PageSplitsPerSecond BIGINT, 
+		ProcessesBlocked BIGINT, 
+		CheckpointPagesPerSecond BIGINT, 
+		StatDate DATETIME
+		)
+		
+	CREATE TABLE #CPUSTATS (
+		CPUStatsHistoryID INT, 
+		SQLProcessPercent INT, 
+		SystemIdleProcessPercent INT, 
+		OtherProcessPerecnt INT, 
+		DateStamp DATETIME
+		)
+		
+	CREATE TABLE #LONGQUERIES (
+		DateStamp DATETIME,
+		[ElapsedTime(ss)] INT,
+		session_id SMALLINT, 
+		[DBName] NVARCHAR(128), 
+		login_name NVARCHAR(128), 
+		sql_text NVARCHAR(MAX)
+		)
+		
+	CREATE TABLE #BLOCKING (
+		DateStamp DATETIME,
+		[DBName] NVARCHAR(128),
+		Blocked_Spid SMALLINT,
+		Blocking_Spid SMALLINT,
+		Blocked_Login NVARCHAR(128),
+		Blocked_Waittime_Seconds NUMERIC(12,2),
+		Blocked_SQL_Text NVARCHAR(MAX),
+		Offending_Login NVARCHAR(128),
+		Offending_SQL_Text NVARCHAR(MAX)
+		)
+	
+	CREATE TABLE #SCHEMACHANGES (
+		ObjectName NVARCHAR(128), 
+		CreateDate DATETIME, 
+		LoginName NVARCHAR(128), 
+		ComputerName NVARCHAR(128), 
+		SQLEvent NVARCHAR(255), 
+		[DBName] NVARCHAR(128)
+		)
+		
+	CREATE TABLE #FILESTATS (
+		[DBName] NVARCHAR(128),
+		[DBID] INT,
+		[FileID] INT,
+		[FileName] NVARCHAR(255),
+		[LogicalFileName] NVARCHAR(255),
+		[VLFCount] INT,
+		DriveLetter NCHAR(1),
+		FileMBSize NVARCHAR(30),
+		[FileMaxSize] NVARCHAR(30),
+		FileGrowth NVARCHAR(30),
+		FileMBUsed NVARCHAR(30),
+		FileMBEmpty NVARCHAR(30),
+		FilePercentEmpty NUMERIC(12,2),
+		LargeLDF INT,
+		[FileGroup] NVARCHAR(100),
+		NumberReads NVARCHAR(30),
+		KBytesRead NUMERIC(20,2),
+		NumberWrites NVARCHAR(30),
+		KBytesWritten NUMERIC(20,2),
+		IoStallReadMS NVARCHAR(30),
+		IoStallWriteMS NVARCHAR(30),
+	Cum_IO_GB NUMERIC(20,2),
+		IO_Percent NUMERIC(12,2)
+		)
+		
+	CREATE TABLE #JOBSTATUS (
+		JobName NVARCHAR(255),
+		Category NVARCHAR(255),
+		[Enabled] INT,
+		StartTime DATETIME,
+		StopTime DATETIME,
+		AvgRunTime NUMERIC(12,2),
+		LastRunTime NUMERIC(12,2),
+		RunTimeStatus NVARCHAR(30),
+		LastRunOutcome NVARCHAR(20)
+		)	
+	
+	IF EXISTS (SELECT TOP 1 * FROM [dba].dbo.HealthReport)
+	BEGIN
+		SELECT @StartDate = MAX(DateStamp) FROM [dba].dbo.HealthReport
+	END
+	ELSE 
+	BEGIN
+		SELECT @StartDate = GETDATE() -1
+	END
+	
+	SELECT @LongQueriesQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
+	SELECT @BlockingQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'BlockingAlert'	
+	
+	IF @Recepients IS NULL
+	BEGIN
+		SELECT @Recepients = EmailList FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
+	END
+	
+	IF @CC IS NULL
+	BEGIN
+		SELECT @CC = EmailList2 FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
+	END
+	
+	/* PerfStats */
+	IF @IncludePerfStats = 1
+	BEGIN
+		INSERT INTO #PERFSTATS (PerfStatsHistoryID, BufferCacheHitRatio, PageLifeExpectency, BatchRequestsPerSecond, CompilationsPerSecond, ReCompilationsPerSecond, 
+			UserConnections, LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate)
+		SELECT PerfStatsHistoryID, BufferCacheHitRatio, PageLifeExpectency, BatchRequestsPerSecond, CompilationsPerSecond, ReCompilationsPerSecond, UserConnections, 
+			LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate
+		FROM [dba].dbo.PerfStatsHistory WHERE StatDate >= GETDATE() -1
+		AND DATEPART(mi,StatDate) = 0
+	
+		INSERT INTO #CPUSTATS (CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp)
+		SELECT CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp
+		FROM [dba].dbo.CPUStatsHistory WHERE DateStamp >= GETDATE() -1
+		AND DATEPART(mi,DateStamp) = 0
+	END
+	
+	/* LongQueries */
+	INSERT INTO #LONGQUERIES (DateStamp, [ElapsedTime(ss)], Session_ID, [DBName], Login_Name, SQL_Text)
+	SELECT MAX(collection_time) AS DateStamp,MAX(CAST(DATEDIFF(ss,start_time,collection_time) AS INT)) AS [ElapsedTime(ss)],Session_ID,
+		[Database_Name] AS [DBName],Login_Name,SQL_Text
+	FROM [dba].dbo.QueryHistory
+	WHERE (DATEDIFF(ss,start_time,collection_time)) >= @LongQueriesQueryValue 
+	AND (DATEDIFF(dd,collection_time,@StartDate)) < 1
+	AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+	AND sql_text NOT LIKE 'BACKUP DATABASE%'
+	AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
+	AND sql_text NOT LIKE 'ALTER INDEX%'
+	AND sql_text NOT LIKE 'DECLARE @BlobEater%'
+	AND sql_text NOT LIKE 'DBCC%'
+	AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
+	GROUP BY Session_ID, [Database_Name], Login_Name, SQL_Text
+	
+	/* Blocking */
+	INSERT INTO #BLOCKING (DateStamp,[DBName],Blocked_Spid,Blocking_Spid,Blocked_Login,Blocked_Waittime_Seconds,Blocked_SQL_Text,Offending_Login,Offending_SQL_Text)
+	SELECT DateStamp,[DBName],Blocked_Spid,Blocking_Spid,Blocked_Login,Blocked_Waittime_Seconds,Blocked_SQL_Text,Offending_Login,Offending_SQL_Text
+	FROM [dba].dbo.BlockingHistory
+	WHERE DateStamp > @StartDate
+	AND Blocked_Waittime_Seconds >= @BlockingQueryValue
+	
+	/* SchemaChanges */
+	CREATE TABLE #TEMP ([DBName] NVARCHAR(128), [Status] INT)
+	
+	INSERT INTO #TEMP ([DBName], [Status])
+	SELECT [DBName], 0
+	FROM [dba].dbo.DatabaseSettings WHERE SchemaTracking = 1 AND [DBName] NOT LIKE 'AdventureWorks%'
+	
+	SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
+	
+	WHILE @DBName IS NOT NULL
+	BEGIN
+		
+		SET @SQL = 
+		
+		'SELECT ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName]
+		FROM '+ '[' + @DBName + ']' +'.dbo.SchemaChangeLog
+		WHERE CreateDate >'''+CONVERT(NVARCHAR(30),@StartDate,121)+'''
+		AND SQLEvent <> ''UPDATE_STATISTICS''
+		ORDER BY CreateDate DESC'
+		
+		INSERT INTO #SCHEMACHANGES (ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName])
+		EXEC(@SQL)
+		
+		UPDATE #TEMP
+		SET [Status] = 1
+		WHERE [DBName] = @DBName
+		
+		SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
+		
+	END
+	DROP TABLE #TEMP
+	
+	/* FileStats */
+	CREATE TABLE #LOGSPACE (
+		[DBName] NVARCHAR(128) NOT NULL,
+		[LogSize] NUMERIC(12,2) NOT NULL,
+		[LogPercentUsed] NUMERIC(12,2) NOT NULL,
+		[LogStatus] INT NOT NULL
+		)
+	
+	CREATE TABLE #DATASPACE (
+		[DBName] NVARCHAR(128) NULL,
+		[Fileid] INT NOT NULL,
+		[FileGroup] INT NOT NULL,
+		[TotalExtents] NUMERIC(12,2) NOT NULL,
+		[UsedExtents] NUMERIC(12,2) NOT NULL,
+		[FileLogicalName] NVARCHAR(128) NULL,
+		[Filename] NVARCHAR(255) NOT NULL
+		)
+	
+	CREATE TABLE #TMP_DB (
+		[DBName] NVARCHAR(128)
+		) 
+	
+	SET @SQL = 'DBCC SQLPERF (LOGSPACE) WITH NO_INFOMSGS' 
+	
+	INSERT INTO #LOGSPACE ([DBName],LogSize,LogPercentUsed,LogStatus)
+	EXEC(@SQL)
+	
+	CREATE INDEX IDX_tLogSpace_Database ON #LOGSPACE ([DBName])
+	
+	INSERT INTO #TMP_DB 
+	SELECT LTRIM(RTRIM(name)) AS [DBName]
+	FROM master..sysdatabases 
+	WHERE category IN ('0', '1','16')
+	AND DATABASEPROPERTYEX(name,'STATUS')='ONLINE'
+	ORDER BY name
+	
+	CREATE INDEX IDX_TMPDB_Database ON #TMP_DB ([DBName])
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN
+		
+		SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+		DBCC SHOWFILESTATS WITH NO_INFOMSGS'
+		
+		INSERT INTO #DATASPACE ([Fileid],[FileGroup],[TotalExtents],[UsedExtents],[FileLogicalName],[Filename])
+		EXEC (@SQL)
+		
+		UPDATE #DATASPACE
+		SET [DBName] = @DBName
+		WHERE COALESCE([DBName],'') = ''
+		
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+		
+	END
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN
+		 
+		SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+		INSERT INTO #FILESTATS (
+			[DBName],
+			[DBID],
+			[FileID],	
+			[DriveLetter],
+			[Filename],
+			[LogicalFileName],
+			[Filegroup],
+			[FileMBSize],
+			[FileMaxSize],
+			[FileGrowth],
+			[FileMBUsed],
+			[FileMBEmpty],
+			[FilePercentEmpty])
+		SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
+				DB_ID() AS [DBID],
+				SF.FileID AS [FileID],
+				LEFT(SF.[FileName], 1) AS DriveLetter,		
+				LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
+				SF.name AS LogicalFileName,
+				COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
+				CAST((SF.size * 8)/1024 AS NVARCHAR) AS [FileMBSize], 
+				CASE SF.maxsize 
+					WHEN -1 THEN N''Unlimited'' 
+					ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
+					END AS FileMaxSize, 
+				(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((growth * 8192)/(1024.0*1024.0))) + '' MB''
+					ELSE CONVERT (NVARCHAR, growth) + '' %'' 
+					END) AS FileGrowth,
+				CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
+				(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
+				(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
+					CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
+		FROM sys.sysfiles SF
+		JOIN master..sysdatabases SDB
+			ON db_id() = SDB.[dbid]
+		JOIN sys.dm_io_virtual_file_stats(NULL,NULL) b
+			ON db_id() = b.[database_id] AND SF.fileid = b.[file_id]
+		LEFT OUTER 
+		JOIN #DATASPACE DSP
+			ON DSP.[Filename] COLLATE DATABASE_DEFAULT = SF.[Filename] COLLATE DATABASE_DEFAULT
+		LEFT OUTER 
+		JOIN #LOGSPACE LSP
+			ON LSP.[DBName] = SDB.Name
+		GROUP BY SDB.Name,SF.FileID,SF.[FileName],SF.name,SF.groupid,SF.size,SF.maxsize,SF.[status],growth,DSP.UsedExtents,LSP.LogSize,LSP.LogPercentUsed'
+		
+		EXEC(@SQL)
+		
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+	END
+	
+	DROP TABLE #LOGSPACE
+	DROP TABLE #DATASPACE
+	
+	UPDATE f
+	SET f.NumberReads = b.num_of_reads,
+		f.KBytesRead = b.num_of_bytes_read / 1024,
+		f.NumberWrites = b.num_of_writes,
+		f.KBytesWritten = b.num_of_bytes_written / 1024,
+		f.IoStallReadMS = b.io_stall_read_ms,
+		f.IoStallWriteMS = b.io_stall_write_ms,
+		f.Cum_IO_GB = b.CumIOGB,
+		f.IO_Percent = b.IOPercent
+	FROM #FILESTATS f
+	JOIN (SELECT database_ID, [file_id], num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms, 
+				CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024 AS CumIOGB,
+				CAST(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024 / 
+					SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
+			FROM sys.dm_io_virtual_file_stats(NULL,NULL)
+			GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
+	ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
+	
+	-- Look for databases where the log file is larger than the primary database file and the log file is larger than 100 MB
+	UPDATE b
+	SET b.LargeLDF = 
+		CASE WHEN CAST(b.FileMBSize AS INT) > CAST(a.FileMBSize AS INT) AND b.FileMBSize > 100 THEN 1
+		ELSE 2 
+		END
+	FROM #FILESTATS a
+	JOIN #FILESTATS b
+	ON a.[DBName] = b.[DBName] 
+	AND a.[FileName] LIKE '%mdf' 
+	AND b.[FileName] LIKE '%ldf'
+	
+	/* VLF INFO - USES SAME TMP_DB TO GATHER STATS */
+	CREATE TABLE #VLFINFO (
+		[DBName] NVARCHAR(128) NULL,
+		RecoveryUnitId NVARCHAR(3),
+		FileID NVARCHAR(3), 
+		FileSize NUMERIC(20,0),
+		StartOffset BIGINT, 
+		FSeqNo BIGINT, 
+		[Status] CHAR(1),
+		Parity NVARCHAR(4),
+		CreateLSN NUMERIC(25,0)
+		)
+	
+	IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
+	BEGIN
+		-- (SQL 2008R2 And Below)
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+		
+		WHILE @DBName IS NOT NULL 
+		BEGIN
+			
+			SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+			INSERT INTO #VLFINFO (FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
+			EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
+			EXEC(@SQL)
+			
+			SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
+			EXEC(@SQL)
+			
+			SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+		END
+	END
+	ELSE 
+	BEGIN
+		-- (SQL 2012 And Above)
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+		
+		WHILE @DBName IS NOT NULL 
+		BEGIN
+			 
+			SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+			INSERT INTO #VLFINFO (RecoveryUnitID, FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
+			EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
+			EXEC(@SQL)
+			
+			SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
+			EXEC(@SQL)
+			
+			SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+		END
+	END
+	
+	DROP TABLE #TMP_DB
+	
+	UPDATE a
+	SET a.VLFCount = (SELECT COUNT(1) FROM #VLFINFO WHERE [DBName] = REPLACE(REPLACE(a.DBName,'[',''),']',''))
+	FROM #FILESTATS a
+	WHERE COALESCE(a.[FileGroup],'') = ''
+	
+	SELECT @MinFileStatsDateStamp = FileStatsDateStamp FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp <= DateAdd(hh, -24, GETDATE())
+	
+	UPDATE c
+	SET c.NumberReads = d.NumberReads,
+		c.KBytesRead = d.KBytesRead,
+		c.NumberWrites = d.NumberWrites,
+		c.KBytesWritten = d.KBytesWritten,
+		c.IoStallReadMS = d.IoStallReadMS,
+		c.IoStallWriteMS = d.IoStallWriteMS,
+		c.Cum_IO_GB = d.Cum_IO_GB
+	FROM #FILESTATS c
+	LEFT OUTER
+	JOIN (SELECT
+			b.dbname,
+			b.[FileName],
+		SUM(CAST(b.NumberReads AS BIGINT) - CAST(a.NumberReads AS BIGINT)) AS NumberReads,
 		SUM(b.KBytesRead - a.KBytesRead) AS KBytesRead,
-		SUM(CAST(b.NumberWrites AS INT) - CAST(a.NumberWrites AS INT)) AS NumberWrites,
+		SUM(CAST(b.NumberWrites AS BIGINT) - CAST(a.NumberWrites AS BIGINT)) AS NumberWrites,
 		SUM(b.KBytesWritten - a.KBytesWritten) AS KBytesWritten,
-		SUM(CAST(b.IoStallReadMS AS INT) - CAST(a.IoStallReadMS AS INT)) AS IoStallReadMS,
-		SUM(CAST(b.IoStallWriteMS AS INT) - CAST(a.IoStallWriteMS AS INT)) AS IoStallWriteMS,
-		SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
-		FROM [dba].dbo.FileStatsHistory a
-		LEFT OUTER
-		JOIN #FILESTATS b
-			ON a.dbname = b.dbname 
-			AND a.[FileName] = b.[FileName]
-		WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
-		GROUP BY b.DBName,b.[FileName]) d
-	ON c.dbname = d.dbname 
-	AND c.[FileName] = d.[FileName]
-
-/* JobStats */
-SELECT sj.job_id, 
-		sj.name,
-		sc.name AS Category,
-		sj.[Enabled], 
-		sjs.last_run_outcome,
-		(SELECT MAX(run_date) 
-			FROM msdb..sysjobhistory(nolock) sjh 
-			WHERE sjh.job_id = sj.job_id) AS last_run_date
-INTO #TEMPJOB
-FROM msdb..sysjobs(nolock) sj
-JOIN msdb..sysjobservers(nolock) sjs
-	ON sjs.job_id = sj.job_id
-JOIN msdb..syscategories sc
-	ON sj.category_id = sc.category_id	
-
-INSERT INTO #JOBSTATUS (JobName,Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
-SELECT
-	t.name AS JobName,
-	t.Category,
-	t.[Enabled],
-	MAX(ja.start_execution_date) AS [StartTime],
-	MAX(ja.stop_execution_date) AS [StopTime],
-	COALESCE(AvgRunTime,0) AS AvgRunTime,
-	CASE 
-		WHEN ja.stop_execution_date IS NULL THEN COALESCE(DATEDIFF(ss,ja.start_execution_date,GETDATE()),0)
-		ELSE DATEDIFF(ss,ja.start_execution_date,ja.stop_execution_date) END AS [LastRunTime],
-	CASE 
-			WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NOT NULL THEN
-				CASE WHEN DATEDIFF(ss,ja.start_execution_date,GETDATE())
-					> (AvgRunTime + AvgRunTime * .25) THEN 'LongRunning-NOW'				
-				ELSE 'NormalRunning-NOW'
-				END
-			WHEN DATEDIFF(ss,ja.start_execution_date,ja.stop_execution_date) 
-				> (AvgRunTime + AvgRunTime * .25) THEN 'LongRunning-History'
-			WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NULL THEN 'NA'
-			ELSE 'NormalRunning-History'
-	END AS [RunTimeStatus],	
-	CASE
-		WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NOT NULL THEN 'InProcess'
-		WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 3 THEN 'CANCELLED'
-		WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 0 THEN 'ERROR'			
-		WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 1 THEN 'SUCCESS'			
-		ELSE 'NA'
-	END AS [LastRunOutcome]
-FROM #TEMPJOB AS t
-LEFT OUTER
-JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb.dbo.sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
-	ON t.job_id = ja2.job_id
-LEFT OUTER
-JOIN msdb.dbo.sysjobactivity(nolock) ja
-	ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
-LEFT OUTER 
-JOIN (SELECT job_id,
-			AVG	((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) + 	STDEV ((run_duration/10000 * 3600) + 
-				((run_duration%10000)/100*60) + (run_duration%10000)%100) AS [AvgRuntime]
-		FROM msdb..sysjobhistory(nolock)
-		WHERE step_id = 0 AND run_status = 1 and run_duration >= 0
-		GROUP BY job_id) art 
-	ON t.job_id = art.job_id
-GROUP BY t.name,t.Category,t.[Enabled],t.last_run_outcome,ja.start_execution_date,ja.stop_execution_date,AvgRunTime
-ORDER BY t.name
-
-DROP TABLE #TEMPJOB
-
-/* Replication Distributor */
-CREATE TABLE #REPLINFO (
-	distributor NVARCHAR(128) NULL, 
-	[distribution database] NVARCHAR(128) NULL, 
-	directory NVARCHAR(500), 
-	account NVARCHAR(200), 
-	[min distrib retention] INT, 
-	[max distrib retention] INT, 
-	[history retention] INT,
-	[history cleanup agent] NVARCHAR(500),
-	[distribution cleanup agent] NVARCHAR(500),
-	[rpc server name] NVARCHAR(200),
-	[rpc login name] NVARCHAR(200),
-	publisher_type NVARCHAR(200)
-	)
-
-INSERT INTO #REPLINFO
-EXEC sp_helpdistributor
-
-/* Replication Publisher */	
-CREATE TABLE #PUBINFO (
-	publisher_db NVARCHAR(128),
-	publication NVARCHAR(128),
-	publication_id INT,
-	publication_type INT,
-	[status] INT,
-	warning INT,
-	worst_latency INT,
-	best_latency INT,
-	average_latency INT,
-	last_distsync DATETIME,
-	[retention] INT,
-	latencythreshold INT,
-	expirationthreshold INT,
-	agentnotrunningthreshold INT,
-	subscriptioncount INT,
-	runningdisagentcount INT,
-	snapshot_agentname NVARCHAR(128) NULL,
-	logreader_agentname NVARCHAR(128) NULL,
-	qreader_agentname NVARCHAR(128) NULL,
-	worst_runspeedPerf INT,
-	best_runspeedPerf INT,
-	average_runspeedPerf INT,
-	retention_period_unit INT
-	)
+		SUM(CAST(b.IoStallReadMS AS BIGINT) - CAST(a.IoStallReadMS AS BIGINT)) AS IoStallReadMS,
+		SUM(CAST(b.IoStallWriteMS AS BIGINT) - CAST(a.IoStallWriteMS AS BIGINT)) AS IoStallWriteMS,
+			SUM(b.Cum_IO_GB - a.Cum_IO_GB) AS Cum_IO_GB
+			FROM [dba].dbo.FileStatsHistory a
+			LEFT OUTER
+			JOIN #FILESTATS b
+				ON a.dbname = b.dbname 
+				AND a.[FileName] = b.[FileName]
+			WHERE a.FileStatsDateStamp = @MinFileStatsDateStamp
+			GROUP BY b.DBName,b.[FileName]) d
+		ON c.dbname = d.dbname 
+		AND c.[FileName] = d.[FileName]
 	
-SELECT @Distributor = distributor, @DistributionDB = [distribution database] FROM #REPLINFO
-
-IF @Distributor = @@SERVERNAME
-BEGIN
-
-SET @DistSQL = 
-'USE ' + @DistributionDB + '; EXEC sp_replmonitorhelppublication @@SERVERNAME
-
-INSERT 
-INTO #PUBINFO
-EXEC sp_replmonitorhelppublication @@SERVERNAME'
-
-EXEC(@DistSQL)
-
-END
-
-/* Replication Subscriber */
-CREATE TABLE #REPLSUB (
-	Publisher NVARCHAR(128),
-	Publisher_DB NVARCHAR(128),
-	Publication NVARCHAR(128),
-	Distribution_Agent NVARCHAR(128),
-	[Time] DATETIME,
-	Immediate_Sync BIT
-	)
-
-INSERT INTO #REPLSUB
-EXEC master.sys.sp_MSForEachDB 'USE [?]; 
-								IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE Table_Name = ''MSreplication_subscriptions'') 
-								BEGIN 
-								SELECT Publisher,Publisher_DB,Publication,Distribution_Agent,[time],immediate_sync FROM MSreplication_subscriptions 
-								END'
-
-/* Databases */
-CREATE TABLE #DATABASES (
-	[DBName] NVARCHAR(128),
-	CreateDate DATETIME,
-	RestoreDate DATETIME,
-	[Size(GB] NUMERIC(20,5),
-	[State] NVARCHAR(20),
-	[Recovery] NVARCHAR(20),
-	[Replication] NVARCHAR(5) DEFAULT('No'),
-	Mirroring NVARCHAR(5) DEFAULT('No')
-	)
-
-INSERT INTO #DATABASES ([DBName],CreateDate,RestoreDate,[Size(GB],[State],[Recovery])
-SELECT MST.Name,MST.create_date,rs.RestoreDate,SUM(CONVERT(DECIMAL,(f.FileMBSize)) / 1024) AS [Size(GB],MST.state_desc,MST.recovery_model_desc
-FROM sys.databases MST
-JOIN #FILESTATS F
-	ON MST.database_id = f.[dbID]
-LEFT OUTER
-JOIN (SELECT destination_database_name AS DBName,
-		MAX(restore_date) AS RestoreDate
-		FROM msdb..restorehistory
-		GROUP BY destination_database_name) AS rs
-	ON MST.Name = rs.DBName	
-GROUP BY MST.Name,MST.create_date,rs.RestoreDate,MST.state_desc,MST.recovery_model_desc
-
-UPDATE d
-SET d.Mirroring = 'Yes'
-FROM #Databases d
-JOIN master..sysdatabases a
-	ON d.[DBName] = a.Name
-JOIN sys.database_mirroring b
-	ON b.database_id = a.[dbid]
-WHERE b.mirroring_state IS NOT NULL
-
-UPDATE d
-SET d.[Replication] = 'Yes'
-FROM #Databases d
-JOIN #REPLSUB r
-	ON d.[DBName] = r.Publication
-
-UPDATE d
-SET d.[Replication] = 'Yes'
-FROM #Databases d
-JOIN #PUBINFO p
-	ON d.[DBName] = p.Publisher_DB
-
-UPDATE d
-SET d.[Replication] = 'Yes'
-FROM #Databases d
-JOIN #REPLINFO r
-	ON d.[DBName] = r.[distribution database]
-
-/* LogShipping */
-SELECT b.primary_server, b.primary_database, a.monitor_server, c.secondary_server, c.secondary_database, a.last_backup_date, a.last_backup_file, backup_share
-INTO #LOGSHIP
-FROM msdb..log_shipping_primary_databases a
-JOIN  msdb..log_shipping_monitor_primary b
-	ON a.primary_id = b.primary_id
-JOIN msdb..log_shipping_primary_secondaries c
-	ON a.primary_id = c.primary_id
-
-/* Mirroring */
-
-CREATE TABLE #MIRRORING (
-	[DBName] NVARCHAR(128),
-	[State] NVARCHAR(50),
-	[ServerRole] NVARCHAR(25),
-	[PartnerInstance] NVARCHAR(128),
-	[SafetyLevel] NVARCHAR(25),
-	[AutomaticFailover] NVARCHAR(5),
-	WitnessServer NVARCHAR(5)
-	)
-
-INSERT INTO #MIRRORING ([DBName], [State], [ServerRole], [PartnerInstance], [SafetyLevel], [AutomaticFailover], [WitnessServer])
-SELECT s.name AS [DBName], 
-	m.mirroring_state_desc AS [State], 
-	m.mirroring_role_desc AS [ServerRole], 
-	m.mirroring_partner_instance AS [PartnerInstance],
-	CASE WHEN m.mirroring_safety_level_desc = 'FULL' THEN 'HIGH SAFETY' ELSE 'HIGH PERFORMANCE' END AS [SafetyLevel], 
-	CASE WHEN m.mirroring_witness_name <> '' THEN 'Yes' ELSE 'No' END AS [AutomaticFailover],
-	CASE WHEN m.mirroring_witness_name <> '' THEN m.mirroring_witness_name ELSE 'N/A' END AS [WitnessServer]
-FROM master..sysdatabases s
-JOIN sys.database_mirroring m
-	ON s.[dbid] = m.database_id
-WHERE m.mirroring_state IS NOT NULL
-
-
-/* ErrorLog */
-CREATE TABLE #DEADLOCKINFO (
-	DeadlockDate DATETIME,
-	DBName NVARCHAR(128),	
-	ProcessInfo NVARCHAR(50),
-	VictimHostname NVARCHAR(128),
-	VictimLogin NVARCHAR(128),	
-	VictimSPID NVARCHAR(5),
-	VictimSQL NVARCHAR(500),
-	LockingHostname NVARCHAR(128),
-	LockingLogin NVARCHAR(128),
-	LockingSPID NVARCHAR(5),
-	LockingSQL NVARCHAR(500)
-	)
-
-CREATE TABLE #ERRORLOG (
-	ID INT IDENTITY(1,1) NOT NULL
-		CONSTRAINT PK_ERRORLOGTEMP
-			PRIMARY KEY CLUSTERED (ID),
-	LogDate DATETIME, 
-	ProcessInfo NVARCHAR(100), 
-	[Text] NVARCHAR(4000)
-	)
+	/* JobStats */
+	SELECT sj.job_id, 
+			sj.name,
+			sc.name AS Category,
+			sj.[Enabled], 
+			sjs.last_run_outcome,
+			(SELECT MAX(run_date) 
+				FROM msdb..sysjobhistory(nolock) sjh 
+				WHERE sjh.job_id = sj.job_id) AS last_run_date
+	INTO #TEMPJOB
+	FROM msdb..sysjobs(nolock) sj
+	JOIN msdb..sysjobservers(nolock) sjs
+		ON sjs.job_id = sj.job_id
+	JOIN msdb..syscategories sc
+		ON sj.category_id = sc.category_id	
 	
-CREATE TABLE #TEMPDATES (LogDate DATETIME)
-
-INSERT INTO #ERRORLOG
-EXEC sp_readerrorlog 0, 1
-
-IF EXISTS (SELECT * FROM #TRACESTATUS WHERE TraceFlag = 1222)
-BEGIN
-INSERT INTO #TEMPDATES (LogDate)
-SELECT DISTINCT CONVERT(VARCHAR(30),LogDate,120) as LogDate
-FROM #ERRORLOG
-WHERE ProcessInfo LIKE 'spid%'
-and [text] LIKE '   process id=%'
-
-INSERT INTO #DEADLOCKINFO (DeadLockDate, DBName, ProcessInfo, VictimHostname, VictimLogin, VictimSPID, LockingHostname, LockingLogin, LockingSPID)
-SELECT 
-DISTINCT CONVERT(VARCHAR(30),b.LogDate,120) AS DeadlockDate,
-DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),SUM((PATINDEX('%lockTimeout%',b.[text])) - (PATINDEX('%currentdb=%',b.[text])) ) )),11,50)) as DBName,
-b.processinfo,
-SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),SUM((PATINDEX('%hostpid%',a.[text])) - (PATINDEX('%hostname=%',a.[text])) ) )),10,50)
-	AS VictimHostname,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50)
-	ELSE NULL END AS VictimLogin,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10)
-	ELSE NULL END AS VictimSPID,
-SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),SUM((PATINDEX('%hostpid%',b.[text])) - (PATINDEX('%hostname=%',b.[text])) ) )),10,50)
-	AS LockingHostname,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50)
-	ELSE NULL END AS LockingLogin,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10)
-	ELSE NULL END AS LockingSPID
-FROM #TEMPDATES t
-JOIN #ERRORLOG a
-	ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),a.LogDate,120)
-JOIN #ERRORLOG b
-	ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),b.LogDate,120) AND a.[text] LIKE '   process id=%' AND b.[text] LIKE '   process id=%' AND a.ID < b.ID 
-GROUP BY b.LogDate,b.processinfo, a.[Text], b.[Text]
-
-DELETE FROM #ERRORLOG
-WHERE CONVERT(VARCHAR(30),LogDate,120) IN (SELECT DeadlockDate FROM #DEADLOCKINFO)
-
-DELETE FROM #DEADLOCKINFO
-WHERE (DeadlockDate <  CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)) -1)
-OR (DeadlockDate >= CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)))
-
-END
-
-DELETE FROM #ERRORLOG
-WHERE LogDate < (GETDATE() -1)
-OR ProcessInfo = 'Backup'
-
-/* BackupStats */
-CREATE TABLE #BACKUPS (
-	ID INT IDENTITY(1,1) NOT NULL
-		CONSTRAINT PK_BACKUPS
-			PRIMARY KEY CLUSTERED (ID),
-	[DBName] NVARCHAR(128),
-	[Type] NVARCHAR(50),
-	[Filename] NVARCHAR(128),
-	Backup_Set_Name NVARCHAR(128),
-	Backup_Start_Date DATETIME,
-	Backup_Finish_Date DATETIME,
-	Backup_Size NUMERIC(20,2),
-	Backup_Age INT
-	)
-
-INSERT INTO #BACKUPS ([DBName],[Type],[Filename],Backup_Set_Name,backup_start_date,backup_finish_date,backup_size,backup_age)
-SELECT a.database_name AS [DBName],
-		CASE a.[Type]
-		WHEN 'D' THEN 'Full'
-		WHEN 'I' THEN 'Diff'
-		WHEN 'L' THEN 'Log'
-		WHEN 'F' THEN 'File/Filegroup'
-		WHEN 'G' THEN 'File Diff'
-		WHEN 'P' THEN 'Partial'
-		WHEN 'Q' THEN 'Partial Diff'
-		ELSE 'Unknown' END AS [Type],
-		COALESCE(b.Physical_Device_Name,'N/A') AS [Filename],
-		a.name AS Backup_Set_Name,		
-		a.backup_start_date,
-		a.backup_finish_date,
-		CAST((a.backup_size/1024)/1024/1024 AS DECIMAL(10,2)) AS Backup_Size,
-		DATEDIFF(hh, MAX(a.backup_finish_date), GETDATE()) AS [Backup_Age] 
-FROM msdb..backupset a
-JOIN msdb..backupmediafamily b
-	ON a.media_set_id = b.media_set_id
-WHERE a.backup_start_date > GETDATE() -1
-GROUP BY a.database_name, a.[Type],a.name, b.Physical_Device_Name,a.backup_start_date,a.backup_finish_date,a.backup_size
-
-/* STEP 2: CREATE HTML BLOB */
-
-SET @HTML =    
-	'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd"><html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;border-top-left-radius: 15px 10px; 
-		border-top-right-radius: 15px 10px;}  
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	td.c2 {background-color: #F0F0F0}
-	td.c1 {background-color: #E0E0E0}
-	td.master {border-bottom:0px}
-	.Perfth {text-align:center; vertical-align:bottom; color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;
-		border-right: 1px solid #41627E; padding: 3px 3px 3px 3px;}
-	.Perfthheader {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;border-top-left-radius: 15px 10px; 
-		border-top-right-radius: 15px 10px;}  
-	.Perftd {text-align:center; vertical-align:bottom; font-size:9px; font-family:arial;border-right: 1px solid #C1DAD7;border-bottom: 1px solid #C1DAD7;
-		padding: 3px 1px 3px 1px;}
-	.Text {background-color: #E0E0E0}
-	.Text2 {background-color: #F0F0F0}	
-	.Alert {background-color: #FF0000}
-	.Warning {background-color: #FFFF00} 	
-	</style></head><body><div>
-	<table width="1150"> <tr><th class="header" width="1150">System</th></tr></table></div><div>
-	<table width="1150">
-	<tr>
-	<th width="200">Name</th>
-	<th width="300">Processor</th>	
-	<th width="250">Operating System</th>	
-	<th width="125">Total Memory (GB)</th>
-	<th width="200">Uptime</th>
-	<th width="75">Clustered</th>	
-	</tr>'
-SELECT @HTML = @HTML + 
-	'<tr><td width="200" class="c1">'+@ServerName +'</td>' +
-	'<td width="300" class="c2">'+@Processor +'</td>' +
-	'<td width="250" class="c1">'+@ServerOS +'</td>' +
-	'<td width="125" class="c2">'+@SystemMemory+'</td>' +	
-	'<td width="200" class="c1">'+@Days+' days, '+@Hours+' hours & '+@Minutes+' minutes' +'</td>' +
-	'<td width="75" class="c2"><b>'+@ISClustered+'</b></td></tr>'
-SELECT @HTML = @HTML + 	'</table></div>'
-
-SELECT @HTML = @HTML + 
-'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Server</th></tr></table></div><div>
-	<table width="1150">
-	<tr>
-	<th width="350">Version</th>	
-	<th width="150">Start Up Date</th>
-	<th width="100">Used Memory (MB)</th>
-	<th width="100">Collation</th>
-	<th width="75">User Mode</th>
-	<th width="75">SQL Agent</th>	
-	</tr>'
-SELECT @HTML = @HTML + 
-	'<tr><td width="350" class="c1">'+@SQLVersion +'</td>' +
-	'<td width="150" class="c2">'+CAST(@ServerStartDate AS NVARCHAR)+'</td>' +
-	'<td width="100" class="c1">'+CAST(@ServerMemory AS NVARCHAR)+'</td>' +
-	'<td width="100" class="c2">'+@ServerCollation+'</td>' +
-	CASE WHEN @SingleUser = 'Multi' THEN '<td width="75" class="c1"><b>Multi</b></td>'  
-		 WHEN @SingleUser = 'Single' THEN '<td width="75" bgcolor="#FFFF00"><b>Single</b></td>'
-	ELSE '<td width="75" bgcolor="#FF0000"><b>UNKNOWN</b></td>'
-	END +	
-	CASE WHEN @SQLAgent = 'Up' THEN '<td width="75" bgcolor="#00FF00"><b>Up</b></td></tr>'  
-		 WHEN @SQLAgent = 'Down' THEN '<td width="75" bgcolor="#FF0000"><b>DOWN</b></td></tr>'  
-	ELSE '<td width="75" bgcolor="#FF0000"><b>UNKNOWN</b></td></tr>'  
+	INSERT INTO #JOBSTATUS (JobName,Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
+	SELECT
+		t.name AS JobName,
+		t.Category,
+		t.[Enabled],
+		MAX(ja.start_execution_date) AS [StartTime],
+		MAX(ja.stop_execution_date) AS [StopTime],
+		COALESCE(AvgRunTime,0) AS AvgRunTime,
+		CASE 
+			WHEN ja.stop_execution_date IS NULL THEN COALESCE(DATEDIFF(ss,ja.start_execution_date,GETDATE()),0)
+			ELSE DATEDIFF(ss,ja.start_execution_date,ja.stop_execution_date) END AS [LastRunTime],
+		CASE 
+				WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NOT NULL THEN
+					CASE WHEN DATEDIFF(ss,ja.start_execution_date,GETDATE())
+						> (AvgRunTime + AvgRunTime * .25) THEN 'LongRunning-NOW'				
+					ELSE 'NormalRunning-NOW'
+					END
+				WHEN DATEDIFF(ss,ja.start_execution_date,ja.stop_execution_date) 
+					> (AvgRunTime + AvgRunTime * .25) THEN 'LongRunning-History'
+				WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NULL THEN 'NA'
+				ELSE 'NormalRunning-History'
+		END AS [RunTimeStatus],	
+		CASE
+			WHEN ja.stop_execution_date IS NULL AND ja.start_execution_date IS NOT NULL THEN 'InProcess'
+			WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 3 THEN 'CANCELLED'
+			WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 0 THEN 'ERROR'			
+			WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 1 THEN 'SUCCESS'			
+			ELSE 'NA'
+		END AS [LastRunOutcome]
+	FROM #TEMPJOB AS t
+	LEFT OUTER
+	JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb.dbo.sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
+		ON t.job_id = ja2.job_id
+	LEFT OUTER
+	JOIN msdb.dbo.sysjobactivity(nolock) ja
+		ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
+	LEFT OUTER 
+	JOIN (SELECT job_id,
+				AVG	((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) + 	STDEV ((run_duration/10000 * 3600) + 
+					((run_duration%10000)/100*60) + (run_duration%10000)%100) AS [AvgRuntime]
+			FROM msdb..sysjobhistory(nolock)
+			WHERE step_id = 0 AND run_status = 1 and run_duration >= 0
+			GROUP BY job_id) art 
+		ON t.job_id = art.job_id
+	GROUP BY t.name,t.Category,t.[Enabled],t.last_run_outcome,ja.start_execution_date,ja.stop_execution_date,AvgRunTime
+	ORDER BY t.name
+	
+	DROP TABLE #TEMPJOB
+	
+	/* Replication Distributor */
+	CREATE TABLE #REPLINFO (
+		distributor NVARCHAR(128) NULL, 
+		[distribution database] NVARCHAR(128) NULL, 
+		directory NVARCHAR(500), 
+		account NVARCHAR(200), 
+		[min distrib retention] INT, 
+		[max distrib retention] INT, 
+		[history retention] INT,
+		[history cleanup agent] NVARCHAR(500),
+		[distribution cleanup agent] NVARCHAR(500),
+		[rpc server name] NVARCHAR(200),
+		[rpc login name] NVARCHAR(200),
+		publisher_type NVARCHAR(200)
+		)
+	
+	INSERT INTO #REPLINFO
+	EXEC sp_helpdistributor
+	
+	/* Replication Publisher */	
+	CREATE TABLE #PUBINFO (
+		publisher_db NVARCHAR(128),
+		publication NVARCHAR(128),
+		publication_id INT,
+		publication_type INT,
+		[status] INT,
+		warning INT,
+		worst_latency INT,
+		best_latency INT,
+		average_latency INT,
+		last_distsync DATETIME,
+		[retention] INT,
+		latencythreshold INT,
+		expirationthreshold INT,
+		agentnotrunningthreshold INT,
+		subscriptioncount INT,
+		runningdisagentcount INT,
+		snapshot_agentname NVARCHAR(128) NULL,
+		logreader_agentname NVARCHAR(128) NULL,
+		qreader_agentname NVARCHAR(128) NULL,
+		worst_runspeedPerf INT,
+		best_runspeedPerf INT,
+		average_runspeedPerf INT,
+		retention_period_unit INT
+		)
+		
+	SELECT @Distributor = distributor, @DistributionDB = [distribution database] FROM #REPLINFO
+	
+	IF @Distributor = @@SERVERNAME
+	BEGIN
+		
+		SET @DistSQL = 
+		'USE ' + @DistributionDB + '; EXEC sp_replmonitorhelppublication @@SERVERNAME
+		
+		INSERT 
+		INTO #PUBINFO
+		EXEC sp_replmonitorhelppublication @@SERVERNAME'
+		
+		EXEC(@DistSQL)
+		
 	END
-
-SELECT @HTML = @HTML + '</table></div>'
-
-SELECT @HTML = @HTML +
-'&nbsp;<table width="1150"><tr><td class="master" width="850" rowspan="3">
-	<div><table width="850"> <tr><th class="header" width="850">Databases</th></tr></table></div><div>
-	<table width="850">
-	  <tr>
-		<th width="175">Database</th>
-		<th width="150">Create Date</th>
-		<th width="150">Restore Date</th>
-		<th width="80">Size (GB)</th>
-		<th width="70">State</th>
-		<th width="75">Recovery</th>
-		<th width="75">Replicated</th>
-		<th width="75">Mirrored</th>				
-	 </tr>'
-SELECT @HTML = @HTML +   
-	'<tr><td width="175" class="c1">' + [DBName] +'</td>' +
-	'<td width="150" class="c2">' + CAST(CreateDate AS NVARCHAR) +'</td>' +
-	'<td width="150" class="c1">' + COALESCE(CAST(RestoreDate AS NVARCHAR),'N/A') +'</td>' +   	 
-	'<td width="80" class="c2">' + CAST([Size(GB] AS NVARCHAR) +'</td>' +    
- 	CASE [State]    
-		WHEN 'OFFLINE' THEN '<td width="70" bgColor="#FF0000"><b>OFFLINE</b></td>'
-		WHEN 'ONLINE' THEN '<td width="70" class="c1">ONLINE</td>'  
-	ELSE '<td width="70" bgcolor="#FF0000"><b>UNKNOWN</b></td>'
-	END +
-	'<td width="75" class="c2">' + [Recovery] +'</td>' +
-	'<td width="75" class="c1">' + [Replication] +'</td>' +
-	'<td width="75" class="c2">' + Mirroring +'</td></tr>'		
-FROM #DATABASES
-ORDER BY [DBName]
-
-SELECT @HTML = @HTML + '</table></div>'
-
-SELECT @HTML = @HTML + '</td><td class="master" width="250" valign="top">'
-
-SELECT @HTML = @HTML + 
-	'<div><table width="250"> <tr><th class="header" width="250">Disks</th></tr></table></div><div>
-	<table width="250">
-	  <tr>
-		<th width="50">Drive</th>
-		<th width="100">Free Space (GB)</th>
-		<th width="100">Cluster Share</th>		
-	 </tr>'
-SELECT @HTML = @HTML +   
-	'<tr><td width="50" class="c1">' + DriveLetter + ':' +'</td>' +    
-	CASE  
-		WHEN (COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0) <= 20) 
-			THEN '<td width="100" bgcolor="#FF0000"><b>' + COALESCE(CONVERT(NVARCHAR(50), COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0)),'') +'</b></td>'
-		ELSE '<td width="100" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0)),'') +'</td>' 
-		END +
-	CASE ClusterShare
-		WHEN 1 THEN '<td width="100" class="c1">Yes</td></tr>'
-		WHEN 0 THEN '<td width="100" class="c1">No</td></tr>'
-		ELSE '<td width="100" class="c1">N/A</td></tr>'
-		END
-FROM #DRIVES
-
-SELECT @HTML = @HTML + '</table></div>'
-
-SELECT @HTML = @HTML + '<tr><td class="master" width="250" valign="top">'
-
-IF EXISTS (SELECT * FROM #CLUSTER)
-BEGIN
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Clustering</th></tr></table></div><div>
-	<table width="250">
-	  <tr>
-		<th width="175">Cluster Name</th>
-		<th width="75">Active</th>
-	 </tr>'
-SELECT @HTML = @HTML +   
-	'<tr><td width="175" class="c1">' + NodeName +'</td>' +    
-	CASE Active
-		WHEN 1 THEN '<td width="75" class="c2">Yes</td></tr>'
-		ELSE '<td width="75" class="c2">No</td></tr>'
-		END
-FROM #CLUSTER
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-SELECT @HTML = @HTML + '<tr><td class="master" width="250" valign="top">'
-
-IF EXISTS (SELECT * FROM #TRACESTATUS)
-BEGIN
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Trace Flags</th></tr></table></div><div>
-	<table width="250">
-	  <tr>
-		<th width="65">Trace Flag</th>
-		<th width="65">Status</th>
-		<th width="60">Global</th>
-		<th width="60">Session</th>				
-	 </tr>'
-SELECT @HTML = @HTML + '<tr><td width="65" class="c1">' + CAST([TraceFlag] AS NVARCHAR) + '</td>' +    
-	CASE [Status]
-		WHEN 1 THEN '<td width="65" class="c2">Active</td>'
-		ELSE '<td width="65" class="c2">Inactive</td>'
-		END +
-	CASE [Global]
-		WHEN 1 THEN '<td width="60" class="c1">On</td>'
-		ELSE '<td width="60" class="c1">Off</td>'
-		END +
-	CASE [Session]
-		WHEN 1 THEN '<td width="60" class="c2">On</td></tr>'
-		ELSE '<td width="60" class="c2">Off</td></tr>'
-		END	
-FROM #TRACESTATUS
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Trace Flags</th></tr></table></div><div>
-	<table width="250">
-	  <tr>
-		<th width="250"><b>No Trace Flags Are Active</b></th>			
-	 </tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-SELECT @HTML = @HTML + '</td></tr></table>'
-
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">File Info</th></tr></table></div><div>
-	<table width="1150">
-	  <tr>
-		<th width="150">Database</th>
-		<th width="50">Drive</th>
-		<th width="250">Filename</th>
-		<th width="150">Logical Name</th>
-		<th width="100">Group</th>
-		<th width="75">VLF Count</th>
-		<th width="75">Size (MB)</th>
-		<th width="75">Growth</th>
-		<th width="75">Used (MB)</th>
-		<th width="75">Empty (MB)</th>
-		<th width="75">% Empty</th>
-	 </tr>'
-SELECT @HTML = @HTML +
-	'<tr><td width="150" class="c1">' + [DBName] +'</td>' +
-	'<td width="50" class="c2">' + COALESCE(DriveLetter,'N/A') + ':' +'</td>' +
-	'<td width="250" class="c1">' + [Filename] +'</td>' +
-	'<td width="150" class="c2">' + [LogicalFilename] +'</td>' +	
-	CASE
-		WHEN COALESCE([FileGroup],'') <> '' THEN '<td width="100" class="c1">' + [FileGroup] +'</td>'
-		ELSE '<td width="100" class="c1">' + 'N/A' +'</td>'
-		END +
-	'<td width="75" class="c2">' + CAST(COALESCE(VLFCount,'') AS NVARCHAR) +'</td>' +
-	CASE
-		WHEN (LargeLDF = 1 AND [FileName] LIKE '%ldf') THEN '<td width="75" bgColor="#FFFF00">' + FileMBSize +'</td>'
-		ELSE '<td width="75" class="c1">' + FileMBSize +'</td>'
-		END +
-	'<td width="75" class="c2">' + FileGrowth +'</td>' +
-	'<td width="75" class="c1">' + FileMBUsed +'</td>' +
-	'<td width="75" class="c2">' + FileMBEmpty +'</td>' +
-	'<td width="75" class="c1">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>' + '</tr>'
-FROM #FILESTATS
-
-SELECT @HTML = @HTML + '</table></div>'
-
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">File Stats - Last 24 Hours</th></tr></table></div><div>
-	<table width="1150">
-	  <tr>
-		<th width="200">Filename</th>
-		<th width="75"># Reads</th>
-		<th width="175">KBytes Read</th>
-		<th width="75"># Writes</th>
-		<th width="175">KBytes Written</th>
-		<th width="125">IO Read Wait (MS)</th>
-		<th width="125">IO Write Wait (MS)</th>
-		<th width="125">Cumulative IO (GB)</th>
-		<th width="75">IO %</th>				
-	 </tr>'
-SELECT @HTML = @HTML +
-	'<tr><td width="200" class="c1">' + [FileName] +'</td>' +
-	'<td width="75" class="c2">' + COALESCE(NumberReads,'0') +'</td>' +
-	'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesRead),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesRead / 1024 AS NUMERIC(18,2))),'') +
-		  ' MB)' +'</td>' +
-	'<td width="75" class="c2">' + COALESCE(NumberWrites,'0') +'</td>' +
-	'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesWritten),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesWritten / 1024 AS NUMERIC(18,2)) ),'') +
-		  ' MB)' +'</td>' +
-	'<td width="125" class="c2">' + COALESCE(IoStallReadMS,'0') +'</td>' +
-	'<td width="125" class="c1">' + COALESCE(IoStallWriteMS,'0') + '</td>' +
-	'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS VARCHAR) + '</td>' +
-	'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS VARCHAR) + '</td>' + '</tr>'	
-FROM #FILESTATS
-
-SELECT @HTML = @HTML + '</table></div>'
-
-IF EXISTS (SELECT * FROM #MIRRORING)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Mirroring</th></tr></table></div><div>
-	<table width="1150">   
-	<tr> 
-	<th width="150">Database</th>      
-	<th width="150">State</th>   
-	<th width="150">Server Role</th>   
-	<th width="150">Partner Instance</th>
-	<th width="150">Safety Level</th>
-	<th width="200">Automatic Failover</th>
-	<th width="250">Witness Server</th>   
-	</tr>'	
-SELECT
-	@HTML = @HTML +   
-	'<tr><td width="150" class="c1">' + [DBName] +'</td>' +
-	'<td width="150" class="c2">' + [State] +'</td>' +  
-	'<td width="150" class="c1">' + [ServerRole] +'</td>' +  
-	'<td width="150" class="c2">' + [PartnerInstance] +'</td>' +  
-	'<td width="150" class="c1">' + [SafetyLevel] +'</td>' +  
-	'<td width="200" class="c2">' + [AutomaticFailover] +'</td>' +  
-	'<td width="250" class="c1">' + [WitnessServer] +'</td>' +  
-	 '</tr>'
-FROM #MIRRORING
-ORDER BY [DBName]
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Mirroring</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">Mirroring is not setup on this system</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #LOGSHIP)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Log Shipping</th></tr></table></div><div>
-	<table width="1150">   
-	<tr> 
-	<th width="150">Primary Server</th>      
-	<th width="150">Primary DB</th>   
-	<th width="150">Monitoring Server</th>   
-	<th width="150">Secondary Server</th>
-	<th width="150">Secondary DB</th>
-	<th width="200">Last Backup Date</th>
-	<th width="250">Backup Share</th>   
-	</tr>'
-SELECT
-	@HTML = @HTML +   
-	'<tr><td width="150" class="c1">' + primary_server +'</td>' +
-	'<td width="150" class="c2">' + primary_database +'</td>' +  
-	'<td width="150" class="c1">' + monitor_server +'</td>' +  
-	'<td width="150" class="c2">' + secondary_server +'</td>' +  
-	'<td width="150" class="c1">' + secondary_database +'</td>' +  
-	'<td width="200" class="c2">' + CAST(last_backup_date AS NVARCHAR) +'</td>' +  
-	'<td width="250" class="c1">' + backup_share +'</td>' +  
-	 '</tr>'
-FROM #LOGSHIP
-ORDER BY Primary_Database
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Log Shipping</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">Log Shipping is not setup on this system</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #REPLINFO WHERE Distributor IS NOT NULL)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Distributor</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="150">Distributor</th>      
-			<th width="150">Distribution DB</th>   
-			<th width="500">Replcation Share</th>   
-			<th width="200">Replication Account</th>
-			<th width="150">Publisher Type</th>
-		</tr>'
-SELECT
-	@HTML = @HTML +   
-	'<tr><td width="150" class="c1">' + Distributor +'</td>' +
-	'<td width="150" class="c2">' + [distribution database] +'</td>' +  
-	'<td width="500" class="c1">' + CAST(directory AS NVARCHAR) +'</td>' +  
-	'<td width="200" class="c2">' + CAST(account AS NVARCHAR) +'</td>' +  
-	'<td width="150" class="c1">' + CAST(publisher_type AS NVARCHAR) +'</td></tr>'
-FROM #REPLINFO
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Distributor</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">Distributor is not setup on this system</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #PUBINFO)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Publisher</th></tr></table></div><div>
-	<table width="1150">   
-	<tr> 
-	<th width="150">Publisher DB</th>      
-	<th width="150">Publication</th>   
-	<th width="150">Publication Type</th>   
-	<th width="75">Status</th>
-	<th width="100">Warnings</th>
-	<th width="125">Best Latency</th>
-	<th width="125">Worst Latency</th>
-	<th width="125">Average Latency</th>
-	<th width="150">Last Dist Sync</th>				
-	</tr>'
-SELECT
-	@HTML = @HTML +   
-	'<tr> 
-	<td width="150" class="c1">' + publisher_db +'</td>' +
-	'<td width="150" class="c2">' + publication +'</td>' +  
-	CASE
-		WHEN publication_type = 0 THEN '<td width="150" class="c1">' + 'Transactional Publication' +'</td>'
-		WHEN publication_type = 1 THEN '<td width="150" class="c1">' + 'Snapshot Publication' +'</td>'
-		WHEN publication_type = 2 THEN '<td width="150" class="c1">' + 'Merge Publication' +'</td>'
-		ELSE '<td width="150" class="c1">' + 'N/A' +'</td>'
-	END +
-	CASE
-		WHEN [status] = 1 THEN '<td width="75" class="c2">' + 'Started' +'</td>'
-		WHEN [status] = 2 THEN '<td width="75" class="c2">' + 'Succeeded' +'</td>'
-		WHEN [status] = 3 THEN '<td width="75" class="c2">' + 'In Progress' +'</td>'
-		WHEN [status] = 4 THEN '<td width="75" class="c2">' + 'Idle' +'</td>'
-		WHEN [status] = 5 THEN '<td width="75" class="c2">' + 'Retrying' +'</td>'
-		WHEN [status] = 6 THEN '<td width="75" class="c2">' + 'Failed' +'</td>'
-		ELSE '<td width="75" class="c2">' + 'N/A' +'</td>'
-	END +
-	CASE
-		WHEN Warning = 1 THEN '<td width="100" bgcolor="#FFFF00">' + 'Expiration' +'</td>'
-		WHEN Warning = 2 THEN '<td width="100" bgcolor="#FFFF00">' + 'Latency' +'</td>'
-		WHEN Warning = 4 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Expiration' +'</td>'
-		WHEN Warning = 8 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Fast Run Duration' +'</td>'
-		WHEN Warning = 16 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Slow Run Duration' +'</td>'
-		WHEN Warning = 32 THEN '<td width="100" bgcolor="#FFFF00">' + 'Marge Fast Run Speed' +'</td>'
-		WHEN Warning = 64 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Slow Run Speed' +'</td>'
-		ELSE '<td width="100" class="c1">' + 'N/A'														
-	END +
-	CASE
-		WHEN publication_type = 0 THEN '<td width="125" class="c2">' + CAST(Best_Latency AS NVARCHAR) +'</td>'
-		WHEN publication_type = 1 THEN '<td width="125" class="c2">' + CAST(Best_RunSpeedPerf AS NVARCHAR) +'</td>'
-	END +
-	CASE
-		WHEN publication_type = 0 THEN '<td width="125" class="c1">' + CAST(Worst_Latency AS NVARCHAR) +'</td>'
-		WHEN publication_type = 1 THEN '<td width="125" class="c1">' + CAST(Worst_RunSpeedPerf AS NVARCHAR) +'</td>'
-	END +
-	CASE
-		WHEN publication_type = 0 THEN '<td width="125" class="c2">' + CAST(Average_Latency AS NVARCHAR) +'</td>'
-		WHEN publication_type = 1 THEN '<td width="125" class="c2">' + CAST(Average_RunSpeedPerf AS NVARCHAR) +'</td>'
-	END +
-	'<td width="150" class="c1">' + CAST(Last_DistSync AS NVARCHAR) +'</td>' + 
-	'</tr>'
-FROM #PUBINFO
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Publisher</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">Publisher is not setup on this system</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #REPLSUB)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Subscriptions</th></tr></table></div><div>
-	<table width="1150">   
-	<tr> 
-	<th width="150">Publisher</th>      
-	<th width="150">Publisher DB</th>   
-	<th width="150">Publication</th>   
-	<th width="450">Distribution Job</th>
-	<th width="150">Last Sync</th>
-	<th width="100">Immediate Sync</th>
-	</tr>'
-SELECT
-	@HTML = @HTML +   
-	'<tr><td width="150" class="c1">' + Publisher +'</td>' +
-	'<td width="150" class="c2">' + Publisher_DB +'</td>' +  
-	'<td width="150" class="c1">' + Publication +'</td>' +  
-	'<td width="450" class="c2">' + Distribution_Agent +'</td>' +  
-	'<td width="150" class="c1">' + CAST([time] AS NVARCHAR) +'</td>' +  
-	CASE [Immediate_sync]
-		WHEN 0 THEN '<td width="100" class="c2">' + 'No'  +'</td>'
-		WHEN 1 THEN '<td width="100" class="c2">' + 'Yes'  +'</td>'
-		ELSE 'N/A'
-	END +
-	 '</tr>'
-FROM #REPLSUB
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Subscriptions</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">Subscriptions are not setup on this system</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #PERFSTATS)
-BEGIN
-	SELECT @HTML = @HTML + 
-		'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">Connections - Last 24 Hours</th></tr></table></div><div>
+	
+	/* Replication Subscriber */
+	CREATE TABLE #REPLSUB (
+		Publisher NVARCHAR(128),
+		Publisher_DB NVARCHAR(128),
+		Publication NVARCHAR(128),
+		Distribution_Agent NVARCHAR(128),
+		[Time] DATETIME,
+		Immediate_Sync BIT
+		)
+	
+	INSERT INTO #REPLSUB
+	EXEC master.sys.sp_MSForEachDB 'USE [?]; 
+									IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE Table_Name = ''MSreplication_subscriptions'') 
+									BEGIN 
+									SELECT Publisher,Publisher_DB,Publication,Distribution_Agent,[time],immediate_sync FROM MSreplication_subscriptions 
+									END'
+	
+	/* Databases */
+	CREATE TABLE #DATABASES (
+		[DBName] NVARCHAR(128),
+		CreateDate DATETIME,
+		RestoreDate DATETIME,
+		[Size(GB] NUMERIC(20,5),
+		[State] NVARCHAR(20),
+		[Recovery] NVARCHAR(20),
+		[Replication] NVARCHAR(5) DEFAULT('No'),
+		Mirroring NVARCHAR(5) DEFAULT('No')
+		)
+	
+	INSERT INTO #DATABASES ([DBName],CreateDate,RestoreDate,[Size(GB],[State],[Recovery])
+	SELECT MST.Name,MST.create_date,rs.RestoreDate,SUM(CONVERT(DECIMAL,(f.FileMBSize)) / 1024) AS [Size(GB],MST.state_desc,MST.recovery_model_desc
+	FROM sys.databases MST
+	JOIN #FILESTATS F
+		ON MST.database_id = f.[dbID]
+	LEFT OUTER
+	JOIN (SELECT destination_database_name AS DBName,
+			MAX(restore_date) AS RestoreDate
+			FROM msdb..restorehistory
+			GROUP BY destination_database_name) AS rs
+		ON MST.Name = rs.DBName	
+	GROUP BY MST.Name,MST.create_date,rs.RestoreDate,MST.state_desc,MST.recovery_model_desc
+	
+	UPDATE d
+	SET d.Mirroring = 'Yes'
+	FROM #Databases d
+	JOIN master..sysdatabases a
+		ON d.[DBName] = a.Name
+	JOIN sys.database_mirroring b
+		ON b.database_id = a.[dbid]
+	WHERE b.mirroring_state IS NOT NULL
+	
+	UPDATE d
+	SET d.[Replication] = 'Yes'
+	FROM #Databases d
+	JOIN #REPLSUB r
+		ON d.[DBName] = r.Publication
+	
+	UPDATE d
+	SET d.[Replication] = 'Yes'
+	FROM #Databases d
+	JOIN #PUBINFO p
+		ON d.[DBName] = p.Publisher_DB
+	
+	UPDATE d
+	SET d.[Replication] = 'Yes'
+	FROM #Databases d
+	JOIN #REPLINFO r
+		ON d.[DBName] = r.[distribution database]
+	
+	/* LogShipping */
+	SELECT b.primary_server, b.primary_database, a.monitor_server, c.secondary_server, c.secondary_database, a.last_backup_date, a.last_backup_file, backup_share
+	INTO #LOGSHIP
+	FROM msdb..log_shipping_primary_databases a
+	JOIN  msdb..log_shipping_monitor_primary b
+		ON a.primary_id = b.primary_id
+	JOIN msdb..log_shipping_primary_secondaries c
+		ON a.primary_id = c.primary_id
+	
+	/* Mirroring */
+	
+	CREATE TABLE #MIRRORING (
+		[DBName] NVARCHAR(128),
+		[State] NVARCHAR(50),
+		[ServerRole] NVARCHAR(25),
+		[PartnerInstance] NVARCHAR(128),
+		[SafetyLevel] NVARCHAR(25),
+		[AutomaticFailover] NVARCHAR(5),
+		WitnessServer NVARCHAR(5)
+		)
+	
+	INSERT INTO #MIRRORING ([DBName], [State], [ServerRole], [PartnerInstance], [SafetyLevel], [AutomaticFailover], [WitnessServer])
+	SELECT s.name AS [DBName], 
+		m.mirroring_state_desc AS [State], 
+		m.mirroring_role_desc AS [ServerRole], 
+		m.mirroring_partner_instance AS [PartnerInstance],
+		CASE WHEN m.mirroring_safety_level_desc = 'FULL' THEN 'HIGH SAFETY' ELSE 'HIGH PERFORMANCE' END AS [SafetyLevel], 
+		CASE WHEN m.mirroring_witness_name <> '' THEN 'Yes' ELSE 'No' END AS [AutomaticFailover],
+		CASE WHEN m.mirroring_witness_name <> '' THEN m.mirroring_witness_name ELSE 'N/A' END AS [WitnessServer]
+	FROM master..sysdatabases s
+	JOIN sys.database_mirroring m
+		ON s.[dbid] = m.database_id
+	WHERE m.mirroring_state IS NOT NULL
+	
+	
+	/* ErrorLog */
+	CREATE TABLE #DEADLOCKINFO (
+		DeadlockDate DATETIME,
+		DBName NVARCHAR(128),	
+		ProcessInfo NVARCHAR(50),
+		VictimHostname NVARCHAR(128),
+		VictimLogin NVARCHAR(128),	
+		VictimSPID NVARCHAR(5),
+		VictimSQL NVARCHAR(500),
+		LockingHostname NVARCHAR(128),
+		LockingLogin NVARCHAR(128),
+		LockingSPID NVARCHAR(5),
+		LockingSQL NVARCHAR(500)
+		)
+	
+	CREATE TABLE #ERRORLOG (
+		ID INT IDENTITY(1,1) NOT NULL
+			CONSTRAINT PK_ERRORLOGTEMP
+				PRIMARY KEY CLUSTERED (ID),
+		LogDate DATETIME, 
+		ProcessInfo NVARCHAR(100), 
+		[Text] NVARCHAR(4000)
+		)
+		
+	CREATE TABLE #TEMPDATES (LogDate DATETIME)
+	
+	INSERT INTO #ERRORLOG
+	EXEC sp_readerrorlog 0, 1
+	
+	IF EXISTS (SELECT * FROM #TRACESTATUS WHERE TraceFlag = 1222)
+	BEGIN
+		INSERT INTO #TEMPDATES (LogDate)
+		SELECT DISTINCT CONVERT(VARCHAR(30),LogDate,120) as LogDate
+		FROM #ERRORLOG
+		WHERE ProcessInfo LIKE 'spid%'
+		and [text] LIKE '   process id=%'
+		
+		INSERT INTO #DEADLOCKINFO (DeadLockDate, DBName, ProcessInfo, VictimHostname, VictimLogin, VictimSPID, LockingHostname, LockingLogin, LockingSPID)
+		SELECT 
+		DISTINCT CONVERT(VARCHAR(30),b.LogDate,120) AS DeadlockDate,
+		DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),SUM((PATINDEX('%lockTimeout%',b.[text])) - (PATINDEX('%currentdb=%',b.[text])) ) )),11,50)) as DBName,
+		b.processinfo,
+		SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),SUM((PATINDEX('%hostpid%',a.[text])) - (PATINDEX('%hostname=%',a.[text])) ) )),10,50)
+			AS VictimHostname,
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50)
+			ELSE NULL END AS VictimLogin,
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10)
+			ELSE NULL END AS VictimSPID,
+		SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),SUM((PATINDEX('%hostpid%',b.[text])) - (PATINDEX('%hostname=%',b.[text])) ) )),10,50)
+			AS LockingHostname,
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50)
+			ELSE NULL END AS LockingLogin,
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10)
+			ELSE NULL END AS LockingSPID
+		FROM #TEMPDATES t
+		JOIN #ERRORLOG a
+			ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),a.LogDate,120)
+		JOIN #ERRORLOG b
+			ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),b.LogDate,120) AND a.[text] LIKE '   process id=%' AND b.[text] LIKE '   process id=%' AND a.ID < b.ID 
+		GROUP BY b.LogDate,b.processinfo, a.[Text], b.[Text]
+		
+		DELETE FROM #ERRORLOG
+		WHERE CONVERT(VARCHAR(30),LogDate,120) IN (SELECT DeadlockDate FROM #DEADLOCKINFO)
+		
+		DELETE FROM #DEADLOCKINFO
+		WHERE (DeadlockDate <  CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)) -1)
+		OR (DeadlockDate >= CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)))
+		
+	END
+	
+	DELETE FROM #ERRORLOG
+	WHERE LogDate < (GETDATE() -1)
+	OR ProcessInfo = 'Backup'
+	
+	/* BackupStats */
+	CREATE TABLE #BACKUPS (
+		ID INT IDENTITY(1,1) NOT NULL
+			CONSTRAINT PK_BACKUPS
+				PRIMARY KEY CLUSTERED (ID),
+		[DBName] NVARCHAR(128),
+		[Type] NVARCHAR(50),
+		[Filename] NVARCHAR(255),
+		Backup_Set_Name NVARCHAR(128),
+		Backup_Start_Date DATETIME,
+		Backup_Finish_Date DATETIME,
+		Backup_Size NUMERIC(20,2),
+		Backup_Age INT
+		)
+	
+	INSERT INTO #BACKUPS ([DBName],[Type],[Filename],Backup_Set_Name,backup_start_date,backup_finish_date,backup_size,backup_age)
+	SELECT a.database_name AS [DBName],
+			CASE a.[Type]
+			WHEN 'D' THEN 'Full'
+			WHEN 'I' THEN 'Diff'
+			WHEN 'L' THEN 'Log'
+			WHEN 'F' THEN 'File/Filegroup'
+			WHEN 'G' THEN 'File Diff'
+			WHEN 'P' THEN 'Partial'
+			WHEN 'Q' THEN 'Partial Diff'
+			ELSE 'Unknown' END AS [Type],
+			COALESCE(b.Physical_Device_Name,'N/A') AS [Filename],
+			a.name AS Backup_Set_Name,		
+			a.backup_start_date,
+			a.backup_finish_date,
+			CAST((a.backup_size/1024)/1024/1024 AS DECIMAL(10,2)) AS Backup_Size,
+			DATEDIFF(hh, MAX(a.backup_finish_date), GETDATE()) AS [Backup_Age] 
+	FROM msdb..backupset a
+	JOIN msdb..backupmediafamily b
+		ON a.media_set_id = b.media_set_id
+	WHERE a.backup_start_date > GETDATE() -1 AND a.[Type] <> 'L'
+	GROUP BY a.database_name, a.[Type],a.name, b.Physical_Device_Name,a.backup_start_date,a.backup_finish_date,a.backup_size
+	
+	/* STEP 2: CREATE HTML BLOB */
+	
+	SET @HTML =    
+		'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd"><html><head><style type="text/css">
+		table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+		th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+		th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;border-top-left-radius: 15px 10px; 
+			border-top-right-radius: 15px 10px;}  
+		td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+		td.c2 {background-color: #F0F0F0}
+		td.c1 {background-color: #E0E0E0}
+		td.master {border-bottom:0px}
+		.Perfth {text-align:center; vertical-align:bottom; color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;
+			border-right: 1px solid #41627E; padding: 3px 3px 3px 3px;}
+		.Perfthheader {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;border-top-left-radius: 15px 10px; 
+			border-top-right-radius: 15px 10px;}  
+		.Perftd {text-align:center; vertical-align:bottom; font-size:9px; font-family:arial;border-right: 1px solid #C1DAD7;border-bottom: 1px solid #C1DAD7;
+			padding: 3px 1px 3px 1px;}
+		.Text {background-color: #E0E0E0}
+		.Text2 {background-color: #F0F0F0}	
+		.Alert {background-color: #FF0000}
+		.Warning {background-color: #FFFF00} 	
+		</style></head><body><div>
+		<table width="1150"> <tr><th class="header" width="1150">System</th></tr></table></div><div>
 		<table width="1150">
-			<tr>'
-	SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((COALESCE(UserConnections,0) / 2) AS NVARCHAR) +'" width="10" /></th>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, UserConnections
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd"><p class="Text2">'+ CAST(COALESCE(UserConnections,0) AS NVARCHAR) +'</p></td>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, UserConnections
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
-	CAST(CAST(DATEPART(mm, StatDate)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(dd, StatDate)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(yyyy, StatDate)AS NVARCHAR)
-	 + '  ' + 
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, StatDate)), 2) + ':' +
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, StatDate)), 2)
-	 AS NVARCHAR) +'</div></td>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, UserConnections
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr></table></div>&nbsp;'
+		<tr>
+		<th width="200">Name</th>
+		<th width="300">Processor</th>	
+		<th width="250">Operating System</th>	
+		<th width="125">Total Memory (GB)</th>
+		<th width="200">Uptime</th>
+		<th width="75">Clustered</th>	
+		</tr>'
+	SELECT @HTML = @HTML + 
+		'<tr><td width="200" class="c1">'+@ServerName +'</td>' +
+		'<td width="300" class="c2">'+@Processor +'</td>' +
+		'<td width="250" class="c1">'+@ServerOS +'</td>' +
+		'<td width="125" class="c2">'+@SystemMemory+'</td>' +	
+		'<td width="200" class="c1">'+@Days+' days, '+@Hours+' hours & '+@Minutes+' minutes' +'</td>' +
+		'<td width="75" class="c2"><b>'+@ISClustered+'</b></td></tr>'
+	SELECT @HTML = @HTML + 	'</table></div>'
+	
+	SELECT @HTML = @HTML + 
+	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Server</th></tr></table></div><div>
+		<table width="1150">
+		<tr>
+		<th width="350">Version</th>	
+		<th width="150">Start Up Date</th>
+		<th width="100">Used Memory (MB)</th>
+		<th width="100">Collation</th>
+		<th width="75">User Mode</th>
+		<th width="75">SQL Agent</th>	
+		</tr>'
+	SELECT @HTML = @HTML + 
+		'<tr><td width="350" class="c1">'+@SQLVersion +'</td>' +
+		'<td width="150" class="c2">'+CAST(@ServerStartDate AS NVARCHAR)+'</td>' +
+		'<td width="100" class="c1">'+CAST(@ServerMemory AS NVARCHAR)+'</td>' +
+		'<td width="100" class="c2">'+@ServerCollation+'</td>' +
+		CASE WHEN @SingleUser = 'Multi' THEN '<td width="75" class="c1"><b>Multi</b></td>'  
+			 WHEN @SingleUser = 'Single' THEN '<td width="75" bgcolor="#FFFF00"><b>Single</b></td>'
+		ELSE '<td width="75" bgcolor="#FF0000"><b>UNKNOWN</b></td>'
+		END +	
+		CASE WHEN @SQLAgent = 'Up' THEN '<td width="75" bgcolor="#00FF00"><b>Up</b></td></tr>'  
+			 WHEN @SQLAgent = 'Down' THEN '<td width="75" bgcolor="#FF0000"><b>DOWN</b></td></tr>'  
+		ELSE '<td width="75" bgcolor="#FF0000"><b>UNKNOWN</b></td></tr>'  
+		END
+	
+	SELECT @HTML = @HTML + '</table></div>'
+	
 	SELECT @HTML = @HTML +
-		'<div><table width="1150"> <tr><th class="Perfthheader" width="1150">Buffer Hit Cache Ratio - Last 24 Hours</th></tr></table></div><div>
-		<table width="1150">
-			<tr>'
-	SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((BufferCacheHitRatio/2) AS NVARCHAR) +'" width="10" /></th>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, BufferCacheHitRatio
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd">' + 
-
-	CASE WHEN BufferCacheHitRatio < 98 THEN '<p class="Alert">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
-		WHEN BufferCacheHitRatio < 99.5 THEN '<p class="Warning">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
-	ELSE '<p class="Text2">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
-	END + '</p></td>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, BufferCacheHitRatio
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
-	CAST(CAST(DATEPART(mm, StatDate)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(dd, StatDate)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(yyyy, StatDate)AS NVARCHAR)
-	 + '  ' + 
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, StatDate)), 2) + ':' +
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, StatDate)), 2)
-	 AS NVARCHAR) +'</div></td>'
-	FROM #PERFSTATS
-	GROUP BY StatDate, BufferCacheHitRatio
-	ORDER BY StatDate ASC
-
-	SELECT @HTML = @HTML + '</tr></table></div>'
-END
-
-IF EXISTS (SELECT * FROM #CPUSTATS)
-BEGIN
+	'&nbsp;<table width="1150"><tr><td class="master" width="850" rowspan="3">
+		<div><table width="850"> <tr><th class="header" width="850">Databases</th></tr></table></div><div>
+		<table width="850">
+		  <tr>
+			<th width="175">Database</th>
+			<th width="150">Create Date</th>
+			<th width="150">Restore Date</th>
+			<th width="80">Size (GB)</th>
+			<th width="70">State</th>
+			<th width="75">Recovery</th>
+			<th width="75">Replicated</th>
+			<th width="75">Mirrored</th>				
+		 </tr>'
+	SELECT @HTML = @HTML +   
+		'<tr><td width="175" class="c1">' + [DBName] +'</td>' +
+		'<td width="150" class="c2">' + CAST(CreateDate AS NVARCHAR) +'</td>' +
+		'<td width="150" class="c1">' + COALESCE(CAST(RestoreDate AS NVARCHAR),'N/A') +'</td>' +   	 
+		'<td width="80" class="c2">' + CAST([Size(GB] AS NVARCHAR) +'</td>' +    
+	 	CASE [State]    
+			WHEN 'OFFLINE' THEN '<td width="70" bgColor="#FF0000"><b>OFFLINE</b></td>'
+			WHEN 'ONLINE' THEN '<td width="70" class="c1">ONLINE</td>'  
+		ELSE '<td width="70" bgcolor="#FF0000"><b>UNKNOWN</b></td>'
+		END +
+		'<td width="75" class="c2">' + [Recovery] +'</td>' +
+		'<td width="75" class="c1">' + [Replication] +'</td>' +
+		'<td width="75" class="c2">' + Mirroring +'</td></tr>'		
+	FROM #DATABASES
+	ORDER BY [DBName]
+	
+	SELECT @HTML = @HTML + '</table></div>'
+	
+	SELECT @HTML = @HTML + '</td><td class="master" width="250" valign="top">'
+	
 	SELECT @HTML = @HTML + 
-		'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">SQL Server CPU Usage (Percent) - Last 24 Hours</th></tr></table></div><div>
+		'<div><table width="250"> <tr><th class="header" width="250">Disks</th></tr></table></div><div>
+		<table width="250">
+		  <tr>
+			<th width="50">Drive</th>
+			<th width="100">Free Space (GB)</th>
+			<th width="100">Cluster Share</th>		
+		 </tr>'
+	SELECT @HTML = @HTML +   
+		'<tr><td width="50" class="c1">' + DriveLetter + ':' +'</td>' +    
+		CASE  
+			WHEN (COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0) <= 20) 
+				THEN '<td width="100" bgcolor="#FF0000"><b>' + COALESCE(CONVERT(NVARCHAR(50), COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0)),'') +'</b></td>'
+			ELSE '<td width="100" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), COALESCE(CAST(CAST(FreeSpace AS DECIMAL(10,2))/1024 AS DECIMAL(10,2)), 0)),'') +'</td>' 
+			END +
+		CASE ClusterShare
+			WHEN 1 THEN '<td width="100" class="c1">Yes</td></tr>'
+			WHEN 0 THEN '<td width="100" class="c1">No</td></tr>'
+			ELSE '<td width="100" class="c1">N/A</td></tr>'
+			END
+	FROM #DRIVES
+	
+	SELECT @HTML = @HTML + '</table></div>'
+	
+	SELECT @HTML = @HTML + '<tr><td class="master" width="250" valign="top">'
+	
+	IF EXISTS (SELECT * FROM #CLUSTER)
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Clustering</th></tr></table></div><div>
+			<table width="250">
+			  <tr>
+				<th width="175">Cluster Name</th>
+				<th width="75">Active</th>
+			 </tr>'
+		SELECT @HTML = @HTML +   
+			'<tr><td width="175" class="c1">' + NodeName +'</td>' +    
+			CASE Active
+				WHEN 1 THEN '<td width="75" class="c2">Yes</td></tr>'
+				ELSE '<td width="75" class="c2">No</td></tr>'
+				END
+		FROM #CLUSTER
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	SELECT @HTML = @HTML + '<tr><td class="master" width="250" valign="top">'
+	
+	IF EXISTS (SELECT * FROM #TRACESTATUS)
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Trace Flags</th></tr></table></div><div>
+			<table width="250">
+			  <tr>
+				<th width="65">Trace Flag</th>
+				<th width="65">Status</th>
+				<th width="60">Global</th>
+				<th width="60">Session</th>				
+			 </tr>'
+		SELECT @HTML = @HTML + '<tr><td width="65" class="c1">' + CAST([TraceFlag] AS NVARCHAR) + '</td>' +    
+			CASE [Status]
+				WHEN 1 THEN '<td width="65" class="c2">Active</td>'
+				ELSE '<td width="65" class="c2">Inactive</td>'
+				END +
+			CASE [Global]
+				WHEN 1 THEN '<td width="60" class="c1">On</td>'
+				ELSE '<td width="60" class="c1">Off</td>'
+				END +
+			CASE [Session]
+				WHEN 1 THEN '<td width="60" class="c2">On</td></tr>'
+				ELSE '<td width="60" class="c2">Off</td></tr>'
+				END	
+		FROM #TRACESTATUS
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Trace Flags</th></tr></table></div><div>
+			<table width="250">
+			  <tr>
+				<th width="250"><b>No Trace Flags Are Active</b></th>			
+			 </tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	SELECT @HTML = @HTML + '</td></tr></table>'
+	
+	SELECT @HTML = @HTML + 
+		'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">File Info</th></tr></table></div><div>
 		<table width="1150">
-			<tr>'
-	SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((COALESCE(SQLProcessPercent,0) / 2) AS NVARCHAR) +'" width="10" /></th>'
-	FROM #CPUSTATS
-	GROUP BY DateStamp, SQLProcessPercent
-	ORDER BY DateStamp ASC
+		  <tr>
+			<th width="150">Database</th>
+			<th width="50">Drive</th>
+			<th width="250">Filename</th>
+			<th width="150">Logical Name</th>
+			<th width="100">Group</th>
+			<th width="75">VLF Count</th>
+			<th width="75">Size (MB)</th>
+			<th width="75">Growth</th>
+			<th width="75">Used (MB)</th>
+			<th width="75">Empty (MB)</th>
+			<th width="75">% Empty</th>
+		 </tr>'
+	SELECT @HTML = @HTML +
+		'<tr><td width="150" class="c1">' + [DBName] +'</td>' +
+		'<td width="50" class="c2">' + COALESCE(DriveLetter,'N/A') + ':' +'</td>' +
+		'<td width="250" class="c1">' + [Filename] +'</td>' +
+		'<td width="150" class="c2">' + [LogicalFilename] +'</td>' +	
+		CASE
+			WHEN COALESCE([FileGroup],'') <> '' THEN '<td width="100" class="c1">' + [FileGroup] +'</td>'
+			ELSE '<td width="100" class="c1">' + 'N/A' +'</td>'
+			END +
+		'<td width="75" class="c2">' + CAST(COALESCE(VLFCount,'') AS NVARCHAR) +'</td>' +
+		CASE
+			WHEN (LargeLDF = 1 AND [FileName] LIKE '%ldf') THEN '<td width="75" bgColor="#FFFF00">' + FileMBSize +'</td>'
+			ELSE '<td width="75" class="c1">' + FileMBSize +'</td>'
+			END +
+		'<td width="75" class="c2">' + FileGrowth +'</td>' +
+		'<td width="75" class="c1">' + FileMBUsed +'</td>' +
+		'<td width="75" class="c2">' + FileMBEmpty +'</td>' +
+		'<td width="75" class="c1">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>' + '</tr>'
+	FROM #FILESTATS
+	
+	SELECT @HTML = @HTML + '</table></div>'
+	
+	SELECT @HTML = @HTML + 
+		'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">File Stats - Last 24 Hours</th></tr></table></div><div>
+		<table width="1150">
+		  <tr>
+			<th width="200">Filename</th>
+			<th width="75"># Reads</th>
+			<th width="175">KBytes Read</th>
+			<th width="75"># Writes</th>
+			<th width="175">KBytes Written</th>
+			<th width="125">IO Read Wait (MS)</th>
+			<th width="125">IO Write Wait (MS)</th>
+			<th width="125">Cumulative IO (GB)</th>
+			<th width="75">IO %</th>				
+		 </tr>'
+	SELECT @HTML = @HTML +
+	'<tr><td width="200" class="c1">' + COALESCE([FileName],'N/A') +'</td>' +
+		'<td width="75" class="c2">' + COALESCE(NumberReads,'0') +'</td>' +
+		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesRead),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesRead / 1024 AS NUMERIC(18,2))),'') +
+			  ' MB)' +'</td>' +
+		'<td width="75" class="c2">' + COALESCE(NumberWrites,'0') +'</td>' +
+		'<td width="175" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), KBytesWritten),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(KBytesWritten / 1024 AS NUMERIC(18,2)) ),'') +
+			  ' MB)' +'</td>' +
+		'<td width="125" class="c2">' + COALESCE(IoStallReadMS,'0') +'</td>' +
+		'<td width="125" class="c1">' + COALESCE(IoStallWriteMS,'0') + '</td>' +
+		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS VARCHAR) + '</td>' +
+		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS VARCHAR) + '</td>' + '</tr>'	
+	FROM #FILESTATS
+	
+	SELECT @HTML = @HTML + '</table></div>'
+	
+	IF EXISTS (SELECT * FROM #MIRRORING)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Mirroring</th></tr></table></div><div>
+			<table width="1150">   
+			<tr> 
+			<th width="150">Database</th>      
+			<th width="150">State</th>   
+			<th width="150">Server Role</th>   
+			<th width="150">Partner Instance</th>
+			<th width="150">Safety Level</th>
+			<th width="200">Automatic Failover</th>
+			<th width="250">Witness Server</th>   
+			</tr>'	
+		SELECT
+			@HTML = @HTML +   
+	'<tr><td width="150" class="c1">' + COALESCE([DBName],'N/A') +'</td>' +
+	'<td width="150" class="c2">' + COALESCE([State],'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE([ServerRole],'N/A') +'</td>' +  
+	'<td width="150" class="c2">' + COALESCE([PartnerInstance],'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE([SafetyLevel],'N/A') +'</td>' +  
+	'<td width="200" class="c2">' + COALESCE([AutomaticFailover],'N/A') +'</td>' +  
+	'<td width="250" class="c1">' + COALESCE([WitnessServer],'N/A') +'</td>' +  
+			 '</tr>'
+		FROM #MIRRORING
+		ORDER BY [DBName]
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Mirroring</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">Mirroring is not setup on this system</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+		
+	IF EXISTS (SELECT * FROM #LOGSHIP)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Log Shipping</th></tr></table></div><div>
+			<table width="1150">   
+			<tr> 
+			<th width="150">Primary Server</th>      
+			<th width="150">Primary DB</th>   
+			<th width="150">Monitoring Server</th>   
+			<th width="150">Secondary Server</th>
+			<th width="150">Secondary DB</th>
+			<th width="200">Last Backup Date</th>
+			<th width="250">Backup Share</th>   
+			</tr>'
+		SELECT
+			@HTML = @HTML +   
+	'<tr><td width="150" class="c1">' + COALESCE(primary_server,'N/A') +'</td>' +
+	'<td width="150" class="c2">' + COALESCE(primary_database,'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE(monitor_server,'N/A') +'</td>' +  
+	'<td width="150" class="c2">' + COALESCE(secondary_server,'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE(secondary_database,'N/A') +'</td>' +  
+	'<td width="200" class="c2">' + COALESCE(CAST(last_backup_date AS NVARCHAR),'N/A') +'</td>' +  
+	'<td width="250" class="c1">' + COALESCE(backup_share,'N/A') +'</td>' +  
+			 '</tr>'
+		FROM #LOGSHIP
+		ORDER BY Primary_Database
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Log Shipping</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">Log Shipping is not setup on this system</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #REPLINFO WHERE Distributor IS NOT NULL)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Distributor</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="150">Distributor</th>      
+					<th width="150">Distribution DB</th>   
+					<th width="500">Replcation Share</th>   
+					<th width="200">Replication Account</th>
+					<th width="150">Publisher Type</th>
+				</tr>'
+		SELECT
+			@HTML = @HTML +   
+	'<tr><td width="150" class="c1">' + COALESCE(Distributor,'N/A') +'</td>' +
+	'<td width="150" class="c2">' + COALESCE([distribution database],'N/A') +'</td>' +  
+	'<td width="500" class="c1">' + COALESCE(CAST(directory AS NVARCHAR),'N/A') +'</td>' +  
+	'<td width="200" class="c2">' + COALESCE(CAST(account AS NVARCHAR),'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE(CAST(publisher_type AS NVARCHAR),'N/A') +'</td></tr>'
+		FROM #REPLINFO
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Distributor</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">Distributor is not setup on this system</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #PUBINFO)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Publisher</th></tr></table></div><div>
+			<table width="1150">   
+			<tr> 
+			<th width="150">Publisher DB</th>      
+			<th width="150">Publication</th>   
+			<th width="150">Publication Type</th>   
+			<th width="75">Status</th>
+			<th width="100">Warnings</th>
+			<th width="125">Best Latency</th>
+			<th width="125">Worst Latency</th>
+			<th width="125">Average Latency</th>
+			<th width="150">Last Dist Sync</th>				
+			</tr>'
+		SELECT
+			@HTML = @HTML +   
+			'<tr> 
+	<td width="150" class="c1">' + COALESCE(publisher_db,'N/A') +'</td>' +
+	'<td width="150" class="c2">' + COALESCE(publication,'N/A') +'</td>' +  
+			CASE
+				WHEN publication_type = 0 THEN '<td width="150" class="c1">' + 'Transactional Publication' +'</td>'
+				WHEN publication_type = 1 THEN '<td width="150" class="c1">' + 'Snapshot Publication' +'</td>'
+				WHEN publication_type = 2 THEN '<td width="150" class="c1">' + 'Merge Publication' +'</td>'
+				ELSE '<td width="150" class="c1">' + 'N/A' +'</td>'
+			END +
+			CASE
+				WHEN [status] = 1 THEN '<td width="75" class="c2">' + 'Started' +'</td>'
+				WHEN [status] = 2 THEN '<td width="75" class="c2">' + 'Succeeded' +'</td>'
+				WHEN [status] = 3 THEN '<td width="75" class="c2">' + 'In Progress' +'</td>'
+				WHEN [status] = 4 THEN '<td width="75" class="c2">' + 'Idle' +'</td>'
+				WHEN [status] = 5 THEN '<td width="75" class="c2">' + 'Retrying' +'</td>'
+				WHEN [status] = 6 THEN '<td width="75" class="c2">' + 'Failed' +'</td>'
+				ELSE '<td width="75" class="c2">' + 'N/A' +'</td>'
+			END +
+			CASE
+				WHEN Warning = 1 THEN '<td width="100" bgcolor="#FFFF00">' + 'Expiration' +'</td>'
+				WHEN Warning = 2 THEN '<td width="100" bgcolor="#FFFF00">' + 'Latency' +'</td>'
+				WHEN Warning = 4 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Expiration' +'</td>'
+				WHEN Warning = 8 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Fast Run Duration' +'</td>'
+				WHEN Warning = 16 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Slow Run Duration' +'</td>'
+				WHEN Warning = 32 THEN '<td width="100" bgcolor="#FFFF00">' + 'Marge Fast Run Speed' +'</td>'
+				WHEN Warning = 64 THEN '<td width="100" bgcolor="#FFFF00">' + 'Merge Slow Run Speed' +'</td>'
+				ELSE '<td width="100" class="c1">' + 'N/A'														
+			END +
+			CASE
+				WHEN publication_type = 0 THEN '<td width="125" class="c2">' + CAST(Best_Latency AS NVARCHAR) +'</td>'
+				WHEN publication_type = 1 THEN '<td width="125" class="c2">' + CAST(Best_RunSpeedPerf AS NVARCHAR) +'</td>'
+			END +
+			CASE
+				WHEN publication_type = 0 THEN '<td width="125" class="c1">' + CAST(Worst_Latency AS NVARCHAR) +'</td>'
+				WHEN publication_type = 1 THEN '<td width="125" class="c1">' + CAST(Worst_RunSpeedPerf AS NVARCHAR) +'</td>'
+			END +
+			CASE
+				WHEN publication_type = 0 THEN '<td width="125" class="c2">' + CAST(Average_Latency AS NVARCHAR) +'</td>'
+				WHEN publication_type = 1 THEN '<td width="125" class="c2">' + CAST(Average_RunSpeedPerf AS NVARCHAR) +'</td>'
+			END +
+			'<td width="150" class="c1">' + CAST(Last_DistSync AS NVARCHAR) +'</td>' + 
+			'</tr>'
+		FROM #PUBINFO
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Publisher</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">Publisher is not setup on this system</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #REPLSUB)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Subscriptions</th></tr></table></div><div>
+			<table width="1150">   
+			<tr> 
+			<th width="150">Publisher</th>      
+			<th width="150">Publisher DB</th>   
+			<th width="150">Publication</th>   
+			<th width="450">Distribution Job</th>
+			<th width="150">Last Sync</th>
+			<th width="100">Immediate Sync</th>
+			</tr>'
+		SELECT
+			@HTML = @HTML +   
+	'<tr><td width="150" class="c1">' + COALESCE(Publisher,'N/A') +'</td>' +
+	'<td width="150" class="c2">' + COALESCE(Publisher_DB,'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE(Publication,'N/A') +'</td>' +  
+	'<td width="450" class="c2">' + COALESCE(Distribution_Agent,'N/A') +'</td>' +  
+	'<td width="150" class="c1">' + COALESCE(CAST([time] AS NVARCHAR),'N/A') +'</td>' +  
+			CASE [Immediate_sync]
+				WHEN 0 THEN '<td width="100" class="c2">' + 'No'  +'</td>'
+				WHEN 1 THEN '<td width="100" class="c2">' + 'Yes'  +'</td>'
+				ELSE 'N/A'
+			END +
+			 '</tr>'
+		FROM #REPLSUB
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Subscriptions</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">Subscriptions are not setup on this system</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #PERFSTATS)
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">Connections - Last 24 Hours</th></tr></table></div><div>
+			<table width="1150">
+				<tr>'
+		SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((COALESCE(UserConnections,0) / 2) AS NVARCHAR) +'" width="10" /></th>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, UserConnections
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd"><p class="Text2">'+ CAST(COALESCE(UserConnections,0) AS NVARCHAR) +'</p></td>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, UserConnections
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
+		CAST(CAST(DATEPART(mm, StatDate)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(dd, StatDate)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(yyyy, StatDate)AS NVARCHAR)
+		 + '  ' + 
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, StatDate)), 2) + ':' +
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, StatDate)), 2)
+		 AS NVARCHAR) +'</div></td>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, UserConnections
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr></table></div>&nbsp;'
+		SELECT @HTML = @HTML +
+			'<div><table width="1150"> <tr><th class="Perfthheader" width="1150">Buffer Hit Cache Ratio - Last 24 Hours</th></tr></table></div><div>
+			<table width="1150">
+				<tr>'
+		SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((BufferCacheHitRatio/2) AS NVARCHAR) +'" width="10" /></th>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, BufferCacheHitRatio
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd">' + 
+	
+		CASE WHEN BufferCacheHitRatio < 98 THEN '<p class="Alert">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
+			WHEN BufferCacheHitRatio < 99.5 THEN '<p class="Warning">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
+		ELSE '<p class="Text2">'+ LEFT(CAST(BufferCacheHitRatio AS NVARCHAR),6) 
+		END + '</p></td>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, BufferCacheHitRatio
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
+		CAST(CAST(DATEPART(mm, StatDate)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(dd, StatDate)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(yyyy, StatDate)AS NVARCHAR)
+		 + '  ' + 
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, StatDate)), 2) + ':' +
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, StatDate)), 2)
+		 AS NVARCHAR) +'</div></td>'
+		FROM #PERFSTATS
+		GROUP BY StatDate, BufferCacheHitRatio
+		ORDER BY StatDate ASC
+	
+		SELECT @HTML = @HTML + '</tr></table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #CPUSTATS)
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">SQL Server CPU Usage (Percent) - Last 24 Hours</th></tr></table></div><div>
+			<table width="1150">
+				<tr>'
+		SELECT @HTML = @HTML + '<th class="Perfth"><img src="foo" style="background-color:white;" height="'+ CAST((COALESCE(SQLProcessPercent,0) / 2) AS NVARCHAR) +'" width="10" /></th>'
+		FROM #CPUSTATS
+		GROUP BY DateStamp, SQLProcessPercent
+		ORDER BY DateStamp ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd"><p class="Text2">'+ CAST(COALESCE(SQLProcessPercent,0) AS NVARCHAR) +'</p></td>'
+		FROM #CPUSTATS
+		GROUP BY DateStamp, SQLProcessPercent
+		ORDER BY DateStamp ASC
+	
+		SELECT @HTML = @HTML + '</tr><tr>'
+		SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
+		CAST(CAST(DATEPART(mm, DateStamp)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(dd, DateStamp)AS NVARCHAR) + '/' + 
+		CAST(DATEPART(yyyy, DateStamp)AS NVARCHAR)
+		 + '  ' + 
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, DateStamp)), 2) + ':' +
+		RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, DateStamp)), 2)
+		 AS NVARCHAR) +'</div></td>'
+		FROM #CPUSTATS
+		GROUP BY DateStamp, SQLProcessPercent
+		ORDER BY DateStamp ASC
+	
+		SELECT @HTML = @HTML + '</tr></table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #JOBSTATUS)
+	BEGIN
+		SELECT @HTML = @HTML + 
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Agent Jobs</th></tr></table></div><div>
+			<table width="1150"> 
+			<tr> 
+			<th width="275">Job Name</th>
+			<th width="150">Category</th> 
+			<th width="75">Enabled</th> 
+			<th width="100">Last Outcome</th> 
+			<th width="150">Last Date Run</th> 
+			<th width="200">Avg Run Time ss(Mi)</th> 
+			<th width="200">Execution Time ss(Mi)</th>
+			</tr>'
+		SELECT @HTML = @HTML +   
+			'<tr><td width="275" class="c1">' + LEFT(JobName,60) +'</td>' +    
+	'<td width="150" class="c2">' + COALESCE(Category,'N/A') +'</td>' +    
+			CASE [Enabled]
+				WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
+				WHEN 1 THEN '<td width="75" class="c1">True</td>'  
+			ELSE '<td width="75" class="c1"><b>Unknown</b></td>'  
+			END  +   
+		 	CASE      
+				WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150" bgColor="#FF0000"><b>FAILED</b></td>'
+				WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#FF0000"><b>ERROR - Long Running</b></td>'  
+				WHEN LastRunOutcome = 'SUCCESS' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150"  bgColor="#00FF00">Success</td>'  
+				WHEN LastRunOutcome = 'Success' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#99FF00">Success - Long Running</td>'  
+				WHEN LastRunOutcome = 'InProcess' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+				WHEN LastRunOutcome = 'InProcess' AND RunTimeStatus = 'LongRunning-NOW' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+				WHEN LastRunOutcome = 'CANCELLED' THEN '<td width="150" bgColor="#FFFF00"><b>CANCELLED</b></td>'  
+				WHEN LastRunOutcome = 'NA' THEN '<td width="150" class="c2">NA</td>'  
+			ELSE '<td width="150" class="c2">NA</td>' 
+			END + 
+			'<td width="150" class="c1">' + COALESCE(CAST(StartTime AS NVARCHAR),'N/A') + '</td>' +
+			'<td width="200" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime / 60),'') +  ')' + '</td>' +
+			'<td width="200" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime / 60),'') +  ')' + '</td></tr>'   
+		FROM #JOBSTATUS
+		ORDER BY [Enabled] Desc, Category, JobName
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #LONGQUERIES)
+	BEGIN
+		SELECT @HTML = @HTML +   
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Long Running Queries</th></tr></table></div><div>
+			<table width="1150">
+			<tr>
+			<th width="150">Date Stamp</th> 	
+			<th width="150">Database</th>
+			<th width="75">Time (ss)</th> 
+			<th width="75">SPID</th> 	
+			<th width="175">Login</th> 	
+			<th width="425">Query Text</th>
+			</tr>'
+		SELECT @HTML = @HTML +   
+			'<tr>
+			<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>	
+	<td width="150" class="c2">' + COALESCE([DBName],'N/A') +'</td>
+			<td width="75" class="c1">' + CAST([ElapsedTime(ss)] AS NVARCHAR) +'</td>
+			<td width="75" class="c2">' + CAST(Session_id AS NVARCHAR) +'</td>
+	<td width="175" class="c1">' + COALESCE(login_name,'N/A') +'</td>	
+	<td width="425" class="c2">' + COALESCE(LEFT(sql_text,100),'N/A') +'</td>			
+			</tr>'
+		FROM #LONGQUERIES
+		ORDER BY DateStamp
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Long Running Queries</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">There has been no recent recorded long running queries</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #BLOCKING)
+	BEGIN
+		SELECT @HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Blocking</th></tr></table></div><div>
+			<table width="1150">
+			<tr> 
+			<th width="150">Date Stamp</th> 
+			<th width="150">Database</th> 	
+			<th width="60">Time (ss)</th> 
+			<th width="60">Victim SPID</th>
+			<th width="145">Victim Login</th>
+			<th width="190">Victim SQL Text</th> 
+			<th width="60">Blocking SPID</th> 	
+			<th width="145">Blocking Login</th>
+			<th width="190">Blocking SQL Text</th> 
+			</tr>'
+		SELECT @HTML = @HTML +   
+			'<tr>
+			<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>
+	<td width="130" class="c2">' + COALESCE([DBName],'N/A') + '</td>
+			<td width="60" class="c1">' + CAST(Blocked_WaitTime_Seconds AS NVARCHAR) +'</td>
+			<td width="60" class="c2">' + CAST(Blocked_SPID AS NVARCHAR) +'</td>
+	<td width="145" class="c1">' + COALESCE(Blocked_Login,'NA') +'</td>		
+			<td width="200" class="c2">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Blocked_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>
+			<td width="60" class="c1">' + CAST(Blocking_SPID AS NVARCHAR) +'</td>
+	<td width="145" class="c2">' + COALESCE(Offending_Login,'NA') +'</td>
+			<td width="200" class="c1">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Offending_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>	
+			</tr>'
+		FROM #BLOCKING
+		ORDER BY DateStamp
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Blocking</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">There has been no recent recorded blocking</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #DEADLOCKINFO)
+	BEGIN
+		SELECT @HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Prior Day</th></tr></table></div><div>
+			<table width="1150">
+			<tr> 
+			<th width="150">Date Stamp</th> 
+			<th width="150">Database</th> 	
+			<th width="75">Victim Hostname</th> 
+			<th width="75">Victim Login</th>
+			<th width="75">Victim SPID</th>
+			<th width="200">Victim Objects</th> 	
+			<th width="75">Locking Hostname</th>
+			<th width="75">Locking Login</th> 
+			<th width="75">Locking SPID</th> 
+			<th width="200">Locking Objects</th>
+			</tr>'
+		SELECT @HTML = @HTML +   
+			'<tr>
+			<td width="150" class="c1">' + CAST(DeadlockDate AS NVARCHAR) +'</td>
+	<td width="150" class="c2">' + COALESCE([DBName],'N/A') + '</td>' +
+			CASE 
+				WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimHostname,'NA') +'</td>'
+			ELSE '<td width="75" class="c1">NA</td>' 
+			END +
+			'<td width="75" class="c2">' + COALESCE(VictimLogin,'NA') +'</td>' +
+			CASE 
+				WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimSPID,'NA') +'</td>'
+			ELSE '<td width="75" class="c1">NA</td>' 
+			END +	
+	'<td width="200" class="c2">' + COALESCE(VictimSQL,'N/A') +'</td>
+	<td width="75" class="c1">' + COALESCE(LockingHostname,'N/A') +'</td>
+	<td width="75" class="c2">' + COALESCE(LockingLogin,'N/A') +'</td>
+	<td width="75" class="c1">' + COALESCE(LockingSPID,'N/A') +'</td>		
+	<td width="200" class="c2">' + COALESCE(LockingSQL,'N/A') +'</td>
+			</tr>'
+		FROM #DEADLOCKINFO 
+		WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
+		ORDER BY DeadlockDate ASC
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Previous Day</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">There has been no recent recorded Deadlocks OR TraceFlag 1222 is not Active</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #SCHEMACHANGES)
+	BEGIN
+		SELECT @HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Schema Changes</th></tr></table></div><div>
+			<table width="1150">
+			  <tr>
+			  	<th width="150">Create Date</th>
+			  	<th width="150">Database</th>
+				<th width="150">SQL Event</th>	  		
+				<th width="350">Object Name</th>
+				<th width="175">Login Name</th>
+				<th width="175">Computer Name</th>
+			 </tr>'
+		SELECT @HTML = @HTML +   
+			'<tr><td width="150" class="c1">' + CAST(CreateDate AS NVARCHAR) +'</td>' +  
+			'<td width="150" class="c2">' + COALESCE([DBName],'N/A') +'</td>' +
+	'<td width="150" class="c1">' + COALESCE(SQLEvent,'N/A') +'</td>' +
+			'<td width="350" class="c2">' + COALESCE(ObjectName,'N/A') +'</td>' +  
+			'<td width="175" class="c1">' + COALESCE(LoginName,'N/A') +'</td>' +  
+			'<td width="175" class="c2">' + COALESCE(ComputerName,'N/A') +'</td></tr>'
+		FROM #SCHEMACHANGES
+		ORDER BY [DBName], CreateDate
+		
+		SELECT 
+			@HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Schema Changes</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">There has been no recent recorded schema changes</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #ERRORLOG)
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Error Log - Last 24 Hours (Does not include Backup or Deadlock info)</th></tr></table></div><div>
+			<table width="1150">
+			<tr>
+			<th width="150">Log Date</th>
+			<th width="150">Process Info</th>
+			<th width="850">Message</th>
+			</tr>'
+		SELECT
+			@HTML = @HTML +
+			'<tr>
+			<td width="150" class="c1">' + COALESCE(CAST(LogDate AS NVARCHAR),'N/A') +'</td>' +
+			'<td width="150" class="c2">' + COALESCE(ProcessInfo,'N/A') +'</td>' +
+			'<td width="850" class="c1">' + COALESCE([text],'N/A') +'</td>' +
+			 '</tr>'
+		FROM #ERRORLOG
+		ORDER BY LogDate DESC
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	IF EXISTS (SELECT * FROM #BACKUPS)
+	BEGIN
+		SELECT
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Backup Stats - Last 24 Hours</th></tr></table></div><div>
+			<table width="1150">
+			<tr>
+			<th width="150">Database</th>
+			<th width="90">Type</th>
+			<th width="300">File Name</th>
+			<th width="160">Backup Set Name</th>		
+			<th width="150">Start Date</th>
+			<th width="150">End Date</th>
+			<th width="75">Size (GB)</th>
+			<th width="75">Age (hh)</th>
+			</tr>'
+		SELECT
+			@HTML = @HTML +   
+			'<tr> 
+			<td width="150" class="c1">' + COALESCE([DBName],'N/A') +'</td>' +
+			'<td width="90" class="c2">' + COALESCE([Type],'N/A') +'</td>' +
+			'<td width="300" class="c1">' + COALESCE([Filename],'N/A') +'</td>' +
+			'<td width="160" class="c2">' + COALESCE(backup_set_name,'N/A') +'</td>' +	
+			'<td width="150" class="c1">' + COALESCE(CAST(backup_start_date AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="150" class="c2">' + COALESCE(CAST(backup_finish_date AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="75" class="c1">' + COALESCE(CAST(backup_size AS NVARCHAR),'N/A') +'</td>' +  
+			'<td width="75" class="c2">' + COALESCE(CAST(backup_age AS NVARCHAR),'N/A') +'</td>' +  	
+			 '</tr>'
+		FROM #BACKUPS
+		ORDER BY backup_start_date DESC
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END ELSE
+	BEGIN
+		SELECT 
+			@HTML = @HTML +
+			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Backup Stats - Last 24 Hours</th></tr></table></div><div>
+			<table width="1150">   
+				<tr> 
+					<th width="1150">No full backups have been created on this server in the last 24 hours</th>
+				</tr>'
+		
+		SELECT @HTML = @HTML + '</table></div>'
+	END
+	
+	SELECT @HTML = @HTML + '&nbsp;<div><table width="1150"><tr><td class="master">Generated on ' + CAST(GETDATE() AS NVARCHAR) + '</td></tr></table></div>'
+	
+	SELECT @HTML = @HTML + '</body></html>'
+	
+	/* STEP 3: SEND REPORT */
+	
+	IF @EmailFlag = 1
+	BEGIN
+		EXEC msdb..sp_send_dbmail
+			@recipients=@Recepients,
+			@copy_recipients=@CC,  
+			@subject = @ReportTitle,    
+			@body = @HTML,    
+			@body_format = 'HTML'
+	END
+	
+	/* STEP 4: PRESERVE DATA */
+	
+	IF @InsertFlag = 1
+	BEGIN
+		IF EXISTS (SELECT name FROM master..sysdatabases WHERE name = 'dba')
+		BEGIN
+			INSERT INTO [dba].dbo.HealthReport (GeneratedHTML)
+			SELECT @HTML
+		END
+	END
+	
+	DROP TABLE #SYSINFO
+	DROP TABLE #PROCESSOR
+	DROP TABLE #DRIVES
+	DROP TABLE #CLUSTER
+	DROP TABLE #TRACESTATUS
+	DROP TABLE #DATABASES
+	DROP TABLE #FILESTATS
+	DROP TABLE #VLFINFO
+	DROP TABLE #JOBSTATUS
+	DROP TABLE #LONGQUERIES
+	DROP TABLE #BLOCKING
+	DROP TABLE #SCHEMACHANGES
+	DROP TABLE #REPLINFO
+	DROP TABLE #PUBINFO
+	DROP TABLE #REPLSUB
+	DROP TABLE #LOGSHIP
+	DROP TABLE #MIRRORING
+	DROP TABLE #ERRORLOG
+	DROP TABLE #BACKUPS
+	DROP TABLE #PERFSTATS
+	DROP TABLE #CPUSTATS
+	DROP TABLE #DEADLOCKINFO
+	DROP TABLE #TEMPDATES
 
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd"><p class="Text2">'+ CAST(COALESCE(SQLProcessPercent,0) AS NVARCHAR) +'</p></td>'
-	FROM #CPUSTATS
-	GROUP BY DateStamp, SQLProcessPercent
-	ORDER BY DateStamp ASC
-
-	SELECT @HTML = @HTML + '</tr><tr>'
-	SELECT @HTML = @HTML + '<td class="Perftd"><div class="Text">'+ 
-	CAST(CAST(DATEPART(mm, DateStamp)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(dd, DateStamp)AS NVARCHAR) + '/' + 
-	CAST(DATEPART(yyyy, DateStamp)AS NVARCHAR)
-	 + '  ' + 
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(hh, DateStamp)), 2) + ':' +
-	RIGHT('0' + CONVERT(NVARCHAR(2), DATEPART(mi, DateStamp)), 2)
-	 AS NVARCHAR) +'</div></td>'
-	FROM #CPUSTATS
-	GROUP BY DateStamp, SQLProcessPercent
-	ORDER BY DateStamp ASC
-
-	SELECT @HTML = @HTML + '</tr></table></div>'
 END
 
-IF EXISTS (SELECT * FROM #JOBSTATUS)
-BEGIN
-SELECT @HTML = @HTML + 
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Agent Jobs</th></tr></table></div><div>
-	<table width="1150"> 
-	<tr> 
-	<th width="275">Job Name</th>
-	<th width="150">Category</th> 
-	<th width="75">Enabled</th> 
-	<th width="100">Last Outcome</th> 
-	<th width="150">Last Date Run</th> 
-	<th width="200">Avg Run Time ss(Mi)</th> 
-	<th width="200">Execution Time ss(Mi)</th>
-	</tr>'
-SELECT @HTML = @HTML +   
-	'<tr><td width="275" class="c1">' + LEFT(JobName,60) +'</td>' +    
-	'<td width="150" class="c2">' + Category +'</td>' +    
-	CASE [Enabled]
-		WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
-		WHEN 1 THEN '<td width="75" class="c1">True</td>'  
-	ELSE '<td width="75" class="c1"><b>Unknown</b></td>'  
-	END  +   
- 	CASE      
-		WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150" bgColor="#FF0000"><b>FAILED</b></td>'
-		WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#FF0000"><b>ERROR - Long Running</b></td>'  
-		WHEN LastRunOutcome = 'SUCCESS' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150"  bgColor="#00FF00">Success</td>'  
-		WHEN LastRunOutcome = 'Success' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#99FF00">Success - Long Running</td>'  
-		WHEN LastRunOutcome = 'InProcess' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
-		WHEN LastRunOutcome = 'InProcess' AND RunTimeStatus = 'LongRunning-NOW' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
-		WHEN LastRunOutcome = 'CANCELLED' THEN '<td width="150" bgColor="#FFFF00"><b>CANCELLED</b></td>'  
-		WHEN LastRunOutcome = 'NA' THEN '<td width="150" class="c2">NA</td>'  
-	ELSE '<td width="150" class="c2">NA</td>' 
-	END + 
-	'<td width="150" class="c1">' + COALESCE(CAST(StartTime AS NVARCHAR),'N/A') + '</td>' +
-	'<td width="200" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime / 60),'') +  ')' + '</td>' +
-	'<td width="200" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime / 60),'') +  ')' + '</td></tr>'   
-FROM #JOBSTATUS
-ORDER BY JobName
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #LONGQUERIES)
-BEGIN
-SELECT @HTML = @HTML +   
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Long Running Queries</th></tr></table></div><div>
-	<table width="1150">
-	<tr>
-	<th width="150">Date Stamp</th> 	
-	<th width="150">Database</th>
-	<th width="75">Time (ss)</th> 
-	<th width="75">SPID</th> 	
-	<th width="175">Login</th> 	
-	<th width="425">Query Text</th>
-	</tr>'
-SELECT @HTML = @HTML +   
-	'<tr>
-	<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>	
-	<td width="150" class="c2">' + [DBName] +'</td>
-	<td width="75" class="c1">' + CAST([ElapsedTime(ss)] AS NVARCHAR) +'</td>
-	<td width="75" class="c2">' + CAST(Session_id AS NVARCHAR) +'</td>
-	<td width="175" class="c1">' + login_name +'</td>	
-	<td width="425" class="c2">' + LEFT(sql_text,100) +'</td>			
-	</tr>'
-FROM #LONGQUERIES
-ORDER BY DateStamp
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Long Running Queries</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">There has been no recent recorded long running queries</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #BLOCKING)
-BEGIN
-SELECT @HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Blocking</th></tr></table></div><div>
-	<table width="1150">
-	<tr> 
-	<th width="150">Date Stamp</th> 
-	<th width="150">Database</th> 	
-	<th width="60">Time (ss)</th> 
-	<th width="60">Victim SPID</th>
-	<th width="145">Victim Login</th>
-	<th width="190">Victim SQL Text</th> 
-	<th width="60">Blocking SPID</th> 	
-	<th width="145">Blocking Login</th>
-	<th width="190">Blocking SQL Text</th> 
-	</tr>'
-SELECT @HTML = @HTML +   
-	'<tr>
-	<td width="150" class="c1">' + CAST(DateStamp AS NVARCHAR) +'</td>
-	<td width="130" class="c2">' + [DBName] + '</td>
-	<td width="60" class="c1">' + CAST(Blocked_WaitTime_Seconds AS NVARCHAR) +'</td>
-	<td width="60" class="c2">' + CAST(Blocked_SPID AS NVARCHAR) +'</td>
-	<td width="145" class="c1">' + Blocked_Login +'</td>		
-	<td width="200" class="c2">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Blocked_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>
-	<td width="60" class="c1">' + CAST(Blocking_SPID AS NVARCHAR) +'</td>
-	<td width="145" class="c2">' + Offending_Login +'</td>
-	<td width="200" class="c1">' + REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LEFT(Offending_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE',''),'FUNCTION',''),'PROC','') +'</td>	
-	</tr>'
-FROM #BLOCKING
-ORDER BY DateStamp
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Blocking</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">There has been no recent recorded blocking</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #DEADLOCKINFO)
-BEGIN
-SELECT @HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Prior Day</th></tr></table></div><div>
-	<table width="1150">
-	<tr> 
-	<th width="150">Date Stamp</th> 
-	<th width="150">Database</th> 	
-	<th width="75">Victim Hostname</th> 
-	<th width="75">Victim Login</th>
-	<th width="75">Victim SPID</th>
-	<th width="200">Victim Objects</th> 	
-	<th width="75">Locking Hostname</th>
-	<th width="75">Locking Login</th> 
-	<th width="75">Locking SPID</th> 
-	<th width="200">Locking Objects</th>
-	</tr>'
-SELECT @HTML = @HTML +   
-	'<tr>
-	<td width="150" class="c1">' + CAST(DeadlockDate AS NVARCHAR) +'</td>
-	<td width="150" class="c2">' + [DBName] + '</td>' +
-	CASE 
-		WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimHostname,'NA') +'</td>'
-	ELSE '<td width="75" class="c1">NA</td>' 
-	END +
-	'<td width="75" class="c2">' + COALESCE(VictimLogin,'NA') +'</td>' +
-	CASE 
-		WHEN VictimLogin IS NOT NULL THEN '<td width="75" class="c1">' + COALESCE(VictimSPID,'NA') +'</td>'
-	ELSE '<td width="75" class="c1">NA</td>' 
-	END +	
-	'<td width="200" class="c2">' + COALESCE(VictimSQL,'NA') +'</td>
-	<td width="75" class="c1">' + COALESCE(LockingHostname,'NA') +'</td>
-	<td width="75" class="c2">' + COALESCE(LockingLogin,'NA') +'</td>
-	<td width="75" class="c1">' + COALESCE(LockingSPID,'NA') +'</td>		
-	<td width="200" class="c2">' + COALESCE(LockingSQL,'NA') +'</td>
-	</tr>'
-FROM #DEADLOCKINFO 
-WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
-ORDER BY DeadlockDate ASC
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Previous Day</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">There has been no recent recorded Deadlocks OR TraceFlag 1222 is not Active</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #SCHEMACHANGES)
-BEGIN
-SELECT @HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Schema Changes</th></tr></table></div><div>
-	<table width="1150">
-	  <tr>
-	  	<th width="150">Create Date</th>
-	  	<th width="150">Database</th>
-		<th width="150">SQL Event</th>	  		
-		<th width="350">Object Name</th>
-		<th width="175">Login Name</th>
-		<th width="175">Computer Name</th>
-	 </tr>'
-SELECT @HTML = @HTML +   
-	'<tr><td width="150" class="c1">' + CAST(CreateDate AS NVARCHAR) +'</td>' +  
-	'<td width="150" class="c2">' + COALESCE([DBName],'N/A') +'</td>' +
-	'<td width="150" class="c1">' + SQLEvent +'</td>' +
-	'<td width="350" class="c2">' + COALESCE(ObjectName,'N/A') +'</td>' +  
-	'<td width="175" class="c1">' + COALESCE(LoginName,'N/A') +'</td>' +  
-	'<td width="175" class="c2">' + COALESCE(ComputerName,'N/A') +'</td></tr>'
-FROM #SCHEMACHANGES
-ORDER BY [DBName], CreateDate
-
-SELECT 
-	@HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Schema Changes</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">There has been no recent recorded schema changes</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #ERRORLOG)
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Error Log - Last 24 Hours (Does not include Backup or Deadlock info)</th></tr></table></div><div>
-	<table width="1150">
-	<tr>
-	<th width="150">Log Date</th>
-	<th width="150">Process Info</th>
-	<th width="850">Message</th>
-	</tr>'
-SELECT
-	@HTML = @HTML +
-	'<tr>
-	<td width="150" class="c1">' + COALESCE(CAST(LogDate AS NVARCHAR),'N/A') +'</td>' +
-	'<td width="150" class="c2">' + COALESCE(ProcessInfo,'N/A') +'</td>' +
-	'<td width="850" class="c1">' + COALESCE([text],'N/A') +'</td>' +
-	 '</tr>'
-FROM #ERRORLOG
-ORDER BY LogDate DESC
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-IF EXISTS (SELECT * FROM #BACKUPS)
-BEGIN
-SELECT
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Backup Stats - Last 24 Hours</th></tr></table></div><div>
-	<table width="1150">
-	<tr>
-	<th width="150">Database</th>
-	<th width="90">Type</th>
-	<th width="300">File Name</th>
-	<th width="160">Backup Set Name</th>		
-	<th width="150">Start Date</th>
-	<th width="150">End Date</th>
-	<th width="75">Size (GB)</th>
-	<th width="75">Age (hh)</th>
-	</tr>'
-SELECT
-	@HTML = @HTML +   
-	'<tr> 
-	<td width="150" class="c1">' + COALESCE([DBName],'N/A') +'</td>' +
-	'<td width="90" class="c2">' + COALESCE([Type],'N/A') +'</td>' +
-	'<td width="300" class="c1">' + COALESCE([Filename],'N/A') +'</td>' +
-	'<td width="160" class="c2">' + COALESCE(backup_set_name,'N/A') +'</td>' +	
-	'<td width="150" class="c1">' + COALESCE(CAST(backup_start_date AS NVARCHAR),'N/A') +'</td>' +  
-	'<td width="150" class="c2">' + COALESCE(CAST(backup_finish_date AS NVARCHAR),'N/A') +'</td>' +  
-	'<td width="75" class="c1">' + COALESCE(CAST(backup_size AS NVARCHAR),'N/A') +'</td>' +  
-	'<td width="75" class="c2">' + COALESCE(CAST(backup_age AS NVARCHAR),'N/A') +'</td>' +  	
-	 '</tr>'
-FROM #BACKUPS
-ORDER BY backup_start_date DESC
-
-SELECT @HTML = @HTML + '</table></div>'
-END ELSE
-BEGIN
-SELECT 
-	@HTML = @HTML +
-	'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Backup Stats - Last 24 Hours</th></tr></table></div><div>
-	<table width="1150">   
-		<tr> 
-			<th width="1150">No backups have been created on this server in the last 24 hours</th>
-		</tr>'
-
-SELECT @HTML = @HTML + '</table></div>'
-END
-
-SELECT @HTML = @HTML + '&nbsp;<div><table width="1150"><tr><td class="master">Generated on ' + CAST(GETDATE() AS NVARCHAR) + '</td></tr></table></div>'
-
-SELECT @HTML = @HTML + '</body></html>'
-
-/* STEP 3: SEND REPORT */
-
-IF @EmailFlag = 1
-BEGIN
-EXEC msdb..sp_send_dbmail
-	@recipients=@Recepients,
-	@copy_recipients=@CC,  
-	@subject = @ReportTitle,    
-	@body = @HTML,    
-	@body_format = 'HTML'
-END
-
-/* STEP 4: PRESERVE DATA */
-
-IF @InsertFlag = 1
-BEGIN
-IF EXISTS (SELECT name FROM master..sysdatabases WHERE name = 'dba')
-BEGIN
-	INSERT INTO [dba].dbo.HealthReport (GeneratedHTML)
-	SELECT @HTML
-END
-END
-
-DROP TABLE #SYSINFO
-DROP TABLE #PROCESSOR
-DROP TABLE #DRIVES
-DROP TABLE #CLUSTER
-DROP TABLE #TRACESTATUS
-DROP TABLE #DATABASES
-DROP TABLE #FILESTATS
-DROP TABLE #VLFINFO
-DROP TABLE #JOBSTATUS
-DROP TABLE #LONGQUERIES
-DROP TABLE #BLOCKING
-DROP TABLE #SCHEMACHANGES
-DROP TABLE #REPLINFO
-DROP TABLE #PUBINFO
-DROP TABLE #REPLSUB
-DROP TABLE #LOGSHIP
-DROP TABLE #MIRRORING
-DROP TABLE #ERRORLOG
-DROP TABLE #BACKUPS
-DROP TABLE #PERFSTATS
-DROP TABLE #CPUSTATS
-DROP TABLE #DEADLOCKINFO
-DROP TABLE #TEMPDATES
-
-END
 GO
 
 USE [dba]
@@ -5598,7 +5665,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Check for
 		@freq_recurrence_factor=1, 
 		@active_start_date=20110308, 
 		@active_end_date=99991231, 
-		@active_start_time=60000, 
+		@active_start_time=70027, 
 		@active_end_time=190000
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5627,7 +5694,8 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_HealthReport',
 		@delete_level=0, 
 		@description=N'No description available.', 
 		@category_name=N'Database Monitoring',
-		@owner_login_name=N'sa', @job_id = @jobId OUTPUT
+		@owner_login_name=N'sa', 
+		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
@@ -5655,7 +5723,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=0, 
 		@active_start_date=20110204, 
 		@active_end_date=99991231, 
-		@active_start_time=60500, 
+		@active_start_time=60552, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5713,7 +5781,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=0, 
 		@active_start_date=20110531, 
 		@active_end_date=99991231, 
-		@active_start_time=500, 
+		@active_start_time=508, 
 		@active_end_time=459
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5771,7 +5839,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=0, 
 		@active_start_date=20110623, 
 		@active_end_date=99991231, 
-		@active_start_time=3000, 
+		@active_start_time=3048, 
 		@active_end_time=2959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5829,7 +5897,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=1, 
 		@active_start_date=20110616, 
 		@active_end_date=99991231, 
-		@active_start_time=200, 
+		@active_start_time=223, 
 		@active_end_time=159
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Sunday schedule', 
@@ -5842,7 +5910,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Sunday sc
 		@freq_recurrence_factor=1, 
 		@active_start_date=20110718, 
 		@active_end_date=99991231, 
-		@active_start_time=190200, 
+		@active_start_time=190223, 
 		@active_end_time=170159
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5900,7 +5968,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'perfstats
 		@freq_recurrence_factor=0, 
 		@active_start_date=20110809, 
 		@active_end_date=99991231, 
-		@active_start_time=0, 
+		@active_start_time=5, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -5958,7 +6026,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=0, 
 		@active_start_date=20111101, 
 		@active_end_date=99991231, 
-		@active_start_time=0, 
+		@active_start_time=9, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -6017,7 +6085,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@freq_recurrence_factor=0, 
 		@active_start_date=20120229, 
 		@active_end_date=99991231, 
-		@active_start_time=0, 
+		@active_start_time=40, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
@@ -6206,3 +6274,68 @@ UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The raw XML data genera
 ----RUN THIS AFTER YOU RUN ALL THE UPDATES BELOW
 EXEC [dba].dbo.dd_ApplyDataDictionary
 GO
+
+/*============================================================================================================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+============================================================Monroe Customization==============================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+==============================================================================================================================================================
+============================================================================================================================================================*/
+
+INSERT INTO dbo.T_Alert_Exclusions
+  VALUES (N'LongRunningQueries', 'sqlBackup')
+go
+
+UPDATE dbo.AlertSettings SET 
+  EmailList=N'EMSL-Prism.Users.DB_Operators@pnnl.gov', CellList=NULL
+go
+
+UPDATE dbo.AlertSettings SET 
+  QueryValue=25
+  WHERE [Name] IN ('LogFiles', 'TempDB')
+go
+
+
+Declare @ScheduleID int
+
+SELECT @ScheduleID = js.schedule_ID FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_BlockingAlert'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=70027
+	
+SELECT @ScheduleID = js.schedule_ID FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_HealthReport'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=60552
+	
+SELECT @ScheduleID = js.schedule_ID FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_LongRunningJobsAlert'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=508
+	
+SELECT @ScheduleID = js.schedule_ID FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_CheckFiles'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=3048
+	
+SELECT @ScheduleID = MIN(js.schedule_ID) FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_LongRunningQueriesAlert'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=223
+
+Print 'Need to update the Sunday schedule for the dba_LongRunningQueriesAlert job to start at 7:02:23 pm'
+
+SELECT @ScheduleID = MIN(js.schedule_ID) FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_PerfStats'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=5
+	
+
+SELECT @ScheduleID = MIN(js.schedule_ID) FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_MemoryUsageStats'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=9
+	
+SELECT @ScheduleID = MIN(js.schedule_ID) FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_CPUAlert'
+if @@RowCount > 0
+	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=40
+	
+	
