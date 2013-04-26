@@ -38,6 +38,7 @@ CREATE PROCEDURE MakeNewPeptideDB
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
 **			11/29/2006 mem - Added parameter @InfoOnly
 **			03/24/2008 mem - Changed value for @dbState from 1 to 5
+**			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **    
 *****************************************************/
 (
@@ -374,6 +375,26 @@ AS
 		Else		
 			Set @message = 'Could not get new database ID from MTS_Master'
 		Goto done
+	End
+
+	---------------------------------------------------
+	-- Add the database to the dbalerts database
+	---------------------------------------------------
+	--
+	If Exists (select * from sys.databases where name = 'dba')
+	Begin
+	
+		If Not Exists ( SELECT *
+		                FROM dba.dbo.DatabaseSettings
+		                WHERE (DBName = @newDBName) )
+		Begin
+		    INSERT INTO dba.dbo.DatabaseSettings( [DBName],
+		                                          SchemaTracking,
+		                                          LogFileAlerts,
+		                                          LongQueryAlerts,
+		                                          Reindex )
+		    VALUES(@NewDBName, 1, 1, 1, 0)
+		End
 	End
 
 	Set @message = 'Created "' + @newDBName + '"'

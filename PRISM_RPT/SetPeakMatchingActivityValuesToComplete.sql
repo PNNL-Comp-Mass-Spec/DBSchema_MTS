@@ -20,6 +20,7 @@ CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
 **			10/14/2010 mem - Added parameter @DebugMode
 **			12/14/2011 mem - Now looking up MDID and QID using V_PM_Results_MDID_and_QID
 **			03/19/2012 mem - Now looking up Ini_File_Name, Comparison_Mass_Tag_Count, and MD_State using V_PM_Results_MDID_and_QID
+**			04/23/2013 mem - Updated log message shown when no match found in T_Peak_Matching_Activity using @serverName, @mtdbName, and @taskID
 **			
 *****************************************************/
 (
@@ -64,6 +65,9 @@ As
 	Set @JobID = IsNull(@JobID, 0)
 	Set @DebugMode = IsNull(@DebugMode, 0)
 
+	Set @serverName = IsNull(@serverName, '')
+	Set @mtdbName = IsNull(@mtdbName, '')
+	
 	---------------------------------------------------
 	-- Cache the current time and lookup the cached History ID value
 	---------------------------------------------------
@@ -113,7 +117,7 @@ As
 		
 		If @myRowCount = 0
 		Begin
-			Set @message = 'No match found in T_Peak_Matching_Activity for Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + '; unable to mark the task as "Complete"'
+			Set @message = 'No match found in T_Peak_Matching_Activity for Task ' + Convert(varchar(12), @taskID) + ' in DB ' + @mtdbName + ' on server ' + @serverName + ' for database ' + @mtdbName + '; unable to mark the task as "Complete"'
 			Exec PostLogEntry 'Error', @message, 'SetPeakMatchingActivityValuesToComplete'
 			Goto Done
 		End

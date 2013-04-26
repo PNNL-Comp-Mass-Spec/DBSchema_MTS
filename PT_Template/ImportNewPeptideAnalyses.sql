@@ -62,6 +62,7 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			08/22/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
+**			04/18/2013 mem - Expanded [Organism_DB_Name] in #TmpNewAnalysisJobs to varchar(128)
 **    
 *****************************************************/
 (
@@ -525,7 +526,7 @@ As
 			[Analysis_Tool] [varchar] (64) NOT NULL ,
 			[Parameter_File_Name] [varchar] (255) NOT NULL ,
 			[Settings_File_Name] [varchar] (255) NULL ,
-			[Organism_DB_Name] [varchar] (64) NOT NULL ,
+			[Organism_DB_Name] [varchar] (128) NOT NULL ,
 			[Protein_Collection_List] [varchar] (max) NOT NULL,
 			[Protein_Options_List] [varchar] (256) NOT NULL,
 			[Vol_Client] [varchar] (128) NOT NULL ,

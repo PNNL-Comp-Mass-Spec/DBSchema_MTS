@@ -36,6 +36,7 @@ CREATE PROCEDURE MakeNewMassTagDB_Replace
 **			07/27/2006 mem - Updated to verify each campaign defined in @campaign
 **			08/26/2006 mem - Now checking the Sql Server version; if Sql Server 2005, then not attempting to update any maintenance plans since SSIS handles DB integrity checks and backups
 **			08/31/2006 mem - Now updating Last_Affected in T_Process_Config & T_Process_Step_Control in the newly created database
+**			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **    
 *****************************************************/
 (
@@ -439,6 +440,26 @@ AS
 		Goto done
 	End
 
+	---------------------------------------------------
+	-- Add the database to the dbalerts database
+	---------------------------------------------------
+	--
+	If Exists (select * from sys.databases where name = 'dba')
+	Begin
+	
+		If Not Exists ( SELECT *
+		                FROM dba.dbo.DatabaseSettings
+		                WHERE (DBName = @MTDBName) )
+		Begin
+		    INSERT INTO dba.dbo.DatabaseSettings( [DBName],
+		                                          SchemaTracking,
+		                                          LogFileAlerts,
+		                                          LongQueryAlerts,
+		                                          Reindex )
+		    VALUES(@MTDBName, 1, 1, 1, 0)
+		End
+	End
+	
 	Set @message = 'Replaced: "' + @MTDBName + '"'
 	
    	---------------------------------------------------

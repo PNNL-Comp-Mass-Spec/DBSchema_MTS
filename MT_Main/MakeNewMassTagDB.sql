@@ -39,6 +39,7 @@ CREATE PROCEDURE MakeNewMassTagDB
 **			11/29/2006 mem - Updated validation of @peptideDBName to work properly if a list of DBs is provided
 **						   - Added parameter @InfoOnly
 **			06/06/2007 mem - Updated default MTL_Import_Holdoff from 48 to 12 hours
+**			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **    
 *****************************************************/
 (
@@ -525,6 +526,26 @@ AS
 		Else		
 			Set @message = 'Could not get new database ID from MTS_Master'
 		Goto done
+	End
+
+	---------------------------------------------------
+	-- Add the database to the dbalerts database
+	---------------------------------------------------
+	--
+	If Exists (select * from sys.databases where name = 'dba')
+	Begin
+	
+		If Not Exists ( SELECT *
+		                FROM dba.dbo.DatabaseSettings
+		                WHERE (DBName = @newDBName) )
+		Begin
+		    INSERT INTO dba.dbo.DatabaseSettings( [DBName],
+		                                          SchemaTracking,
+		                                          LogFileAlerts,
+		                                          LongQueryAlerts,
+		                                          Reindex )
+		    VALUES(@NewDBName, 1, 1, 1, 0)
+		End
 	End
 
 	Set @message = 'Created "' + @newDBName + '"'

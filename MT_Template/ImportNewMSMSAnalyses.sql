@@ -61,6 +61,7 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **						   - Now populating DS_Acq_Length in T_Analysis_Description
 **			03/28/2012 mem - Now using parameters MSMS_Job_Minimum and MSMS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
 **			04/26/2012 mem - Now showing warnings if jobs in @JobListOverride are not in a Peptide DB, or if those jobs are in a Peptide DB that is not defined in T_Process_Config
+**			04/18/2013 mem - Expanded [Organism_DB_Name] in #TmpNewAnalysisJobs to varchar(128)
 **
 *****************************************************/
 (
@@ -525,7 +526,7 @@ As
 		[Analysis_Tool] varchar(64) NOT NULL,
 		[Parameter_File_Name] varchar(255) NOT NULL,
 		[Settings_File_Name] varchar(255) NULL,
-		[Organism_DB_Name] varchar(64) NOT NULL,
+		[Organism_DB_Name] varchar(128) NOT NULL,
 		[Protein_Collection_List] varchar(max) NOT NULL,
 		[Protein_Options_List] varchar(256) NOT NULL,
 		[Vol_Client] varchar(128) NOT NULL,
