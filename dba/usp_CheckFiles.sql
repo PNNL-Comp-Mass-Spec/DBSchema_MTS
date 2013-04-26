@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROC dbo.usp_CheckFiles
+CREATE PROC [dbo].[usp_CheckFiles]
 AS
 
 /**************************************************************************************************************
@@ -18,8 +18,8 @@ AS
 **  06/10/2012		Michael Rounds			1.1					Updated to use new FileStatsHistory table
 **	08/31/2012		Michael Rounds			1.2					Changed VARCHAR to NVARCHAR
 **	04/15/2013		Matthew Monroe			1.2.1				Now ignoring log files less than 200 MB in size.  Now also looking for '[tempdb]' and '[model]' in addition to 'tempdb' and 'model'.  Fixed bug that was performing a text compare of #TEMP.FileMBSize
-**	04/17/2013		Matthew Monroe			1.3					Factored out duplicate code into usp_CheckFilesWork
-**	04/18/2013		Matthew Monroe			1.3.1				Now implicitly creating #TEMP since FileMBSize, FileMBUsed, are now FileMBEmpty stored as INT values in table FileStatsHistory
+**	04/17/2013		Matthew Monroe			1.2.1				Added database names "[model]" and "[tempdb]"
+**	04/25/2013		Matthew Monroe			1.3					Factored out duplicate code into usp_CheckFilesWork
 ***************************************************************************************************************/
 
 BEGIN
@@ -44,14 +44,13 @@ BEGIN
 	WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
 
 	/* LOG FILES */
-	exec usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0, @MinimumFileSizeMB=200
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0, @MinimumFileSizeMB=0
 
 	/* TEMP DB */
-	exec usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1, @MinimumFileSizeMB=100
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1, @MinimumFileSizeMB=0
 	
 	DROP TABLE #TEMP
 
 END
-
 
 GO

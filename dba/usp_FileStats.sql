@@ -24,6 +24,7 @@ AS
 **	04/15/2013		Michael Rounds			2.1.6				Expanded Cum_IO_GB
 **	04/16/2013		Michael Rounds			2.1.7				Expanded LogSize, TotalExtents and UsedExtents
 **	04/17/2013		Michael Rounds			2.1.8				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize,FileMBUsed,FileMBEmpty
+**	04/22/2013		T_Peters from SSC		2.1.9				Added CAST to BIGINT on growth which fixes a bug that caused an arithmetic error
 ***************************************************************************************************************/
 
 BEGIN
@@ -36,11 +37,11 @@ CREATE TABLE #FILESTATS (
 	[LogicalFileName] NVARCHAR(255),
 	[VLFCount] INT,
 	DriveLetter NCHAR(1),
-	FileMBSize INT,
+	FileMBSize BIGINT,
 	[FileMaxSize] NVARCHAR(30),
 	FileGrowth NVARCHAR(30),
-	FileMBUsed INT,
-	FileMBEmpty INT,
+	FileMBUsed BIGINT,
+	FileMBEmpty BIGINT,
 	FilePercentEmpty NUMERIC(12,2),
 	LargeLDF INT,
 	[FileGroup] NVARCHAR(100),
@@ -146,11 +147,11 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 			WHEN -1 THEN N''Unlimited'' 
 			ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
 			END AS FileMaxSize, 
-		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((growth * 8192)/(1024.0*1024.0))) + '' MB''
+		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((CAST(growth AS BIGINT) * 8192)/(1024.0*1024.0))) + '' MB''
 			ELSE CONVERT (NVARCHAR, growth) + '' %'' 
 			END) AS FileGrowth,
-		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBUsed],
-		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS INT) AS [FileMBEmpty],
+		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
+		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
 		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
 			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
 FROM sys.sysfiles SF
@@ -185,9 +186,9 @@ SET f.NumberReads = b.num_of_reads,
 	f.IO_Percent = b.IOPercent
 FROM #FILESTATS f
 JOIN (SELECT database_ID, [file_id], num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms, 
-			CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024 AS CumIOGB,
+			CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(20,2)) / 1024 AS CumIOGB,
 			CAST(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024 / 
-				SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12, 2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
+				SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
 		FROM sys.dm_io_virtual_file_stats(NULL,NULL)
 		GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
 ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]

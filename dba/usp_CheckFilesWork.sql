@@ -3,11 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROC dbo.usp_CheckFilesWork
+CREATE PROC [dbo].[usp_CheckFilesWork]
 (
-	@CheckTempDB tinyint = 0,					-- Must be 0 or 1
-	@WarnGrowingLogFiles tinyint = 0,
+	@CheckTempDB BIT = 0,
+	@WarnGrowingLogFiles BIT = 0,
 	@MinimumFileSizeMB int = 200				-- Log files smaller than this threshold will be ignored
 )
 AS
@@ -19,35 +18,33 @@ AS
 **  
 **  Date			Author					Version				Revision  
 **  ----------		--------------------	-------------		-------------
-**	04/17/2013		Matthew Monroe			1.0					Re-factored code out of usp_CheckFiles
-**	04/18/2013		Matthew Monroe			1.0.1				Changed FileMBSize, FileMBUsed, and FileMBEmpty from BIGINT to INT in table #TEMP3
+**	04/17/2013		Matthew Monroe			0.9					Re-factored code out of usp_CheckFiles
+**	04/25/2013		Matthew Monroe			1.0					Re-factored code out of usp_CheckFiles
 ***************************************************************************************************************/
 
 BEGIN
 
 	SET NOCOUNT ON
 
-	DECLARE @QueryValue INT, @QueryValue2 INT, @HTML NVARCHAR(MAX), @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(128), @EmailSubject NVARCHAR(100)
+	DECLARE @QueryValue INT, 
+			@QueryValue2 INT, 
+			@HTML NVARCHAR(MAX), 
+			@EmailList NVARCHAR(255), 
+			@CellList NVARCHAR(255), 
+			@ServerName NVARCHAR(128), 
+			@EmailSubject NVARCHAR(100), 
+			@ReportTitle NVARCHAR(128)
 	
 	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
-
-	DECLARE @ReportTitle NVARCHAR(128)
 	
-	Set @CheckTempDB = IsNull(@CheckTempDB, 0)
-	If @CheckTempDB <> 0
-		Set @CheckTempDB = 1
-		
-	Set @WarnGrowingLogFiles = IsNull(@WarnGrowingLogFiles, 0)
-
-
 	/*Grab AlertSettings for the specified DB category*/
 	SELECT @QueryValue = QueryValue,
 			@QueryValue2 = QueryValue2,
 			@EmailList = EmailList,
 			@CellList = CellList
 	FROM [dba].dbo.AlertSettings 
-	WHERE @CheckTempDB = 0 And Name = 'LogFiles' OR
-	      @CheckTempDB = 1 And Name = 'TempDB'
+	WHERE @CheckTempDB = 0 AND Name = 'LogFiles' OR
+	      @CheckTempDB = 1 AND Name = 'TempDB'
 
 	/*Populate TEMPLogFiles table with Already Grown Log Files or Already Grown TEMPDB files*/
 	CREATE TABLE #TEMPLogFiles (
@@ -70,22 +67,22 @@ BEGIN
 		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
 	WHERE t2.FileMBSize > @MinimumFileSizeMB
-	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
-	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
+	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
+	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
-	      AND ( @CheckTempDB = 0 And t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                             And t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
 	            OR
-	            @CheckTempDB = 1 And t2.[DBName] IN ('tempdb', '[tempdb]')
+	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
 	
 	/*Start of Files Already Grown*/
 	IF EXISTS (SELECT * FROM #TEMPLogFiles)
 	BEGIN
-		If @CheckTempDB = 0		
-			Set @ReportTitle = 'Recent Log File Auto-Growth'
-		Else
-			Set @ReportTitle = 'Recent TempDB Auto-Growth'
+		IF @CheckTempDB = 0		
+			SET @ReportTitle = 'Recent Log File Auto-Growth'
+		ELSE
+			SET @ReportTitle = 'Recent TempDB Auto-Growth'
 
 		SET	@HTML =
 			'<html><head><style type="text/css">
@@ -115,12 +112,12 @@ BEGIN
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
-		If @CheckTempDB = 0		
+		IF @CheckTempDB = 0		
 			SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
-		Else
+		ELSE
 			SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
 
-		IF ISNULL(@EmailList, '') <> ''
+		IF COALESCE(@EmailList, '') <> ''
 		BEGIN
 			EXEC msdb.dbo.sp_send_dbmail
 			@recipients= @EmailList,
@@ -129,7 +126,7 @@ BEGIN
 			@body_format = 'HTML'
 		END
 		
-		IF ISNULL(@CellList, '') <> ''
+		IF COALESCE(@CellList, '') <> ''
 		BEGIN
 			/*TEXT MESSAGE*/
 			SET	@HTML =
@@ -139,7 +136,7 @@ BEGIN
 			FROM #TEMPLogFiles
 			SELECT @HTML =  @HTML + '</table></body></html>'
 
-			If @CheckTempDB = 0		
+			IF @CheckTempDB = 0		
 				SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
 			Else
 				SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
@@ -177,29 +174,29 @@ BEGIN
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
 	WHERE t2.FilePercentEmpty < @QueryValue
 	      AND t2.FileMBSize > @MinimumFileSizeMB
-	      AND (@CheckTempDB = 0 And t2.[Filename] like '%ldf' OR 
-	           @CheckTempDB = 1 And t2.[Filename] like '%mdf')
+	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
+	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize
-	      AND ( @CheckTempDB = 0 And t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                             And t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
+	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
 	            OR
-	            @CheckTempDB = 1 And t2.[DBName] IN ('tempdb', '[tempdb]')
+	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
 	
 	-- Delete any entries from #TEMP3 that are in #TEMPLogFiles (and thus were already reported)
-	DELETE #TEMP3
-	FROM #TEMP3
-	     INNER JOIN #TEMPLogFiles
-	       ON #TEMP3.[DBName] = #TEMPLogFiles.[DBName] AND
-	          #TEMP3.[Filename] = #TEMPLogFiles.[Filename]
+	DELETE a
+	FROM #TEMP3 a
+	JOIN #TEMPLogFiles b
+		ON a.[DBName] = b.[DBName]
+		AND a.[Filename] = b.[Filename]
 	
 	/*Start of Growing Log Files or Growing TempDB*/
 	IF EXISTS (SELECT * FROM #TEMP3) And @WarnGrowingLogFiles <> 0
 	BEGIN
-		If @CheckTempDB = 0		
-			Set @ReportTitle = 'Growing Log Files'
-		Else
-			Set @ReportTitle = 'TempDB Growth'
+		IF @CheckTempDB = 0		
+			SET @ReportTitle = 'Growing Log Files'
+		ELSE
+			SET @ReportTitle = 'TempDB Growth'
 		
 		SET	@HTML =
 			'<html><head><style type="text/css">
@@ -229,12 +226,12 @@ BEGIN
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
-		If @CheckTempDB = 0		
+		IF @CheckTempDB = 0		
 			SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
-		Else
+		ELSE
 			SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
 
-		IF ISNULL(@EmailList, '') <> ''
+		IF COALESCE(@EmailList, '') <> ''
 		BEGIN
 			EXEC msdb.dbo.sp_send_dbmail
 			@recipients= @EmailList,
@@ -243,7 +240,7 @@ BEGIN
 			@body_format = 'HTML'
 		END
 		
-		IF ISNULL(@CellList, '') <> ''
+		IF COALESCE(@CellList, '') <> ''
 		BEGIN
 
 			IF @QueryValue2 IS NOT NULL
@@ -256,8 +253,8 @@ BEGIN
 			/*TEXT MESSAGE*/
 			IF EXISTS (SELECT * FROM #TEMP3)
 			BEGIN
-				If @CheckTempDB = 0
-				Begin
+				IF @CheckTempDB = 0
+				BEGIN
 					SET	@HTML =
 						'<html><head></head><body><table><tr><td>Database,</td><td>FileSize,</td><td>Percent</td></tr>'
 					SELECT @HTML =  @HTML +   
@@ -267,9 +264,8 @@ BEGIN
 
 					SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
 
-				End
-				Else
-				Begin
+				END
+				ELSE BEGIN
 					SET	@HTML =
 						'<html><head></head><body><table><tr><td>FileSize,</td><td>FileEmpty,</td><td>Percent</td></tr>'
 					SELECT @HTML =  @HTML +   
@@ -279,7 +275,7 @@ BEGIN
 					SELECT @HTML =  @HTML + '</table></body></html>'
 
 					SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
-				End
+				END
 				
 				EXEC msdb.dbo.sp_send_dbmail
 				@recipients= @CellList,

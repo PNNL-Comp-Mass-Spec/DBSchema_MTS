@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE PROC [dbo].[usp_JobStats] (@InsertFlag BIT = 0)
 AS
 
@@ -16,6 +15,7 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0				Comments creation
 **  03/13/2012		Michael Rounds			1.1				Added join to syscategories to pull in Category name
+**	04/24/2013		Volker.Bachmann from SSC 1.1.1			Added COALESCE to MAX(ja.start_execution_date) and MAX(ja.stop_execution_date)
 ***************************************************************************************************************/
 
 BEGIN
@@ -39,8 +39,8 @@ SELECT
 	t.name AS JobName,
 	t.Category,
 	t.[Enabled],
-	MAX(ja.start_execution_date) AS [StartTime],
-	MAX(ja.stop_execution_date) AS [StopTime],
+	COALESCE(MAX(ja.start_execution_date),0) AS [StartTime],
+	COALESCE(MAX(ja.stop_execution_date),0) AS [StopTime],
 	COALESCE(AvgRunTime,0) AS AvgRunTime,
 	CASE 
 		WHEN ja.stop_execution_date IS NULL THEN DATEDIFF(ss,ja.start_execution_date,GETDATE())
