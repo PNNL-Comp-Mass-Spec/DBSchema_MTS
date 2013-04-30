@@ -1932,7 +1932,7 @@ BEGIN
 		SELECT
 			@HTML = @HTML +   
 			'<tr> 
-			<td width="150" class="c1">' + COALESCE([DBName],FB.name,'N/A') +'</td>' +
+			<td width="150" class="c1">' + COALESCE([DBName],'N/A') +'</td>' +
 			'<td width="90" class="c2">' + COALESCE([Type],'N/A') +'</td>' +
 			'<td width="300" class="c1">' + COALESCE([Filename],'N/A') +'</td>' +
 			'<td width="160" class="c2">' + COALESCE(backup_set_name,'N/A') +'</td>' +	
