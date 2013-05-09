@@ -1,8 +1,9 @@
 /****** Object:  StoredProcedure [dbo].[SetGANETUpdateTaskComplete] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
+
 
 CREATE Procedure dbo.SetGANETUpdateTaskComplete
 /****************************************************
@@ -70,6 +71,7 @@ As
 	--
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskComplete] TO [MTS_DB_Dev] AS [dbo]

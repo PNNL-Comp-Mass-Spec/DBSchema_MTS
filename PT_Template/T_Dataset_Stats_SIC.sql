@@ -20,15 +20,6 @@ CREATE TABLE [dbo].[T_Dataset_Stats_SIC](
 	[FWHM_In_Scans] [int] NULL,
 	[Peak_Area] [float] NULL,
 	[Parent_Ion_Intensity] [real] NULL,
-	[Peak_Baseline_Noise_Level] [real] NULL,
-	[Peak_Baseline_Noise_StDev] [real] NULL,
-	[Peak_Baseline_Points_Used] [smallint] NULL,
-	[StatMoments_Area] [real] NULL,
-	[CenterOfMass_Scan] [int] NULL,
-	[Peak_StDev] [real] NULL,
-	[Peak_Skew] [real] NULL,
-	[Peak_KSStat] [real] NULL,
-	[StatMoments_DataCount_Used] [smallint] NULL,
  CONSTRAINT [PK_T_Dataset_Stats_SIC] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC,

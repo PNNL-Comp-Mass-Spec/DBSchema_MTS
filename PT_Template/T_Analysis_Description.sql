@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Analysis_Tool] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Parameter_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Settings_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[Organism_DB_Name] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Organism_DB_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Protein_Collection_List] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Protein_Options_List] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Vol_Client] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -51,6 +51,7 @@ CREATE TABLE [dbo].[T_Analysis_Description](
 	[Regression_Equation_XML] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Regression_Param_File] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Retry_Load_Count] [tinyint] NOT NULL,
+	[Regression_Failure_Count] [tinyint] NOT NULL,
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
@@ -147,4 +148,6 @@ GO
 ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Param_File]  DEFAULT ('') FOR [Regression_Param_File]
 GO
 ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Retry_Load_Count]  DEFAULT ((0)) FOR [Retry_Load_Count]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Failure_Count]  DEFAULT ((0)) FOR [Regression_Failure_Count]
 GO

@@ -16,11 +16,14 @@ CREATE PROCEDURE dbo.RebuildFragmentedIndices
 **
 **	Auth:	mem
 **	Date:	11/12/2007
+**			10/15/2012 mem - Added spaces prior to printing debug messages
+**			10/18/2012 mem - Added parameter @VerifyUpdateEnabled
 **    
 *****************************************************/
 (
 	@MaxFragmentation int = 15,
 	@TrivialPageCount int = 12,
+	@VerifyUpdateEnabled tinyint = 1,		-- When non-zero, then calls VerifyUpdateEnabled to assure that database updating is enabled
 	@infoOnly tinyint = 1,
 	@message varchar(1024) = '' output
 )
@@ -53,6 +56,20 @@ As
 
 	Declare @UpdateEnabled tinyint
 
+	---------------------------------------
+	-- Validate the inputs
+	---------------------------------------
+	--
+	Set @MaxFragmentation = IsNull(@MaxFragmentation, 15)
+	Set @TrivialPageCount = IsNull(@TrivialPageCount, 12)
+	Set @VerifyUpdateEnabled = IsNull(@VerifyUpdateEnabled, 1)
+	Set @infoOnly = IsNull(@infoOnly, 1)
+	Set @message = ''
+	
+	---------------------------------------
+	-- Create a table to track the indices to process
+	---------------------------------------
+	--
 	CREATE TABLE dbo.#TmpIndicesToProcess(
 		[UniqueID] int Identity(1,1) NOT NULL,
 		[objectid] [int] NULL,
@@ -61,8 +78,11 @@ As
 		[frag] [float] NULL
 	) ON [PRIMARY]
 
+	---------------------------------------
 	-- Conditionally select tables and indexes from the sys.dm_db_index_physical_stats function 
 	-- and convert object and index IDs to names. 
+	---------------------------------------
+	--
 	INSERT INTO #TmpIndicesToProcess (objectid, indexid, partitionnum, frag)
 	SELECT object_id,
 	       index_id,
@@ -79,11 +99,15 @@ As
 	If @myRowCount = 0
 	Begin
 		Set @Message = 'All database indices have fragmentation levels below ' + convert(varchar(12), @MaxFragmentation) + '%'
-		Print @message
+		If @infoOnly <> 0
+			Print '  ' + @message
 		Goto Done
 	End
 
-	-- Loop through #TmpIndicesToProcess	and process the indices
+	---------------------------------------
+	-- Loop through #TmpIndicesToProcess and process the indices
+	---------------------------------------
+	--
 	Set @StartTime = GetDate()
 	Set @continue = 1
 	Set @UniqueID = -1
@@ -137,7 +161,7 @@ As
 	                   ON SO.Object_id = SC.object_id
 	                 INNER JOIN sys.types ST
 	                   ON SC.system_type_id = ST.system_type_id 
-	                      AND
+	               AND
 	            ST.name IN ('text', 'ntext', 'image', 'varchar(max)', 'nvarchar(max)', 'varbinary(max)', 'xml')
 	            WHERE SO.Object_ID = @objectID
 			End
@@ -176,7 +200,7 @@ As
 			Set @message = @message + 'Executing: ' + @command + ' Has Blob = ' + convert(nvarchar(2),@HasBlobColumn) 
 			
 			if @InfoOnly <> 0
-				PRINT @message
+				Print '  ' + @message
 			Else
 			Begin
 				EXEC (@command) 
@@ -186,12 +210,15 @@ As
 
 				Set @IndexCountProcessed = @IndexCountProcessed + 1
 
-				-- Validate that updating is enabled, abort if not enabled
-				If Exists (select * from sys.objects where name = 'VerifyUpdateEnabled')
+				If @VerifyUpdateEnabled <> 0
 				Begin
-					exec VerifyUpdateEnabled @CallingFunctionDescription = 'RebuildFragmentedIndices', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
-					If @UpdateEnabled = 0
-						Goto Done
+					-- Validate that updating is enabled, abort if not enabled
+					If Exists (select * from sys.objects where name = 'VerifyUpdateEnabled')
+					Begin
+						exec VerifyUpdateEnabled @CallingFunctionDescription = 'RebuildFragmentedIndices', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
+						If @UpdateEnabled = 0
+							Goto Done
+					End
 				End
 			End
 	
@@ -200,9 +227,9 @@ As
 
 	If @IndexCountProcessed > 0
 	Begin
-		-----------------------------------------------------------
+		---------------------------------------
 		-- Log the reindex
-		-----------------------------------------------------------
+		---------------------------------------
 		
 		Set @message = 'Reindexed ' + Convert(varchar(12), @IndexCountProcessed) + ' indices in ' + convert(varchar(12), Convert(decimal(9,1), DateDiff(second, @StartTime, GetDate()) / 60.0)) + ' minutes'
 		Exec PostLogEntry 'Normal', @message, 'RebuildFragmentedIndices'

@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[ComputeMassTagsAnalysisCounts] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure ComputeMassTagsAnalysisCounts
@@ -40,6 +40,8 @@ CREATE Procedure ComputeMassTagsAnalysisCounts
 **			10/03/2011 mem - Added support for MSGFDB results (type MSG_Peptide_Hit)
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
+**			05/07/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
+**							 Added support for filtering on MSGF+ PepQValue
 **    
 *****************************************************/
 (
@@ -179,7 +181,7 @@ AS
 		Set @S = @S +             ' FROM (	SELECT TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, '
 		Set @S = @S +                         ' ISNULL(SS.XCorr, 0) AS Normalized_Score,'
 		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
-		Set @S = @S +                      ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
+		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
 		Set @S = @S +                         ' 0 AS Log_Evalue,'
 		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
@@ -408,8 +410,11 @@ AS
 			@MSGFDbSpecProbThreshold real,
 			@MSGFDbPValueComparison varchar(2),				-- Only used for MSGFDB results
 			@MSGFDbPValueThreshold real,
-			@MSGFDbFDRComparison varchar(2),				-- Only used for MSGFDB results
-			@MSGFDbFDRThreshold real,
+
+			@MSGFPlusQValueComparison varchar(2),			-- Only used for MSGF+ results (was FDR for MSGFDB)
+			@MSGFPlusQValueThreshold real, 				
+			@MSGFPlusPepQValueComparison varchar(2),		-- Only used for MSGF+ results (was PepFDR for MSGFDB)
+			@MSGFPlusPepQValueThreshold real, 
 							
 			@MSAlignPValueComparison varchar(2),		-- Used by MSAlign
 			@MSAlignPValueThreshold real,			
@@ -487,7 +492,8 @@ AS
 								@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT,
 								@MSGFDbSpecProbComparison = @MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold = @MSGFDbSpecProbThreshold OUTPUT,
 								@MSGFDbPValueComparison = @MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold = @MSGFDbPValueThreshold OUTPUT,
-								@MSGFDbFDRComparison = @MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold = @MSGFDbFDRThreshold OUTPUT,
+								@MSGFPlusQValueComparison = @MSGFPlusQValueComparison OUTPUT, @MSGFPlusQValueThreshold = @MSGFPlusQValueThreshold OUTPUT,
+								@MSGFPlusPepQValueComparison = @MSGFPlusPepQValueComparison OUTPUT, @MSGFPlusPepQValueThreshold = @MSGFPlusPepQValueThreshold OUTPUT,
 								@MSAlignPValueComparison = @MSAlignPValueComparison OUTPUT, @MSAlignPValueThreshold = @MSAlignPValueThreshold OUTPUT,
 								@MSAlignFDRComparison = @MSAlignFDRComparison OUTPUT, @MSAlignFDRThreshold = @MSAlignFDRThreshold OUTPUT
 
@@ -719,7 +725,8 @@ AS
 						Set @S = @S +   ' SELECT Dataset_ID, Mass_Tag_ID, Scan_Number, GANET_Obs, Charge_State,'
 						Set @S = @S +     ' MIN(SubQ.MSGFDB_SpecProb_Min) AS MSGFDB_SpecProb_Min,'
 						Set @S = @S +     ' MIN(SubQ.MSGFDB_PValue_Min) AS MSGFDB_PValue_Min,'
-						Set @S = @S +     ' MIN(SubQ.MSGFDB_FDR_Min) AS MSGFDB_FDR_Min,'
+						Set @S = @S +     ' MIN(SubQ.MSGFPlus_QValue_Min) AS MSGFPlus_QValue_Min,'
+						Set @S = @S +     ' MIN(SubQ.MSGFPlus_PepQValue_Min) AS MSGFPlus_PepQValue_Min,'
 						Set @S = @S +     ' MAX(SubQ.Discriminant_Score_Max) AS Discriminant_Score_Max,'
 						Set @S = @S +     ' MAX(SubQ.Peptide_Prophet_Max) AS Peptide_Prophet_Max,'
 						Set @S = @S +     ' MIN(SubQ.MSGF_SpecProb_Min) AS MSGF_SpecProb_Min'
@@ -728,7 +735,8 @@ AS
 						Set @S = @S +             ' P.Charge_State,'
 						Set @S = @S +             ' MIN(IsNull(M.SpecProb, 1)) AS MSGFDB_SpecProb_Min,'
 						Set @S = @S +             ' MIN(IsNull(M.PValue, 1)) AS MSGFDB_PValue_Min,'
-						Set @S = @S +             ' MIN(IsNull(M.FDR, 1)) AS MSGFDB_FDR_Min,'
+						Set @S = @S +             ' MIN(IsNull(M.FDR, 1)) AS MSGFPlus_QValue_Min,'
+						Set @S = @S +             ' MIN(IsNull(M.PepFDR, 1)) AS MSGFPlus_PepQValue_Min,'
 						Set @S = @S +             ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
 						Set @S = @S +             ' MAX(IsNull(SD.Peptide_Prophet_Probability, 0)) As Peptide_Prophet_Max,'
 						Set @S = @S +             ' MIN(IsNull(SD.MSGF_SpecProb, 1)) As MSGF_SpecProb_Min'
@@ -747,7 +755,8 @@ AS
 						Set @S = @S +   ' StatsQ.Charge_State ' +  @ChargeStateComparison + Convert(varchar(11), @ChargeStateThreshold) + ' AND '
 						Set @S = @S +   ' StatsQ.MSGFDB_SpecProb_Min ' +  @MSGFDbSpecProbComparison + Convert(varchar(11), @MSGFDbSpecProbThreshold) + ' AND '
 						Set @S = @S +   ' StatsQ.MSGFDB_PValue_Min ' +  @MSGFDbPValueComparison + Convert(varchar(11), @MSGFDbPValueThreshold) + ' AND '
-						Set @S = @S +   ' StatsQ.MSGFDB_FDR_Min ' +  @MSGFDbFDRComparison + Convert(varchar(11), @MSGFDbFDRThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGFPlus_QValue_Min ' +  @MSGFPlusQValueComparison + Convert(varchar(11), @MSGFPlusQValueThreshold) + ' AND '
+						Set @S = @S +   ' StatsQ.MSGFPlus_PepQValue_Min ' +  @MSGFPlusPepQValueComparison + Convert(varchar(11), @MSGFPlusPepQValueThreshold) + ' AND '
 						Set @S = @S +   ' ISNULL(MTPM.Cleavage_State, 0) ' + @CleavageStateComparison + Convert(varchar(11), @CleavageStateThreshold) + ' AND '
 						Set @S = @S +   ' ISNULL(MTPM.Terminus_State, 0) ' + @TerminusStateComparison + Convert(varchar(11), @TerminusStateThreshold) + ' AND '
 						Set @S = @S +   ' LEN(MT.Peptide) ' + @PeptideLengthComparison + Convert(varchar(11), @PeptideLengthThreshold) + ' AND '

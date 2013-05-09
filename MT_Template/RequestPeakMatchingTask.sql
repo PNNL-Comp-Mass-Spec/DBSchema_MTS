@@ -45,6 +45,7 @@ CREATE Procedure dbo.RequestPeakMatchingTask
 **			06/16/2009 mem - Now storing Exactive results in folder 'Exactive'
 **			02/02/2010 mem - Now storing Velos Orbitrap results (VOrbi) in folder 'LTQ_Orb'
 **			10/18/2012 mem - Now storing IMS results in folder 'IMS'
+**			05/06/2013 mem - Now storing QExactive results 'QExact'
 **    
 *****************************************************/
 (
@@ -370,6 +371,9 @@ As
 	If @OutputFolderBase = '' AND @OutputFolderPrefix Like 'IMS%'
 		Set @OutputFolderBase = 'IMS'
 	
+	If @OutputFolderBase = '' AND @OutputFolderPrefix Like 'QExact%'
+		Set @OutputFolderBase = 'QExact'
+
 	
 	If @OutputFolderBase = ''
 	Begin
@@ -549,7 +553,6 @@ Done:
 	End
 
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User] AS [dbo]

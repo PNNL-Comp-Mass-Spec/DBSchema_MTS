@@ -236,9 +236,9 @@ As
 				
 					Begin Try
 						
-						Set @CurrentLocation = 'Look for RequestPeakMatchingTask in ' + @DBPath + '.sys.tables'
+						Set @CurrentLocation = 'Look for T_Peak_Matching_Task in ' + @DBPath + '.sys.tables'
 						
-						-- Check If table @TaskTableName existing in @CurrentMTDB
+						-- Check If table @TaskTableName exists in @CurrentMTDB
 
 						Set @MatchCount = 0
 						Set @S = ''				

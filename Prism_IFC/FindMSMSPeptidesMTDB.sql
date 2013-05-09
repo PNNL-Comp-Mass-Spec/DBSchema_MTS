@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[FindMSMSPeptidesMTDB] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
-ALTER PROCEDURE dbo.FindMSMSPeptidesMTDB
+CREATE PROCEDURE dbo.FindMSMSPeptidesMTDB
 /****************************************************
 **
 **	Desc: 
@@ -613,9 +618,7 @@ Done:
 
 	return @myError
 
+
 GO
-
-
 GRANT EXECUTE ON [dbo].[FindMSMSPeptidesMTDB] TO [DMS_SP_User] AS [dbo]
 GO
-

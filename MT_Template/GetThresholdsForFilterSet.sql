@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[GetThresholdsForFilterSet] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE PROCEDURE GetThresholdsForFilterSet
@@ -32,6 +32,8 @@ CREATE PROCEDURE GetThresholdsForFilterSet
 **			09/16/2011 mem - Switched default PeptideProphet Threshold from >= -1 to >= -100
 **						   - Added parameters @MSGFDbSpecProb, @MSGFDbPValue, and @MSGFDbFDR
 **			12/05/2012 mem - Added parameters @MSAlignPValueComparison and @MSAlignFDRComparison
+**			05/07/2013 mem - Renamed parameter @MSGFDbFDR to @MSGFPlusQValue
+**							 Added parameter @MSGFPlusPepQValue
 **    
 *****************************************************/
 (
@@ -113,8 +115,11 @@ CREATE PROCEDURE GetThresholdsForFilterSet
 	@MSGFDbPValueComparison varchar(2)='<=' output,
 	@MSGFDbPValueThreshold real=1 output,
 
-	@MSGFDbFDRComparison varchar(2)='<=' output,
-	@MSGFDbFDRThreshold real=1 output, 
+	@MSGFPlusQValueComparison varchar(2)='<=' output,
+	@MSGFPlusQValueThreshold real=1 output, 
+
+	@MSGFPlusPepQValueComparison varchar(2)='<=' output,
+	@MSGFPlusPepQValueThreshold real=1 output, 
 
 	@MSAlignPValueComparison varchar(2)='<=' output,
 	@MSAlignPValueThreshold real=1 output,
@@ -207,14 +212,17 @@ As
 	Set @MSGFSpecProbComparison = '<='				-- MSGF re-scorer tool
 	Set @MSGFSpecProbThreshold = 1
 
-	Set @MSGFDbSpecProbComparison = '<='			-- MSGFDB Search Engine
+	Set @MSGFDbSpecProbComparison = '<='			-- MSGF+ (aka MSGFDB) Search Engine
 	Set @MSGFDbSpecProbThreshold = 1
 	
 	Set @MSGFDbPValueComparison = '<='				-- MSGFDB Search Engine
 	Set @MSGFDbPValueThreshold = 1
 
-	Set @MSGFDbFDRComparison = '<='					-- MSGFDB Search Engine
-	Set @MSGFDbFDRThreshold = 1
+	Set @MSGFPlusQValueComparison = '<='			-- MSGF+ Search Engine (was called FDR by MSGFDB)
+	Set @MSGFPlusQValueThreshold = 1
+
+	Set @MSGFPlusPepQValueComparison = '<='			-- MSGF+ Search Engine (was called PepFDR by MSGFDB)
+	Set @MSGFPlusPepQValueThreshold = 1
 
 	Set @MSAlignPValueComparison = '<='				-- MSAlign Search Engine
 	Set @MSAlignPValueThreshold = 1
@@ -423,10 +431,15 @@ As
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 24	-- MSGFDB PValue
 
-		SELECT TOP 1 @MSGFDbFDRComparison = Criterion_Comparison,
-					 @MSGFDbFDRThreshold = Criterion_Value
+		SELECT TOP 1 @MSGFPlusQValueComparison = Criterion_Comparison,
+					 @MSGFPlusQValueThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
-		WHERE Criterion_ID = 25	-- MSGFDB FDR
+		WHERE Criterion_ID = 25	-- MSGFPlus QValue
+
+		SELECT TOP 1 @MSGFPlusPepQValueComparison = Criterion_Comparison,
+					 @MSGFPlusPepQValueThreshold = Criterion_Value
+		FROM #T_TmpFilterSetCriteria
+		WHERE Criterion_ID = 28	-- MSGFPlus PepQValue
 
 		SELECT TOP 1 @MSAlignPValueComparison = Criterion_Comparison,
 					 @MSAlignPValueThreshold = Criterion_Value
@@ -437,6 +450,7 @@ As
 					 @MSAlignFDRThreshold = Criterion_Value
 		FROM #T_TmpFilterSetCriteria
 		WHERE Criterion_ID = 27	-- MSAlign FDR
+
 	End
 
 DoneDropTable:

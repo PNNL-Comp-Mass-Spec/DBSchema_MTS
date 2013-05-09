@@ -3661,6 +3661,10 @@ AS
 **																Now ignoring additional error log entries
 **	04/30/2013		Matthew Monroe			2.3.7.3				Now only showing disks with less than 20 GB of free space when @Condensed = 1
 **																Now reporting databases that have not had a full backup in the last 8 days
+**	05/07/2013		Matthew Monroe			2.3.7.4				Removed Sum() statements from query populating #DEADLOCKINFO since this could result in non-numeric values being passed to the DB_NAME() funciton
+**																Added WHERE clause to query populating #DEADLOCKINFO
+**																Now filtering on ProcessInfo and [text] when deleting from #ERRORLOG
+**																Now reporting, at most 250 deadlock events and 250 error events
 ***************************************************************************************************************/
     
 BEGIN
@@ -3697,7 +3701,9 @@ BEGIN
 			@MaxFileStatsDateStamp DATETIME,
 			@SQLVer NVARCHAR(20),
 			@WindowSizeDays float,
-			@TableTitle NVARCHAR(128)
+			@TableTitle NVARCHAR(128),
+			@TotalRows int,
+			@MaxRows int
 	
 	DECLARE @FullDBList BIT = 1,
 	        @FullFileInfo BIT = 1,
@@ -4545,29 +4551,30 @@ BEGIN
 		INSERT INTO #TEMPDATES (LogDate)
 		SELECT DISTINCT CONVERT(VARCHAR(30),LogDate,120) as LogDate
 		FROM #ERRORLOG
-		WHERE ProcessInfo LIKE 'spid%'
-		and [text] LIKE '   process id=%'
-		
+		WHERE LogDate >= DATEADD(day, -@WindowSizeDays, GETDATE())
+		      AND ProcessInfo LIKE 'spid%'
+		      AND [text] LIKE '   process id=%'
+				
 		INSERT INTO #DEADLOCKINFO (DeadLockDate, DBName, ProcessInfo, VictimHostname, VictimLogin, VictimSPID, LockingHostname, LockingLogin, LockingSPID)
 		SELECT 
 		DISTINCT CONVERT(VARCHAR(30),b.LogDate,120) AS DeadlockDate,
-		DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),SUM((PATINDEX('%lockTimeout%',b.[text])) - (PATINDEX('%currentdb=%',b.[text])) ) )),11,50)) as DBName,
+		DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),PATINDEX('%lockTimeout%',b.[text]) - PATINDEX('%currentdb=%',b.[text]) )),11,50)) as DBName,
 		b.processinfo,
-		SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),SUM((PATINDEX('%hostpid%',a.[text])) - (PATINDEX('%hostname=%',a.[text])) ) )),10,50)
+		SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),PATINDEX('%hostpid%',a.[text]) - PATINDEX('%hostname=%',a.[text]) )),10,50)
 			AS VictimHostname,
-		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50) NOT LIKE '%id%'
-			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50)
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),PATINDEX('%isolationlevel%',a.[text]) - PATINDEX('%loginname=%',a.[text]) )),11,50) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),PATINDEX('%isolationlevel%',a.[text]) - PATINDEX('%loginname=%',a.[text]) )),11,50)
 			ELSE NULL END AS VictimLogin,
-		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10) NOT LIKE '%id%'
-			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10)
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),PATINDEX('%sbid%',a.[text]) - PATINDEX('%spid=%',a.[text]) )),6,10) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),PATINDEX('%sbid%',a.[text]) - PATINDEX('%spid=%',a.[text]) )),6,10)
 			ELSE NULL END AS VictimSPID,
-		SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),SUM((PATINDEX('%hostpid%',b.[text])) - (PATINDEX('%hostname=%',b.[text])) ) )),10,50)
+		SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),PATINDEX('%hostpid%',b.[text]) - PATINDEX('%hostname=%',b.[text]) )),10,50)
 			AS LockingHostname,
-		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50) NOT LIKE '%id%'
-			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50)
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),PATINDEX('%isolationlevel%',b.[text]) - PATINDEX('%loginname=%',b.[text]) )),11,50) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),PATINDEX('%isolationlevel%',b.[text]) - PATINDEX('%loginname=%',b.[text]) )),11,50)
 			ELSE NULL END AS LockingLogin,
-		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10) NOT LIKE '%id%'
-			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10)
+		CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),PATINDEX('%sbid=%',b.[text]) - PATINDEX('%spid=%',b.[text]) )),6,10) NOT LIKE '%id%'
+			THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),PATINDEX('%sbid=%',b.[text]) - PATINDEX('%spid=%',b.[text]) )),6,10)
 			ELSE NULL END AS LockingSPID
 		FROM #TEMPDATES t
 		JOIN #ERRORLOG a
@@ -4577,7 +4584,9 @@ BEGIN
 		GROUP BY b.LogDate,b.processinfo, a.[Text], b.[Text]
 		
 		DELETE FROM #ERRORLOG
-		WHERE CONVERT(VARCHAR(30),LogDate,120) IN (SELECT DeadlockDate FROM #DEADLOCKINFO)
+		WHERE CONVERT(VARCHAR(30),LogDate,120) IN (SELECT DISTINCT DeadlockDate FROM #DEADLOCKINFO) 
+		      AND ProcessInfo LIKE 'spid%'
+		      AND [text] LIKE '   process id=%'
 		
 		DELETE FROM #DEADLOCKINFO
 		WHERE (DeadlockDate <  CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)) - @WindowSizeDays)
@@ -5392,6 +5401,8 @@ BEGIN
 	
 	IF EXISTS (SELECT * FROM #DEADLOCKINFO)
 	BEGIN
+		Set @MaxRows = 250
+		
 		SELECT @HTML = @HTML +
 			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Prior Day</th></tr></table></div><div>
 			<table width="1150">
@@ -5407,7 +5418,7 @@ BEGIN
 			<th width="75">Locking SPID</th> 
 			<th width="200">Locking Objects</th>
 			</tr>'
-		SELECT @HTML = @HTML +   
+		SELECT TOP (@MaxRows) @HTML = @HTML +   
 			'<tr>
 			<td width="150" class="c1">' + CAST(DeadlockDate AS NVARCHAR) +'</td>
 			<td width="150" class="c2">' + COALESCE([DBName],'N/A') + '</td>' +
@@ -5429,6 +5440,27 @@ BEGIN
 		FROM #DEADLOCKINFO 
 		WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
 		ORDER BY DeadlockDate ASC
+		
+		SELECT @TotalRows = COUNT(*) 
+		FROM #DEADLOCKINFO 
+		WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
+		
+		If @TotalRows > @MaxRows
+		BEGIN
+			SET @HTML = @HTML + 
+			'<tr>
+			<td width="150" class="c1">' + CAST(GetDate() AS NVARCHAR) +'</td>
+			<td width="150" class="c2">' + @@ServerName + '</td>
+			<td width="75" class="c1">N/A</td>
+			<td width="75" class="c2">N/A</td>
+			<td width="75" class="c1">N/A</td>	
+			<td width="200" class="c2">' + CAST(@TotalRows - @MaxRows AS NVARCHAR) + ' additional Deadlocks not listed</td>
+			<td width="75" class="c1">N/A</td>
+			<td width="75" class="c2">N/A</td>
+			<td width="75" class="c1">N/A</td>		
+			<td width="200" class="c2">N/A</td>
+			</tr>'
+		END
 		
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
@@ -5490,6 +5522,8 @@ BEGIN
 	
 	IF EXISTS (SELECT * FROM #ERRORLOG)
 	BEGIN
+		Set @MaxRows = 250
+	
 		SELECT 
 			@HTML = @HTML +
 			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Error Log - Last 24 Hours (Does not include Backup or Deadlock info)</th></tr></table></div><div>
@@ -5499,7 +5533,7 @@ BEGIN
 			<th width="150">Process Info</th>
 			<th width="850">Message</th>
 			</tr>'
-		SELECT
+		SELECT TOP (@MaxRows)
 			@HTML = @HTML +
 			'<tr>
 			<td width="150" class="c1">' + COALESCE(CAST(LogDate AS NVARCHAR),'N/A') +'</td>' +
@@ -5508,6 +5542,19 @@ BEGIN
 			 '</tr>'
 		FROM #ERRORLOG
 		ORDER BY LogDate DESC
+		
+		SELECT @TotalRows = COUNT(*) 
+		FROM #ERRORLOG 
+		
+		If @TotalRows > @MaxRows
+		BEGIN
+			SET @HTML = @HTML + 
+			'<tr>
+			<td width="150" class="c1">' + CAST(GetDate() AS NVARCHAR) +'</td>
+			<td width="150" class="c2"></td>
+			<td width="850" class="c1">' + CAST(@TotalRows - @MaxRows AS NVARCHAR) + ' additional errors not listed</td>
+			</tr>'
+		END
 		
 		SELECT @HTML = @HTML + '</table></div>'
 	END
@@ -5651,6 +5698,7 @@ BEGIN
 	DROP TABLE #TEMPDATES
 
 END
+
 GO
 IF EXISTS(SELECT * FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_NAME = 'gen_GetHealthReportHTML' AND ROUTINE_SCHEMA = 'dbo' AND ROUTINE_TYPE = 'PROCEDURE')
 BEGIN

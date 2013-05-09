@@ -22,6 +22,7 @@ CREATE PROCEDURE JoinSplitSeparationJobSections
 **			08/14/2008 mem - Renamed Organism field to Experiment_Organism in T_Analysis_Job
 **			07/13/2010 mem - Now populating Acq_Length in T_Datasets
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			03/25/2013 mem - No longer updating CenterOfMass_Scan
 **    
 *****************************************************/
 (
@@ -894,8 +895,8 @@ As
 			Optimal_Peak_Apex_Scan_Number = Optimal_Peak_Apex_Scan_Number + JJD.Scan_Number_Added, 
 			Peak_Scan_Start = Peak_Scan_Start + JJD.Scan_Number_Added, 
 			Peak_Scan_End = Peak_Scan_End + JJD.Scan_Number_Added, 
-			Peak_Scan_Max_Intensity = Peak_Scan_Max_Intensity + JJD.Scan_Number_Added, 
-			CenterOfMass_Scan = CenterOfMass_Scan + JJD.Scan_Number_Added
+			Peak_Scan_Max_Intensity = Peak_Scan_Max_Intensity + JJD.Scan_Number_Added
+			-- CenterOfMass_Scan = CenterOfMass_Scan + JJD.Scan_Number_Added
 		FROM T_Joined_Job_Details JJD INNER JOIN
 			T_Dataset_Stats_SIC DSSIC ON JJD.Source_Job = DSSIC.Job
 		WHERE JJD.Joined_Job_ID = @JoinedMASICJobNum AND
@@ -1152,6 +1153,7 @@ Done:
 		Select @message as ErrorMessage
 		
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[JoinSplitSeparationJobSections] TO [MTS_DB_Dev] AS [dbo]

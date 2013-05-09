@@ -24,7 +24,8 @@ SELECT FSO.Filter_Type_Name,
        PR.[22] AS MSGF_SpecProb,
        PR.[23] AS MSGFDB_SpecProb,
        PR.[24] AS MSGFDB_PValue,
-       PR.[25] AS MSGFDB_FDR,
+       PR.[25] AS MSGFPlus_QValue,		-- previously named MSGFDB_FDR
+       PR.[28] AS MSGFPlus_PepQValue,
        PR.[26] AS MSAlign_PValue,
        PR.[27] AS MSAlign_FDR,
        PR.[18] AS Inspect_MQScore,
@@ -45,7 +46,7 @@ FROM ( SELECT FSD.Filter_Set_ID,
        FROM dbo.T_DMS_Filter_Set_Details_Cached FSD ) AS DataQ
      PIVOT ( MAX(Criterion)
              FOR Criterion_id
-             IN ( [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [18], [19], [20], [21], [22], [23], [24], [25], [26], [27] ) 
+             IN ( [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12], [13], [14], [15], [16], [17], [18], [19], [20], [21], [22], [23], [24], [25], [26], [27], [28] ) 
      ) AS PR
      INNER JOIN dbo.T_DMS_Filter_Set_Overview_Cached FSO
        ON PR.Filter_Set_ID = FSO.Filter_Set_ID

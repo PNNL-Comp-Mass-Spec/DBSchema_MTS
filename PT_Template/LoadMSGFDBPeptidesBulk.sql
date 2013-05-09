@@ -1,10 +1,8 @@
 /****** Object:  StoredProcedure [dbo].[LoadMSGFDBPeptidesBulk] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
-
-
 
 CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 /****************************************************
@@ -38,6 +36,8 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 **			12/04/2012 mem - Now populating #Tmp_Peptide_ModSummary
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
+**			05/08/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
+**							 Added support for filtering on MSGF+ PepQValue
 **
 *****************************************************/
 (
@@ -103,7 +103,8 @@ As
 	declare @UseMSGFFilter tinyint
 	declare @UseMSGFDbSpecProbFilter tinyint
 	declare @UseMSGFDbPValueFilter tinyint
-	declare @UseMSGFDbFDRFilter tinyint
+	declare @UseMSGFPlusQValueFilter tinyint
+	declare @UseMSGFPlusPepQValueFilter tinyint
 	
 	declare @LogLevel int
 	declare @LogMessage varchar(512)
@@ -744,9 +745,11 @@ As
 			@MSGFDbSpecProbThreshold real,
 			@MSGFDbPValueComparison varchar(2),
 			@MSGFDbPValueThreshold real,
-			@MSGFDbFDRComparison varchar(2),
-			@MSGFDbFDRThreshold real
-			
+
+			@MSGFPlusQValueComparison varchar(2),
+			@MSGFPlusQValueThreshold real,
+			@MSGFPlusPepQValueComparison varchar(2),
+			@MSGFPlusPepQValueThreshold real			
 
 
 	If IsNull(@FilterSetID, 0) = 0
@@ -787,7 +790,8 @@ As
 										@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT,
 										@MSGFDbSpecProbComparison = @MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold = @MSGFDbSpecProbThreshold OUTPUT,
 										@MSGFDbPValueComparison = @MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold = @MSGFDbPValueThreshold OUTPUT,
-										@MSGFDbFDRComparison = @MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold = @MSGFDbFDRThreshold OUTPUT
+										@MSGFPlusQValueComparison = @MSGFPlusQValueComparison OUTPUT, @MSGFPlusQValueThreshold = @MSGFPlusQValueThreshold OUTPUT,
+										@MSGFPlusPepQValueComparison = @MSGFPlusPepQValueComparison OUTPUT, @MSGFPlusPepQValueThreshold = @MSGFPlusPepQValueThreshold OUTPUT
 		
 		if @myError <> 0
 		begin
@@ -832,7 +836,8 @@ As
 			Set @UseMSGFFilter = 0
 			Set @UseMSGFDbSpecProbFilter = 0
 			Set @UseMSGFDbPValueFilter = 0
-			Set @UseMSGFDbFDRFilter = 0
+			Set @UseMSGFPlusQValueFilter = 0
+			Set @UseMSGFPlusPepQValueFilter = 0
 			
 			If @MSGFCountLoaded > 0
 			Begin
@@ -846,8 +851,11 @@ As
 			If @MSGFDbPValueComparison IN ('<', '<=') AND @MSGFDbPValueThreshold < 1
 				Set @UseMSGFDbPValueFilter = 1
 
-			If @MSGFDbFDRComparison IN ('<', '<=') AND @MSGFDbFDRThreshold < 1
-				Set @UseMSGFDbFDRFilter = 1
+			If @MSGFPlusQValueComparison IN ('<', '<=') AND @MSGFPlusQValueThreshold < 1
+				Set @UseMSGFPlusQValueFilter = 1
+
+			If @MSGFPlusPepQValueComparison IN ('<', '<=') AND @MSGFPlusPepQValueThreshold < 1
+				Set @UseMSGFPlusPepQValueFilter = 1
 			
 			-- Construct the Sql Update Query
 			--
@@ -880,8 +888,11 @@ As
 			If @UseMSGFDbPValueFilter = 1
 				Set @W = @W +      ' AND IsNull(TPI.PValue, 1) ' + @MSGFDbPValueComparison + Convert(varchar(11), @MSGFDbPValueThreshold)
 			
-			If @UseMSGFDbFDRFilter = 1
-				Set @W = @W +      ' AND IsNull(TPI.FDR, 1) ' + @MSGFDbFDRComparison + Convert(varchar(11), @MSGFDbFDRThreshold)
+			If @UseMSGFPlusQValueFilter = 1
+				Set @W = @W +      ' AND IsNull(TPI.FDR, 1) ' + @MSGFPlusQValueComparison + Convert(varchar(11), @MSGFPlusQValueThreshold)
+
+			If @UseMSGFPlusPepQValueFilter = 1
+				Set @W = @W +      ' AND IsNull(TPI.PepFDR, 1) ' + @MSGFPlusPepQValueComparison + Convert(varchar(11), @MSGFPlusPepQValueThreshold)
 				
 			Set @W = @W +    ' ) LookupQ ON LookupQ.Result_ID = TFF.Result_ID'
 
@@ -937,7 +948,8 @@ As
 											@MSGFSpecProbComparison = @MSGFSpecProbComparison OUTPUT, @MSGFSpecProbThreshold = @MSGFSpecProbThreshold OUTPUT,
 											@MSGFDbSpecProbComparison = @MSGFDbSpecProbComparison OUTPUT, @MSGFDbSpecProbThreshold = @MSGFDbSpecProbThreshold OUTPUT,
 											@MSGFDbPValueComparison = @MSGFDbPValueComparison OUTPUT, @MSGFDbPValueThreshold = @MSGFDbPValueThreshold OUTPUT,
-											@MSGFDbFDRComparison = @MSGFDbFDRComparison OUTPUT, @MSGFDbFDRThreshold = @MSGFDbFDRThreshold OUTPUT
+											@MSGFPlusQValueComparison = @MSGFPlusQValueComparison OUTPUT, @MSGFPlusQValueThreshold = @MSGFPlusQValueThreshold OUTPUT,
+											@MSGFPlusPepQValueComparison = @MSGFPlusPepQValueComparison OUTPUT, @MSGFPlusPepQValueThreshold = @MSGFPlusPepQValueThreshold OUTPUT
 
 			If @myError <> 0
 			Begin

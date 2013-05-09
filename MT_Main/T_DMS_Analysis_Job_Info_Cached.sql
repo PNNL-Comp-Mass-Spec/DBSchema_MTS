@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 	[Completed] [datetime] NULL,
 	[ParameterFileName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[SettingsFileName] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[OrganismDBName] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[OrganismDBName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ProteinCollectionList] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ProteinOptions] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[StoragePathClient] [varchar](8000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -56,6 +56,14 @@ GO
 /****** Object:  Index [IX_T_DMS_Analysis_Job_Info_Cached_Experiment] ******/
 CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached] 
 (
+	[Experiment] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+GO
+
+/****** Object:  Index [IX_T_DMS_Analysis_Job_Info_Cached_Organism_Experiment] ******/
+CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Organism_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached] 
+(
+	[Organism] ASC,
 	[Experiment] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO

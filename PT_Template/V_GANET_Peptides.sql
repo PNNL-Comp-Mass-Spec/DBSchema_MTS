@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW V_GANET_Peptides
+CREATE VIEW [dbo].[V_GANET_Peptides]
 AS
 -- Warning: This view can run very slowly
 -- Instead, use stored procedure ExportGANETPeptideFile
@@ -143,4 +143,6 @@ FROM T_Analysis_Description TAD
      INNER JOIN dbo.T_Score_Discriminant SD 
        ON Pep.Peptide_ID = SD.Peptide_ID
 WHERE (TAD.ResultType = 'MSA_Peptide_Hit')
+
+
 GO
