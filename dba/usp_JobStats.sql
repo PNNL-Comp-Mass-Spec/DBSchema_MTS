@@ -16,10 +16,34 @@ AS
 **  02/21/2012		Michael Rounds			1.0				Comments creation
 **  03/13/2012		Michael Rounds			1.1				Added join to syscategories to pull in Category name
 **	04/24/2013		Volker.Bachmann from SSC 1.1.1			Added COALESCE to MAX(ja.start_execution_date) and MAX(ja.stop_execution_date)
+**	05/01/2013		Michael Rounds			1.2				Creating temp tables instead of inserting INTO
+**															Removed COALESCE's from previous change on 4/24. Causing dates to read 1/1/1900 when NULL. Would rather have NULL.
 ***************************************************************************************************************/
 
 BEGIN
 
+CREATE TABLE #TEMP (
+	Job_ID NVARCHAR(255),
+	Name NVARCHAR(128),
+	Category NVARCHAR(128),
+	[Enabled] BIT,
+	Last_Run_Outcome INT,
+	Last_Run_Date NVARCHAR(20)
+	)
+	
+CREATE TABLE #TEMP2 (
+	JobName NVARCHAR(128),
+	Category NVARCHAR(128),
+	[Enabled] BIT,
+	StartTime DATETIME,
+	StopTime DATETIME,
+	AvgRunTime NUMERIC(20,10),
+	LastRunTime INT,
+	RunTimeStatus NVARCHAR(128),
+	LastRunOutcome NVARCHAR(20)
+	)
+	
+INSERT INTO #TEMP (Job_ID,Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
 SELECT sj.job_id, 
 		sj.name,
 		sc.name AS Category,
@@ -28,19 +52,19 @@ SELECT sj.job_id,
         (SELECT MAX(run_date) 
 			FROM msdb..sysjobhistory(nolock) sjh 
 			WHERE sjh.job_id = sj.job_id) AS last_run_date
-INTO #TEMP
 FROM msdb..sysjobs(nolock) sj
 JOIN msdb..sysjobservers(nolock) sjs
     ON sjs.job_id = sj.job_id
 JOIN msdb..syscategories sc
 	ON sj.category_id = sc.category_id	
 
+INSERT INTO #TEMP2 (JobName,Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
 SELECT
 	t.name AS JobName,
 	t.Category,
 	t.[Enabled],
-	COALESCE(MAX(ja.start_execution_date),0) AS [StartTime],
-	COALESCE(MAX(ja.stop_execution_date),0) AS [StopTime],
+	MAX(ja.start_execution_date) AS [StartTime],
+	MAX(ja.stop_execution_date) AS [StopTime],
 	COALESCE(AvgRunTime,0) AS AvgRunTime,
 	CASE 
 		WHEN ja.stop_execution_date IS NULL THEN DATEDIFF(ss,ja.start_execution_date,GETDATE())
@@ -63,13 +87,12 @@ SELECT
 		WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 1 THEN 'SUCCESS'			
 		ELSE 'NA'
 	END AS [LastRunOutcome]
-INTO #TEMP2
 FROM #TEMP AS t
 LEFT OUTER
-JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb.dbo.sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
+JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb..sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
 	ON t.job_id = ja2.job_id
 LEFT OUTER
-JOIN msdb.dbo.sysjobactivity(nolock) ja
+JOIN msdb..sysjobactivity(nolock) ja
 	ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
 LEFT OUTER 
 JOIN (SELECT job_id,

@@ -74,6 +74,29 @@
 **																rpt_HealthReport - Expanded WitnessServer in #MIRRORING to NVARCHAR(128) FROM NVARCHAR(5)
 **					Matthew Monroe								usp_CheckFilesWork - New proc - Re-factored code out of usp_CheckFiles
 **						from SSC								usp_CheckFiles - Factored out duplicate code into usp_CheckFilesWork
+**	04/26/2013		Michael Rounds			2.3.10				usp_CheckFilesWork - Removed "t2" from DELETE to #TEMP3, causing the error 
+**																	"The multi-part identifier "t2.FilePercentEmpty" could not be found"
+**	05/02/2013		Michael Rounds			2.4					usp_JobStats - Creating temp tables instead of inserting INTO
+**																usp_JobStats - Removed COALESCE's from previous change on 4/24. Causing dates to read 1/1/1900 when NULL. Would rather have NULL.
+**																rpt_HealthReport - Fixed HTML formatting in Job Stats section
+**																rpt_HealthReport - Changed Job Stats section - CREATE #TEMPJOB instead of INSERT INTO
+**																rpt_HealthReport - Changed LongRunningQueries section to use Formatted_SQL_Text instead of SQL_Text
+**																usp_LongRunningQueries - Change TEMP table to use Formatted_SQL_Text instead of SQL_Text
+**																rpt_Queries- Changed to use Formatted_SQL_Text instead of SQL_Text
+**																SchemaChangeLog - SQLCmd is now NULLABLE (added ALTER TABLE for existing installations)
+**																AlertSettings table has changed. AlertContacts table added, separating out email addresses from the AlertSettings table
+**																	The following procs were modified to work with the updated schema
+**																		- usp_CheckFiles
+**																		- usp_CheckFilesWork
+**																		- ti_blockinghistory
+**																		- usp_CPUProcessAlert
+**																		- usp_LongRunningQueries
+**																		- usp_LongRunningJobs
+**																		- rpt_Queries
+**																		- rpt_HealthReport
+**					Matthew Monroe from SSC/Michael Rounds		rpt_HealthReport - New variables added to AlertSettings to turn sections on/off or show reduced data. Use the [Enabled] BIT in AlertSettings.
+**					Volker.Bachmann								Changed all SQL Job names from "dba_" to "dba_" **ALL OLD JOBS WILL BE DROPPED
+**						from SSC								Added "[dba]" to the start of all email subject lines
 ********************************************************************************************************************************************************
 **
 **		:::::CONTENTS:::::
@@ -239,29 +262,79 @@ GO
 USE [dba]
 GO
 
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AlertSettings' AND TABLE_SCHEMA = 'dbo')
+BEGIN
+DROP TABLE dbo.AlertSettings
+END
+GO
+
+USE [dba]
+GO
+
 IF NOT EXISTS (SELECT *	FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AlertSettings' AND TABLE_SCHEMA = 'dbo')
 BEGIN
-CREATE TABLE [dba].dbo.AlertSettings (
-	Name NVARCHAR(50) NOT NULL
-		CONSTRAINT pk_AlertSettings
-			PRIMARY KEY CLUSTERED (Name),
-	QueryValue INT,
-	QueryValueDesc NVARCHAR(255),
-	QueryValue2 NVARCHAR(255),
-	QueryValue2Desc NVARCHAR(255),
+
+CREATE TABLE dbo.AlertSettings (
+	AlertName NVARCHAR(25) NOT NULL,
+	VariableName NVARCHAR(35) NOT NULL,
+	[Enabled] BIT CONSTRAINT df_AlertSettings_Enabled DEFAULT(1),
+	Value NVARCHAR(20),
+	[Description] NVARCHAR(255),
+
+	constraint PK_AlertSettings primary key(AlertName,VariableName)
+)
+
+INSERT INTO dbo.AlertSettings (AlertName,VariableName,Value,[Description],[Enabled])
+SELECT 'BlockingAlert','QueryValue','10','Value is in seconds',1 UNION ALL
+SELECT 'BlockingAlert','QueryValue2','20','Value is in seconds',1 UNION ALL
+SELECT 'CPUAlert','QueryValue','85','Value is in percentage',1 UNION ALL
+SELECT 'CPUAlert','QueryValue2','95','Value is in percentage',1 UNION ALL
+SELECT 'LogFiles','QueryValue','50','Value is in percentage',1 UNION ALL
+SELECT 'LogFiles','QueryValue2','20','Value is in percentage',1 UNION ALL
+SELECT 'LogFiles','MinFileSizeMB','100','Ignore LogFiles smaller than this threshold, in MB',1 UNION ALL
+SELECT 'TempDB','QueryValue','50','Value is in percentage',1 UNION ALL
+SELECT 'TempDB','QueryValue2','20','Value is in percentage',1 UNION ALL
+SELECT 'TempDB','MinFileSizeMB','100','Ignore the tempDB if the log file size is below this threshold, in MB',1 UNION ALL
+SELECT 'LongRunningJobs','QueryValue','60','Value is in seconds',1 UNION ALL
+SELECT 'LongRunningQueries','QueryValue','615','Value is in seconds',1 UNION ALL
+SELECT 'LongRunningQueries','QueryValue2','1200','Value is in seconds',1 UNION ALL
+SELECT 'LongRunningQueries','Exclusion_Sql','sqlBackup','SQL Like Clause',1 UNION ALL
+SELECT 'HealthReport','MaxDeadLockRows','250','Maximum Deadlock rows to display',1 UNION ALL
+SELECT 'HealthReport','MaxErrorLogRows','250','Maximum Error Log rows to display',1 UNION ALL
+SELECT 'HealthReport','MinLogFileSizeMB','100','Variable for the HealthReport',1 UNION ALL
+SELECT 'HealthReport','ShowAllDisks',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowFullDBList',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowFullFileInfo',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowFullJobInfo',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowSchemaChanges',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowBackups',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowLogBackups',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowPerfStats',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowCPUStats',NULL,'Variable for the HealthReport',0 UNION ALL
+SELECT 'HealthReport','ShowEmptySections',NULL,'Variable for the HealthReport',0
+END
+GO
+
+USE [dba]
+GO
+
+IF NOT EXISTS (SELECT *	FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AlertContacts' AND TABLE_SCHEMA = 'dbo')
+BEGIN
+CREATE TABLE dbo.AlertContacts (
+	AlertName NVARCHAR(25),
 	EmailList NVARCHAR(255),
 	EmailList2 NVARCHAR(255),
 	CellList NVARCHAR(255)
 	)
 
-INSERT INTO [dba].dbo.AlertSettings (Name,QueryValue,QueryValueDesc,QueryValue2,QueryValue2Desc,EmailList,CellList)
-SELECT 'LongRunningJobs',60,'Seconds',NULL,NULL,(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
-SELECT 'LongRunningQueries',615,'Seconds',1200,'Seconds',(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
-SELECT 'BlockingAlert',10,'Seconds',20,'Seconds',(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
-SELECT 'LogFiles',50,'Percent',20,'Percent',(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
-SELECT 'TempDB',50,'Percent',20,'Percent',(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
-SELECT 'HealthReport',1,'NA',NULL,NULL,(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),NULL UNION ALL
-SELECT 'CPUAlert',85,'Percent',95,'Percent',(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb.dbo.sysoperators WHERE name = 'SQL_DBA_vtext') 
+INSERT INTO dbo.AlertContacts (AlertName,EmailList,CellList)
+SELECT 'LongRunningJobs',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
+SELECT 'LongRunningQueries',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
+SELECT 'BlockingAlert',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
+SELECT 'LogFiles',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
+SELECT 'TempDB',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext') UNION ALL
+SELECT 'HealthReport',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),NULL UNION ALL
+SELECT 'CPUAlert',(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA'),(SELECT email_address FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext')
 END
 GO
 
@@ -300,6 +373,7 @@ CREATE TABLE [dba].dbo.QueryHistory (
 				PRIMARY KEY CLUSTERED ([QueryHistoryID]),
 	[DateStamp] DATETIME NOT NULL,
 	[Login_Time] DATETIME NULL,
+	[Start_Time] DATETIME NULL,
 	[RunTime] NUMERIC(20,4) NULL,
 	[Session_ID] SMALLINT NOT NULL,
 	[CPU_Time] BIGINT NULL,
@@ -374,6 +448,9 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
+**	05/03/2013		Michael Rounds			1.2					Changed how variables are gathered in AlertSettings and AlertContacts
+**					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
 ***************************************************************************************************************/
 
 BEGIN
@@ -381,11 +458,13 @@ DECLARE @HTML NVARCHAR(MAX), @QueryValue INT, @QueryValue2 INT, @EmailList NVARC
 
 SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
 
-SELECT @QueryValue = QueryValue,
-		@QueryValue2 = QueryValue2,
-		@EmailList = EmailList,
-		@CellList = CellList 
-FROM [dba].dbo.AlertSettings WHERE Name = 'BlockingAlert'
+SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'BlockingAlert'
+
+SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'BlockingAlert'
+	
+SELECT @EmailList = EmailList,
+		@CellList = CellList	
+FROM [dba].dbo.AlertContacts WHERE AlertName = 'BlockingAlert'
 
 SELECT *
 INTO #TEMP
@@ -432,9 +511,9 @@ WHERE CAST(Blocked_WaitTime_Seconds AS DECIMAL) > @QueryValue
 
 SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'Blocking on ' + @ServerName + '!'
+SELECT @EmailSubject = '[dba]Blocking on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
+EXEC msdb..sp_send_dbmail
 @recipients= @EmailList,
 @subject = @EmailSubject,
 @body = @HTML,
@@ -442,45 +521,45 @@ EXEC msdb.dbo.sp_send_dbmail
 
 END
 
-IF @CellList IS NOT NULL
+IF COALESCE(@CellList, '') <> ''
 BEGIN
-SELECT @EmailSubject = 'Blocking-' + @ServerName
-
-IF @QueryValue2 IS NOT NULL
-BEGIN
-IF EXISTS (SELECT * FROM #TEMP WHERE CAST(BLOCKED_WAITTIME_SECONDS AS DECIMAL) > @QueryValue2)
-BEGIN
-SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
-FROM #TEMP
-WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue2
-SELECT @HTML =  @HTML + '</table></body></html>'
-
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+	SELECT @EmailSubject = '[dba]Blocking-' + @ServerName
+	
+	IF @QueryValue2 IS NOT NULL
+	BEGIN
+		IF EXISTS (SELECT * FROM #TEMP WHERE CAST(BLOCKED_WAITTIME_SECONDS AS DECIMAL) > @QueryValue2)
+		BEGIN
+			SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
+			SELECT @HTML =  @HTML +   
+				'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
+			FROM #TEMP
+			WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue2
+			SELECT @HTML =  @HTML + '</table></body></html>'
+			
+			EXEC msdb..sp_send_dbmail
+			@recipients= @CellList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
+		END
+	END
 END
-END
-END
 
-IF @QueryValue2 IS NULL AND @CellList IS NOT NULL
+IF @QueryValue2 IS NULL AND COALESCE(@CellList, '') <> ''
 BEGIN
-/*TEXT MESSAGE*/
-SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
-SELECT @HTML =  @HTML +   
-	'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
-FROM #TEMP
-WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue
-SELECT @HTML =  @HTML + '</table></body></html>'
-
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @CellList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+	/*TEXT MESSAGE*/
+	SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
+	SELECT @HTML =  @HTML +   
+		'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
+	FROM #TEMP
+	WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue
+	SELECT @HTML =  @HTML + '</table></body></html>'
+	
+	EXEC msdb..sp_send_dbmail
+	@recipients= @CellList,
+	@subject = @EmailSubject,
+	@body = @HTML,
+	@body_format = 'HTML'
 END
 
 DROP TABLE #TEMP
@@ -599,11 +678,11 @@ ALTER TABLE dbo.QueryHistory
 DROP COLUMN Collection_Time
 END
 GO
-IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'QueryHistory' AND TABLE_SCHEMA = 'dbo' 
+IF NOT EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'QueryHistory' AND TABLE_SCHEMA = 'dbo' 
 AND COLUMN_NAME = 'Start_Time')
 BEGIN
 ALTER TABLE dbo.QueryHistory
-DROP COLUMN Start_Time
+ADD Start_Time DATETIME NULL
 END
 GO
 IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'QueryHistory' AND TABLE_SCHEMA = 'dbo' 
@@ -792,16 +871,21 @@ CREATE TABLE dbo.DataDictionary_Fields(
 )
 END
 
-IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='T_Alert_Exclusions')
+IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_NAME='V_Last_Full_DB_Backup')
 BEGIN
-CREATE TABLE dbo.T_Alert_Exclusions(
-  Category_Name    nvarchar(50) not null,
-  FilterLikeClause varchar(255) not null,
-
-  constraint PK_T_Alert_Exclusions primary key(Category_Name,FilterLikeClause)
-)
-alter table T_Alert_Exclusions add
-  constraint FK_T_Alert_Exclusions_AlertSettings foreign key(Category_Name) references AlertSettings([Name]);
+CREATE VIEW dbo.V_Last_Full_DB_Backup
+AS
+SELECT SysDB.name,
+       BUSet.Backup_Date,
+       DATEDIFF(DAY, ISNULL(backup_date, GETDATE() - 365), GETDATE()) AS Days_Since_Last_Full_Backup
+FROM master.dbo.sysdatabases AS SysDB
+     LEFT OUTER JOIN ( SELECT database_name,
+                              MAX(backup_finish_date) AS backup_date
+                       FROM msdb.dbo.backupset
+                       WHERE backup_finish_date <= GetDate() AND
+                             [type] = 'D' -- Full DB Backups as Type D
+                       GROUP BY database_name ) AS BUSet
+       ON SysDB.name = BUSet.database_name
 END
 
 GO
@@ -862,9 +946,36 @@ CREATE TABLE [dbo].[SchemaChangeLog](
 	[SQLEvent] SYSNAME NOT NULL,
 	[Schema] SYSNAME NULL,
 	[ObjectName] SYSNAME NULL,
-	[SQLCmd] NVARCHAR(MAX) NOT NULL,
+	[SQLCmd] NVARCHAR(MAX) NULL,
 	[XmlEvent] XML NOT NULL
 	)
+END;
+
+USE ' + '[' + @DBName + ']' +';
+
+IF NOT EXISTS (SELECT *	FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ''SchemaChangeLog'' AND TABLE_SCHEMA = ''dbo'')
+BEGIN
+CREATE TABLE [dbo].[SchemaChangeLog](
+	[SchemaChangeLogID] INT IDENTITY(1,1) NOT NULL
+		CONSTRAINT PK_SchemaChangeLog
+			PRIMARY KEY CLUSTERED (SchemaChangeLogID),	
+	[CreateDate] DATETIME NULL,
+	[LoginName] SYSNAME NULL,
+	[ComputerName] SYSNAME NULL,
+	[DBName] SYSNAME NOT NULL,
+	[SQLEvent] SYSNAME NOT NULL,
+	[Schema] SYSNAME NULL,
+	[ObjectName] SYSNAME NULL,
+	[SQLCmd] NVARCHAR(MAX) NULL,
+	[XmlEvent] XML NOT NULL
+	)
+END;
+
+IF EXISTS (SELECT *	FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ''SchemaChangeLog'' AND TABLE_SCHEMA = ''dbo'' 
+AND COLUMN_NAME = ''SQLCmd'' AND IS_NULLABLE = ''NO'')
+BEGIN
+ALTER TABLE dbo.SchemaChangeLog
+ALTER COLUMN [SQLCmd] NVARCHAR(MAX) NULL
 END;
 
 DECLARE @triggersql1 NVARCHAR(MAX)
@@ -964,10 +1075,34 @@ AS
 **  02/21/2012		Michael Rounds			1.0				Comments creation
 **  03/13/2012		Michael Rounds			1.1				Added join to syscategories to pull in Category name
 **	04/24/2013		Volker.Bachmann from SSC 1.1.1			Added COALESCE to MAX(ja.start_execution_date) and MAX(ja.stop_execution_date)
+**	05/01/2013		Michael Rounds			1.2				Creating temp tables instead of inserting INTO
+**															Removed COALESCE's from previous change on 4/24. Causing dates to read 1/1/1900 when NULL. Would rather have NULL.
 ***************************************************************************************************************/
 
 BEGIN
 
+CREATE TABLE #TEMP (
+	Job_ID NVARCHAR(255),
+	Name NVARCHAR(128),
+	Category NVARCHAR(128),
+	[Enabled] BIT,
+	Last_Run_Outcome INT,
+	Last_Run_Date NVARCHAR(20)
+	)
+	
+CREATE TABLE #TEMP2 (
+	JobName NVARCHAR(128),
+	Category NVARCHAR(128),
+	[Enabled] BIT,
+	StartTime DATETIME,
+	StopTime DATETIME,
+	AvgRunTime NUMERIC(20,10),
+	LastRunTime INT,
+	RunTimeStatus NVARCHAR(128),
+	LastRunOutcome NVARCHAR(20)
+	)
+	
+INSERT INTO #TEMP (Job_ID,Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
 SELECT sj.job_id, 
 		sj.name,
 		sc.name AS Category,
@@ -976,19 +1111,19 @@ SELECT sj.job_id,
         (SELECT MAX(run_date) 
 			FROM msdb..sysjobhistory(nolock) sjh 
 			WHERE sjh.job_id = sj.job_id) AS last_run_date
-INTO #TEMP
 FROM msdb..sysjobs(nolock) sj
 JOIN msdb..sysjobservers(nolock) sjs
     ON sjs.job_id = sj.job_id
 JOIN msdb..syscategories sc
 	ON sj.category_id = sc.category_id	
 
+INSERT INTO #TEMP2 (JobName,Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
 SELECT
 	t.name AS JobName,
 	t.Category,
 	t.[Enabled],
-	COALESCE(MAX(ja.start_execution_date),0) AS [StartTime],
-	COALESCE(MAX(ja.stop_execution_date),0) AS [StopTime],
+	MAX(ja.start_execution_date) AS [StartTime],
+	MAX(ja.stop_execution_date) AS [StopTime],
 	COALESCE(AvgRunTime,0) AS AvgRunTime,
 	CASE 
 		WHEN ja.stop_execution_date IS NULL THEN DATEDIFF(ss,ja.start_execution_date,GETDATE())
@@ -1011,13 +1146,12 @@ SELECT
 		WHEN ja.stop_execution_date IS NOT NULL AND t.last_run_outcome = 1 THEN 'SUCCESS'			
 		ELSE 'NA'
 	END AS [LastRunOutcome]
-INTO #TEMP2
 FROM #TEMP AS t
 LEFT OUTER
-JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb.dbo.sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
+JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb..sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
 	ON t.job_id = ja2.job_id
 LEFT OUTER
-JOIN msdb.dbo.sysjobactivity(nolock) ja
+JOIN msdb..sysjobactivity(nolock) ja
 	ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
 LEFT OUTER 
 JOIN (SELECT job_id,
@@ -1556,6 +1690,9 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/29/2012		Michael Rounds			1.0					New Proc to alert on CPU usage
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
+**	05/03/2013		Michael Rounds			1.2					Changed how variables are gathered in AlertSettings and AlertContacts
+**					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
 ***************************************************************************************************************/
 
 BEGIN
@@ -1567,11 +1704,13 @@ SELECT @LastDateStamp = MAX(DateStamp) FROM [dba].dbo.CPUStatsHistory
 
 SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
 
-SELECT @QueryValue = QueryValue,
-	@QueryValue2 = QueryValue2,
-	@EmailList = EmailList,
-	@CellList = CellList	
-FROM [dba].dbo.AlertSettings WHERE Name = 'CPUAlert'
+SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'CPUAlert'
+
+SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'CPUAlert'
+	
+SELECT @EmailList = EmailList,
+		@CellList = CellList	
+FROM [dba].dbo.AlertContacts WHERE AlertName = 'CPUAlert'
 
 CREATE TABLE #TEMP (
 	[SQLProcessPercent] INT,
@@ -1611,37 +1750,37 @@ FROM #TEMP WHERE SQLProcessPercent > @QueryValue AND DateStamp > COALESCE(@LastD
 
 SELECT @HTML =  @HTML + '</table></body></html>'
 
-SELECT @EmailSubject = 'High CPU Alert on ' + @ServerName + '!'
+SELECT @EmailSubject = '[dba]High CPU Alert on ' + @ServerName + '!'
 
-EXEC msdb.dbo.sp_send_dbmail
+EXEC msdb..sp_send_dbmail
 @recipients= @EmailList,
 @subject = @EmailSubject,
 @body = @HTML,
 @body_format = 'HTML'
 
-IF @CellList IS NOT NULL
+IF COALESCE(@CellList, '') <> ''
 BEGIN
-
-/*TEXT MESSAGE*/
-IF EXISTS (SELECT * FROM #TEMP WHERE SQLProcessPercent > COALESCE(@QueryValue2, @QueryValue))
-BEGIN
-	SET	@HTML =
-		'<html><head></head><body><table><tr><td>CPU,</td><td>Idle,</td><td>Other,</td><td>Date</td></tr>'
-	SELECT @HTML =  @HTML +   
-		'<tr><td>' + CAST(SQLProcessPercent AS NVARCHAR) +',</td><td>' + CAST(SystemIdleProcessPercent AS NVARCHAR) +',</td><td>' + CAST(OtherProcessPerecnt AS NVARCHAR) +',</td><td>' + CAST(DateStamp AS NVARCHAR) + '</td></tr>'
-	FROM #TEMP WHERE SQLProcessPercent > COALESCE(@QueryValue2, @QueryValue)
-
-	SELECT @HTML =  @HTML + '</table></body></html>'
-
-	SELECT @EmailSubject = 'HighCPUAlert-' + @ServerName
-
-	EXEC msdb.dbo.sp_send_dbmail
-	@recipients= @CellList,
-	@subject = @EmailSubject,
-	@body = @HTML,
-	@body_format = 'HTML'
-
-END
+	
+	/*TEXT MESSAGE*/
+	IF EXISTS (SELECT * FROM #TEMP WHERE SQLProcessPercent > COALESCE(@QueryValue2, @QueryValue))
+	BEGIN
+		SET	@HTML =
+			'<html><head></head><body><table><tr><td>CPU,</td><td>Idle,</td><td>Other,</td><td>Date</td></tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr><td>' + CAST(SQLProcessPercent AS NVARCHAR) +',</td><td>' + CAST(SystemIdleProcessPercent AS NVARCHAR) +',</td><td>' + CAST(OtherProcessPerecnt AS NVARCHAR) +',</td><td>' + CAST(DateStamp AS NVARCHAR) + '</td></tr>'
+		FROM #TEMP WHERE SQLProcessPercent > COALESCE(@QueryValue2, @QueryValue)
+	
+		SELECT @HTML =  @HTML + '</table></body></html>'
+	
+		SELECT @EmailSubject = '[dba]HighCPUAlert-' + @ServerName
+	
+		EXEC msdb..sp_send_dbmail
+		@recipients= @CellList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
+	
+	END
 END
 END
 
@@ -1682,119 +1821,126 @@ AS
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
 **	01/16/2013		Michael Rounds			1.2					Added "AND JobName <> 'dba_LongRunningJobsAlert'" to INSERT into TEMP table
+**	05/03/2013		Michael Rounds			1.3					Changed how variables are gathered in AlertSettings and AlertContacts
+**					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
 ***************************************************************************************************************/
 
 BEGIN
+	
+	EXEC [dba].dbo.usp_JobStats @InsertFlag=1
+	
+	DECLARE @JobStatsID INT, @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @HTML NVARCHAR(MAX), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
+	
+	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
+	
+	SET @JobStatsID = (SELECT MAX(JobStatsID) FROM [dba].dbo.JobStatsHistory)
+	
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningJobs'
+	
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningJobs'
+		
+	SELECT @EmailList = EmailList,
+			@CellList = CellList	
+	FROM [dba].dbo.AlertContacts WHERE AlertName = 'LongRunningJobs'
+	
+	CREATE TABLE #TEMP (
+		JobStatsHistoryID INT,
+		JobStatsID INT,
+		JobStatsDateStamp DATETIME,
+		JobName NVARCHAR(255),
+		[Enabled] INT,
+		StartTime DATETIME,
+		StopTime DATETIME,
+		AvgRunTime NUMERIC(12,2),
+		LastRunTime NUMERIC(12,2),
+		RunTimeStatus NVARCHAR(30),
+		LastRunOutcome NVARCHAR(20)
+		)
+	
+	INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
+	SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
+	FROM [dba].dbo.JobStatsHistory
+	WHERE RunTimeStatus = 'LongRunning-NOW'
+	AND JobName <> 'dba_LongRunningJobsAlert'
+	AND LastRunTime > @QueryValue AND JobStatsID = @JobStatsID
+	
+	IF EXISTS (SELECT * FROM #TEMP)
+	BEGIN
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="725"> <tr><th class="header" width="725">Long Running Jobs</th></tr></table>	
+			<table width="725">
+			<tr>  
+			<th width="250">JobName</th>	
+			<th width="100">AvgRunTime</th>  
+			<th width="100">LastRunTime</th>  
+			<th width="150">RunTimeStatus</th>  	
+			<th width="125">LastRunOutcome</th>
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td bgcolor="#E0E0E0" width="250">' + JobName +'</td>
+			<td bgcolor="#E0E0E0" width="100">' + COALESCE(CAST(AvgRunTime AS NVARCHAR), '') +'</td>
+			<td bgcolor="#F0F0F0" width="100">' + CAST(LastRunTime AS NVARCHAR) +'</td>
+			<td bgcolor="#E0E0E0" width="150">' + RunTimeStatus +'</td>	
+			<td bgcolor="#F0F0F0" width="125">' + LastRunOutcome +'</td>		
+			</tr>'
+		FROM #TEMP
+		
+		SELECT @HTML =  @HTML + '</table></body></html>'
+		
+		SELECT @EmailSubject = '[dba]ACTIVE Long Running JOBS on ' + @ServerName + '! - IMMEDIATE Action Required'
+		
+		EXEC msdb..sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
+		
+		IF COALESCE(@CellList, '') <> ''
+		BEGIN
+			
+			IF @QueryValue2 IS NOT NULL
+			BEGIN
+			TRUNCATE TABLE #TEMP
+				INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
+				SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
+				FROM [dba].dbo.JobStatsHistory
+				WHERE RunTimeStatus = 'LongRunning-NOW'
+				AND JobName <> 'dba_LongRunningJobsAlert'
+				AND LastRunTime > @QueryValue2 AND JobStatsID = @JobStatsID
+			END
+			
+			/*TEXT MESSAGE*/
+			IF EXISTS (SELECT * FROM #TEMP)
+			BEGIN
+				SET	@HTML =
+					'<html><head></head><body><table><tr><td>Name,</td><td>AvgRun,</td><td>LastRun</td></tr>'
+				SELECT @HTML =  @HTML +   
+					'<tr><td>' + COALESCE(CAST(LOWER(LEFT(JobName,17)) AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(AvgRunTime AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(LastRunTime AS NVARCHAR), '') +'</td></tr>'
+				FROM #TEMP
+			
+				SELECT @HTML =  @HTML + '</table></body></html>'
+			
+				SELECT @EmailSubject = '[dba]JobsPastDue-' + @ServerName
+			
+				EXEC msdb..sp_send_dbmail
+				@recipients= @CellList,
+				@subject = @EmailSubject,
+				@body = @HTML,
+				@body_format = 'HTML'
+			
+		END
+	END
 
-EXEC [dba].dbo.usp_JobStats @InsertFlag=1
-
-DECLARE @JobStatsID INT, @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @HTML NVARCHAR(MAX), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
-
-SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
-
-SET @JobStatsID = (SELECT MAX(JobStatsID) FROM [dba].dbo.JobStatsHistory)
-SELECT @QueryValue = QueryValue,
-	@QueryValue2 = QueryValue2,
-	@EmailList = EmailList,
-	@CellList = CellList	
-FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningJobs'
-
-CREATE TABLE #TEMP (
-	JobStatsHistoryID INT,
-	JobStatsID INT,
-	JobStatsDateStamp DATETIME,
-	JobName NVARCHAR(255),
-	[Enabled] INT,
-	StartTime DATETIME,
-	StopTime DATETIME,
-	AvgRunTime NUMERIC(12,2),
-	LastRunTime NUMERIC(12,2),
-	RunTimeStatus NVARCHAR(30),
-	LastRunOutcome NVARCHAR(20)
-	)
-
-INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
-SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
-FROM [dba].dbo.JobStatsHistory
-WHERE RunTimeStatus = 'LongRunning-NOW'
-AND JobName <> 'dba_LongRunningJobsAlert'
-AND LastRunTime > @QueryValue AND JobStatsID = @JobStatsID
-
-IF EXISTS (SELECT * FROM #TEMP)
-BEGIN
-SET	@HTML =
-	'<html><head><style type="text/css">
-	table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-	th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-	th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-	td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-	</style></head><body>
-	<table width="725"> <tr><th class="header" width="725">Long Running Jobs</th></tr></table>	
-	<table width="725">
-	<tr>  
-	<th width="250">JobName</th>	
-	<th width="100">AvgRunTime</th>  
-	<th width="100">LastRunTime</th>  
-	<th width="150">RunTimeStatus</th>  	
-	<th width="125">LastRunOutcome</th>
-	</tr>'
-SELECT @HTML =  @HTML +   
-	'<tr>
-	<td bgcolor="#E0E0E0" width="250">' + JobName +'</td>
-	<td bgcolor="#E0E0E0" width="100">' + COALESCE(CAST(AvgRunTime AS NVARCHAR), '') +'</td>
-	<td bgcolor="#F0F0F0" width="100">' + CAST(LastRunTime AS NVARCHAR) +'</td>
-	<td bgcolor="#E0E0E0" width="150">' + RunTimeStatus +'</td>	
-	<td bgcolor="#F0F0F0" width="125">' + LastRunOutcome +'</td>		
-	</tr>'
-FROM #TEMP
-
-SELECT @HTML =  @HTML + '</table></body></html>'
-
-SELECT @EmailSubject = 'ACTIVE Long Running JOBS on ' + @ServerName + '! - IMMEDIATE Action Required'
-
-EXEC msdb.dbo.sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
-
-IF @CellList IS NOT NULL
-BEGIN
-
-IF @QueryValue2 IS NOT NULL
-BEGIN
-TRUNCATE TABLE #TEMP
-INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
-SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
-FROM [dba].dbo.JobStatsHistory
-WHERE RunTimeStatus = 'LongRunning-NOW'
-AND JobName <> 'dba_LongRunningJobsAlert'
-AND LastRunTime > @QueryValue2 AND JobStatsID = @JobStatsID
-END
-
-/*TEXT MESSAGE*/
-IF EXISTS (SELECT * FROM #TEMP)
-BEGIN
-	SET	@HTML =
-		'<html><head></head><body><table><tr><td>Name,</td><td>AvgRun,</td><td>LastRun</td></tr>'
-	SELECT @HTML =  @HTML +   
-		'<tr><td>' + COALESCE(CAST(LOWER(LEFT(JobName,17)) AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(AvgRunTime AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(LastRunTime AS NVARCHAR), '') +'</td></tr>'
-	FROM #TEMP
-
-	SELECT @HTML =  @HTML + '</table></body></html>'
-
-	SELECT @EmailSubject = 'JobsPastDue-' + @ServerName
-
-	EXEC msdb.dbo.sp_send_dbmail
-	@recipients= @CellList,
-	@subject = @EmailSubject,
-	@body = @HTML,
-	@body_format = 'HTML'
-
-END
-END
-DROP TABLE #TEMP
-END
+	DROP TABLE #TEMP
+	END
 END
 GO
 
@@ -1824,18 +1970,24 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
-**	04/15/2013		Matthew Monroe			1.11				Now using table T_Alert_Exclusions to optionally ignore some long running queries
 **	04/22/2013		Michael Rounds			1.2					Simplified to use DMV's to gather session information
 **	04/23/2013		Michael Rounds			1.2.1				Adjusted INSERT based on schema changes to QueryHistory, Added Formatted_SQL_Text.
+**	05/02/2013		Michael Rounds			1.2.2				Switched login_time to start_time for determining individual long running queries
+**																Changed TEMP table to use Formatted_SQL_Text instead of SQL_Text
+**																Changed how variables are gathered in AlertSettings and AlertContacts
+**	05/03/2013		Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
+**	05/14/2013		Matthew Monroe			1.2.3				Now using Exclusion entries in AlertSettings to optionally ignore some long running queries
 ***************************************************************************************************************/
 
 BEGIN
 
 
-	INSERT INTO dbo.QueryHistory (DateStamp,Login_Time,RunTime,Session_ID,CPU_Time,Reads,Writes,Logical_Reads,[Host_Name],DBName,Login_Name,Formatted_SQL_Text,SQL_Text,[Program_Name])
+	INSERT INTO dbo.QueryHistory (DateStamp,Login_Time,Start_Time,RunTime,Session_ID,CPU_Time,Reads,Writes,Logical_Reads,[Host_Name],DBName,Login_Name,Formatted_SQL_Text,SQL_Text,[Program_Name])
 	SELECT
-		GETDATE() AS DateStamp,
-		s.login_time,
+	GETDATE() AS DateStamp,
+	s.login_time,
+	s.last_request_start_time as start_time,	
 		(r.total_elapsed_time/1000.0) as RunTime,
 		r.session_id,                                    
 		r.cpu_time,
@@ -1860,11 +2012,13 @@ BEGIN
 
 	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
 
-	SELECT @QueryValue = QueryValue,
-		@QueryValue2 = QueryValue2,
-		@EmailList = EmailList,
-		@CellList = CellList
-	FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningQueries'
+
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningQueries'
+		
+	SELECT @EmailList = EmailList,
+			@CellList = CellList	
+	FROM [dba].dbo.AlertContacts WHERE AlertName = 'LongRunningQueries'
 
 	DECLARE @LastQueryHistoryID INT, @LastCollectionTime DATETIME
 
@@ -1878,6 +2032,7 @@ BEGIN
 		QueryHistoryID INT,
 		DateStamp DATETIME,
 		login_time DATETIME,
+		Start_Time DATETIME,
 		Session_ID SMALLINT,
 		CPU_Time INT,
 		Reads BIGINT,
@@ -1890,21 +2045,24 @@ BEGIN
 		[Program_name] NVARCHAR(128)
 		)
 
-	INSERT INTO #TEMP (QueryHistoryID, DateStamp, Login_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
-	SELECT QueryHistoryID, DateStamp, Login_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name]
-	FROM [dba].dbo.QueryHistory QH
-		LEFT OUTER JOIN [dba].dbo.T_Alert_Exclusions AlertEx 
-			ON AlertEx.Category_Name = 'LongRunningQueries' AND QH.sql_text LIKE AlertEx.FilterLikeClause
-	WHERE (DATEDIFF(ss,Login_Time,DateStamp)) >= @QueryValue
+	INSERT INTO #TEMP (QueryHistoryID, DateStamp, Login_Time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
+		SELECT QueryHistoryID, DateStamp, Login_Time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, Formatted_SQL_Text AS SQL_Text, [program_name]
+		FROM [dba].dbo.QueryHistory QH
+			LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
+			                 WHERE AlertName = 'LongRunningQueries' AND 
+			                       VariableName LIKE 'Exclusion%' AND 
+			                       Not Value Is Null AND Enabled = 1) AlertEx
+				ON QH.Formatted_SQL_Text LIKE AlertEx.Value
+	WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue
 		AND (DATEDIFF(mi,DateStamp,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, DateStamp))
 		AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-		AND SQL_Text NOT LIKE '%BACKUP DATABASE%'
-		AND SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-		AND SQL_Text NOT LIKE '%ALTER INDEX%'
-		AND SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-		AND SQL_Text NOT LIKE '%DBCC%'
-		AND SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
-		AND AlertEx.Category_Name Is Null
+		AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+		AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+		AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+		AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+		AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+		AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+		AND AlertEx.Value Is Null
 
 	IF EXISTS (SELECT * FROM #TEMP)
 	BEGIN
@@ -1930,46 +2088,49 @@ BEGIN
 			</tr>'
 		SELECT @HTML =  @HTML +   
 			'<tr>
-			<td bgcolor="#E0E0E0" width="100">' + CAST(collection_time AS NVARCHAR) +'</td>	
-			<td bgcolor="#F0F0F0" width="100">' + CAST(DATEDIFF(ss,start_time,collection_time) AS NVARCHAR) +'</td>
+			<td bgcolor="#E0E0E0" width="100">' + CAST(DateStamp AS NVARCHAR) +'</td>	
+			<td bgcolor="#F0F0F0" width="100">' + CAST(DATEDIFF(ss,Start_Time,DateStamp) AS NVARCHAR) +'</td>
 			<td bgcolor="#E0E0E0" width="50">' + CAST(Session_id AS NVARCHAR) +'</td>
 			<td bgcolor="#F0F0F0" width="75">' + CAST([DBName] AS NVARCHAR) +'</td>	
 			<td bgcolor="#E0E0E0" width="100">' + CAST(login_name AS NVARCHAR) +'</td>	
-			<td bgcolor="#F0F0F0" width="475">' + LEFT(sql_text,100) +'</td>			
+			<td bgcolor="#F0F0F0" width="475">' + LEFT(SQL_Text,100) +'</td>			
 			</tr>'
 		FROM #TEMP
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
-		SELECT @EmailSubject = 'Long Running QUERIES on ' + @ServerName + '!'
+		SELECT @EmailSubject = '[dba]Long Running QUERIES on ' + @ServerName + '!'
 
-		EXEC msdb.dbo.sp_send_dbmail
+		EXEC msdb..sp_send_dbmail
 			@recipients= @EmailList,
 			@subject = @EmailSubject,
 			@body = @HTML,
 			@body_format = 'HTML'
 
-		IF IsNull(@CellList, '') <> ''
+		IF COALESCE(@CellList, '') <> ''
 		BEGIN
 
 			IF IsNull(@QueryValue2, '') <> ''
 			BEGIN
 				TRUNCATE TABLE #TEMP
-				INSERT INTO #TEMP (QueryHistoryID, DateStamp, login_time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
-				SELECT QueryHistoryID, DateStamp, login_time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name]
+				INSERT INTO #TEMP (QueryHistoryID, DateStamp, login_time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
+				SELECT QueryHistoryID, DateStamp, login_time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, Formatted_SQL_Text AS SQL_Text, [program_name]
 				FROM [dba].dbo.QueryHistory QH
-					LEFT OUTER JOIN [dba].dbo.T_Alert_Exclusions AlertEx 
-						ON AlertEx.Category_Name = 'LongRunningQueries' AND QH.sql_text LIKE AlertEx.FilterLikeClause
-				WHERE (DATEDIFF(ss,Login_Time,DateStamp)) >= @QueryValue2
+					LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
+					                 WHERE AlertName = 'LongRunningQueries' AND 
+					                       VariableName LIKE 'Exclusion%' AND 
+					                       Not Value Is Null AND Enabled = 1) AlertEx
+						ON QH.Formatted_SQL_Text LIKE AlertEx.Value
+				WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue2
 					AND (DATEDIFF(mi,DateStamp,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, DateStamp))
 					AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-					AND SQL_Text NOT LIKE '%BACKUP DATABASE%'
-					AND SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-					AND SQL_Text NOT LIKE '%ALTER INDEX%'
-					AND SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-					AND SQL_Text NOT LIKE '%DBCC%'
-					AND SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
-					AND AlertEx.Category_Name Is Null
+					AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+					AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+					AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+					AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+					AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+					AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+					AND AlertEx.Value Is Null
 			END
 
 			/*TEXT MESSAGE*/
@@ -1978,14 +2139,14 @@ BEGIN
 				SET	@HTML =
 					'<html><head></head><body><table><tr><td>Time,</td><td>SPID,</td><td>Login</td></tr>'
 				SELECT @HTML =  @HTML +   
-					'<tr><td>' + CAST(DATEDIFF(ss,Login_Time,DateStamp) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
+					'<tr><td>' + CAST(DATEDIFF(ss,Start_Time,DateStamp) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
 				FROM #TEMP
 
 				SELECT @HTML =  @HTML + '</table></body></html>'
 
-				SELECT @EmailSubject = 'LongQueries-' + @ServerName
+				SELECT @EmailSubject = '[dba]LongQueries-' + @ServerName
 
-				EXEC msdb.dbo.sp_send_dbmail
+				EXEC msdb..sp_send_dbmail
 					@recipients= @CellList,
 					@subject = @EmailSubject,
 					@body = @HTML,
@@ -2377,8 +2538,7 @@ GO
 ALTER PROC [dbo].[usp_CheckFilesWork]
 (
 	@CheckTempDB BIT = 0,
-	@WarnGrowingLogFiles BIT = 0,
-	@MinimumFileSizeMB int = 200				-- Log files smaller than this threshold will be ignored
+	@WarnGrowingLogFiles BIT = 0
 )
 AS
 
@@ -2389,8 +2549,14 @@ AS
 **  
 **  Date			Author					Version				Revision  
 **  ----------		--------------------	-------------		-------------
-**	04/17/2013		Matthew Monroe			0.9					Re-factored code out of usp_CheckFiles
 **	04/25/2013		Matthew Monroe			1.0					Re-factored code out of usp_CheckFiles
+**	04/26/2013		Michael Rounds			1.1					Removed "t2" from DELETE to #TEMP3, causing the error 
+**																	"The multi-part identifier "t2.FilePercentEmpty" could not be bound"
+**	05/03/2013		Michael Rounds			1.2					Removed Parameter MinimumFileSizeMB. Value is now collected from AlertSettings table
+**																Changed SELECT from #TEMP to FileStatsHistory since it doesn't exist anymore
+**					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
+**	05/14/2013		Matthew Monroe			1.2.1				Now treating @MinFileSizeMB as 0 MB if null
 ***************************************************************************************************************/
 
 BEGIN
@@ -2404,18 +2570,21 @@ BEGIN
 			@CellList NVARCHAR(255), 
 			@ServerName NVARCHAR(128), 
 			@EmailSubject NVARCHAR(100), 
-			@ReportTitle NVARCHAR(128)
+			@ReportTitle NVARCHAR(128),
+			@MinFileSizeMB INT
 	
 	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
 	
 	/*Grab AlertSettings for the specified DB category*/
-	SELECT @QueryValue = QueryValue,
-			@QueryValue2 = QueryValue2,
-			@EmailList = EmailList,
-			@CellList = CellList
-	FROM [dba].dbo.AlertSettings 
-	WHERE @CheckTempDB = 0 AND Name = 'LogFiles' OR
-	      @CheckTempDB = 1 AND Name = 'TempDB'
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' 
+			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' 
+			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
+	SELECT @MinFileSizeMB = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'MinFileSizeMB' 
+			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
+	SELECT @EmailList = EmailList,
+			@CellList = CellList	
+	FROM [dba].dbo.AlertContacts WHERE @CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB'
 
 	/*Populate TEMPLogFiles table with Already Grown Log Files or Already Grown TEMPDB files*/
 	CREATE TABLE #TEMPLogFiles (
@@ -2428,16 +2597,16 @@ BEGIN
 		)
 
 	-- Find log files that have grown
-	-- and are at least @MinimumFileSizeMB in size
+	-- and are at least @MinFileSizeMB in size
 	INSERT INTO #TEMPLogFiles
 	SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
-	FROM #TEMP t
-	JOIN #TEMP t2
+	FROM [dba].dbo.FileStatsHistory t
+	JOIN [dba].dbo.FileStatsHistory t2
 		ON t.[DBName] = t2.[DBName] 
 		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
-	WHERE t2.FileMBSize > @MinimumFileSizeMB
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM [dba].dbo.FileStatsHistory) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
+	WHERE t2.FileMBSize > IsNull(@MinFileSizeMB, 0)
 	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
 	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
@@ -2484,13 +2653,13 @@ BEGIN
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
 		IF @CheckTempDB = 0		
-			SELECT @EmailSubject = 'Log files have Auto-Grown on ' + @ServerName + '!'
+			SELECT @EmailSubject = '[dba]Log files have Auto-Grown on ' + @ServerName + '!'
 		ELSE
-			SELECT @EmailSubject = 'TempDB has Auto-Grown on ' + @ServerName + '!'
+			SELECT @EmailSubject = '[dba]TempDB has Auto-Grown on ' + @ServerName + '!'
 
 		IF COALESCE(@EmailList, '') <> ''
 		BEGIN
-			EXEC msdb.dbo.sp_send_dbmail
+			EXEC msdb..sp_send_dbmail
 			@recipients= @EmailList,
 			@subject = @EmailSubject,
 			@body = @HTML,
@@ -2508,11 +2677,11 @@ BEGIN
 			SELECT @HTML =  @HTML + '</table></body></html>'
 
 			IF @CheckTempDB = 0		
-				SELECT @EmailSubject = 'LDFAutoGrowth-' + @ServerName
+				SELECT @EmailSubject = '[dba]LDFAutoGrowth-' + @ServerName
 			Else
-				SELECT @EmailSubject = 'TempDBAutoGrowth-' + @ServerName
+				SELECT @EmailSubject = '[dba]TempDBAutoGrowth-' + @ServerName
 
-			EXEC msdb.dbo.sp_send_dbmail
+			EXEC msdb..sp_send_dbmail
 			@recipients= @CellList,
 			@subject = @EmailSubject,
 			@body = @HTML,
@@ -2534,17 +2703,17 @@ BEGIN
 		)
 	
 	-- Find log files that are less than @QueryValue percent empty	
-	-- and are at least @MinimumFileSizeMB in size
+	-- and are at least @MinFileSizeMB in size
 	INSERT INTO #TEMP3
 	SELECT t.[DBName],t.[Filename],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
-	FROM #TEMP t
-	JOIN #TEMP t2
+	FROM [dba].dbo.FileStatsHistory t
+	JOIN [dba].dbo.FileStatsHistory t2
 		ON t.[DBName] = t2.[DBName] 
 		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM #TEMP) 
-		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM #TEMP)
+		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM [dba].dbo.FileStatsHistory) 
+		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
 	WHERE t2.FilePercentEmpty < @QueryValue
-	      AND t2.FileMBSize > @MinimumFileSizeMB
+	      AND t2.FileMBSize > IsNull(@MinFileSizeMB, 0)
 	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
 	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize
@@ -2562,7 +2731,7 @@ BEGIN
 		AND a.[Filename] = b.[Filename]
 	
 	/*Start of Growing Log Files or Growing TempDB*/
-	IF EXISTS (SELECT * FROM #TEMP3) And @WarnGrowingLogFiles <> 0
+	IF EXISTS (SELECT * FROM #TEMP3) AND @WarnGrowingLogFiles <> 0
 	BEGIN
 		IF @CheckTempDB = 0		
 			SET @ReportTitle = 'Growing Log Files'
@@ -2598,13 +2767,13 @@ BEGIN
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
 		IF @CheckTempDB = 0		
-			SELECT @EmailSubject = 'Log files are about to Auto-Grow on ' + @ServerName + '!'
+			SELECT @EmailSubject = '[dba]Log files are about to Auto-Grow on ' + @ServerName + '!'
 		ELSE
-			SELECT @EmailSubject = 'TempDB is growing on ' + @ServerName + '!'
+			SELECT @EmailSubject = '[dba]TempDB is growing on ' + @ServerName + '!'
 
 		IF COALESCE(@EmailList, '') <> ''
 		BEGIN
-			EXEC msdb.dbo.sp_send_dbmail
+			EXEC msdb..sp_send_dbmail
 			@recipients= @EmailList,
 			@subject = @EmailSubject,
 			@body = @HTML,
@@ -2618,7 +2787,7 @@ BEGIN
 			BEGIN
 				-- Remove extra entries from #TEMP3 by filtering on @QueryValue2
 				DELETE FROM #TEMP3
-				WHERE t2.FilePercentEmpty > @QueryValue2
+				WHERE FilePercentEmpty > @QueryValue2
 			END
 
 			/*TEXT MESSAGE*/
@@ -2633,7 +2802,7 @@ BEGIN
 					FROM #TEMP3
 					SELECT @HTML =  @HTML + '</table></body></html>'
 
-					SELECT @EmailSubject = 'LDFGrowing-' + @ServerName
+					SELECT @EmailSubject = '[dba]LDFGrowing-' + @ServerName
 
 				END
 				ELSE BEGIN
@@ -2645,10 +2814,10 @@ BEGIN
 
 					SELECT @HTML =  @HTML + '</table></body></html>'
 
-					SELECT @EmailSubject = 'TempDBGrowing-' + @ServerName
+					SELECT @EmailSubject = '[dba]TempDBGrowing-' + @ServerName
 				END
 				
-				EXEC msdb.dbo.sp_send_dbmail
+				EXEC msdb..sp_send_dbmail
 				@recipients= @CellList,
 				@subject = @EmailSubject,
 				@body = @HTML,
@@ -2691,9 +2860,10 @@ AS
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **  06/10/2012		Michael Rounds			1.1					Updated to use new FileStatsHistory table
 **	08/31/2012		Michael Rounds			1.2					Changed VARCHAR to NVARCHAR
-**	04/15/2013		Matthew Monroe			1.2.1				Now ignoring log files less than 200 MB in size.  Now also looking for '[tempdb]' and '[model]' in addition to 'tempdb' and 'model'.  Fixed bug that was performing a text compare of #TEMP.FileMBSize
 **	04/17/2013		Matthew Monroe			1.2.1				Added database names "[model]" and "[tempdb]"
 **	04/25/2013		Matthew Monroe			1.3					Factored out duplicate code into usp_CheckFilesWork
+**	05/03/2013		Michael Rounds			1.3.1				Removed param @MinimumFileSizeMB - value is collected from AlertSettings now
+**																Removed DECLARE and other SQL not being used anymore
 ***************************************************************************************************************/
 
 BEGIN
@@ -2705,25 +2875,11 @@ BEGIN
 	/*Populate File Stats tables*/
 	EXEC [dba].dbo.usp_FileStats @InsertFlag=1
 
-	DECLARE @FileStatsID INT, @QueryValue INT, @QueryValue2 INT, @HTML NVARCHAR(MAX), @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(128), @EmailSubject NVARCHAR(100)
-
-	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
-
-	SET @FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
-
-	/*Populate Main TEMP table*/
-	SELECT FileStatsHistoryID, FileStatsID, FileStatsDateStamp, [DBName], [FileName], DriveLetter, FileMBSize, FileGrowth, FileMBUsed, FileMBEmpty, FilePercentEmpty
-	INTO #TEMP
-	FROM [dba].dbo.FileStatsHistory
-	WHERE FileStatsID IN (@FileStatsID,(@FileStatsID -1 ))
-
 	/* LOG FILES */
-	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0, @MinimumFileSizeMB=0
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0
 
 	/* TEMP DB */
-	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1, @MinimumFileSizeMB=0
-	
-	DROP TABLE #TEMP
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1
 
 END
 GO
@@ -3477,25 +3633,25 @@ BEGIN
 
 DECLARE @QueryValue INT
 
-SET @QueryValue = (SELECT QueryValue FROM [dba].dbo.AlertSettings (nolock) WHERE Name = 'LongRunningQueries')
+SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningQueries'
 
 SELECT
 DateStamp AS DateStamp,
-CAST(DATEDIFF(ss,Login_Time,DateStamp) AS INT) AS [ElapsedTime(ss)],
+CAST(DATEDIFF(ss,Start_Time,DateStamp) AS INT) AS [ElapsedTime(ss)],
 Session_ID AS Session_ID,
 [DBName] AS [DBName],	
 Login_Name AS Login_Name,
-SQL_Text AS SQL_Text
+Formatted_SQL_Text AS SQL_Text
 FROM [dba].dbo.QueryHistory (nolock) 
-WHERE (DATEDIFF(ss,Login_Time,DateStamp)) >= @QueryValue 
+WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue 
 AND (DATEDIFF(dd,DateStamp,GETDATE())) <= @DateRangeInDays
 AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-AND SQL_Text NOT LIKE '%BACKUP DATABASE%'
-AND SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-AND SQL_Text NOT LIKE '%ALTER INDEX%'
-AND SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-AND SQL_Text NOT LIKE '%DBCC%'
-AND SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
 ORDER BY DateStamp DESC
 
 END
@@ -3602,21 +3758,22 @@ BEGIN
 END
 GO
 
-ALTER PROCEDURE [dbo].[rpt_HealthReport] (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @IncludePerfStats BIT = 0, @EmailFlag BIT = 1, @Condensed BIT = 1)
+ALTER PROCEDURE [dbo].[rpt_HealthReport] (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @EmailFlag BIT = 1)
 AS
+
 /**************************************************************************************************************
 **  Purpose: This procedure generates and emails (using DBMail) an HMTL formatted health report of the server
 **
 **	EXAMPLE USAGE:
 **
 **	SEND EMAIL WITHOUT RETAINING DATA
-**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 0, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 0
 **	
 **	TO POPULATE THE TABLES
-**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 1, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = '<email address>', @CC ='<email address>', @InsertFlag = 1
 **
 **	PULL EMAIL ADDRESSES FROM ALERTSETTINGS TABLE:
-**		EXEC dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1, @IncludePerfStats = 1
+**		EXEC dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1
 **
 **  Revision History  
 **  
@@ -3661,10 +3818,18 @@ AS
 **																Now ignoring additional error log entries
 **	04/30/2013		Matthew Monroe			2.3.7.3				Now only showing disks with less than 20 GB of free space when @Condensed = 1
 **																Now reporting databases that have not had a full backup in the last 8 days
-**	05/07/2013		Matthew Monroe			2.3.7.4				Removed Sum() statements from query populating #DEADLOCKINFO since this could result in non-numeric values being passed to the DB_NAME() funciton
+**	05/02/2013		Michael Rounds								Fixed HTML formatting in Job Stats section
+**																Changed Job Stats section - CREATE #TEMPJOB instead of INSERT INTO
+**																Changed LongRunningQueries section to use Formatted_SQL_Text instead of SQL_Text
+**																Added variables for updated AlertSettings table for turning on/off (or reducing) sections of the HealthReport
+**																	and removed @IncludePerfStats parameter (now in the table as ShowPerfStats and ShowCPUStats)
+**	05/03/2013		Volker.Bachmann								Added "[dba]" to the start of all email subject lines
+**						from SSC
+**	05/07/2013		Matthew Monroe			2.3.7.4				Removed Sum() statements from query populating #DEADLOCKINFO since this could result in non-numeric values being passed to the DB_NAME() function
 **																Added WHERE clause to query populating #DEADLOCKINFO
 **																Now filtering on ProcessInfo and [text] when deleting from #ERRORLOG
 **																Now reporting, at most 250 deadlock events and 250 error events
+**	05/07/2013		Matthew Monroe			2.3.7.5				Now looking up MaxDeadLockRows and MaxErrorLogRows from the AlertSettings table
 ***************************************************************************************************************/
     
 BEGIN
@@ -3703,15 +3868,19 @@ BEGIN
 			@WindowSizeDays float,
 			@TableTitle NVARCHAR(128),
 			@TotalRows int,
-			@MaxRows int
-	
-	DECLARE @FullDBList BIT = 1,
-	        @FullFileInfo BIT = 1,
-	        @HideEmpty BIT = 0,
-	        @FullJobInfo BIT = 1,
-	        @ShowSchemaChanges BIT = 1,
-	        @ShowBackups BIT = 1,
-	        @ShowAllDisks BIT = 1
+			@MaxDeadLockRows int,
+			@MaxErrorLogRows int,
+			@MinLogFileSizeMB int,
+			@ShowAllDisks BIT,
+			@ShowFullDBList BIT,
+			@ShowFullFileInfo BIT,
+			@ShowFullJobInfo BIT,
+			@ShowSchemaChanges BIT,
+			@ShowBackups BIT,
+			@ShowLogBackups bit,
+			@ShowPerfStats BIT,
+			@ShowCPUStats BIT,
+			@ShowEmptySections BIT
 	
 	/* STEP 1: GATHER DATA */
 	IF @@Language <> 'us_english'
@@ -3719,18 +3888,22 @@ BEGIN
 		SET LANGUAGE us_english
 	END
 	
-	IF COALESCE(@Condensed, 0) > 0
-	BEGIN
-		SET @FullDBList = 0
-	    SET @FullFileInfo = 0
-	    SET @HideEmpty = 1
-	    SET @FullJobInfo = 0
-	    SET @ShowSchemaChanges = 0
-		SET @ShowBackups = 0
-		SET @ShowAllDisks = 0
-	END
+	SELECT @ShowAllDisks = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowAllDisks'
+	SELECT @ShowFullDBList = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowFullDBList'
+	SELECT @ShowFullFileInfo = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowFullFileInfo'
+	SELECT @ShowFullJobInfo = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowFullJobInfo'
+	SELECT @ShowSchemaChanges = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowSchemaChanges'
+	SELECT @ShowBackups = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowBackups'
+	SELECT @ShowLogBackups = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowLogBackups'
+	SELECT @ShowCPUStats = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowCPUStats'
+	SELECT @ShowPerfStats = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowPerfStats'
+	SELECT @ShowEmptySections = [Enabled] FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowEmptySections'
 	
-	SELECT @ReportTitle = 'Database Health Report ('+ CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName')) + ')'
+	SELECT @MaxDeadLockRows = Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxDeadlockRows'
+	SELECT @MaxErrorLogRows = Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxErrorLogRows'
+	SELECT @MinLogFileSizeMB = Cast(Value as int) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MinLogFileSizeMB'
+
+	SELECT @ReportTitle = '[dba]Database Health Report ('+ CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName')) + ')'
 	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName'))
 	
 	CREATE TABLE #SYSTEMMEMORY (SystemMemory NUMERIC(12,2))
@@ -3952,21 +4125,21 @@ BEGIN
 		Set @WindowSizeDays = 1
 	END
 	
-	SELECT @LongQueriesQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'LongRunningQueries'
-	SELECT @BlockingQueryValue = COALESCE(QueryValue,0) FROM [dba].dbo.AlertSettings WHERE Name = 'BlockingAlert'	
+	SELECT @LongQueriesQueryValue = COALESCE(CAST(Value AS INT),0) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningQueries'
+	SELECT @BlockingQueryValue = COALESCE(CAST(Value AS INT),0) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'BlockingAlert'
 	
 	IF @Recepients IS NULL
 	BEGIN
-		SELECT @Recepients = EmailList FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
+		SELECT @Recepients = EmailList FROM [dba].dbo.AlertContacts WHERE AlertName = 'HealthReport'
 	END
 	
 	IF @CC IS NULL
 	BEGIN
-		SELECT @CC = EmailList2 FROM [dba].dbo.AlertSettings WHERE Name = 'HealthReport'
+		SELECT @CC = EmailList2 FROM [dba].dbo.AlertContacts WHERE AlertName = 'HealthReport'
 	END
 	
 	/* PerfStats */
-	IF @IncludePerfStats = 1
+	IF @ShowPerfStats = 1
 	BEGIN
 		INSERT INTO #PERFSTATS (PerfStatsHistoryID, BufferCacheHitRatio, PageLifeExpectency, BatchRequestsPerSecond, CompilationsPerSecond, ReCompilationsPerSecond, 
 			UserConnections, LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate)
@@ -3974,7 +4147,10 @@ BEGIN
 			LockWaitsPerSecond, PageSplitsPerSecond, ProcessesBlocked, CheckpointPagesPerSecond, StatDate
 		FROM [dba].dbo.PerfStatsHistory WHERE StatDate >= GETDATE() - @WindowSizeDays
 		AND DATEPART(mi,StatDate) = 0
-	
+	END
+
+	IF @ShowCPUStats = 1
+	BEGIN
 		INSERT INTO #CPUSTATS (CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp)
 		SELECT CPUStatsHistoryID, SQLProcessPercent, SystemIdleProcessPercent, OtherProcessPerecnt, DateStamp
 		FROM [dba].dbo.CPUStatsHistory WHERE DateStamp >= GETDATE() - @WindowSizeDays
@@ -3983,20 +4159,24 @@ BEGIN
 	
 	/* LongQueries */
 	INSERT INTO #LONGQUERIES (DateStamp, [ElapsedTime(ss)], Session_ID, [DBName], Login_Name, SQL_Text)
-	SELECT MAX(DateStamp) AS DateStamp,MAX(CAST(DATEDIFF(ss,Login_Time,DateStamp) AS INT)) AS [ElapsedTime(ss)],Session_ID,
-		[DBName] AS [DBName],Login_Name,SQL_Text
-	FROM [dba].dbo.QueryHistory
-	WHERE (DATEDIFF(ss,Login_Time,DateStamp)) >= @LongQueriesQueryValue 
+	SELECT MAX(DateStamp) AS DateStamp,MAX(CAST(DATEDIFF(ss,Start_Time,DateStamp) AS INT)) AS [ElapsedTime(ss)],Session_ID,
+		[DBName] AS [DBName],Login_Name,Formatted_SQL_Text AS SQL_Text
+	FROM [dba].dbo.QueryHistory QH
+		LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
+					                 WHERE AlertName = 'LongRunningQueries' AND 
+					                       VariableName LIKE 'Exclusion%' AND 
+					                       Not Value Is Null AND Enabled = 1) AlertEx
+						ON QH.Formatted_SQL_Text LIKE AlertEx.Value
+	WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @LongQueriesQueryValue 
 		AND (DATEDIFF(dd,DateStamp,@StartDate)) < 1
 		AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-		AND SQL_Text NOT LIKE '%BACKUP DATABASE%'
-		AND SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-		AND SQL_Text NOT LIKE '%ALTER INDEX%'
-		AND SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-		AND SQL_Text NOT LIKE '%DBCC%'
-		AND SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
-		AND SQL_Text NOT LIKE '%sqlbackup%'
-	GROUP BY Session_ID, [DBName], Login_Name, SQL_Text
+		AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+		AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+		AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+		AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+		AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+		AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+	GROUP BY Session_ID, [DBName], Login_Name, Formatted_SQL_Text
 	
 	/* Blocking */
 	INSERT INTO #BLOCKING (DateStamp,[DBName],Blocked_Spid,Blocking_Spid,Blocked_Login,Blocked_Waittime_Seconds,Blocked_SQL_Text,Offending_Login,Offending_SQL_Text)
@@ -4006,36 +4186,39 @@ BEGIN
 	AND Blocked_Waittime_Seconds >= @BlockingQueryValue
 	
 	/* SchemaChanges */
-	CREATE TABLE #TEMP ([DBName] NVARCHAR(128), [Status] INT)
-	
-	INSERT INTO #TEMP ([DBName], [Status])
-	SELECT [DBName], 0
-	FROM [dba].dbo.DatabaseSettings WHERE SchemaTracking = 1 AND [DBName] NOT LIKE 'AdventureWorks%'
-	
-	SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
-	
-	WHILE @DBName IS NOT NULL And @ShowSchemaChanges = 1
+	IF @ShowSchemaChanges = 1
 	BEGIN
+		CREATE TABLE #TEMP ([DBName] NVARCHAR(128), [Status] INT)
 		
-		SET @SQL = 
-		
-		'SELECT ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName]
-		FROM '+ '[' + @DBName + ']' +'.dbo.SchemaChangeLog
-		WHERE CreateDate >'''+CONVERT(NVARCHAR(30),@StartDate,121)+'''
-		AND SQLEvent <> ''UPDATE_STATISTICS''
-		ORDER BY CreateDate DESC'
-		
-		INSERT INTO #SCHEMACHANGES (ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName])
-		EXEC(@SQL)
-		
-		UPDATE #TEMP
-		SET [Status] = 1
-		WHERE [DBName] = @DBName
+		INSERT INTO #TEMP ([DBName], [Status])
+		SELECT [DBName], 0
+		FROM [dba].dbo.DatabaseSettings WHERE SchemaTracking = 1 AND [DBName] NOT LIKE 'AdventureWorks%'
 		
 		SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
 		
+		WHILE @DBName IS NOT NULL
+		BEGIN
+			
+			SET @SQL = 
+			
+			'SELECT ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName]
+			FROM '+ '[' + @DBName + ']' +'.dbo.SchemaChangeLog
+			WHERE CreateDate >'''+CONVERT(NVARCHAR(30),@StartDate,121)+'''
+			AND SQLEvent <> ''UPDATE_STATISTICS''
+			ORDER BY CreateDate DESC'
+			
+			INSERT INTO #SCHEMACHANGES (ObjectName,CreateDate,LoginName,ComputerName,SQLEvent,[DBName])
+			EXEC(@SQL)
+			
+			UPDATE #TEMP
+			SET [Status] = 1
+			WHERE [DBName] = @DBName
+			
+			SET @DBName = (SELECT TOP 1 [DBName] FROM #TEMP WHERE [Status] = 0)
+			
+		END
+		DROP TABLE #TEMP
 	END
-	DROP TABLE #TEMP
 	
 	/* FileStats */
 	CREATE TABLE #LOGSPACE (
@@ -4172,10 +4355,10 @@ BEGIN
 			GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
 	ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
 	
-	-- Look for databases where the log file is larger than the primary database file and the log file is larger than 100 MB
+	-- Look for databases where the log file is larger than the primary database file and the log file is larger than @MinLogFileSizeMB
 	UPDATE b
 	SET b.LargeLDF = 
-		CASE WHEN b.FileMBSize > a.FileMBSize AND b.FileMBSize > 100 THEN 1
+		CASE WHEN b.FileMBSize > a.FileMBSize AND b.FileMBSize > IsNull(@MinLogFileSizeMB, 0) THEN 1
 		ELSE 2 
 		END
 	FROM #FILESTATS a
@@ -4242,52 +4425,66 @@ BEGIN
 	FROM #FILESTATS a
 	WHERE COALESCE(a.[FileGroup],'') = ''
 	
-	-- Find the FileStatsDateStamp that corresponds to 24 hours before the most recent entry in FileStatsHistory
-	-- Note that we use 1470 instead of 1440 to allow for the entry from 24 hours ago to be slightly more than 24 hours old
-	
-	SELECT @MaxFileStatsDateStamp = MAX(FileStatsDateStamp) FROM [dba].dbo.FileStatsHistory
-
-	SELECT @MinFileStatsDateStamp = MIN(FileStatsDateStamp) FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp >= DateAdd(minute, -1470, @MaxFileStatsDateStamp)
-
-	IF @MinFileStatsDateStamp IS NOT NULL
+	IF @ShowFullFileInfo = 1
 	BEGIN
-		-- Update the stats in #FILESTATS to reflect the change over the last 24 hours 
-		-- (instead of the change since the Sql Server service last started)
-		--
-		IF @ServerStartDate < @MinFileStatsDateStamp
+	
+		-- Find the FileStatsDateStamp that corresponds to 24 hours before the most recent entry in FileStatsHistory
+		-- Note that we use 1470 instead of 1440 to allow for the entry from 24 hours ago to be slightly more than 24 hours old
+		
+		SELECT @MaxFileStatsDateStamp = MAX(FileStatsDateStamp) FROM [dba].dbo.FileStatsHistory
+	
+		SELECT @MinFileStatsDateStamp = MIN(FileStatsDateStamp) FROM [dba].dbo.FileStatsHistory WHERE FileStatsDateStamp >= DateAdd(minute, -1470, @MaxFileStatsDateStamp)
+	
+		IF @MinFileStatsDateStamp IS NOT NULL
 		BEGIN
-			UPDATE c
-			SET c.NumberReads = d.NumberReads,
-				c.KBytesRead = d.KBytesRead,
-				c.NumberWrites = d.NumberWrites,
-				c.KBytesWritten = d.KBytesWritten,
-				c.IoStallReadMS = d.IoStallReadMS,
-				c.IoStallWriteMS = d.IoStallWriteMS,
-				c.Cum_IO_GB = d.Cum_IO_GB
-			FROM #FILESTATS c
-			LEFT OUTER
-			JOIN (SELECT
-					b.dbname,
-					b.[FileName],
-					(b.NumberReads - COALESCE(a.NumberReads,0)) AS NumberReads,
-					(b.KBytesRead - COALESCE(a.KBytesRead,0)) AS KBytesRead,
-					(b.NumberWrites - COALESCE(a.NumberWrites,0)) AS NumberWrites,
-					(b.KBytesWritten - COALESCE(a.KBytesWritten,0)) AS KBytesWritten,
-					(b.IoStallReadMS - COALESCE(a.IoStallReadMS,0)) AS IoStallReadMS,
-					(b.IoStallWriteMS - COALESCE(a.IoStallWriteMS,0)) AS IoStallWriteMS,
-					(b.Cum_IO_GB - COALESCE(a.Cum_IO_GB,0)) AS Cum_IO_GB
-					FROM #FILESTATS b
-					LEFT OUTER
-					JOIN [dba].dbo.FileStatsHistory a
-						ON a.dbname = b.dbname 
-						AND a.[FileName] = b.[FileName]
-						AND a.FileStatsDateStamp = @MinFileStatsDateStamp) d
-				ON c.dbname = d.dbname 
-				AND c.[FileName] = d.[FileName]
+			-- Update the stats in #FILESTATS to reflect the change over the last 24 hours 
+			-- (instead of the change since the Sql Server service last started)
+			--
+			IF @ServerStartDate < @MinFileStatsDateStamp
+			BEGIN
+				UPDATE c
+				SET c.NumberReads = d.NumberReads,
+					c.KBytesRead = d.KBytesRead,
+					c.NumberWrites = d.NumberWrites,
+					c.KBytesWritten = d.KBytesWritten,
+					c.IoStallReadMS = d.IoStallReadMS,
+					c.IoStallWriteMS = d.IoStallWriteMS,
+					c.Cum_IO_GB = d.Cum_IO_GB
+				FROM #FILESTATS c
+				LEFT OUTER
+				JOIN (SELECT
+						b.dbname,
+						b.[FileName],
+						(b.NumberReads - COALESCE(a.NumberReads,0)) AS NumberReads,
+						(b.KBytesRead - COALESCE(a.KBytesRead,0)) AS KBytesRead,
+						(b.NumberWrites - COALESCE(a.NumberWrites,0)) AS NumberWrites,
+						(b.KBytesWritten - COALESCE(a.KBytesWritten,0)) AS KBytesWritten,
+						(b.IoStallReadMS - COALESCE(a.IoStallReadMS,0)) AS IoStallReadMS,
+						(b.IoStallWriteMS - COALESCE(a.IoStallWriteMS,0)) AS IoStallWriteMS,
+						(b.Cum_IO_GB - COALESCE(a.Cum_IO_GB,0)) AS Cum_IO_GB
+						FROM #FILESTATS b
+						LEFT OUTER
+						JOIN [dba].dbo.FileStatsHistory a
+							ON a.dbname = b.dbname 
+							AND a.[FileName] = b.[FileName]
+							AND a.FileStatsDateStamp = @MinFileStatsDateStamp) d
+					ON c.dbname = d.dbname 
+					AND c.[FileName] = d.[FileName]
+			END
 		END
 	END
 	
 	/* JobStats */
+	CREATE TABLE #TEMPJOB (
+		Job_ID NVARCHAR(255),
+		Name NVARCHAR(128),
+		Category NVARCHAR(128),
+		[Enabled] BIT,
+		Last_Run_Outcome INT,
+		Last_Run_Date NVARCHAR(20)
+		)
+
+	INSERT INTO #TEMPJOB (Job_ID,Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
 	SELECT sj.job_id, 
 			sj.name,
 			sc.name AS Category,
@@ -4296,7 +4493,6 @@ BEGIN
 			(SELECT MAX(run_date) 
 				FROM msdb..sysjobhistory(nolock) sjh 
 				WHERE sjh.job_id = sj.job_id) AS last_run_date
-	INTO #TEMPJOB
 	FROM msdb..sysjobs(nolock) sj
 	JOIN msdb..sysjobservers(nolock) sjs
 		ON sjs.job_id = sj.job_id
@@ -4308,8 +4504,8 @@ BEGIN
 		t.name AS JobName,
 		t.Category,
 		t.[Enabled],
-		COALESCE(MAX(ja.start_execution_date),0) AS [StartTime],
-		COALESCE(MAX(ja.stop_execution_date),0) AS [StopTime],
+		MAX(ja.start_execution_date) AS [StartTime],
+		MAX(ja.stop_execution_date) AS [StopTime],
 		COALESCE(AvgRunTime,0) AS AvgRunTime,
 		CASE 
 			WHEN ja.stop_execution_date IS NULL THEN COALESCE(DATEDIFF(ss,ja.start_execution_date,GETDATE()),0)
@@ -4334,10 +4530,10 @@ BEGIN
 		END AS [LastRunOutcome]
 	FROM #TEMPJOB AS t
 	LEFT OUTER
-	JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb.dbo.sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
+	JOIN (SELECT MAX(session_id) as session_id,job_id FROM msdb..sysjobactivity(nolock) WHERE run_requested_date IS NOT NULL GROUP BY job_id) AS ja2
 		ON t.job_id = ja2.job_id
 	LEFT OUTER
-	JOIN msdb.dbo.sysjobactivity(nolock) ja
+	JOIN msdb..sysjobactivity(nolock) ja
 		ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
 	LEFT OUTER 
 	JOIN (SELECT job_id,
@@ -4535,6 +4731,7 @@ BEGIN
 	
 	CREATE TABLE #ERRORLOG (
 		ID INT IDENTITY(1,1) NOT NULL
+			CONSTRAINT PK_ERRORLOGTEMP
 				PRIMARY KEY CLUSTERED (ID),
 		LogDate DATETIME, 
 		ProcessInfo NVARCHAR(100), 
@@ -4590,7 +4787,7 @@ BEGIN
 		
 		DELETE FROM #DEADLOCKINFO
 		WHERE (DeadlockDate <  CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)) - @WindowSizeDays)
-		OR (DeadlockDate >= CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)))
+		   OR (DeadlockDate >= CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)))
 		
 	END
 	
@@ -4606,6 +4803,7 @@ BEGIN
 	/* BackupStats */
 	CREATE TABLE #BACKUPS (
 		ID INT IDENTITY(1,1) NOT NULL
+			CONSTRAINT PK_BACKUPS
 				PRIMARY KEY CLUSTERED (ID),
 		[DBName] NVARCHAR(128),
 		[Type] NVARCHAR(50),
@@ -4617,29 +4815,32 @@ BEGIN
 		Backup_Age INT
 		)
 	
-	INSERT INTO #BACKUPS ([DBName],[Type],[Filename],Backup_Set_Name,backup_start_date,backup_finish_date,backup_size,backup_age)
-	SELECT a.database_name AS [DBName],
-			CASE a.[Type]
-			WHEN 'D' THEN 'Full'
-			WHEN 'I' THEN 'Diff'
-			WHEN 'L' THEN 'Log'
-			WHEN 'F' THEN 'File/Filegroup'
-			WHEN 'G' THEN 'File Diff'
-			WHEN 'P' THEN 'Partial'
-			WHEN 'Q' THEN 'Partial Diff'
-			ELSE 'Unknown' END AS [Type],
-			COALESCE(b.Physical_Device_Name,'N/A') AS [Filename],
-			a.name AS Backup_Set_Name,		
-			a.backup_start_date,
-			a.backup_finish_date,
-			CAST((a.backup_size/1024)/1024/1024 AS DECIMAL(10,2)) AS Backup_Size,
-			DATEDIFF(hh, MAX(a.backup_finish_date), GETDATE()) AS [Backup_Age] 
-	FROM msdb..backupset a
-	JOIN msdb..backupmediafamily b
-		ON a.media_set_id = b.media_set_id
-	WHERE a.backup_start_date > GETDATE() - @WindowSizeDays AND a.[Type] <> 'L'
-	GROUP BY a.database_name, a.[Type],a.name, b.Physical_Device_Name,a.backup_start_date,a.backup_finish_date,a.backup_size
-	
+	IF @ShowBackups = 1
+	BEGIN
+		INSERT INTO #BACKUPS ([DBName],[Type],[Filename],Backup_Set_Name,backup_start_date,backup_finish_date,backup_size,backup_age)
+		SELECT a.database_name AS [DBName],
+				CASE a.[Type]
+				WHEN 'D' THEN 'Full'
+				WHEN 'I' THEN 'Diff'
+				WHEN 'L' THEN 'Log'
+				WHEN 'F' THEN 'File/Filegroup'
+				WHEN 'G' THEN 'File Diff'
+				WHEN 'P' THEN 'Partial'
+				WHEN 'Q' THEN 'Partial Diff'
+				ELSE 'Unknown' END AS [Type],
+				COALESCE(b.Physical_Device_Name,'N/A') AS [Filename],
+				a.name AS Backup_Set_Name,		
+				a.backup_start_date,
+				a.backup_finish_date,
+				CAST((a.backup_size/1024)/1024/1024 AS DECIMAL(10,2)) AS Backup_Size,
+				DATEDIFF(hh, MAX(a.backup_finish_date), GETDATE()) AS [Backup_Age] 
+		FROM msdb..backupset a
+		JOIN msdb..backupmediafamily b
+			ON a.media_set_id = b.media_set_id
+		WHERE a.backup_start_date > GETDATE() - @WindowSizeDays AND (@ShowLogBackups = 1 OR a.[Type] <> 'L')
+		GROUP BY a.database_name, a.[Type],a.name, b.Physical_Device_Name,a.backup_start_date,a.backup_finish_date,a.backup_size
+	END
+
 	/* STEP 2: CREATE HTML BLOB */
 	
 	SET @HTML =    
@@ -4709,7 +4910,7 @@ BEGIN
 	
 	SELECT @HTML = @HTML + '</table></div>'
 	
-	If @FullDBList = 1
+	If @ShowFullDBList = 1
 		SET @TableTitle = 'Databases'
 	Else
 		SET @TableTitle = 'Offline Databases'
@@ -4742,7 +4943,7 @@ BEGIN
 		'<td width="75" class="c1">' + [Replication] +'</td>' +
 		'<td width="75" class="c2">' + Mirroring +'</td></tr>'		
 	FROM #DATABASES
-	WHERE @FullDBList = 1 Or [State] = 'OFFLINE'
+	WHERE @ShowFullDBList = 1 Or [State] = 'OFFLINE'
 	ORDER BY [DBName]
 	
 	SELECT @HTML = @HTML + '</table></div>'
@@ -4828,6 +5029,8 @@ BEGIN
 		
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
+BEGIN
+	IF @ShowEmptySections = 1
 	BEGIN
 		SELECT @HTML = @HTML + 
 			'&nbsp;<div><table width="250"> <tr><th class="header" width="250">Trace Flags</th></tr></table></div><div>
@@ -4835,9 +5038,10 @@ BEGIN
 			  <tr>
 				<th width="250"><b>No Trace Flags Are Active</b></th>			
 			 </tr>'
-		
+
 		SELECT @HTML = @HTML + '</table></div>'
 	END
+END
 	
 	SELECT @HTML = @HTML + '</td></tr></table>'
 	
@@ -4876,7 +5080,7 @@ BEGIN
 		'<td width="75" class="c2">' + CAST(FileMBEmpty AS NVARCHAR) +'</td>' +
 		'<td width="75" class="c1">' + CAST(FilePercentEmpty AS NVARCHAR) + '</td>' + '</tr>'
 	FROM #FILESTATS
-	WHERE @FullFileInfo = 1 OR LargeLDF = 1
+	WHERE @ShowFullFileInfo = 1 OR LargeLDF = 1
 	
 	SELECT @HTML = @HTML + '</table></div>'
 	
@@ -4907,7 +5111,7 @@ BEGIN
 		'<td width="125" class="c2">' + CAST(COALESCE(Cum_IO_GB,'0') AS NVARCHAR) + '</td>' +
 		'<td width="75" class="c1">' + CAST(COALESCE(IO_Percent,'0') AS NVARCHAR) + '</td>' + '</tr>'	
 	FROM #FILESTATS
-	WHERE @FullFileInfo = 1 OR IsNull(IO_Percent,0) > 10
+	WHERE @ShowFullFileInfo = 1 OR IsNull(IO_Percent,0) > 10
 	
 	SELECT @HTML = @HTML + '</table></div>'
 	
@@ -4942,8 +5146,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Mirroring</th></tr></table></div><div>
@@ -4953,7 +5157,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 		
 	IF EXISTS (SELECT * FROM #LOGSHIP)
@@ -4987,8 +5191,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Log Shipping</th></tr></table></div><div>
@@ -4998,7 +5202,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #REPLINFO WHERE Distributor IS NOT NULL)
@@ -5026,8 +5230,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Distributor</th></tr></table></div><div>
@@ -5037,7 +5241,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #PUBINFO)
@@ -5106,8 +5310,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Publisher</th></tr></table></div><div>
@@ -5117,7 +5321,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #REPLSUB)
@@ -5152,8 +5356,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Replication Subscriptions</th></tr></table></div><div>
@@ -5163,10 +5367,10 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
-	IF EXISTS (SELECT * FROM #PERFSTATS)
+	IF EXISTS (SELECT * FROM #PERFSTATS) AND @ShowPerfStats = 1
 	BEGIN
 		SELECT @HTML = @HTML + 
 			'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">Connections - Last 24 Hours</th></tr></table></div><div>
@@ -5233,7 +5437,7 @@ BEGIN
 		SELECT @HTML = @HTML + '</tr></table></div>'
 	END
 	
-	IF EXISTS (SELECT * FROM #CPUSTATS)
+	IF EXISTS (SELECT * FROM #CPUSTATS) AND @ShowCPUStats = 1
 	BEGIN
 		SELECT @HTML = @HTML + 
 			'&nbsp;<div><table width="1150"> <tr><th class="Perfthheader" width="1150">SQL Server CPU Usage (Percent) - Last 24 Hours</th></tr></table></div><div>
@@ -5266,47 +5470,91 @@ BEGIN
 		SELECT @HTML = @HTML + '</tr></table></div>'
 	END
 	
-	IF EXISTS (SELECT * FROM #JOBSTATUS WHERE @FullJobInfo = 1 OR LastRunOutcome = 'ERROR' OR RunTimeStatus IN ('LongRunning-NOW', 'LongRunning-History'))
+	IF EXISTS (SELECT * FROM #JOBSTATUS)
 	BEGIN
-		SELECT @HTML = @HTML + 
-			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Agent Jobs</th></tr></table></div><div>
-			<table width="1150"> 
-			<tr> 
-			<th width="275">Job Name</th>
-			<th width="150">Category</th> 
-			<th width="75">Enabled</th> 
-			<th width="100">Last Outcome</th> 
-			<th width="150">Last Date Run</th> 
-			<th width="200">Avg Run Time ss(Mi)</th> 
-			<th width="200">Execution Time ss(Mi)</th>
-			</tr>'
-		SELECT @HTML = @HTML +   
-			'<tr><td width="275" class="c1">' + LEFT(JobName,60) +'</td>' +    
-			'<td width="150" class="c2">' + COALESCE(Category,'N/A') +'</td>' +    
-			CASE [Enabled]
-				WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
-				WHEN 1 THEN '<td width="75" class="c1">True</td>'  
-			ELSE '<td width="75" class="c1"><b>Unknown</b></td>'  
-			END  +   
-		 	CASE      
-				WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150" bgColor="#FF0000"><b>FAILED</b></td>'
-				WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#FF0000"><b>ERROR - Long Running</b></td>'  
-				WHEN LastRunOutcome = 'SUCCESS' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150"  bgColor="#00FF00">Success</td>'  
-				WHEN LastRunOutcome = 'Success' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#99FF00">Success - Long Running</td>'  
-				WHEN LastRunOutcome = 'InProcess' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
-				WHEN LastRunOutcome = 'InProcess' AND RunTimeStatus = 'LongRunning-NOW' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
-				WHEN LastRunOutcome = 'CANCELLED' THEN '<td width="150" bgColor="#FFFF00"><b>CANCELLED</b></td>'  
-				WHEN LastRunOutcome = 'NA' THEN '<td width="150" class="c2">NA</td>'  
-			ELSE '<td width="150" class="c2">NA</td>' 
-			END + 
-			'<td width="150" class="c1">' + COALESCE(CAST(StartTime AS NVARCHAR),'N/A') + '</td>' +
-			'<td width="200" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime / 60),'') +  ')' + '</td>' +
-			'<td width="200" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime / 60),'') +  ')' + '</td></tr>'   
-		FROM #JOBSTATUS 
-		WHERE @FullJobInfo = 1 OR LastRunOutcome = 'ERROR' OR RunTimeStatus IN ('LongRunning-NOW', 'LongRunning-History')
-		ORDER BY [Enabled] Desc, Category, JobName
-		
-		SELECT @HTML = @HTML + '</table></div>'
+		IF EXISTS (SELECT * FROM #JOBSTATUS WHERE LastRunOutcome = 'ERROR' OR RunTimeStatus = 'LongRunning-History' OR RunTimeStatus = 'LongRunning-NOW') AND @ShowFullJobInfo = 0
+		BEGIN
+			SELECT @HTML = @HTML + 
+				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Agent Jobs</th></tr></table></div><div>
+				<table width="1150"> 
+				<tr> 
+				<th width="375">Job Name</th>
+				<th width="150">Category</th> 
+				<th width="75">Enabled</th> 
+				<th width="150">Last Outcome</th> 
+				<th width="150">Last Date Run</th> 
+				<th width="125">Avg RunTime ss(mi)</th> 
+				<th width="125">Last RunTime ss(mi)</th>
+				</tr>'
+			SELECT @HTML = @HTML +   
+				'<tr><td width="375" class="c1">' + LEFT(JobName,75) +'</td>' +    
+				'<td width="150" class="c2">' + COALESCE(Category,'N/A') +'</td>' +    
+				CASE [Enabled]
+					WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
+					WHEN 1 THEN '<td width="75" class="c1">True</td>'  
+				ELSE '<td width="75" class="c1"><b>Unknown</b></td>'  
+				END  +   
+ 				CASE      
+					WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150" bgColor="#FF0000"><b>FAILED</b></td>'
+					WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#FF0000"><b>ERROR - Long Running</b></td>'  
+					WHEN LastRunOutcome = 'SUCCESS' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150"  bgColor="#00FF00">Success</td>'  
+					WHEN LastRunOutcome = 'Success' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#99FF00">Success - Long Running</td>'  
+					WHEN LastRunOutcome = 'InProcess' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+					WHEN LastRunOutcome = 'InProcess' AND RunTimeStatus = 'LongRunning-NOW' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+					WHEN LastRunOutcome = 'CANCELLED' THEN '<td width="150" bgColor="#FFFF00"><b>CANCELLED</b></td>'  
+					WHEN LastRunOutcome = 'NA' THEN '<td width="150" class="c2">NA</td>'  
+				ELSE '<td width="150" class="c2">NA</td>' 
+				END + 
+				'<td width="150" class="c1">' + COALESCE(CAST(StartTime AS NVARCHAR),'N/A') + '</td>' +
+				'<td width="125" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(AvgRuntime / 60 AS NUMERIC(12,2))),'') +  ')' + '</td>' +
+				'<td width="125" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(LastRunTime / 60 AS NUMERIC(12,2))),'') +  ')' + '</td></tr>'   
+			FROM #JOBSTATUS
+			WHERE LastRunOutcome = 'ERROR' OR RunTimeStatus = 'LongRunning-History' OR RunTimeStatus = 'LongRunning-NOW'
+			ORDER BY JobName
+
+			SELECT @HTML = @HTML + '</table></div>'
+		END
+
+		IF @ShowFullJobInfo = 1
+		BEGIN
+			SELECT @HTML = @HTML + 
+				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">SQL Agent Jobs</th></tr></table></div><div>
+				<table width="1150"> 
+				<tr> 
+				<th width="375">Job Name</th>
+				<th width="150">Category</th> 
+				<th width="75">Enabled</th> 
+				<th width="150">Last Outcome</th> 
+				<th width="150">Last Date Run</th> 
+				<th width="125">Avg RunTime ss(mi)</th> 
+				<th width="125">Last RunTime ss(mi)</th>
+				</tr>'
+			SELECT @HTML = @HTML +   
+				'<tr><td width="375" class="c1">' + LEFT(JobName,75) +'</td>' +    
+				'<td width="150" class="c2">' + COALESCE(Category,'N/A') +'</td>' +    
+				CASE [Enabled]
+					WHEN 0 THEN '<td width="75" bgcolor="#FFFF00">False</td>'  
+					WHEN 1 THEN '<td width="75" class="c1">True</td>'  
+				ELSE '<td width="75" class="c1"><b>Unknown</b></td>'  
+				END  +   
+ 				CASE      
+					WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150" bgColor="#FF0000"><b>FAILED</b></td>'
+					WHEN LastRunOutcome = 'ERROR' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#FF0000"><b>ERROR - Long Running</b></td>'  
+					WHEN LastRunOutcome = 'SUCCESS' AND RunTimeStatus = 'NormalRunning-History' THEN '<td width="150"  bgColor="#00FF00">Success</td>'  
+					WHEN LastRunOutcome = 'Success' AND RunTimeStatus = 'LongRunning-History' THEN '<td width="150"  bgColor="#99FF00">Success - Long Running</td>'  
+					WHEN LastRunOutcome = 'InProcess' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+					WHEN LastRunOutcome = 'InProcess' AND RunTimeStatus = 'LongRunning-NOW' THEN '<td width="150" bgColor="#00FFFF">InProcess</td>'  
+					WHEN LastRunOutcome = 'CANCELLED' THEN '<td width="150" bgColor="#FFFF00"><b>CANCELLED</b></td>'  
+					WHEN LastRunOutcome = 'NA' THEN '<td width="150" class="c2">NA</td>'  
+				ELSE '<td width="150" class="c2">NA</td>' 
+				END + 
+				'<td width="150" class="c1">' + COALESCE(CAST(StartTime AS NVARCHAR),'N/A') + '</td>' +
+				'<td width="125" class="c2">' + COALESCE(CONVERT(NVARCHAR(50), AvgRuntime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(AvgRuntime / 60 AS NUMERIC(12,2))),'') +  ')' + '</td>' +
+				'<td width="125" class="c1">' + COALESCE(CONVERT(NVARCHAR(50), LastRunTime),'') + ' (' + COALESCE(CONVERT(NVARCHAR(50), CAST(LastRunTime / 60 AS NUMERIC(12,2))),'') +  ')' + '</td></tr>'   
+			FROM #JOBSTATUS
+			ORDER BY JobName
+			SELECT @HTML = @HTML + '</table></div>'	
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #LONGQUERIES)
@@ -5337,8 +5585,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Long Running Queries</th></tr></table></div><div>
@@ -5348,7 +5596,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #BLOCKING)
@@ -5385,8 +5633,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Blocking</th></tr></table></div><div>
@@ -5396,13 +5644,14 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #DEADLOCKINFO)
 	BEGIN
-		Set @MaxRows = 250
-		
+		If IsNull(@MaxDeadLockRows, 0) <= 0
+			Set @MaxDeadLockRows = 10000
+
 		SELECT @HTML = @HTML +
 			'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Prior Day</th></tr></table></div><div>
 			<table width="1150">
@@ -5418,7 +5667,7 @@ BEGIN
 			<th width="75">Locking SPID</th> 
 			<th width="200">Locking Objects</th>
 			</tr>'
-		SELECT TOP (@MaxRows) @HTML = @HTML +   
+		SELECT TOP (@MaxDeadLockRows) @HTML = @HTML +   
 			'<tr>
 			<td width="150" class="c1">' + CAST(DeadlockDate AS NVARCHAR) +'</td>
 			<td width="150" class="c2">' + COALESCE([DBName],'N/A') + '</td>' +
@@ -5445,7 +5694,7 @@ BEGIN
 		FROM #DEADLOCKINFO 
 		WHERE (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
 		
-		If @TotalRows > @MaxRows
+		If @TotalRows > @MaxDeadLockRows
 		BEGIN
 			SET @HTML = @HTML + 
 			'<tr>
@@ -5454,7 +5703,7 @@ BEGIN
 			<td width="75" class="c1">N/A</td>
 			<td width="75" class="c2">N/A</td>
 			<td width="75" class="c1">N/A</td>	
-			<td width="200" class="c2">' + CAST(@TotalRows - @MaxRows AS NVARCHAR) + ' additional Deadlocks not listed</td>
+			<td width="200" class="c2">' + CAST(@TotalRows - @MaxDeadLockRows AS NVARCHAR) + ' additional Deadlocks not listed</td>
 			<td width="75" class="c1">N/A</td>
 			<td width="75" class="c2">N/A</td>
 			<td width="75" class="c1">N/A</td>		
@@ -5465,8 +5714,8 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Deadlocks - Previous Day</th></tr></table></div><div>
@@ -5476,7 +5725,7 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #SCHEMACHANGES)
@@ -5506,8 +5755,8 @@ BEGIN
 			@HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Schema Changes</th></tr></table></div><div>
@@ -5517,12 +5766,13 @@ BEGIN
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 	
 	IF EXISTS (SELECT * FROM #ERRORLOG)
 	BEGIN
-		Set @MaxRows = 250
+		If IsNull(@MaxErrorLogRows, 0) <= 0
+			Set @MaxErrorLogRows = 10000
 	
 		SELECT 
 			@HTML = @HTML +
@@ -5533,7 +5783,7 @@ BEGIN
 			<th width="150">Process Info</th>
 			<th width="850">Message</th>
 			</tr>'
-		SELECT TOP (@MaxRows)
+		SELECT TOP (@MaxErrorLogRows)
 			@HTML = @HTML +
 			'<tr>
 			<td width="150" class="c1">' + COALESCE(CAST(LogDate AS NVARCHAR),'N/A') +'</td>' +
@@ -5546,20 +5796,20 @@ BEGIN
 		SELECT @TotalRows = COUNT(*) 
 		FROM #ERRORLOG 
 		
-		If @TotalRows > @MaxRows
+		If @TotalRows > @MaxErrorLogRows
 		BEGIN
 			SET @HTML = @HTML + 
 			'<tr>
 			<td width="150" class="c1">' + CAST(GetDate() AS NVARCHAR) +'</td>
 			<td width="150" class="c2"></td>
-			<td width="850" class="c1">' + CAST(@TotalRows - @MaxRows AS NVARCHAR) + ' additional errors not listed</td>
+			<td width="850" class="c1">' + CAST(@TotalRows - @MaxErrorLogRows AS NVARCHAR) + ' additional errors not listed</td>
 			</tr>'
 		END
 		
 		SELECT @HTML = @HTML + '</table></div>'
 	END
 	
-	IF @ShowBackups = 1 AND EXISTS (SELECT * FROM #BACKUPS)
+	IF EXISTS (SELECT * FROM #BACKUPS) AND @ShowBackups = 1
 	BEGIN
 		SELECT
 			@HTML = @HTML +
@@ -5593,18 +5843,18 @@ BEGIN
 		SELECT @HTML = @HTML + '</table></div>'
 	END ELSE
 	BEGIN
-		If @ShowBackups = 1 AND @HideEmpty = 0
-		Begin
+		IF @ShowEmptySections = 1
+		BEGIN
 			SELECT 
 				@HTML = @HTML +
 				'&nbsp;<div><table width="1150"> <tr><th class="header" width="1150">Backup Stats - Last 24 Hours</th></tr></table></div><div>
 				<table width="1150">   
 					<tr> 
-						<th width="1150">No full backups have been created on this server in the last 24 hours</th>
+						<th width="1150">No backups have been created on this server in the last 24 hours</th>
 					</tr>'
 			
 			SELECT @HTML = @HTML + '</table></div>'
-		End
+		END
 	END
 
 
@@ -5666,13 +5916,10 @@ BEGIN
 	
 	IF @InsertFlag = 1
 	BEGIN
-		IF EXISTS (SELECT name FROM master..sysdatabases WHERE name = 'dba')
-		BEGIN
-			INSERT INTO [dba].dbo.HealthReport (GeneratedHTML)
-			SELECT @HTML
-		END
+		INSERT INTO [dba].dbo.HealthReport (GeneratedHTML)
+		SELECT @HTML
 	END
-	
+
 	DROP TABLE #SYSINFO
 	DROP TABLE #PROCESSOR
 	DROP TABLE #DRIVES
@@ -5725,23 +5972,74 @@ GO
 ========================================================================================================================================================
 ======================================================================================================================================================*/
 	/* CATEGORY */
+USE [msdb]
+GO
+	
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'Database Monitoring' AND category_class=1)
 BEGIN
 EXEC msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Database Monitoring'
 END
-
+GO
 	/* JOBS */
 USE [msdb]
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_BlockingAlert')
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_BlockingAlert')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_BlockingAlert'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_CheckFiles')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_CheckFiles'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_CPUAlert')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_CPUAlert'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_HealthReport')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_HealthReport'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_LongRunningJobsAlert')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_LongRunningJobsAlert'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_LongRunningQueriesAlert')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_LongRunningQueriesAlert'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_MemoryUsageStats')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_MemoryUsageStats'
+END
+GO
+
+IF EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_PerfStats')
+BEGIN
+EXEC msdb..sp_delete_job @job_name=N'dba_PerfStats'
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_BlockingAlert')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_BlockingAlert', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_BlockingAlert', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -5753,7 +6051,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_BlockingAlert',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -5767,9 +6065,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Check for blocking', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'Check for blocking', 
 		@enabled=1, 
 		@freq_type=8, 
 		@freq_interval=127, 
@@ -5782,7 +6080,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Check for
 		@active_start_time=70027, 
 		@active_end_time=190000
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -5792,14 +6090,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_HealthReport')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_HealthReport')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_HealthReport', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_HealthReport', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=0, 
@@ -5811,7 +6109,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_HealthReport',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -5821,13 +6119,13 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_attempts=0, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
-		@command=N'EXEC [dba].dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1, @IncludePerfStats = 1', 
+		@command=N'EXEC [dba].dbo.rpt_HealthReport @Recepients = NULL, @CC = NULL, @InsertFlag = 1', 
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -5840,7 +6138,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=60552, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -5850,14 +6148,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_LongRunningJobsAlert')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_LongRunningJobsAlert')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_LongRunningJobsAlert', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_LongRunningJobsAlert', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -5869,7 +6167,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_LongRunningJobsAlert',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -5883,9 +6181,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -5898,7 +6196,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=508, 
 		@active_end_time=459
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -5908,14 +6206,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_CheckFiles')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_CheckFiles')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_CheckFiles', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_CheckFiles', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -5927,7 +6225,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_CheckFiles',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -5937,13 +6235,13 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@retry_attempts=0, 
 		@retry_interval=0, 
 		@os_run_priority=0, @subsystem=N'TSQL', 
-		@command=N'EXEC [dba].dbo.usp_CheckFiles', 
+		@command=N'EXEC [dba]..usp_CheckFiles', 
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -5956,7 +6254,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=3048, 
 		@active_end_time=2959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -5966,14 +6264,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_LongRunningQueriesAlert')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_LongRunningQueriesAlert')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_LongRunningQueriesAlert', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_LongRunningQueriesAlert', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -5985,7 +6283,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_LongRunningQueriesAlert'
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -5999,9 +6297,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=8, 
 		@freq_interval=126, 
@@ -6014,7 +6312,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=223, 
 		@active_end_time=159
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Sunday schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'Sunday schedule', 
 		@enabled=1, 
 		@freq_type=8, 
 		@freq_interval=1, 
@@ -6027,7 +6325,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'Sunday sc
 		@active_start_time=190223, 
 		@active_end_time=170159
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -6037,14 +6335,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_PerfStats')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_PerfStats')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_PerfStats', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_PerfStats', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -6056,7 +6354,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_PerfStats',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run exec', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run exec', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -6070,9 +6368,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run exec
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'perfstats schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'perfstats schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -6085,7 +6383,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'perfstats
 		@active_start_time=5, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -6095,14 +6393,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_MemoryUsageStats')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_MemoryUsageStats')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_MemoryUsageStats', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_MemoryUsageStats', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -6114,7 +6412,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_MemoryUsageStats',
 		@owner_login_name=N'sa', 
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -6128,9 +6426,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -6143,7 +6441,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=9, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -6153,14 +6451,14 @@ EndSave:
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM msdb.dbo.sysjobs WHERE name = 'dba_CPUAlert')
+IF NOT EXISTS (SELECT * FROM msdb..sysjobs WHERE name = 'dba_CPUAlert')
 BEGIN
 BEGIN TRANSACTION
 DECLARE @ReturnCode INT
 SELECT @ReturnCode = 0
 
 DECLARE @jobId BINARY(16)
-EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_CPUAlert', 
+EXEC @ReturnCode =  msdb..sp_add_job @job_name=N'dba_CPUAlert', 
 		@enabled=0, 
 		@notify_level_eventlog=0, 
 		@notify_level_email=2, 
@@ -6173,7 +6471,7 @@ EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'dba_CPUAlert',
 		@notify_email_operator_name=N'SQL_DBA', @job_id = @jobId OUTPUT
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 /****** Object:  Step [run proc]    Script Date: 02/29/2012 11:32:46 ******/
-EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
+EXEC @ReturnCode = msdb..sp_add_jobstep @job_id=@jobId, @step_name=N'run proc', 
 		@step_id=1, 
 		@cmdexec_success_code=0, 
 		@on_success_action=1, 
@@ -6187,9 +6485,9 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'run proc
 		@database_name=N'master', 
 		@flags=0
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+EXEC @ReturnCode = msdb..sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
+EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'schedule', 
 		@enabled=1, 
 		@freq_type=4, 
 		@freq_interval=1, 
@@ -6202,7 +6500,7 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'schedule'
 		@active_start_time=40, 
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 COMMIT TRANSACTION
 GOTO EndSave
@@ -6255,14 +6553,14 @@ UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Table Name' WHERE Table
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Schema Name' WHERE TableName = 'DataDictionary_Tables' AND FieldName = 'SchemaName'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Table Description' WHERE TableName = 'DataDictionary_Tables' AND FieldName = 'TableDescription'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Table Name' WHERE TableName = 'DataDictionary_Tables' AND FieldName = 'TableName'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Cell numbers for texting alerts' WHERE TableName = 'AlertSettings' AND FieldName = 'CellList'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Email addresses for emailing alerts' WHERE TableName = 'AlertSettings' AND FieldName = 'EmailList'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Secondary email address for emailing alerts' WHERE TableName = 'AlertSettings' AND FieldName = 'EmailList2'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Stores a value sometimes used by SQL Jobs' WHERE TableName = 'AlertSettings' AND FieldName = 'JobValue'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The description of what is stored in the JobValue column' WHERE TableName = 'AlertSettings' AND FieldName = 'JobValueDesc'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The name of the alert, corresponding to a SQL Job' WHERE TableName = 'AlertSettings' AND FieldName = 'Name'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Stores the values used by the query run by the SQL Job or stored proc' WHERE TableName = 'AlertSettings' AND FieldName = 'QueryValue'
-UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The description of what is stored in the QueryValue column' WHERE TableName = 'AlertSettings' AND FieldName = 'QueryValueDesc'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Cell numbers for texting alerts' WHERE TableName = 'AlertContacts' AND FieldName = 'CellList'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Email addresses for emailing alerts' WHERE TableName = 'AlertContacts' AND FieldName = 'EmailList'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Secondary email address for emailing alerts' WHERE TableName = 'AlertContacts' AND FieldName = 'EmailList2'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Stores a value used by the alert' WHERE TableName = 'AlertSettings' AND FieldName = 'Value'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The description of the variable' WHERE TableName = 'AlertSettings' AND FieldName = 'Description'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The name of the alert, corresponding to a SQL Job' WHERE TableName = 'AlertSettings' AND FieldName = 'AlertName'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The name of the variable used in the alert' WHERE TableName = 'AlertSettings' AND FieldName = 'VariableName'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'Used for variables where a BIT is needed' WHERE TableName = 'AlertSettings' AND FieldName = 'Enabled'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The hostname of the victim session' WHERE TableName = 'BlockingHistory' AND FieldName = 'BLOCKED_HOSTNAME'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The Last WAITTYPE of the victim session' WHERE TableName = 'BlockingHistory' AND FieldName = 'BLOCKED_LASTWAITTYPE'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The Login name of the victim session' WHERE TableName = 'BlockingHistory' AND FieldName = 'BLOCKED_LOGIN'
@@ -6316,6 +6614,7 @@ UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The name of the databas
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The host name the query originated from' WHERE TableName = 'QueryHistory' AND FieldName = 'host_name'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The login name that ran the query' WHERE TableName = 'QueryHistory' AND FieldName = 'login_name'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The timestamp of when the user logged in' WHERE TableName = 'QueryHistory' AND FieldName = 'login_time'
+UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The timestamp of when the last query started' WHERE TableName = 'QueryHistory' AND FieldName = 'start_time'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The number of physical reads the query performed' WHERE TableName = 'QueryHistory' AND FieldName = 'Logical_Reads'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The name of the program that initiated the query' WHERE TableName = 'QueryHistory' AND FieldName = 'program_name'
 UPDATE dbo.DataDictionary_Fields SET FieldDescription = 'The PK on the table' WHERE TableName = 'QueryHistory' AND FieldName = 'QueryHistoryID'
@@ -6400,19 +6699,11 @@ GO
 ==============================================================================================================================================================
 ============================================================================================================================================================*/
 
-INSERT INTO dbo.T_Alert_Exclusions
-  VALUES (N'LongRunningQueries', 'sqlBackup')
-go
 
-UPDATE dbo.AlertSettings SET 
-  EmailList=N'EMSL-Prism.Users.DB_Operators@pnnl.gov', CellList=NULL
-go
-
-UPDATE dbo.AlertSettings SET 
-  QueryValue=25
-  WHERE [Name] IN ('LogFiles', 'TempDB')
-go
-
+UPDATE AlertContacts
+SET EmailList = 'EMSL-Prism.Users.DB_Operators@pnnl.gov', EMailList2=Null, CellList=null
+WHERE EmailList IS NULL AND
+      AlertName <> 'LogFiles'
 
 Declare @ScheduleID int
 
@@ -6450,5 +6741,21 @@ if @@RowCount > 0
 SELECT @ScheduleID = MIN(js.schedule_ID) FROM msdb.dbo.sysjobschedules JS INNER JOIN msdb.dbo.sysjobs J ON JS.job_id = j.job_id WHERE name = 'dba_CPUAlert'
 if @@RowCount > 0
 	exec msdb.dbo.sp_update_schedule @schedule_id=@ScheduleID, @active_start_time=40
-	
-	
+
+GO
+
+
+-- Enable all of the jobs expect dba_LongRunningQueriesAlert 
+UPDATE msdb.dbo.sysjobs
+SET enabled = 1
+WHERE name LIKE 'dba%' AND
+      name <> 'dba_LongRunningQueriesAlert' AND
+      enabled = 0
+
+
+If @@ServerName = 'Gigasax'
+	UPDATE msdb.dbo.sysjobs
+	SET enabled = 1
+	WHERE name = 'dba_LongRunningQueriesAlert' AND
+	      enabled = 0
+

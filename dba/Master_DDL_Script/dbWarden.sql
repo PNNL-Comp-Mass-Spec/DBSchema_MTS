@@ -51,7 +51,7 @@
 **	04/14/2013		Michael Rounds			2.3.3				Expanded Cum_IO_GB in FileStatsHistory, usp_FileStats and rpt_HealthReport to NUMERIC(20,2) FROM NUMERIC(12,2)																
 **																REMOVED gen_GetHealthReport stored procs for now. BCP has different behaviour in 2012 that needs tweaking															
 **																Fixed update in rpt_HealthReport, CASTing as INT by mistake
-**	04/16/2013		Michael Rounds			2.3.4				Renamed created database from dba to dba
+**	04/16/2013		Michael Rounds			2.3.4				Renamed created database from dba to dbWarden
 **																Changed defaults of DatabaseSettings table to OFF for everything. REPLACE CHANGEME in Update to DatabaseSettings to enable
 **																	databases you wish to track (this also fixes issues when trying to track a database that is OFFLINE
 **	04/17/2013		Michael Rounds			2.3.5				Updated Instructions at the top

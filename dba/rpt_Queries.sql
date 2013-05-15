@@ -11,26 +11,26 @@ BEGIN
 
 DECLARE @QueryValue INT
 
-SET @QueryValue = (SELECT QueryValue FROM [dba].dbo.AlertSettings (nolock) WHERE Name = 'LongRunningQueries')
+SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningQueries'
 
 SELECT
-collection_time AS DateStamp,
-CAST(DATEDIFF(ss,start_time,collection_time) AS INT) AS [ElapsedTime(ss)],
+DateStamp AS DateStamp,
+CAST(DATEDIFF(ss,Start_Time,DateStamp) AS INT) AS [ElapsedTime(ss)],
 Session_ID AS Session_ID,
-[Database_Name] AS [DBName],	
+[DBName] AS [DBName],	
 Login_Name AS Login_Name,
-SQL_Text AS SQL_Text
+Formatted_SQL_Text AS SQL_Text
 FROM [dba].dbo.QueryHistory (nolock) 
-WHERE (DATEDIFF(ss,start_time,collection_time)) >= @QueryValue 
-AND (DATEDIFF(dd,collection_time,GETDATE())) <= @DateRangeInDays
-AND [Database_Name] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-AND sql_text NOT LIKE 'BACKUP DATABASE%'
-AND sql_text NOT LIKE 'RESTORE VERIFYONLY%'
-AND sql_text NOT LIKE 'ALTER INDEX%'
-AND sql_text NOT LIKE 'DECLARE @BlobEater%'
-AND sql_text NOT LIKE 'DBCC%'
-AND sql_text NOT LIKE 'WAITFOR(RECEIVE%'
-ORDER BY collection_time DESC
+WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue 
+AND (DATEDIFF(dd,DateStamp,GETDATE())) <= @DateRangeInDays
+AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+ORDER BY DateStamp DESC
 
 END
 

@@ -18,4 +18,5 @@ FROM master.dbo.sysdatabases AS SysDB
                        GROUP BY database_name ) AS BUSet
        ON SysDB.name = BUSet.database_name
 
+
 GO

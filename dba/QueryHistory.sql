@@ -7,6 +7,7 @@ CREATE TABLE [dbo].[QueryHistory](
 	[QueryHistoryID] [int] IDENTITY(1,1) NOT NULL,
 	[DateStamp] [datetime] NOT NULL,
 	[Login_Time] [datetime] NULL,
+	[Start_Time] [datetime] NULL,
 	[RunTime] [numeric](20, 4) NULL,
 	[Session_ID] [smallint] NOT NULL,
 	[CPU_Time] [bigint] NULL,

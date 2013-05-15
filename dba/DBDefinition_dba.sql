@@ -1,8 +1,8 @@
 /****** Object:  Database [dba] ******/
 CREATE DATABASE [dba] ON  PRIMARY 
-( NAME = N'dba', FILENAME = N'I:\SQLServerData\dba.mdf' , SIZE = 10688KB , MAXSIZE = UNLIMITED, FILEGROWTH = 1024KB )
+( NAME = N'dba', FILENAME = N'I:\SqlServerData\dba.mdf' , SIZE = 44480KB , MAXSIZE = UNLIMITED, FILEGROWTH = 1024KB )
  LOG ON 
-( NAME = N'dba_log', FILENAME = N'H:\SQLServerData\dba_log.LDF' , SIZE = 1792KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
+( NAME = N'dba_log', FILENAME = N'H:\SqlServerData\dba_log.LDF' , SIZE = 1280KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [dba] SET COMPATIBILITY_LEVEL = 100
