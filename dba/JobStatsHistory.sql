@@ -16,6 +16,7 @@ CREATE TABLE [dbo].[JobStatsHistory](
 	[LastRunTime] [numeric](12, 2) NULL,
 	[RunTimeStatus] [nvarchar](30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[LastRunOutcome] [nvarchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Owner] [nvarchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [pk_JobStatsHistory] PRIMARY KEY CLUSTERED 
 (
 	[JobStatsHistoryId] ASC

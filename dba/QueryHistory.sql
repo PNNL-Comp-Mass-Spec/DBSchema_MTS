@@ -20,6 +20,13 @@ CREATE TABLE [dbo].[QueryHistory](
 	[Formatted_SQL_Text] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[SQL_Text] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Program_Name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Blocking_Session_ID] [smallint] NULL,
+	[Status] [nvarchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Open_Transaction_Count] [int] NULL,
+	[Percent_Complete] [numeric](12, 2) NULL,
+	[Client_Net_Address] [nvarchar](20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Wait_Time] [int] NULL,
+	[Last_Wait_Type] [nvarchar](60) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [pk_QueryHistory] PRIMARY KEY CLUSTERED 
 (
 	[QueryHistoryID] ASC

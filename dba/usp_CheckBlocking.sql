@@ -16,6 +16,7 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  02/21/2012		Michael Rounds			1.0					Comments creation
 **	08/31/2012		Michael Rounds			1.1					Changed VARCHAR to NVARCHAR
+**	05/16/2013		Michael Rounds			1.2					Changed SELECT to use sys.databases instead of master..sysdatabases
 ***************************************************************************************************************/
 
 BEGIN
@@ -47,7 +48,7 @@ b.lastwaittype AS Offending_LastWaitType,
 b.[status] AS Offending_Status,
 b.[program_name] AS Offending_Program,
 CAST(st2.text AS NVARCHAR(MAX)) as Offending_SQL_Text,
-(SELECT name from master..sysdatabases WHERE [dbid] = a.[dbid]) AS [DBName]
+(SELECT name from sys.databases WHERE [database_id] = a.[dbid]) AS [DBName]
 FROM master..sysprocesses as a CROSS APPLY sys.dm_exec_sql_text (a.sql_handle) as st1
 JOIN master..sysprocesses as b CROSS APPLY sys.dm_exec_sql_text (b.sql_handle) as st2
 ON a.blocked = b.spid

@@ -3,6 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+
 CREATE PROC [dbo].[usp_JobStats] (@InsertFlag BIT = 0)
 AS
 
@@ -18,12 +20,14 @@ AS
 **	04/24/2013		Volker.Bachmann from SSC 1.1.1			Added COALESCE to MAX(ja.start_execution_date) and MAX(ja.stop_execution_date)
 **	05/01/2013		Michael Rounds			1.2				Creating temp tables instead of inserting INTO
 **															Removed COALESCE's from previous change on 4/24. Causing dates to read 1/1/1900 when NULL. Would rather have NULL.
+**	05/17/2013		Michael Rounds			1.2.1			Added Job Owner to JobStatsHistory
 ***************************************************************************************************************/
 
 BEGIN
 
 CREATE TABLE #TEMP (
 	Job_ID NVARCHAR(255),
+	[Owner] NVARCHAR(255),
 	Name NVARCHAR(128),
 	Category NVARCHAR(128),
 	[Enabled] BIT,
@@ -33,6 +37,7 @@ CREATE TABLE #TEMP (
 	
 CREATE TABLE #TEMP2 (
 	JobName NVARCHAR(128),
+	[Owner] NVARCHAR(255),
 	Category NVARCHAR(128),
 	[Enabled] BIT,
 	StartTime DATETIME,
@@ -43,8 +48,9 @@ CREATE TABLE #TEMP2 (
 	LastRunOutcome NVARCHAR(20)
 	)
 	
-INSERT INTO #TEMP (Job_ID,Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
-SELECT sj.job_id, 
+INSERT INTO #TEMP (Job_ID,[Owner],Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
+SELECT sj.job_id,
+	SUSER_SNAME(sj.owner_sid) AS [Owner],
 		sj.name,
 		sc.name AS Category,
 		sj.[Enabled], 
@@ -58,9 +64,10 @@ JOIN msdb..sysjobservers(nolock) sjs
 JOIN msdb..syscategories sc
 	ON sj.category_id = sc.category_id	
 
-INSERT INTO #TEMP2 (JobName,Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
+INSERT INTO #TEMP2 (JobName,[Owner],Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
 SELECT
 	t.name AS JobName,
+	t.[Owner],
 	t.Category,
 	t.[Enabled],
 	MAX(ja.start_execution_date) AS [StartTime],
@@ -101,7 +108,7 @@ JOIN (SELECT job_id,
 		WHERE step_id = 0 AND run_status = 1 and run_duration >= 0
 		GROUP BY job_id) art 
 	ON t.job_id = art.job_id
-GROUP BY t.name,t.Category,t.[Enabled],t.last_run_outcome,ja.start_execution_date,ja.stop_execution_date,AvgRunTime
+GROUP BY t.name,t.[Owner],t.Category,t.[Enabled],t.last_run_outcome,ja.start_execution_date,ja.stop_execution_date,AvgRunTime
 ORDER BY t.name
 
 SELECT * FROM #TEMP2
@@ -109,8 +116,8 @@ SELECT * FROM #TEMP2
 IF @InsertFlag = 1
 BEGIN
 
-INSERT INTO [dba].dbo.JobStatsHistory (JobName,Category,[Enabled],StartTime,StopTime,[AvgRunTime],[LastRunTime],RunTimeStatus,LastRunOutcome) 
-SELECT JobName,Category,[Enabled],StartTime,StopTime,[AvgRunTime],[LastRunTime],RunTimeStatus,LastRunOutcome
+INSERT INTO [dba].dbo.JobStatsHistory (JobName,[Owner],Category,[Enabled],StartTime,StopTime,[AvgRunTime],[LastRunTime],RunTimeStatus,LastRunOutcome) 
+SELECT JobName,[Owner],Category,[Enabled],StartTime,StopTime,[AvgRunTime],[LastRunTime],RunTimeStatus,LastRunOutcome
 FROM #TEMP2
 
 UPDATE [dba].dbo.JobStatsHistory

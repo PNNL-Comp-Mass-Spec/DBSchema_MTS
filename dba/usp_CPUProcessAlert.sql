@@ -77,11 +77,14 @@ SELECT @HTML =  @HTML + '</table></body></html>'
 
 SELECT @EmailSubject = '[dba]High CPU Alert on ' + @ServerName + '!'
 
-EXEC msdb..sp_send_dbmail
-@recipients= @EmailList,
-@subject = @EmailSubject,
-@body = @HTML,
-@body_format = 'HTML'
+IF COALESCE(@EmailList, '') <> ''
+Begin
+	EXEC msdb..sp_send_dbmail
+	@recipients= @EmailList,
+	@subject = @EmailSubject,
+	@body = @HTML,
+	@body_format = 'HTML'
+End
 
 IF COALESCE(@CellList, '') <> ''
 BEGIN
@@ -117,5 +120,6 @@ ORDER BY DATESTAMP ASC
 
 DROP TABLE #TEMP
 END
+
 
 GO

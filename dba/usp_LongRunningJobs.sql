@@ -92,11 +92,14 @@ BEGIN
 		
 		SELECT @EmailSubject = '[dba]ACTIVE Long Running JOBS on ' + @ServerName + '! - IMMEDIATE Action Required'
 		
-		EXEC msdb..sp_send_dbmail
-		@recipients= @EmailList,
-		@subject = @EmailSubject,
-		@body = @HTML,
-		@body_format = 'HTML'
+		IF COALESCE(@EmailList, '') <> ''
+		Begin
+			EXEC msdb..sp_send_dbmail
+			@recipients= @EmailList,
+			@subject = @EmailSubject,
+			@body = @HTML,
+			@body_format = 'HTML'
+		End
 		
 		IF COALESCE(@CellList, '') <> ''
 		BEGIN
@@ -137,5 +140,6 @@ BEGIN
 	DROP TABLE #TEMP
 	END
 END
+
 
 GO

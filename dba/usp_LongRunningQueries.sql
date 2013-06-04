@@ -3,9 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+
 CREATE PROC dbo.usp_LongRunningQueries
 AS
-
 /**************************************************************************************************************
 **  Purpose: 
 **
@@ -22,98 +23,78 @@ AS
 **																Changed how variables are gathered in AlertSettings and AlertContacts
 **	05/03/2013		Volker.Bachmann								Added "[dba]" to the start of all email subject lines
 **						from SSC
-**	05/14/2013		Matthew Monroe			1.2.3				Now using Exclusion entries in AlertSettings to optionally ignore some long running queries
+**	05/10/2013		Michael Rounds			1.2.3				Changed INSERT into QueryHistory to use EXEC sp_Query
+**	05/14/2013		Matthew Monroe			1.2.4				Now using Exclusion entries in AlertSettings to optionally ignore some long running queries
+**	05/28/2013		Michael	Rounds			1.3					Changed proc to INSERT into TEMP table and query from TEMP table before INSERT into QueryHistory, improves performance
+**																	and resolves a very infrequent bug with the Long Running Queries Job
 ***************************************************************************************************************/
-
 BEGIN
 
-
-	INSERT INTO dbo.QueryHistory (DateStamp,Login_Time,Start_Time,RunTime,Session_ID,CPU_Time,Reads,Writes,Logical_Reads,[Host_Name],DBName,Login_Name,Formatted_SQL_Text,SQL_Text,[Program_Name])
-	SELECT
-	GETDATE() AS DateStamp,
-	s.login_time,
-	s.last_request_start_time as start_time,	
-		(r.total_elapsed_time/1000.0) as RunTime,
-		r.session_id,                                    
-		r.cpu_time,
-		r.Reads,
-		r.Writes,
-		r.Logical_Reads,
-		s.[Host_Name],
-		DB_Name(r.database_id) as DBName,
-		s.login_name,
-		SUBSTRING(qt.[text],r.statement_start_offset/2,(LTRIM(LEN(CONVERT(NVARCHAR(MAX), qt.[text]))) * 2 - r.statement_start_offset)/2)
-		AS Formatted_SQL_Text,
-		qt.[text] AS SQL_Text,		
-		[Program_Name]
-	FROM sys.dm_exec_requests r (nolock)
-	JOIN sys.dm_exec_sessions s (nolock) 
-		ON r.session_id = s.session_id
-	CROSS APPLY sys.dm_exec_sql_text(sql_handle) as qt
-	WHERE r.session_id > 50
-	AND r.session_id <> @@SPID
-
-	DECLARE @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
+	DECLARE @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100), @HTML NVARCHAR(MAX)
 
 	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
-
 	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningQueries'
-
-	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningQueries'
-		
+	SELECT @QueryValue2 = COALESCE(CAST(Value AS INT),@QueryValue) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningQueries'
 	SELECT @EmailList = EmailList,
 			@CellList = CellList	
 	FROM [dba].dbo.AlertContacts WHERE AlertName = 'LongRunningQueries'
 
-	DECLARE @LastQueryHistoryID INT, @LastCollectionTime DATETIME
-
-	SELECT @LastQueryHistoryID =  MIN(a.queryhistoryID) -1
-	FROM [dba].dbo.queryhistory a
-	WHERE a.DateStamp = (SELECT MAX(DateStamp) FROM [dba].dbo.QueryHistory WHERE DateStamp > GETDATE() -1) 
-
-	SELECT @LastCollectionTime = DateStamp FROM [dba].dbo.QueryHistory WHERE QueryHistoryID = @LastQueryHistoryID
-
-	CREATE TABLE #TEMP (
-		QueryHistoryID INT,
-		DateStamp DATETIME,
-		login_time DATETIME,
-		Start_Time DATETIME,
-		Session_ID SMALLINT,
-		CPU_Time INT,
-		Reads BIGINT,
-		Writes BIGINT,
-		Logical_Reads BIGINT,
-		[Host_Name] NVARCHAR(128),
-		[DBName] NVARCHAR(128),
-		Login_name NVARCHAR(128),
-		SQL_Text NVARCHAR(MAX),
-		[Program_name] NVARCHAR(128)
+	CREATE TABLE #QUERYHISTORY (
+		[Session_ID] SMALLINT NOT NULL,
+		[DBName] NVARCHAR(128) NULL,		
+		[RunTime] NUMERIC(20,4) NULL,		
+		[Login_Name] NVARCHAR(128) NOT NULL,
+		[Formatted_SQL_Text] NVARCHAR(MAX) NULL,
+		[SQL_Text] NVARCHAR(MAX) NULL,
+		[CPU_Time] BIGINT NULL,	
+		[Logical_Reads] BIGINT NULL,
+		[Reads] BIGINT NULL,		
+		[Writes] BIGINT NULL,
+		Wait_Time INT,
+		Last_Wait_Type NVARCHAR(60),
+		[Status] NVARCHAR(50),
+		Blocking_Session_ID SMALLINT,
+		Open_Transaction_Count INT,
+		Percent_Complete NUMERIC(12,2),
+		[Host_Name] NVARCHAR(128) NULL,		
+		Client_net_address NVARCHAR(50),
+		[Program_Name] NVARCHAR(128) NULL,
+		[Start_Time] DATETIME NOT NULL,
+		[Login_Time] DATETIME NULL,
+		[DateStamp] DATETIME NULL
+			CONSTRAINT [DF_QueryHistory_DateStamp]  DEFAULT (GETDATE())
 		)
 
-	INSERT INTO #TEMP (QueryHistoryID, DateStamp, Login_Time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
-		SELECT QueryHistoryID, DateStamp, Login_Time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, Formatted_SQL_Text AS SQL_Text, [program_name]
-		FROM [dba].dbo.QueryHistory QH
-			LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
-			                 WHERE AlertName = 'LongRunningQueries' AND 
-			                       VariableName LIKE 'Exclusion%' AND 
-			                       Not Value Is Null AND Enabled = 1) AlertEx
-				ON QH.Formatted_SQL_Text LIKE AlertEx.Value
-	WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue
-		AND (DATEDIFF(mi,DateStamp,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, DateStamp))
-		AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-		AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
-		AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-		AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
-		AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-		AND Formatted_SQL_Text NOT LIKE '%DBCC%'
-		AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
-		AND AlertEx.Value Is Null
+	INSERT INTO #QUERYHISTORY (session_id,DBName,RunTime,login_name,Formatted_SQL_Text,SQL_Text,cpu_time,Logical_Reads,Reads,Writes,wait_time,last_wait_type,[status],blocking_session_id,
+								open_transaction_count,percent_complete,[Host_Name],Client_Net_Address,[Program_Name],start_time,login_time,DateStamp)
+	EXEC dbo.sp_Sessions;
 
-	IF EXISTS (SELECT * FROM #TEMP)
+	-- Flag long-running queries to exclude
+	ALTER TABLE #QUERYHISTORY
+	Add NotifyExclude bit
+
+	UPDATE #QUERYHISTORY
+	SET NotifyExclude = 1
+	FROM #QUERYHISTORY QH
+	     INNER JOIN ( SELECT Value
+	                  FROM AlertSettings
+	                  WHERE AlertName = 'LongRunningQueries' AND
+	                        VariableName LIKE 'Exclusion%' AND
+	                        NOT VALUE IS NULL AND
+	                        Enabled = 1 ) AlertEx
+	       ON QH.Formatted_SQL_Text LIKE AlertEx.Value
+
+	IF EXISTS (SELECT * FROM #QUERYHISTORY 
+				WHERE RunTime >= @QueryValue
+				AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+				AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+				AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+				AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+				AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+				AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+				AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+				AND IsNull(NotifyExclude, 0) = 0)
 	BEGIN
-
-		DECLARE @HTML NVARCHAR(MAX)
-
 		SET	@HTML =
 			'<html><head><style type="text/css">
 			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
@@ -138,70 +119,68 @@ BEGIN
 			<td bgcolor="#E0E0E0" width="50">' + CAST(Session_id AS NVARCHAR) +'</td>
 			<td bgcolor="#F0F0F0" width="75">' + CAST([DBName] AS NVARCHAR) +'</td>	
 			<td bgcolor="#E0E0E0" width="100">' + CAST(login_name AS NVARCHAR) +'</td>	
-			<td bgcolor="#F0F0F0" width="475">' + LEFT(SQL_Text,100) +'</td>			
+			<td bgcolor="#F0F0F0" width="475">' + LEFT(COALESCE(LTRIM(RTRIM(SQL_Text)),'N/A'),100) +'</td>			
 			</tr>'
-		FROM #TEMP
+		FROM #QUERYHISTORY 
+		WHERE RunTime >= @QueryValue
+		AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+		AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+		AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+		AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+		AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+		AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+		AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+		AND IsNull(NotifyExclude, 0) = 0
 
 		SELECT @HTML =  @HTML + '</table></body></html>'
 
 		SELECT @EmailSubject = '[dba]Long Running QUERIES on ' + @ServerName + '!'
 
 		EXEC msdb..sp_send_dbmail
-			@recipients= @EmailList,
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
+
+		IF COALESCE(@CellList,'') <> '' AND IsNull(@QueryValue2, '') <> ''
+		BEGIN
+			/*TEXT MESSAGE*/
+			SET	@HTML =
+				'<html><head></head><body><table><tr><td>Time,</td><td>SPID,</td><td>Login</td></tr>'
+			SELECT @HTML =  @HTML +   
+				'<tr><td>' + CAST(DATEDIFF(ss,Start_Time,DateStamp) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
+			FROM #QUERYHISTORY 
+			WHERE RunTime >= @QueryValue2
+			AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
+			AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
+			AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
+			AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
+			AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
+			AND Formatted_SQL_Text NOT LIKE '%DBCC%'
+			AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
+			AND IsNull(NotifyExclude, 0) = 0
+
+			SELECT @HTML =  @HTML + '</table></body></html>'
+
+			SELECT @EmailSubject = '[dba]LongQueries-' + @ServerName
+
+			EXEC msdb..sp_send_dbmail
+			@recipients= @CellList,
 			@subject = @EmailSubject,
 			@body = @HTML,
 			@body_format = 'HTML'
-
-		IF IsNull(@CellList, '') <> ''
-		BEGIN
-
-			IF IsNull(@QueryValue2, '') <> ''
-			BEGIN
-				TRUNCATE TABLE #TEMP
-				INSERT INTO #TEMP (QueryHistoryID, DateStamp, login_time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, SQL_Text, [program_name])
-				SELECT QueryHistoryID, DateStamp, login_time, Start_Time, session_id, CPU_Time, reads, writes, Logical_Reads, [host_name], [DBName], login_name, Formatted_SQL_Text AS SQL_Text, [program_name]
-				FROM [dba].dbo.QueryHistory QH
-					LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
-					                 WHERE AlertName = 'LongRunningQueries' AND 
-					                       VariableName LIKE 'Exclusion%' AND 
-					                       Not Value Is Null AND Enabled = 1) AlertEx
-						ON QH.Formatted_SQL_Text LIKE AlertEx.Value
-				WHERE (DATEDIFF(ss,Start_Time,DateStamp)) >= @QueryValue2
-					AND (DATEDIFF(mi,DateStamp,GETDATE())) < (DATEDIFF(mi,@LastCollectionTime, DateStamp))
-					AND [DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LongQueryAlerts = 0)
-					AND Formatted_SQL_Text NOT LIKE '%BACKUP DATABASE%'
-					AND Formatted_SQL_Text NOT LIKE '%RESTORE VERIFYONLY%'
-					AND Formatted_SQL_Text NOT LIKE '%ALTER INDEX%'
-					AND Formatted_SQL_Text NOT LIKE '%DECLARE @BlobEater%'
-					AND Formatted_SQL_Text NOT LIKE '%DBCC%'
-					AND Formatted_SQL_Text NOT LIKE '%WAITFOR(RECEIVE%'
-					AND AlertEx.Value Is Null
-			END
-
-			/*TEXT MESSAGE*/
-			IF EXISTS (SELECT * FROM #TEMP)
-			BEGIN
-				SET	@HTML =
-					'<html><head></head><body><table><tr><td>Time,</td><td>SPID,</td><td>Login</td></tr>'
-				SELECT @HTML =  @HTML +   
-					'<tr><td>' + CAST(DATEDIFF(ss,Start_Time,DateStamp) AS NVARCHAR) +',</td><td>' + CAST(Session_id AS NVARCHAR) +',</td><td>' + CAST(login_name AS NVARCHAR) +'</td></tr>'
-				FROM #TEMP
-
-				SELECT @HTML =  @HTML + '</table></body></html>'
-
-				SELECT @EmailSubject = '[dba]LongQueries-' + @ServerName
-
-				EXEC msdb..sp_send_dbmail
-					@recipients= @CellList,
-					@subject = @EmailSubject,
-					@body = @HTML,
-					@body_format = 'HTML'
-
-			END
 		END
-		DROP TABLE #TEMP
 	END
+	
+	IF EXISTS (SELECT * FROM #QUERYHISTORY)
+	BEGIN
+		INSERT INTO dbo.QueryHistory (session_id,DBName,RunTime,login_name,Formatted_SQL_Text,SQL_Text,cpu_time,Logical_Reads,Reads,Writes,wait_time,last_wait_type,[status],blocking_session_id,
+								open_transaction_count,percent_complete,[Host_Name],Client_Net_Address,[Program_Name],start_time,login_time,DateStamp)
+		SELECT session_id,DBName,RunTime,login_name,Formatted_SQL_Text,SQL_Text,cpu_time,Logical_Reads,Reads,Writes,wait_time,last_wait_type,[status],blocking_session_id,
+								open_transaction_count,percent_complete,[Host_Name],Client_Net_Address,[Program_Name],start_time,login_time,DateStamp
+		FROM #QUERYHISTORY
+	END
+	DROP TABLE #QUERYHISTORY
 END
-
 
 GO

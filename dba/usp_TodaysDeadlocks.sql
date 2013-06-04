@@ -6,6 +6,18 @@ GO
 
 CREATE PROC [dbo].[usp_TodaysDeadlocks]
 AS
+
+/**************************************************************************************************************
+**  Purpose:
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  03/19/2013		Michael Rounds			1.0					Comments creation
+**	05/15/2013		Matthew Monroe from SSC	1.1					Removed all SUM() potentially causing a conversion failure
+***************************************************************************************************************/
+
 BEGIN
 SET NOCOUNT ON
 
@@ -37,37 +49,37 @@ EXEC sp_readerrorlog 0, 1
 CREATE TABLE #TEMPDATES (LogDate DATETIME)
 
 INSERT INTO #TEMPDATES (LogDate)
-SELECT DISTINCT CONVERT(VARCHAR(30),LogDate,120) as LogDate
+SELECT DISTINCT CONVERT(NVARCHAR(30),LogDate,120) as LogDate
 FROM #ERRORLOG
 WHERE ProcessInfo LIKE 'spid%'
 and [text] LIKE '   process id=%'
 
 INSERT INTO #DEADLOCKINFO (DeadLockDate, DBName, ProcessInfo, VictimHostname, VictimLogin, VictimSPID, LockingHostname, LockingLogin, LockingSPID)
 SELECT 
-DISTINCT CONVERT(VARCHAR(30),b.LogDate,120) AS DeadlockDate,
-DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),SUM((PATINDEX('%lockTimeout%',b.[text])) - (PATINDEX('%currentdb=%',b.[text])) ) )),11,50)) as DBName,
+DISTINCT CONVERT(NVARCHAR(30),b.LogDate,120) AS DeadlockDate,
+DB_NAME(SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%currentdb=%',b.[text]),(PATINDEX('%lockTimeout%',b.[text])) - (PATINDEX('%currentdb=%',b.[text]))  )),11,50)) as DBName,
 b.processinfo,
-SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),SUM((PATINDEX('%hostpid%',a.[text])) - (PATINDEX('%hostname=%',a.[text])) ) )),10,50)
+SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%hostname=%',a.[text]),(PATINDEX('%hostpid%',a.[text])) - (PATINDEX('%hostname=%',a.[text]))  )),10,50)
 	AS VictimHostname,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),SUM((PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text])) ) )),11,50)
+CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),(PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text]))  )),11,50) NOT LIKE '%id%'
+	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%loginname=%',a.[text]),(PATINDEX('%isolationlevel%',a.[text])) - (PATINDEX('%loginname=%',a.[text]))  )),11,50)
 	ELSE NULL END AS VictimLogin,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),SUM((PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text])) ) )),6,10)
+CASE WHEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),(PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text]))  )),6,10) NOT LIKE '%id%'
+	THEN SUBSTRING(RTRIM(SUBSTRING(a.[text],PATINDEX('%spid=%',a.[text]),(PATINDEX('%sbid%',a.[text])) - (PATINDEX('%spid=%',a.[text]))  )),6,10)
 	ELSE NULL END AS VictimSPID,
-SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),SUM((PATINDEX('%hostpid%',b.[text])) - (PATINDEX('%hostname=%',b.[text])) ) )),10,50)
+SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%hostname=%',b.[text]),(PATINDEX('%hostpid%',b.[text])) - (PATINDEX('%hostname=%',b.[text]))  )),10,50)
 	AS LockingHostname,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),SUM((PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text])) ) )),11,50)
+CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),(PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text]))  )),11,50) NOT LIKE '%id%'
+	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%loginname=%',b.[text]),(PATINDEX('%isolationlevel%',b.[text])) - (PATINDEX('%loginname=%',b.[text]))  )),11,50)
 	ELSE NULL END AS LockingLogin,
-CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10) NOT LIKE '%id%'
-	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),SUM((PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text])) ) )),6,10)
+CASE WHEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),(PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text]))  )),6,10) NOT LIKE '%id%'
+	THEN SUBSTRING(RTRIM(SUBSTRING(b.[text],PATINDEX('%spid=%',b.[text]),(PATINDEX('%sbid=%',b.[text])) - (PATINDEX('%spid=%',b.[text]))  )),6,10)
 	ELSE NULL END AS LockingSPID
 FROM #TEMPDATES t
 JOIN #ERRORLOG a
-	ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),a.LogDate,120)
+	ON CONVERT(NVARCHAR(30),t.LogDate,120) = CONVERT(NVARCHAR(30),a.LogDate,120)
 JOIN #ERRORLOG b
-	ON CONVERT(VARCHAR(30),t.LogDate,120) = CONVERT(VARCHAR(30),b.LogDate,120) AND a.[text] LIKE '   process id=%' AND b.[text] LIKE '   process id=%' AND a.ID < b.ID 
+	ON CONVERT(NVARCHAR(30),t.LogDate,120) = CONVERT(NVARCHAR(30),b.LogDate,120) AND a.[text] LIKE '   process id=%' AND b.[text] LIKE '   process id=%' AND a.ID < b.ID 
 GROUP BY b.LogDate,b.processinfo, a.[Text], b.[Text]
 
 SELECT 
@@ -80,7 +92,7 @@ LockingHostname,
 LockingLogin,
 LockingSPID
 FROM #DEADLOCKINFO 
-WHERE DeadlockDate >=  CONVERT(DATETIME, CONVERT (VARCHAR(10), GETDATE(), 101)) AND
+WHERE DeadlockDate >=  CONVERT(DATETIME, CONVERT (NVARCHAR(10), GETDATE(), 101)) AND
 (VictimLogin IS NOT NULL OR LockingLogin IS NOT NULL)
 ORDER BY DeadlockDate ASC
 

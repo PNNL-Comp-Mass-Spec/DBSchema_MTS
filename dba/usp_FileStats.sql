@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROC [dbo].[usp_FileStats] (@InsertFlag BIT = 0)
 AS
 /**************************************************************************************************************
@@ -25,6 +26,7 @@ AS
 **	04/16/2013		Michael Rounds			2.1.7				Expanded LogSize, TotalExtents and UsedExtents
 **	04/17/2013		Michael Rounds			2.1.8				Changed NVARCHAR(30) to BIGINT for Read/Write columns in #FILESTATS and FileMBSize,FileMBUsed,FileMBEmpty
 **	04/22/2013		T_Peters from SSC		2.1.9				Added CAST to BIGINT on growth which fixes a bug that caused an arithmetic error
+**	05/16/2013		Michael Rounds			2.2					Changed SELECT to use sys.databases instead of master..sysdatabases
 ***************************************************************************************************************/
 
 BEGIN
@@ -89,9 +91,9 @@ CREATE INDEX IDX_tLogSpace_Database ON #LOGSPACE ([DBName])
 
 INSERT INTO #TMP_DB 
 SELECT LTRIM(RTRIM(name)) AS [DBName]
-FROM master..sysdatabases 
-WHERE category IN ('0', '1','16')
-AND DATABASEPROPERTYEX(name,'STATUS')='ONLINE'
+FROM sys.databases
+WHERE is_subscribed = 0
+AND [state] = 0
 ORDER BY name
 
 CREATE INDEX IDX_TMPDB_Database ON #TMP_DB ([DBName])
@@ -155,8 +157,8 @@ SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
 		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
 			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
 FROM sys.sysfiles SF
-JOIN master..sysdatabases SDB
-	ON db_id() = SDB.[dbid]
+JOIN sys.databases SDB
+	ON db_id() = SDB.[database_id]
 JOIN sys.dm_io_virtual_file_stats(NULL,NULL) b
 	ON db_id() = b.[database_id] AND SF.fileid = b.[file_id]
 LEFT OUTER 

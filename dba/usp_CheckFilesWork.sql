@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROC [dbo].[usp_CheckFilesWork]
+CREATE PROC dbo.usp_CheckFilesWork
 (
 	@CheckTempDB BIT = 0,
 	@WarnGrowingLogFiles BIT = 0
@@ -25,6 +25,7 @@ AS
 **					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
 **						from SSC
 **	05/14/2013		Matthew Monroe			1.2.1				Now treating @MinFileSizeMB as 0 MB if null
+**	05/28/2013		Matthew Monroe			1.2.2				Now querying on LogFileAlerts = 1 in DatabaseSettings
 ***************************************************************************************************************/
 
 BEGIN
@@ -79,7 +80,7 @@ BEGIN
 	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
 	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	                             AND t2.[DBName] IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 1) 
 	            OR
 	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
@@ -186,7 +187,7 @@ BEGIN
 	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize
 	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	                       AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
 	            OR
 	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
