@@ -1,5 +1,13 @@
 Declare @PublicationID int = 1080
 
+/*
+ * Note: if you receive a duplicate key error, then the relationship already exists
+ *
+ * If desired, you could delete extra entries of a given type, for example:
+ *   DELETE FROM publication_entity_xref where publication_id = 1084 and entity_type = 'Job';
+ *
+ */
+
 SELECT 'INSERT INTO publication_entity_xref (publication_id, entity_id, entity_type)
 VALUES (' + Convert(varchar(12), @PublicationID) + ',' + Convert(varchar(12), ID) + ', ''Dataset'');'
 FROM (SELECT DDR.ID AS id

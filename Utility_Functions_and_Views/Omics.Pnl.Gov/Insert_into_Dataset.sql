@@ -11,7 +11,7 @@ FROM (SELECT DDR.ID AS id, DDR.Dataset AS dataset_name, DDR.Created AS created, 
           T_Experiments E ON DDR.Experiment = E.Experiment_Num
       WHERE (DDR.Dataset IN ('SysVirol_ICL012_Mock_0h_1_Protein_A_12Jun12_Sphinx_12-05-04','SysVirol_ICL012_Mock_0h_1_Protein_B_12Jun12_Sphinx_12-05-04'))) LookupQ
 
--- Lookup by Dataset Name
+-- Lookup by Dataset ID
 SELECT 'INSERT INTO dataset (id, dataset_name, created, comment, instrument_name, archive_path_id, rating, scan_count, file_size_bytes, experiment_id, archive_file_size_bytes)
 VALUES (' + Convert(varchar(12), id) + ',''' + dataset_name + ''', ''' + Convert(varchar(32), created, 120) + ''', ''' + comment + ''', ''' + instrument_name + ''', ' + Convert(varchar(12), archive_path_id) + ', ''' + rating + ''', ' + Convert(varchar(12), scan_count) + ', ' + Convert(varchar(12), file_size_bytes) + ', ' + 
     Convert(varchar(12), experiment_id) + ', ' + Convert(varchar(12), archive_file_size_bytes) + ');'
