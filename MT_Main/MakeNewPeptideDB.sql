@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE MakeNewPeptideDB
+CREATE Procedure MakeNewPeptideDB
 /****************************************************
 **
 **	Desc: Creates a new peptide database
@@ -39,6 +39,7 @@ CREATE PROCEDURE MakeNewPeptideDB
 **			11/29/2006 mem - Added parameter @InfoOnly
 **			03/24/2008 mem - Changed value for @dbState from 1 to 5
 **			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
+**			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
 **    
 *****************************************************/
 (
@@ -393,7 +394,7 @@ AS
 		                                          LogFileAlerts,
 		                                          LongQueryAlerts,
 		                                          Reindex )
-		    VALUES(@NewDBName, 1, 1, 1, 0)
+		    VALUES(@NewDBName, 1, 0, 1, 0)
 		End
 	End
 

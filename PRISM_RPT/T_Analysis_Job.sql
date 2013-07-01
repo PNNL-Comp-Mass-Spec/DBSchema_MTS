@@ -29,6 +29,7 @@ CREATE TABLE [dbo].[T_Analysis_Job](
 	[AMT_Count_10pct_FDR] [int] NULL,
 	[AMT_Count_25pct_FDR] [int] NULL,
 	[AMT_Count_50pct_FDR] [int] NULL,
+	[Refine_Mass_Cal_PPMShift] [numeric](9, 4) NULL,
 	[MD_ID] [int] NULL,
 	[QID] [int] NULL,
 	[Ini_File_Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,

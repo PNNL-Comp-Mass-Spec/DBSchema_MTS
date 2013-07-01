@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE dbo.GetProteinsIdentifiedOutputColumns
+CREATE PROCEDURE dbo.GetProteinsIdentifiedOutputColumns
 /****************************************************
 **
 **	Desc: 
@@ -99,6 +99,7 @@ As
 
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[GetProteinsIdentifiedOutputColumns] TO [DMS_SP_User] AS [dbo]

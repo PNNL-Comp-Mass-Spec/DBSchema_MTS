@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.RemoveDecoyProteins
 /****************************************************
 **
@@ -19,6 +20,7 @@ CREATE PROCEDURE dbo.RemoveDecoyProteins
 **	Date:	03/18/2010
 **			03/19/2010 mem - Now posting to the log if proteins are deleted
 **			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
+**			06/20/2013 mem - Added 'xxx[_]%' as an additional prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -59,11 +61,12 @@ AS
 	( SELECT MTPMA.Mass_Tag_ID,
 	         COUNT(*) AS ProteinCount,
 	         SUM(CASE
-	                 WHEN (Prot.Reference LIKE 'reversed[_]%') OR
-	                      (Prot.Reference LIKE 'scrambled[_]%') OR
-	                      (Prot.Reference LIKE '%[:]reversed') OR
-	                      (Prot.Reference LIKE 'xxx.%') OR
-	                      (Prot.Reference LIKE 'rev[_]%') THEN 1
+	                 WHEN Prot.Reference LIKE 'reversed[_]%' OR		-- MTS reversed proteins
+	                      Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+	                      Prot.Reference LIKE '%[:]reversed' OR		-- X!Tandem decoy proteins
+	                      Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
+	                      Prot.Reference LIKE 'rev[_]%' OR			-- MSGFDB reversed proteins
+	                      Prot.Reference LIKE 'xxx[_]%' THEN 1		-- MSGF+ reversed proteins
 	                 ELSE 0
 	             END) AS DecoyProteinCount
 	  FROM T_Proteins Prot
@@ -80,11 +83,12 @@ AS
 	                  WHERE (DecoyProteinCount > 0) AND
 	                        (ProteinCount > DecoyProteinCount) ) MTIDList
 	       ON MTPM.Mass_Tag_ID = MTIDList.Mass_Tag_ID
-	WHERE (Prot.Reference LIKE 'reversed[_]%') OR
-	      (Prot.Reference LIKE 'scrambled[_]%') OR
-	      (Prot.Reference LIKE '%[:]reversed') OR
-	      (Prot.Reference LIKE 'xxx.%') OR
-	      (Prot.Reference LIKE 'rev[_]%') AND
+	WHERE Prot.Reference LIKE 'reversed[_]%' OR
+	      Prot.Reference LIKE 'scrambled[_]%' OR
+	      Prot.Reference LIKE '%[:]reversed' OR
+	      Prot.Reference LIKE 'xxx.%' OR
+	      Prot.Reference LIKE 'rev[_]%' OR
+	      Prot.Reference LIKE 'xxx[_]%' AND
 	      NOT Prot.Ref_ID IN ( SELECT Ref_ID
 	                           FROM T_Mass_Tag_to_Protein_Map
 	                           WHERE Mass_Tag_ID IN ( SELECT Mass_Tag_ID
@@ -102,7 +106,7 @@ AS
 		---------------------------------------------------
 		
 		SELECT MTPM.Ref_ID,
-		       Prot.Reference,
+		   Prot.Reference,
 		       COUNT(*) AS MT_Count
 		FROM T_Mass_Tag_to_Protein_Map MTPM
 		     INNER JOIN T_Proteins Prot

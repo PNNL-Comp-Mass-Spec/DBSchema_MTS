@@ -1,7 +1,7 @@
 /****** Object:  View [dbo].[V_Table_Size_Summary] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE VIEW dbo.V_Table_Size_Summary

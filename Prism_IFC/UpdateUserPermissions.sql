@@ -4,8 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE PROCEDURE [dbo].[UpdateUserPermissions]
+CREATE PROCEDURE dbo.UpdateUserPermissions
 /****************************************************
 **
 **	Desc: Updates user permissions in the current DB
@@ -165,7 +164,6 @@ AS
 	exec UpdateUserPermissionsViewDefinitions @UserList='MTS_DB_Dev, MTS_DB_Lite'
 
 	Return 0
-
 
 
 GO

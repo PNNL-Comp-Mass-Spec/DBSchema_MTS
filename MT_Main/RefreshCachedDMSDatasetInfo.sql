@@ -20,12 +20,13 @@ CREATE PROCEDURE dbo.RefreshCachedDMSDatasetInfo
 **			12/13/2010 mem - Fixed the table name being sent to RefreshCachedDMSInfoFinalize and PostLogEntry
 **			03/03/2011 mem - Now populating [File Size MB]
 **			10/17/2012 mem - Now populating Instrument_Data_Purged
+**			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
 **
 *****************************************************/
 (
-	@DatasetIDMinimum int = 0,		-- Set to a positive value to limit the datasets examined; when non-zero, then datasets outside this range are ignored
+	@DatasetIDMinimum int = 0,					-- Set to a positive value to limit the datasets examined; when non-zero, then datasets outside this range are ignored
 	@DatasetIDMaximum int = 0,
-	@SourceMTSServer varchar(128) = 'porky',	-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Dataset_Import_Ex
+	@SourceMTSServer varchar(128) = '',			-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Dataset_Import_Ex to directly query Gigasax
 	@UpdateSourceMTSServer tinyint = 0,			-- If 1, then first calls RefreshCachedDMSDatasetInfo on the source MTS server; only valid if @SourceMTSServer is not blank
 	@message varchar(255) = '' output,
 	@previewSql tinyint = 0

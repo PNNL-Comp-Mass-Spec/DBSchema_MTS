@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE VIEW V_Filter_Set_Report
+CREATE VIEW [dbo].[V_Filter_Set_Report]
 AS
 SELECT OuterQ.Filter_Set_ID, 
     OuterQ.PMT_Quality_Score_Value, OuterQ.Experiment_Filter, 
@@ -22,7 +22,8 @@ SELECT OuterQ.Filter_Set_ID,
     FSR.MSGF_SpecProb,
     FSR.MSGFDB_SpecProb,
     FSR.MSGFDB_PValue,
-    FSR.MSGFDB_FDR,
+    FSR.MSGFPlus_QValue,
+    FSR.MSGFPlus_PepQValue,
     FSR.MSAlign_PValue,
     FSR.MSAlign_FDR,
     FSR.Inspect_MQScore,
@@ -54,6 +55,7 @@ FROM (SELECT CONVERT(int, LTRIM(RTRIM(SUBSTRING(Value, 1, CommaLoc - 1)))) AS Fi
       WHERE (CommaLoc > 0)) AS OuterQ INNER JOIN
     MT_Main.dbo.V_DMS_Filter_Set_Report AS FSR ON 
     OuterQ.Filter_Set_ID = FSR.Filter_Set_ID
+
 
 
 GO

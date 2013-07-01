@@ -4,8 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE PROCEDURE [dbo].[UpdateUserPermissionsViewDefinitions]
+CREATE PROCEDURE dbo.UpdateUserPermissionsViewDefinitions
 /****************************************************
 **
 **	Desc: Grants view definition permission to all stored procedures for the specified users
@@ -178,7 +177,6 @@ As
 Done:
 
 	Return @myError
-
 
 
 GO

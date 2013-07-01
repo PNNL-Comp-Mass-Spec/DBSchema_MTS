@@ -51,6 +51,7 @@ CREATE Procedure ComputePMTQualityScore
 **			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **			05/07/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
 **							 Added support for filtering on MSGF+ PepQValue
+**			06/18/2013 mem - Fixed bug that was trying to access non-existent column RankSpecProb in table T_Score_MSAlign
 **
 ****************************************************/
 (
@@ -693,7 +694,7 @@ As
 								
 								Set @S = @S + ' FROM ('
 								Set @S = @S +    ' SELECT Mass_Tag_ID,'
-								Set @S = @S +      ' Charge_State,'
+								Set @S = @S +   ' Charge_State,'
 								Set @S = @S +      ' MAX(SubQ.XCorr_Max) AS XCorr_Max,'
 													-- X!Tandem Scores
 								Set @S = @S +	   ' MAX(SubQ.Hyperscore_Max) AS Hyperscore_Max,'
@@ -815,7 +816,7 @@ As
 									Set @S = @S +        ' MIN(IsNull(M.SpecProb, 1)) AS MSGFDB_SpecProb_Min,'
 									Set @S = @S +        ' MIN(IsNull(M.PValue, 1)) AS MSGFDB_PValue_Min,'
 									Set @S = @S +        ' MIN(IsNull(M.FDR, 1)) AS MSGFPlus_QValue_Min,'
-									Set @S = @S +        ' MIN(IsNull(M.PepFDR, 1)) AS MSGFPlus_PepQValue_Min,'
+									Set @S = @S +    ' MIN(IsNull(M.PepFDR, 1)) AS MSGFPlus_PepQValue_Min,'
 									Set @S = @S +        ' 1 AS MSAlign_PValue_Min,'
 									Set @S = @S +        ' 1 AS MSAlign_FDR_Min,'	
 									Set @S = @S +        ' MAX(IsNull(SD.DiscriminantScoreNorm, 0)) As Discriminant_Score_Max,'
@@ -1016,7 +1017,7 @@ As
 								Set @S = @S +         ' IsNull(MT.Multiple_Proteins, 0) + 1 AS ProteinCount,'
 								Set @S = @S +         ' MAX(ISNULL(MTPM.Cleavage_State, 0)) AS MaxCleavageState,'
 								Set @S = @S +         ' MAX(ISNULL(MTPM.Terminus_State, 0)) AS MaxTerminusState,'
-								Set @S = @S +         ' ' + @ObsSql + ' AS ObservationCount'
+								Set @S = @S +    ' ' + @ObsSql + ' AS ObservationCount'
 
 								Set @S = @S +      ' FROM T_Mass_Tags AS MT INNER JOIN ('
 								Set @S = @S +          ' SELECT P.Peptide_ID,'
@@ -1098,7 +1099,6 @@ As
 									Set @S = @S +        ' INNER JOIN T_Score_Discriminant AS SD ON P.Peptide_ID = SD.Peptide_ID'
 									Set @S = @S + ' WHERE TAD.ResultType = ''MSA_Peptide_Hit'' AND NOT P.Charge_State IS NULL AND'
 									Set @S = @S +        ' P.Charge_State ' +  @ChargeStateComparison + Convert(varchar(11), @ChargeStateThreshold) + ' AND '
-									Set @S = @S +        ' M.RankSpecProb ' + @RankScoreComparison + Convert(varchar(11), @RankScoreThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(M.PValue, 1) ' +    @MSAlignPValueComparison +  Convert(varchar(11), @MSAlignPValueThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(M.FDR, 1) ' +       @MSAlignFDRComparison +  Convert(varchar(11), @MSAlignFDRThreshold) + ' AND '
 									Set @S = @S +        ' IsNull(SD.DiscriminantScoreNorm, 0) ' + @DiscriminantScoreComparison +  Convert(varchar(11), @DiscriminantScoreThreshold) + ' AND '

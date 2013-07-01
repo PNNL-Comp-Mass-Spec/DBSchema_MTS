@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.UpdateMassTagToProteinModMap
 /****************************************************
 **
@@ -24,6 +25,7 @@ CREATE Procedure dbo.UpdateMassTagToProteinModMap
 **			04/25/2008 mem - Updated to properly handle MTs with multiple occurences of the same modification on a given residue (e.g. N-terminus of peptide has NHS_SS modification twice)
 **						   - Added Try/Catch error handling
 **			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
+**			06/20/2013 mem - Added 'xxx[_]%' as an additional prefix for reversed proteins
 **    
 *****************************************************/
 (
@@ -201,11 +203,12 @@ AS
 
 		If @SkipReversedAndScrambledProteins <> 0
 		Begin
-				Set @S = @S + ' AND (NOT ( Prot.Reference LIKE ''reversed[_]%'' OR'
-				Set @S = @S +           ' Prot.Reference LIKE ''scrambled[_]%'' OR'
-				Set @S = @S +           ' Prot.Reference LIKE ''%[:]reversed'' OR'
-				Set @S = @S +           ' Prot.Reference LIKE ''xxx.%'' OR'
-				Set @S = @S +           ' Prot.Reference LIKE ''rev[_]%'''
+				Set @S = @S + ' AND (NOT ( Prot.Reference LIKE ''reversed[_]%'' OR'		-- MTS reversed proteins  
+				Set @S = @S +           ' Prot.Reference LIKE ''scrambled[_]%'' OR'		-- MTS scrambled proteins 
+				Set @S = @S +           ' Prot.Reference LIKE ''%[:]reversed'' OR'		-- X!Tandem decoy proteins
+				Set @S = @S +           ' Prot.Reference LIKE ''xxx.%'' OR'				-- Inspect reversed/scrambled proteins
+				Set @S = @S +           ' Prot.Reference LIKE ''rev[_]%'' OR'			-- MSGFDB reversed proteins
+				Set @S = @S +           ' Prot.Reference LIKE ''xxx[_]%'''				-- MSGF+ reversed proteins
 				
 				Set @S = @S +         ' ))'
 		End

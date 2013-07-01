@@ -28,6 +28,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **						   - Added parameters @DiskRetryIntervalSec, @DiskRetryCount, and CompressionLevel
 **						   - Changed the default number of threads to 3
 **						   - Changed the default compression level to 4
+**			06/28/2013 mem - Now performing a log backup of the Model DB after the full backup to prevent the model DB's log file from growing over time (it grows because the Model DB's recovery model is "Full", and a database backup is a logged operation)
 **    
 *****************************************************/
 (
@@ -241,7 +242,7 @@ As
 	---------------------------------------
 	-- Create a temporary table to hold the databases to process
 	---------------------------------------
-	If Exists (SELECT [Name] FROM sysobjects WHERE [Name] = '#Tmp_DB_Backup_List')
+	If Exists (SELECT * from sys.tables where Name = '#Tmp_DB_Backup_List')
 		DROP TABLE #Tmp_DB_Backup_List
 
 	CREATE TABLE #Tmp_DB_Backup_List (
@@ -250,10 +251,11 @@ As
 		Perform_Full_DB_Backup tinyint NOT NULL DEFAULT 0
 	)
 
+	-- Note that is not a unique index; the model database will be listed twice if it is using Full Recovery mode
 	CREATE CLUSTERED INDEX #IX_Tmp_DB_Backup_List ON #Tmp_DB_Backup_List (DatabaseName)
 
 
-	If Exists (SELECT [Name] FROM sysobjects WHERE [Name] = '#Tmp_Current_Batch')
+	If Exists (SELECT * from sys.tables where Name = '#Tmp_Current_Batch')
 		DROP TABLE #Tmp_Current_Batch
 
 	CREATE TABLE #Tmp_Current_Batch (
@@ -267,11 +269,27 @@ As
 	-- Optionally include the system databases
 	-- Note that system DBs are forced to perform a full backup, even if @TransactionLogBackup = 1
 	---------------------------------------
+	--
 	If @IncludeSystemDBs <> 0
 	Begin
 		INSERT INTO #Tmp_DB_Backup_List (DatabaseName, Perform_Full_DB_Backup) VALUES ('Master', 1)
 		INSERT INTO #Tmp_DB_Backup_List (DatabaseName, Perform_Full_DB_Backup) VALUES ('Model', 1)
 		INSERT INTO #Tmp_DB_Backup_List (DatabaseName, Perform_Full_DB_Backup) VALUES ('MSDB', 1)
+
+		---------------------------------------
+		-- Lookup the recovery mode of the Model DB
+		-- If it is using Full Recovery, then we need to perform a log backup after the full backup, 
+		--   otherwise the model DB's log file may grow indefinitely
+		---------------------------------------
+		
+		Declare @ModelDbRecoveryModel varchar(12)
+
+		SELECT @ModelDbRecoveryModel = recovery_model_desc
+		FROM sys.databases
+		where name = 'Model'
+
+		If @ModelDbRecoveryModel = 'Full'
+			INSERT INTO #Tmp_DB_Backup_List (DatabaseName, Perform_Full_DB_Backup) VALUES ('Model', 0)
 	End
 
 	---------------------------------------
@@ -372,6 +390,7 @@ As
 	Begin
 		UPDATE #Tmp_DB_Backup_List
 		SET Perform_Full_DB_Backup = 1
+		WHERE DatabaseName <> 'Model'
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -500,6 +519,7 @@ As
 				DELETE #Tmp_DB_Backup_List
 				FROM #Tmp_DB_Backup_List BL INNER JOIN 
 					 #Tmp_Current_Batch CB ON BL.DatabaseName = CB.DatabaseName
+				WHERE BL.Perform_Full_DB_Backup = @FullDBBackupMatchMode
 					
 				---------------------------------------
 				-- Construct the backup command for the databases in @DBList
@@ -660,7 +680,8 @@ As
 			Else
 			Begin -- <e>
 				DELETE FROM #Tmp_DB_Backup_List
-				WHERE @DBName = DatabaseName
+				WHERE @DBName = DatabaseName AND
+				      Perform_Full_DB_Backup = @FullDBBackupMatchMode
 
 				---------------------------------------
 				-- Construct the backup and restore commands for database @DBName
@@ -820,7 +841,6 @@ Done:
 	DROP TABLE #Tmp_DB_Backup_List
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[BackupMTSDBs] TO [MTS_DB_Dev] AS [dbo]

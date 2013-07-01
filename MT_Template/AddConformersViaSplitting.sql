@@ -12,7 +12,7 @@ CREATE PROCEDURE dbo.AddConformersViaSplitting
 **			If observed drift times are more than @DriftTimeToleranceFinal msec from the must abundant observation, then
 **			splits the conformer into two or more new conformers
 **
-**			This procedure must be called AddMatchMakingConformersForList finishes processing all of the MDIDs being used to create conformers
+**			This procedure must be called after AddMatchMakingConformersForList finishes processing all of the MDIDs being used to create conformers
 **
 **	Return values: 0 if no error; otherwise error code
 **
@@ -20,6 +20,7 @@ CREATE PROCEDURE dbo.AddConformersViaSplitting
 **
 **	Auth:	mem
 **	Date:	11/09/2010 mem - Initial version
+**			06/21/2013 mem - Moved determination of the next available conformer number for a given mass_tag_id to within the while loop processing each row in #Tmp_NewConformers
 **    
 *****************************************************/
 (
@@ -39,7 +40,7 @@ AS
 	Declare @Charge smallint
 	Declare @MassTagID  int
 	Declare @DriftTime real
-	Declare @ConformerNum smallint
+	Declare @ConformerNumNew smallint
 	Declare @ConformerIDNew int
 	
 	Declare @InfoOnlyConformerID int = -1
@@ -97,7 +98,6 @@ AS
 		Drift_Time real NOT NULL,
 		Charge_State smallint NOT NULL,
 		Mass_Tag_ID int NOT NULL,
-		Conformer_Num_New smallint NULL,
 		Conformer_ID_New int NULL
 	)
 
@@ -131,7 +131,7 @@ AS
 
 	-----------------------------------------------------
 	-- Populate #Tmp_PMResultsToProcess with the observations for each conformer 
-	-- that are more than @DriftTimeTolerance msec away from the drift time of the most abundance observation for that conformer
+	-- that are more than @DriftTimeTolerance msec away from the drift time of the most abundant observation for that conformer
 	-----------------------------------------------------
 	--
 	INSERT INTO #Tmp_PMResultsToProcess( Conformer_ID,
@@ -206,21 +206,21 @@ AS
 		-----------------------------------------------------
 		-- Populate #Tmp_NewConformers with the drift time and charge of the 
 		-- most abundant observation for each of the rows that 
-		-- still have a null value for Conformer_Num_New in #Tmp_PMResultsToProcess
+		-- still have a null value for Conformer_ID_New in #Tmp_PMResultsToProcess
 		--
 		-- This will define the new conformers that need to be added to T_Mass_Tag_Conformers_Observed
+		--
+		-- When computing Max_Conformer, we group by Mass_tag_id and charge, then add 1
 		-----------------------------------------------------
 		--
 		INSERT INTO #Tmp_NewConformers ( Conformer_ID,
 		                                 Mass_Tag_ID,
 		                                 Drift_Time,
-		                                 Charge_State,
-		                                 Conformer_Num_New )
+		                                 Charge_State )
 		SELECT ObsQ.Conformer_ID,
 		       ObsQ.Mass_Tag_ID,
 		       ObsQ.Drift_Time,
-		       ObsQ.Charge_State,
-		       Conformers.Max_Conformer + 1 AS Conformer_Num_New
+		       ObsQ.Charge_State
 		FROM ( SELECT Conformer_ID,
 		              UMC_ResultDetails_ID,
 		              Mass_Tag_ID,
@@ -231,14 +231,6 @@ AS
 		       FROM #Tmp_PMResultsToProcess
 		       WHERE Conformer_ID_New IS NULL 
 		       ) ObsQ
-		     INNER JOIN ( SELECT Mass_Tag_ID,
-		                         Charge,
-		                         MAX(Conformer) AS Max_Conformer
-		                  FROM dbo.T_Mass_Tag_Conformers_Observed
-		                  GROUP BY Mass_Tag_ID, Charge 
-		                ) Conformers
-		       ON ObsQ.Mass_Tag_ID = Conformers.Mass_Tag_ID AND
-		          ObsQ.Charge_State = Conformers.Charge
 		WHERE ObsQ.AbundanceRank = 1
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -256,8 +248,7 @@ AS
 				SELECT TOP 1 @ConformerID = Conformer_ID,
 				             @Charge = Charge_State,
 				             @MassTagID = Mass_Tag_ID,
-				             @DriftTime = Drift_Time,
-				             @ConformerNum = Conformer_Num_New
+				             @DriftTime = Drift_Time
 				FROM #Tmp_NewConformers
 				WHERE Conformer_ID > @ConformerID
 				ORDER BY Conformer_ID
@@ -271,13 +262,20 @@ AS
 						
 						If @InfoOnly = 0
 						Begin
+							Set @ConformerNumNew = 1
+							
+							SELECT @ConformerNumNew = MAX(Conformer) +1
+							FROM T_Mass_Tag_Conformers_Observed
+							WHERE Mass_Tag_ID = @MassTagID AND Charge = @Charge
+							
+							
 							INSERT INTO T_Mass_Tag_Conformers_Observed( Mass_Tag_ID,
 																		Charge,
 																		Conformer,
 																		Drift_Time_Avg,
 																		Obs_Count,
 																		Last_Affected )
-							VALUES(@MassTagID, @Charge, @ConformerNum, @DriftTime, 0, GetDate())
+							VALUES(@MassTagID, @Charge, @ConformerNumNew, @DriftTime, 0, GetDate())
 							--			    
 							SELECT @myError = @@error, @myRowCount = @@rowcount, @ConformerIDNew = SCOPE_IDENTITY()
 						    
@@ -302,9 +300,12 @@ AS
 						INSERT INTO #Tmp_ConformerIDList (Conformer_ID)
 						VALUES (@ConformerIDNew)
 						
-						UPDATE T_Mass_Tag_Conformers_Observed
-						SET Last_Affected = GetDate()
-						WHERE Conformer_ID = @ConformerID
+						If @InfoOnly = 0
+						Begin
+							UPDATE T_Mass_Tag_Conformers_Observed
+							SET Last_Affected = GetDate()
+							WHERE Conformer_ID = @ConformerID
+						End
 						
 				End -- </c>
 

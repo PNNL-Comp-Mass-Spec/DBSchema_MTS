@@ -12,7 +12,7 @@ CREATE TABLE [dbo].[SchemaChangeLog](
 	[SQLEvent] [sysname] COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Schema] [sysname] COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ObjectName] [sysname] COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[SQLCmd] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[SQLCmd] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[XmlEvent] [xml] NOT NULL,
  CONSTRAINT [PK_SchemaChangeLog] PRIMARY KEY CLUSTERED 
 (

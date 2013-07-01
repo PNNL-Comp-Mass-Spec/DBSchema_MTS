@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[UpdateMassTagsFromOneAnalysis] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure UpdateMassTagsFromOneAnalysis
@@ -57,6 +57,7 @@ CREATE Procedure UpdateMassTagsFromOneAnalysis
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/05/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			               - Now populating T_Peptides.DelM_PPM And T_Peptides.RankHit
+**			06/14/2013 mem - Fixed bug updating MSGFPlus and MSAlign peptides
 **
 *****************************************************/
 (
@@ -913,7 +914,7 @@ As
 		set @S = @S +  ' M.DeNovoScore, M.MSGFScore, M.SpecProb, M.RankSpecProb, '
 		set @S = @S +  ' M.PValue, M.Normalized_Score, M.FDR, M.PepFDR'
 		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
-		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSGFDB AS I ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSGFDB AS M ON IP.Peptide_ID_Original = M.Peptide_ID'
 		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 		
 		If @previewSql <> 0
@@ -969,7 +970,7 @@ As
 		set @S = @S + ' SELECT IP.Peptide_ID_New, M.Prsm_ID, M.PrecursorMZ, M.DelM, M.Unexpected_Mod_Count, M.Peak_Count, M.Matched_Peak_Count, '
 		set @S = @S +  ' M.Matched_Fragment_Ion_Count, M.PValue, M.EValue, M.FDR, M.Normalized_Score'
 		set @S = @S + ' FROM #Imported_Peptides AS IP INNER JOIN'
-		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSAlign AS I ON IP.Peptide_ID_Original = M.Peptide_ID'
+		set @S = @S +   ' ' + @PeptideDBPath + '.dbo.T_Score_MSAlign AS M ON IP.Peptide_ID_Original = M.Peptide_ID'
 		set @S = @S + ' ORDER BY IP.Peptide_ID_New'
 		
 		If @previewSql <> 0
@@ -1316,6 +1317,7 @@ Done:
 PreviewOnlyDone:
 
 	return @errorReturn
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateMassTagsFromOneAnalysis] TO [MTS_DB_Dev] AS [dbo]

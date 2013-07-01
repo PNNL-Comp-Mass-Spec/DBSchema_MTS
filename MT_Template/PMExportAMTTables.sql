@@ -20,6 +20,7 @@ CREATE Procedure dbo.PMExportAMTTables
 **			02/22/2011 mem - Added parameter @ReturnIMSConformersTable
 **			10/07/2011 mem - Added column Peptide_Count_Observed to the proteins table
 **			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
+**			06/20/2013 mem - Added 'xxx[_]%' as an additional prefix for reversed proteins
 **
 ****************************************************/
 (
@@ -106,11 +107,12 @@ AS
 			       Prot.External_Protein_ID,
 			       Prot.Protein_Collection_ID,
 			       CASE
-			           WHEN Prot.Reference LIKE 'reversed[_]%' OR
-			                Prot.Reference LIKE 'scrambled[_]%' OR
-			                Prot.Reference LIKE '%[:]reversed' OR
+			           WHEN Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+			                Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+			                Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
 	                        Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-	                        Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins			                
+	                        Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
+	                        Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
 			                THEN 1
 			           ELSE 0
 			       END AS Decoy_Protein,
@@ -149,11 +151,12 @@ AS
 					MTPM.Terminus_State,
 					MTPM.Missed_Cleavage_Count,
 					CASE
-						WHEN Prot.Reference LIKE 'reversed[_]%' OR
-							Prot.Reference LIKE 'scrambled[_]%' OR
-			                Prot.Reference LIKE '%[:]reversed' OR
+						WHEN Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins  
+							Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins 
+			                Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
 	                        Prot.Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-	                        Prot.Reference LIKE 'rev[_]%'			-- MSGFDB reversed proteins			                
+	                        Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
+	                        Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
 			                THEN 1
 						ELSE 0
 					END AS Decoy_Protein

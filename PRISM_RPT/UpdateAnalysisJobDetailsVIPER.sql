@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.UpdateAnalysisJobDetailsVIPER
 **	Auth:	mem
 **	Date:	12/14/2011 mem - Initial version
 **			03/16/2012 mem - Now updating columns Ini_File_Name, Comparison_Mass_Tag_Count, and MD_State when @UpdateMDIDandQID = 1
+**			05/24/2013 mem - Added column Refine_Mass_Cal_PPMShift
 **
 *****************************************************/
 (
@@ -277,7 +278,8 @@ As
 								Set @S = @S     + ' AMT_Count_5pct_FDR = Source.AMT_Count_5pct_FDR,'
 								Set @S = @S     + ' AMT_Count_10pct_FDR = Source.AMT_Count_10pct_FDR,'
 								Set @S = @S     + ' AMT_Count_25pct_FDR = Source.AMT_Count_25pct_FDR,'
-								Set @S = @S     + ' AMT_Count_50pct_FDR = Source.AMT_Count_50pct_FDR'
+								Set @S = @S     + ' AMT_Count_50pct_FDR = Source.AMT_Count_50pct_FDR,'
+								Set @S = @S     + ' Refine_Mass_Cal_PPMShift = Source.Refine_Mass_Cal_PPMShift'
 								Set @S = @S + ' FROM T_Analysis_Job AJ'
 								Set @S = @S     + '  INNER JOIN ' + @DBPath + '.dbo.V_PM_Results_FDR_Stats Source'
 								Set @S = @S     + '    ON AJ.Task_ID = Source.Task_ID AND'
@@ -289,7 +291,8 @@ As
 								Set @S = @S     + ' (ISNULL(AJ.AMT_Count_5pct_FDR, 0) <> Source.AMT_Count_5pct_FDR) OR'
 								Set @S = @S     + ' (ISNULL(AJ.AMT_Count_10pct_FDR, 0) <> Source.AMT_Count_10pct_FDR) OR'
 								Set @S = @S     + ' (ISNULL(AJ.AMT_Count_25pct_FDR, 0) <> Source.AMT_Count_25pct_FDR) OR'
-								Set @S = @S     + ' (ISNULL(AJ.AMT_Count_50pct_FDR, 0) <> Source.AMT_Count_50pct_FDR)'
+								Set @S = @S     + ' (ISNULL(AJ.AMT_Count_50pct_FDR, 0) <> Source.AMT_Count_50pct_FDR) OR'
+								Set @S = @S     + ' (ISNULL(AJ.Refine_Mass_Cal_PPMShift, -99999) <> Source.Refine_Mass_Cal_PPMShift)'
 
 								If @PreviewSql <> 0
 									Print @S

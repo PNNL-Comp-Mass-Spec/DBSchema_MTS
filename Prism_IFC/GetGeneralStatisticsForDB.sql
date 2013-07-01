@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE dbo.GetGeneralStatisticsForDB
+
+CREATE PROCEDURE dbo.GetGeneralStatisticsForDB
 /****************************************************
 **
 **	Desc:	Returns the contents of the General_Statistics table
@@ -103,6 +104,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[GetGeneralStatisticsForDB] TO [DMS_SP_User] AS [dbo]

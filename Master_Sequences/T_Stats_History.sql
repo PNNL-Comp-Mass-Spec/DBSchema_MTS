@@ -7,7 +7,7 @@ CREATE TABLE [dbo].[T_Stats_History](
 	[Entry_ID] [int] IDENTITY(1,1) NOT NULL,
 	[Posting_Time] [datetime] NOT NULL,
 	[Sequence_Count] [int] NOT NULL,
- CONSTRAINT [PK_T_Stats_History] PRIMARY KEY NONCLUSTERED 
+ CONSTRAINT [PK_T_Stats_History] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
@@ -16,7 +16,7 @@ CREATE TABLE [dbo].[T_Stats_History](
 GO
 
 /****** Object:  Index [IX_T_Stats_History] ******/
-CREATE UNIQUE CLUSTERED INDEX [IX_T_Stats_History] ON [dbo].[T_Stats_History] 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Stats_History] ON [dbo].[T_Stats_History] 
 (
 	[Posting_Time] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]

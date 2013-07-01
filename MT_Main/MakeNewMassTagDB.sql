@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE MakeNewMassTagDB
+CREATE Procedure MakeNewMassTagDB
 /****************************************************
 **
 **	Desc: Creates a new mass tag database
@@ -40,6 +40,7 @@ CREATE PROCEDURE MakeNewMassTagDB
 **						   - Added parameter @InfoOnly
 **			06/06/2007 mem - Updated default MTL_Import_Holdoff from 48 to 12 hours
 **			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
+**			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
 **    
 *****************************************************/
 (
@@ -544,7 +545,7 @@ AS
 		                                          LogFileAlerts,
 		                                          LongQueryAlerts,
 		                                          Reindex )
-		    VALUES(@NewDBName, 1, 1, 1, 0)
+		    VALUES(@NewDBName, 1, 0, 1, 0)
 		End
 	End
 

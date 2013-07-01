@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE MakeNewMassTagDB_Replace
+CREATE Procedure MakeNewMassTagDB_Replace
 /****************************************************
 **
 **	Desc: 
@@ -471,6 +471,7 @@ Done:
 		Select @message as Message, @myError as ErrorCode
 		
 	return @myError
+
 
 
 GO

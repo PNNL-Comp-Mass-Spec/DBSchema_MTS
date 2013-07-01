@@ -34,6 +34,7 @@ CREATE Procedure dbo.ComputeMassTagsGANET
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			11/16/2012 mem - Now excluding early-eluting peptides that have observed NET values more than 10% away from predicted NET values; these are typically carryover peptides
 **						   - Now using -Log(MSGF_SpecProb) instead of discriminant score
+**			06/18/2013 mem - Now assigning a confidence score of 1 to MSGF_SpecProb values that are > 1 (null MSGF_SpecProb values also receive a confidence score of 1)
 **
 *********************************************************/
 (
@@ -420,11 +421,10 @@ AS
 	FROM ( SELECT BestObsQ.Mass_Tag_ID,
 	              TAD.Dataset_ID,
 	              BestNETObs,
-	              CASE SD.MSGF_SpecProb 
-	                   WHEN NULL THEN 1 
-	                   WHEN 0 THEN 90 
+	              CASE WHEN IsNull(SD.MSGF_SpecProb, 10) > 1 THEN 1
+	                   WHEN SD.MSGF_SpecProb = 0 THEN 90 
 	                   ELSE -Log(SD.MSGF_SpecProb)
-	              END ConfidenceScore,
+	              END AS ConfidenceScore,
 	              P.Scan_Time_Peak_Apex / RangeQ.Elution_Max AS FractionElutionRange
 	    FROM ( SELECT Job,
 	                  Mass_Tag_ID,
@@ -841,7 +841,6 @@ AS
 Done:
 
 	Return @MyError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsGANET] TO [MTS_DB_Dev] AS [dbo]

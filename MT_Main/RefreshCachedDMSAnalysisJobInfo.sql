@@ -24,12 +24,13 @@ CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 **			09/24/2010 mem - Now populating RequestID
 **			01/19/2011 mem - Now casting DS_Acq_Length to decimal(9, 2) when querying @SourceTable
 **						   - Added parameter @ShowActionTable
+**			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
 **
 *****************************************************/
 (
 	@JobMinimum int = 0,						-- Set to a positive value to limit the jobs examined; when non-zero, then jobs outside this range are ignored
 	@JobMaximum int = 0,
-	@SourceMTSServer varchar(128) = 'porky',	-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Analysis_Job_Import_Ex
+	@SourceMTSServer varchar(128) = '',			-- MTS Server to look at to get this information from (in the MT_Main database); if blank, then uses V_DMS_Dataset_Import_Ex to directly query Gigasax
 	@UpdateSourceMTSServer tinyint = 0,			-- If 1, then first calls RefreshCachedDMSAnalysisJobInfo on the source MTS server; only valid if @SourceMTSServer is not blank
 	@message varchar(255) = '' output,
 	@previewSql tinyint = 0,
