@@ -29,6 +29,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **						   - Changed the default number of threads to 3
 **						   - Changed the default compression level to 4
 **			06/28/2013 mem - Now performing a log backup of the Model DB after the full backup to prevent the model DB's log file from growing over time (it grows because the Model DB's recovery model is "Full", and a database backup is a logged operation)
+**			07/01/2013 mem - Added parameter @NativeSqlServerBackup (requires that procedure DatabaseBackup and related procedures from Ola Hallengren's Maintenance Solution be installed in the master DB)
 **    
 *****************************************************/
 (
@@ -46,7 +47,8 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 	@UseLocalTransferFolder tinyint = 0,			-- Set to 1 to backup to the local "Redgate Backup Transfer Folder" then copy the file to @BackupFolderRoot; only used if @BackupFolderRoot starts with "\\"
 	@DiskRetryIntervalSec smallint = 30,			-- Set to non-zero value to specify that the backup should be re-tried if a network error occurs; this is the delay time before the retry occurs
 	@DiskRetryCount smallint = 10,					-- When @DiskRetryIntervalSec is non-zero, this specifies the maximum number of times to retry the backup
-	@CompressionLevel tinyint = 4,					-- 1 is the fastest backup, but the largest file size; 4 is the slowest backup, but the smallest file size
+	@CompressionLevel tinyint = 4,					-- 1 is the fastest backup, but the largest file size; 4 is the slowest backup, but the smallest file size,
+	@NativeSqlServerBackup tinyint = 0,				-- 0 to use Red-Gate backup, 1 to use Sql Server's native backup.  Note that the Compression option of native sql backup is only available for Sql Server 2008 R2 or newer
 	@message varchar(2048) = '' OUTPUT
 )
 As	
@@ -114,8 +116,12 @@ As
 	If @CompressionLevel < 1 Or @CompressionLevel > 4
 		Set @CompressionLevel = 3
 
+	Set @NativeSqlServerBackup = IsNull(@NativeSqlServerBackup, 0)
+	If @NativeSqlServerBackup > 0	
+		Set @BackupBatchSize = 1
+	
 	Set @message = ''
-
+		
 	---------------------------------------
 	-- Define the local variables
 	---------------------------------------
@@ -163,6 +169,17 @@ As
 		SELECT @BackupFolderRoot = Server_Path
 		FROM T_Folder_Paths
 		WHERE ([Function] = 'Database Backup Path')
+		
+		If @NativeSqlServerBackup > 0 and Len(@BackupFolderRoot) > 0
+		Begin
+			-- Backup path will be something like \\proto-7\MTS_Backup\Elmer_Backup\
+			-- Change it to \\proto-7\MTS_Backup\
+			
+			Declare @CharIndex int
+			Set @CharIndex = CHARINDEX(@@ServerName, @BackupFolderRoot)
+			If @CharIndex > 0 
+				Set @BackupFolderRoot = Substring(@BackupFolderRoot, 1, @CharIndex-1)
+		End
 	End
 	
 	Set @BackupFolderRoot = LTrim(RTrim(@BackupFolderRoot))
@@ -526,7 +543,7 @@ As
 				---------------------------------------
 				
 				If @FullDBBackupMatchMode = 1
-				Begin
+				Begin				
 					Set @Sql = '-SQL "BACKUP DATABASES '
 					Set @BackupType = 'FULL'
 					Set @DBBackupFullCount = @DBBackupFullCount + @DBCountInBatch
@@ -548,7 +565,6 @@ As
 
 				Set @Sql = @Sql + ' TO DISK = ''' + dbo.udfCombinePaths(@BackupFileBasePath, '<DATABASE>\<AUTO>') + ''''
 				
-
 				Set @Sql = @Sql + ' WITH NAME=''<AUTO>'', DESCRIPTION=''<AUTO>'','
 
 				-- Only include the MAXDATABLOCK parameter if @BackupFileBasePath points to a network share
@@ -593,7 +609,7 @@ As
 					Set @Sql = @Sql + ' VERIFY,'
 					
 				Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogPathBase + ''', MAILTO_ONERROR = ''matthew.monroe@pnl.gov''"'
-
+				
 				If @InfoOnly = 0
 				Begin -- <c3>
 					---------------------------------------
@@ -654,6 +670,26 @@ As
 	End -- </Batched>
 	Else
 	Begin -- <NonBatched>
+	
+		---------------------------------------
+		-- Determine the version of Sql Server that we are running on
+		--   10.00 is Sql Server 2008
+		--   10.50 is Sql Server 2008 R2
+		--   11.00 is Sql Server 2012
+		---------------------------------------
+		
+		Declare @Version numeric(18,10)
+		Declare @Compress varchar(1)
+		
+		SET @Version = CAST(LEFT(CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(max)),CHARINDEX('.',CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(max))) - 1) + '.' + REPLACE(RIGHT(CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(max)), LEN(CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(max))) - CHARINDEX('.',CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(max)))),'.','') AS numeric(18,10))
+
+		if (NOT ((@Version >= 10 AND @Version < 10.5 AND SERVERPROPERTY('EngineEdition') = 3) OR (@Version >= 10.5 AND (SERVERPROPERTY('EngineEdition') = 3 OR SERVERPROPERTY('EditionID') IN (-1534726760, 284895786))))) 
+			-- Compression is Not Supported
+			Set @Compress = 'N'
+		Else	
+			-- Compression is supported
+			Set @Compress = 'Y'
+			
 		---------------------------------------
 		-- Loop through the databases in #Tmp_DB_Backup_List
 		-- First process DBs with Perform_Full_DB_Backup = 1
@@ -661,6 +697,7 @@ As
 		---------------------------------------
 		Set @FullDBBackupMatchMode = 1
 		Set @continue = 1
+		
 		While @continue <> 0
 		Begin -- <d>
 			SELECT TOP 1 @DBName = DatabaseName
@@ -683,51 +720,81 @@ As
 				WHERE @DBName = DatabaseName AND
 				      Perform_Full_DB_Backup = @FullDBBackupMatchMode
 
+				If @FullDBBackupMatchMode = 1
+					Set @DBBackupFullCount = @DBBackupFullCount + 1
+				Else
+					Set @DBBackupTransCount = @DBBackupTransCount + 1
+
 				---------------------------------------
 				-- Construct the backup and restore commands for database @DBName
 				---------------------------------------
-				
-				If @FullDBBackupMatchMode = 1
+
+				If @NativeSqlServerBackup > 0
 				Begin
-					Set @Sql = '-SQL "BACKUP DATABASE '
-					Set @BackupType = 'FULL'
-					Set @DBBackupFullCount = @DBBackupFullCount + 1
+					-- Native backup (using Ola Hallengren's Maintenance Solution; see http://ola.hallengren.com/
+					
+					-- Note that even with Sql Server's native compression enabled, the compressed database size is still much larger than that created with Red-Gate.
+					-- For example, an 818 MB database backs up to 738 MB without compression, 118 MB with native compression, and 63 MB with Red-Gate Sql Backup Pro
+					
+					Set @Sql = 'exec master.dbo.DatabaseBackup @Databases=''' + @DBName + ''', @Directory=''' + @BackupFolderRoot + ''''
+					If @FullDBBackupMatchMode = 1
+						Set @Sql = @Sql + ', @BackupType=''FULL'''
+					Else
+						Set @Sql = @Sql + ', @BackupType=''LOG'''
+						
+					If @DaysToKeepOldBackups > 0
+					Begin
+						Set @Sql = @Sql + ', @CleanupTime=' + Convert(varchar(12), @DaysToKeepOldBackups*24)
+					End
+					
+					Set @Sql = @Sql + ', @Verify=''Y'', @Compress=''' + @Compress + ''', @ChangeBackupType=''Y'', @CheckSum=''Y'''
+					
 				End
 				Else
 				Begin
-					Set @Sql = '-SQL "BACKUP LOG '
-					Set @BackupType = 'LOG'
-					Set @DBBackupTransCount = @DBBackupTransCount + 1
-				End
+					-- Red-gate Backup
+					
+					If @FullDBBackupMatchMode = 1
+					Begin
+						Set @Sql = '-SQL "BACKUP DATABASE '
+						Set @BackupType = 'FULL'
+					End
+					Else
+					Begin
+						Set @Sql = '-SQL "BACKUP LOG '
+						Set @BackupType = 'LOG'
+					End
 
-				Set @Sql = @Sql + '[' + @DBName + '] TO '
+					Set @Sql = @Sql + '[' + @DBName + '] TO '
 
-				-- Generate a time stamp in the form: yyyymmdd_hhnnss
-				Set @BackupTime = Convert(varchar(64), GetDate(), 120 )
-				Set @BackupTime = Replace(Replace(Replace(@BackupTime, ' ', '_'), ':', ''), '-', '')
+					-- Generate a time stamp in the form: yyyymmdd_hhnnss
+					Set @BackupTime = Convert(varchar(64), GetDate(), 120 )
+					Set @BackupTime = Replace(Replace(Replace(@BackupTime, ' ', '_'), ':', ''), '-', '')
+					
+					Set @BackupFileBaseName =  @DBName + '_' + @BackupType + '_' + @BackupTime
+					Set @BackupFileBasePath = @BackupFolderRoot + @DBName + '\' + @BackupFileBaseName
+
+					Set @BackupFileList = 'DISK = ''' + @BackupFileBasePath + '.sqb'''
+					
+					Set @Sql = @Sql + @BackupFileList
+
+					Set @Sql = @Sql + ' WITH MAXDATABLOCK=524288, NAME=''<AUTO>'', DESCRIPTION=''<AUTO>'','
+					Set @Sql = @Sql + ' ERASEFILES=' + Convert(varchar(16), @DaysToKeepOldBackups) + ','
+					Set @Sql = @Sql + ' COMPRESSION=3,'
+
+					If @FileCount > 1
+						Set @Sql = @Sql + ' FILECOUNT=' + Convert(varchar(6), @FileCount) + ','
+					Else
+					Begin
+						If @ThreadCount > 1
+							Set @Sql = @Sql + ' THREADCOUNT=' + Convert(varchar(4), @ThreadCount) + ','
+					End
 				
-				Set @BackupFileBaseName =  @DBName + '_' + @BackupType + '_' + @BackupTime
-				Set @BackupFileBasePath = @BackupFolderRoot + @DBName + '\' + @BackupFileBaseName
-
-				Set @BackupFileList = 'DISK = ''' + @BackupFileBasePath + '.sqb'''
-				
-				Set @Sql = @Sql + @BackupFileList
-				Set @Sql = @Sql + ' WITH MAXDATABLOCK=524288, NAME=''<AUTO>'', DESCRIPTION=''<AUTO>'','
-				Set @Sql = @Sql + ' ERASEFILES=' + Convert(varchar(16), @DaysToKeepOldBackups) + ','
-				Set @Sql = @Sql + ' COMPRESSION=3,'
-
-				If @FileCount > 1
-					Set @Sql = @Sql + ' FILECOUNT=' + Convert(varchar(6), @FileCount) + ','
-				Else
-				Begin
-					If @ThreadCount > 1
-						Set @Sql = @Sql + ' THREADCOUNT=' + Convert(varchar(4), @ThreadCount) + ','
+					Set @DBBackupStatusLogFileName = @DBBackupStatusLogPathBase + @BackupFileBaseName + '.log'
+					Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogFileName + ''', MAILTO_ONERROR = ''matthew.monroe@pnl.gov''"'
+					
+					Set @SqlRestore = '-SQL "RESTORE VERIFYONLY FROM ' + @BackupFileList + '"'
 				End
-			
-				Set @DBBackupStatusLogFileName = @DBBackupStatusLogPathBase + @BackupFileBaseName + '.log'
-				Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogFileName + ''', MAILTO_ONERROR = ''matthew.monroe@pnl.gov''"'
-
-				Set @SqlRestore = '-SQL "RESTORE VERIFYONLY FROM ' + @BackupFileList + '"'
 				
 				
 				If @InfoOnly = 0
@@ -735,60 +802,94 @@ As
 					---------------------------------------
 					-- Perform the backup
 					---------------------------------------
-					exec master..sqlbackup @Sql, @ExitCode OUTPUT, @SqlErrorCode OUTPUT
-
-					If (@ExitCode <> 0) OR (@SqlErrorCode <> 0)
-					Begin
-						---------------------------------------
-						-- Error occurred; post a log entry
-						---------------------------------------
-						Set @message = 'SQL Backup of DB ' + @DBName + ' failed with exitcode: ' + Convert(varchar(19), @ExitCode) + ' and SQL error code: ' + Convert(varchar(19), @SqlErrorCode)
-						Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
-					End
-					Else
-					Begin
-						If @Verify <> 0
+				
+					If @NativeSqlServerBackup > 0
+					Begin -- <g1>
+						Declare @SqlN nvarchar(2048) = @Sql
+						
+						exec @ExitCode = sp_ExecuteSql @SqlN
+						
+						If (@ExitCode <> 0)
 						Begin
-							-------------------------------------
-							-- Verify the backup
-							-------------------------------------
-							exec master..sqlbackup @SqlRestore, @ExitCode OUTPUT, @SqlErrorCode OUTPUT
+							---------------------------------------
+							-- Error occurred; post a log entry
+							---------------------------------------
+							Set @message = 'Native SQL Backup of DB ' + @DBName + ' failed with exitcode: ' + Convert(varchar(19), @ExitCode)
+							Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
+						End						
+						
+					End -- </g1>
+					Else
+					Begin -- <g2>
+						exec master..sqlbackup @Sql, @ExitCode OUTPUT, @SqlErrorCode OUTPUT
 
-							If (@ExitCode <> 0) OR (@SqlErrorCode <> 0)
+						If (@ExitCode <> 0) OR (@SqlErrorCode <> 0)
+						Begin
+							---------------------------------------
+							-- Error occurred; post a log entry
+							---------------------------------------
+							Set @message = 'Red-gate SQL Backup of DB ' + @DBName + ' failed with exitcode: ' + Convert(varchar(19), @ExitCode) + ' and SQL error code: ' + Convert(varchar(19), @SqlErrorCode)
+							Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
+						End
+						Else
+						Begin
+							If @Verify <> 0
 							Begin
-								---------------------------------------
-								-- Error occurred; post a log entry
-								---------------------------------------
-								Set @message = 'SQL Backup Verify of DB ' + @DBName + ' failed with exitcode: ' + Convert(varchar(19), @ExitCode) + ' and SQL error code: ' + Convert(varchar(19), @SqlErrorCode)
-								Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
+								-------------------------------------
+								-- Verify the backup
+								-------------------------------------
+								exec master..sqlbackup @SqlRestore, @ExitCode OUTPUT, @SqlErrorCode OUTPUT
+
+								If (@ExitCode <> 0) OR (@SqlErrorCode <> 0)
+								Begin
+									---------------------------------------
+									-- Error occurred; post a log entry
+									---------------------------------------
+									Set @message = 'SQL Backup Verify of DB ' + @DBName + ' failed with exitcode: ' + Convert(varchar(19), @ExitCode) + ' and SQL error code: ' + Convert(varchar(19), @SqlErrorCode)
+									Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
+								End
 							End
 						End
-					End
+							
+						---------------------------------------
+						-- Append the contents of @DBBackupStatusLogFileName to @DBBackupStatusLogSummary
+						---------------------------------------
+						Exec @myError = AppendTextFileToTargetFile	@DBBackupStatusLogFileName, 
+																	@DBBackupStatusLogSummary, 
+																	@DeleteSourceAfterAppend = 1, 
+																	@message = @message output
+						If @myError <> 0
+						Begin
+							Set @message = 'Error calling AppendTextFileToTargetFile: ' + @message
+							Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
+							Goto Done
+						End
+					End -- </g2>
 					
-					---------------------------------------
-					-- Append the contents of @DBBackupStatusLogFileName to @DBBackupStatusLogSummary
-					---------------------------------------
-					Exec @myError = AppendTextFileToTargetFile	@DBBackupStatusLogFileName, 
-																@DBBackupStatusLogSummary, 
-																@DeleteSourceAfterAppend = 1, 
-																@message = @message output
-					If @myError <> 0
-					Begin
-						Set @message = 'Error calling AppendTextFileToTargetFile: ' + @message
-						Execute PostLogEntry 'Error', @message, 'BackupMTSDBs'
-						Goto Done
-					End
 				End -- </f1>
 				Else
 				Begin -- <f2>
 					---------------------------------------
 					-- Preview the backup Sql 
 					---------------------------------------
-					Set @Sql = Replace(@Sql, '''', '''' + '''')
-					Print 'exec master..sqlbackup ''' + @Sql + ''''
 					
-					Set @SqlRestore = Replace(@SqlRestore, '''', '''' + '''')
-					Print 'exec master..sqlbackup ''' + @SqlRestore + ''''
+					If @NativeSqlServerBackup > 0
+					Begin
+						Print @Sql
+						
+						Set @Sql = @Sql + ', @Execute=''N'''
+						Exec (@Sql)
+					End
+					Else
+					Begin
+						Set @Sql = Replace(@Sql, '''', '''' + '''')
+					
+						Print 'exec master..sqlbackup ''' + @Sql + ''''
+					
+						Set @SqlRestore = Replace(@SqlRestore, '''', '''' + '''')
+						Print 'exec master..sqlbackup ''' + @SqlRestore + ''''
+					End
+					
 				End -- </f2>
 				
 				---------------------------------------
@@ -807,6 +908,7 @@ As
 
 			End -- </e>
 		End -- </d>
+		
 	End -- </NonBatched>
 
 	If @DBBackupFullCount + @DBBackupTransCount = 0
