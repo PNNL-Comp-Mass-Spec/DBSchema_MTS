@@ -13,6 +13,12 @@ WHERE last_name LIKE 'Yang%' OR
       last_name LIKE 'Adkins%' OR
       last_name LIKE 'Heffron%'
 
+-- Find one author
+select * from publication_authors where last_name like 'Varney'
+
+-- Add a new author:
+insert into publication_authors (last_name, first_name, middle_initial) values ('Sharma', 'Deepak', '')
+insert into publication_authors (last_name, first_name, middle_initial) values ('Varney', 'Rebecca', '')
 
 -- Associate authors with a publication
 insert into publication_author_xref (publication_id, author_id, listing_order) values (1080, 249, 2);

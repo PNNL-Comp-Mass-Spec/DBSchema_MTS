@@ -1,0 +1,11 @@
+Declare @PublicationID int = 1087
+
+SELECT 'INSERT INTO publication_entity_xref (publication_id, entity_id, entity_type)
+VALUES (' + Convert(varchar(12), @PublicationID) + ',' + Convert(varchar(12), AJ_JobID) + ', ''Job'');'
+FROM (SELECT AJ_JobID
+      FROM T_Analysis_Job
+      WHERE AJ_JobID IN (762595,763326,764107,764108,764109,764110,764111,764419,764450,765057,765058,765059,765060,765061,765062,765063,765064,765070,765071,765072,765073,765074,765075,765076,765077,765078,765079,765080,765081,765082,765083,765084,767580,767584,767588,767592,767595,767598,767599,767600,767601,767603,866975,866976,866977,866978,866979,866980,866981,866982,866983,866984,866985,866986)
+) LookupQ
+
+INSERT INTO publication_entity_xref (publication_id, entity_id, entity_type)  VALUES (1083,706657, 'Job');
+INSERT INTO publication_entity_xref (publication_id, entity_id, entity_type)  VALUES (1083,706658, 'Job');
