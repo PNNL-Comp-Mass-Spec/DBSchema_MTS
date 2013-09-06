@@ -21,6 +21,7 @@ CREATE Procedure dbo.SetPeakMatchingActivityValuesToComplete
 **			12/14/2011 mem - Now looking up MDID and QID using V_PM_Results_MDID_and_QID
 **			03/19/2012 mem - Now looking up Ini_File_Name, Comparison_Mass_Tag_Count, and MD_State using V_PM_Results_MDID_and_QID
 **			04/23/2013 mem - Updated log message shown when no match found in T_Peak_Matching_Activity using @serverName, @mtdbName, and @taskID
+**			08/14/2013 mem - Now populating Refine_Mass_Cal_PPMShift
 **			
 *****************************************************/
 (
@@ -51,7 +52,8 @@ As
             @AMTCount5pctFDR int = 0,
             @AMTCount10pctFDR int = 0,
             @AMTCount25pctFDR int = 0,
-            @AMTCount50pctFDR int = 0
+            @AMTCount50pctFDR int = 0,
+            @MassCalPPMShift decimal (9,4)
     
 	declare @MDID int
 	declare @QID int
@@ -174,11 +176,13 @@ As
 	Set @S = @S +    ' @AMTCount5pctFDR = AMT_Count_5pct_FDR,'
 	Set @S = @S +    ' @AMTCount10pctFDR = AMT_Count_10pct_FDR,'
 	Set @S = @S +    ' @AMTCount25pctFDR = AMT_Count_25pct_FDR,'
-	Set @S = @S +    ' @AMTCount50pctFDR = AMT_Count_50pct_FDR'
+	Set @S = @S +    ' @AMTCount50pctFDR = AMT_Count_50pct_FDR,'
+	Set @S = @S +    ' @MassCalPPMShift = Refine_Mass_Cal_PPMShift'
+	
 	Set @S = @S + ' FROM ' + @WorkingServerPrefix + '[' + @mtdbname + '].dbo.V_PM_Results_FDR_Stats'
 	Set @S = @S + ' WHERE Task_ID = ' + Convert(varchar(12), @taskID)
 	
-	Set @SqlParams = '@AMTCount1pctFDR int output, @AMTCount5pctFDR int output, @AMTCount10pctFDR int output, @AMTCount25pctFDR int output, @AMTCount50pctFDR int output'
+	Set @SqlParams = '@AMTCount1pctFDR int output, @AMTCount5pctFDR int output, @AMTCount10pctFDR int output, @AMTCount25pctFDR int output, @AMTCount50pctFDR int output, @MassCalPPMShift decimal(9,4) output'
 
 	
 	Set @message = 'Sql to execute: ' + @S
@@ -194,7 +198,8 @@ As
 										@AMTCount5pctFDR output,
 										@AMTCount10pctFDR output,
 										@AMTCount25pctFDR output,
-										@AMTCount50pctFDR output
+										@AMTCount50pctFDR output,
+										@MassCalPPMShift output
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -204,6 +209,7 @@ As
 	Set @message = @message +  '; @AMTCount10pctFDR=' + IsNull(Convert(varchar(12), @AMTCount10pctFDR), 'NULL')
 	Set @message = @message +  '; @AMTCount25pctFDR=' + IsNull(Convert(varchar(12), @AMTCount25pctFDR), 'NULL')
 	Set @message = @message +  '; @AMTCount50pctFDR=' + IsNull(Convert(varchar(12), @AMTCount50pctFDR), 'NULL')
+	Set @message = @message +  '; @MassCalPPMShift=' + IsNull(Convert(varchar(12), @MassCalPPMShift), 'NULL')
 
 	If @DebugMode <> 0
 		Exec PostLogEntry 'Debug', @message, 'SetPeakMatchingActivityValuesToComplete'
@@ -283,6 +289,7 @@ As
 		    AMT_Count_10pct_FDR = @AMTCount10pctFDR,
 		    AMT_Count_25pct_FDR = @AMTCount25pctFDR,
 		    AMT_Count_50pct_FDR = @AMTCount50pctFDR,
+		    Refine_Mass_Cal_PPMShift = @MassCalPPMShift,
 		    MD_ID = @MDID,
 		    QID = @QID,
 		    Ini_File_Name = @IniFileName,

@@ -21,6 +21,7 @@ CREATE PROCEDURE QuantitationProcessWorkStepB
 **			10/20/2008 mem - Added Try/Catch error handling
 **			09/13/2010 mem - Added more @CurrentLocation checkpoints
 **			10/13/2010 mem - Added support for Uniqueness_Probability and FDR_Threshold
+**			08/07/2013 mem - Now reporting job number in error 'All matching mass tags were filtered out'
 **
 ****************************************************/
 (
@@ -440,12 +441,23 @@ AS
 				--
 				If @myRowCount = 0
 				Begin
+					Declare @FirstJob int
+					
+					SELECT @FirstJob = MMD.MD_Reference_Job
+					FROM T_Quantitation_Description QD INNER JOIN
+						T_Quantitation_MDIDs QMDIDs ON QD.Quantitation_ID = QMDIDs.Quantitation_ID INNER JOIN
+						T_Match_Making_Description MMD ON QMDIDs.MD_ID = MMD.MD_ID
+					WHERE (QD.Quantitation_ID = @QuantitationID)
+
 					-- Post an error message to T_Log_Entries
-					set @message = 'All matching mass tags were filtered out using Match_Score >= ' + Convert(varchar(12), Round(@MinimumMatchScore, 3)) 
+					set @message = 'All matching mass tags were filtered out'
+					set @message = @message + ' for Quantitation_ID = ' + convert(varchar(19), @QuantitationID)
+					set @message = @message + ', Job ' + IsNull(convert(varchar(19), @FirstJob), '???')
+					set @message = @message + ' using Match_Score >= ' + Convert(varchar(12), Round(@MinimumMatchScore, 3)) 
 					set @message = @message + ', Del_Match_Score >= ' +  Convert(varchar(12), Round(@MinimumDelMatchScore, 3))
 					set @message = @message + ', Uniqueness_Probability >= ' +  Convert(varchar(12), Round(@MinimumUniquenessProbability, 3))
 					set @message = @message + ', and FDR_Threshold <= ' +  Convert(varchar(12), Round(@MaximumFDRThreshold, 3))
-					set @message = @message + ' for Quantitation_ID = ' + convert(varchar(19), @QuantitationID)
+					
 					set @myError = 121
 					goto Done
 				End
