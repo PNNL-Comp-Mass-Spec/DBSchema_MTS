@@ -1,20 +1,17 @@
-ALTER PROCEDURE dbo.CloneO18AMTs
+ALTER PROCEDURE dbo.CloneiTraqAMTs
 /****************************************************
 ** 
-**	Desc:	Clones each AMT tag in T_Mass_Tags that has an O18 mod on the C-terminus (e.g. Two_O18:30)
-**
+**	Desc:	Clones each AMT tag in T_Mass_Tags that has ITraq mods (e.g. itrac:1 or itrac:5)
 **
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
-**	Date:	02/09/2012 mem - Initial version
-**			11/07/2013 mem - Now calling CloneAMTsWork after populating #T_Tmp_MTs_to_Clone
+**	Date:	11/7/2013 mem - Initial version (modelled after CloneO18AMTs)
 **    
 *****************************************************/
 (
 	@InfoOnly tinyint = 0,
 	@PMTQualityScoreMinimum real = 1,
-	@O18DynamicModSymbol varchar(1) = '#',				-- If a dynamic O18 mod search was used, then use this parameter to define the mod symbol that needs to be removed from cloned AMTs
 	@message varchar(255) = '' output
 )
 As
@@ -25,8 +22,8 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @O18ModName varchar(12) = 'Two_O18'
-	declare @O18ModMass float = 0
+	declare @ITraqModName varchar(12) = 'itrac'
+	declare @ITraqModMass float = 0
 
 	Declare @PDBID int = 0
 	Declare @Job int = 0
@@ -54,24 +51,23 @@ As
 		
 		Set @InfoOnly = IsNull(@InfoOnly, 0)
 		Set @PMTQualityScoreMinimum = IsNull(@PMTQualityScoreMinimum, 1)
-		Set @O18DynamicModSymbol = IsNull(@O18DynamicModSymbol, '')
 		Set @message = ''
 
 		--------------------------------------------------------------
-		-- Lookup the monoisotopic mass for the Two_O18 mod
+		-- Lookup the monoisotopic mass for the ITraq mod
 		--------------------------------------------------------------
 		
-		SELECT @O18ModMass = Monoisotopic_Mass_Correction
+		SELECT @ITraqModMass = Monoisotopic_Mass_Correction
 		FROM MT_Main.dbo.T_DMS_Mass_Correction_Factors_Cached
-		WHERE (Mass_Correction_Tag = @O18ModName)
+		WHERE (Mass_Correction_Tag = @ITraqModName)
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
 
-		If @myRowCount = 0 Or @O18ModMass = 0
+		If @myRowCount = 0 Or @ITraqModMass = 0
 		Begin
 			Set @myError = 51000
-			Set @message = 'Mod "' + @O18ModName + '" not found in MT_Main.dbo.T_DMS_Mass_Correction_Factors_Cached'
+			Set @message = 'Mod "' + @ITraqModName + '" not found in MT_Main.dbo.T_DMS_Mass_Correction_Factors_Cached'
 			Goto Done
 		End
 		
@@ -184,49 +180,52 @@ As
 			Peptide_Obs_Count_Passing_Filter, High_Normalized_Score, High_Discriminant_Score, High_Peptide_Prophet_Probability, 
 			Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, 
 			Mod_Count_New, Mod_Description_New, PeptideEx_New, Monoisotopic_Mass_New, Add_Sequence)
-		SELECT Mass_Tag_ID,
-		       Peptide,
-		       Monoisotopic_Mass,
-		       Multiple_Proteins,
+		SELECT MT.Mass_Tag_ID,
+		       MT.Peptide,
+		       MT.Monoisotopic_Mass,
+		       MT.Multiple_Proteins,
 		       GETDATE() AS Created,
 		       GETDATE() AS Last_Affected,
-		       Number_Of_Peptides,
-		       Peptide_Obs_Count_Passing_Filter,
-		       High_Normalized_Score,
-		       High_Discriminant_Score,
-		       High_Peptide_Prophet_Probability,
-		       Mod_Count,
-		       Mod_Description,
-		       PMT_Quality_Score,
-		       Cleavage_State_Max,
-		       PeptideEx,
-		       Min_MSGF_SpecProb,
+		       MT.Number_Of_Peptides,
+		       MT.Peptide_Obs_Count_Passing_Filter,
+		       MT.High_Normalized_Score,
+		       MT.High_Discriminant_Score,
+		       MT.High_Peptide_Prophet_Probability,
+		       MT.Mod_Count,
+		       MT.Mod_Description,
+		       MT.PMT_Quality_Score,
+		       MT.Cleavage_State_Max,
+		       MT.PeptideEx,
+		       MT.Min_MSGF_SpecProb,
 		       -1 AS Mod_Count_New,
 		       '' AS Mod_Description_New,
-		       CASE WHEN @O18DynamicModSymbol = '' 
-		            THEN PeptideEx
-		            ELSE Replace(PeptideEx, @O18DynamicModSymbol, '')
-		       END,
-		       Monoisotopic_Mass - @O18ModMass AS Monoisotopic_Mass_New,
+		       MT.PeptideEx,
+		       MT.Monoisotopic_Mass - @ITraqModMass * CountQ.ITraqModCount AS Monoisotopic_Mass_New,
 		       0 AS Add_Sequence
-		FROM T_Mass_Tags
+		FROM T_Mass_Tags MT
+		     INNER JOIN ( SELECT Mass_Tag_ID,
+		                         COUNT(*) AS ITraqModCount
+		                  FROM T_Mass_Tag_Mod_Info
+		                  WHERE Mod_Name = 'itrac'
+		                  GROUP BY Mass_Tag_ID 
+		                ) CountQ
+		       ON MT.Mass_Tag_ID = CountQ.Mass_Tag_ID
 		WHERE (PMT_Quality_Score >= @PMTQualityScoreMinimum) AND
-		      (Mod_Description LIKE '%Two_O18%')			-- Like @O18ModName
+		    (Mod_Description LIKE '%itrac%')			-- Like @ITraqModName
 		ORDER BY Mass_Tag_ID
-
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		
 		If @myRowCount = 0
 		Begin
-			Set @message = 'No AMT tags in T_Mass_Tags have PMT QS >= ' + Convert(varchar(12), @PMTQualityScoreMinimum) + ' and Mod_Description Like Two_O18'
+			Set @message = 'No AMT tags in T_Mass_Tags have PMT QS >= ' + Convert(varchar(12), @PMTQualityScoreMinimum) + ' and Mod_Description Like %itrac%'
 			Print @message
 			Goto Done
 		End
 		
 		--------------------------------------------------------------
 		-- Populate #T_Tmp_Mass_Tag_Mod_Info
-		-- Exclude the Two_O18 entries
+		-- Exclude the itrac entries
 		--------------------------------------------------------------
 		--
 		Set @CurrentLocation = 'Populate #T_Tmp_Mass_Tag_Mod_Info'
@@ -239,7 +238,7 @@ As
 		FROM T_Mass_Tag_Mod_Info MTMI
 		     INNER JOIN #T_Tmp_MTs_to_Clone MT
 		       ON MTMI.Mass_Tag_ID = MT.Mass_Tag_ID
-		WHERE Mod_Name <> @O18ModName
+		WHERE Mod_Name <> @ITraqModName
 
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -249,21 +248,21 @@ As
 		-- Populate the Mod_Description_New column
 		-----------------------------------------------------------
 
-		-- First process peptides with multiple mods, for example: IodoAcet:11,Two_O18:15
+		-- First process peptides with multiple mods, for example: IodoAcet:11,itrac:15
 		--
 		UPDATE #T_Tmp_MTs_to_Clone
-		SET Mod_Description_New = SUBSTRING(Mod_Description, 1, CHARINDEX('Two_O18', Mod_Description) - 2), 
+		SET Mod_Description_New = SUBSTRING(Mod_Description, 1, CHARINDEX('itrac', Mod_Description) - 2), 
 			Mod_Count_New = Mod_Count - 1
-		WHERE Not Mod_Description like 'Two_O18%'
+		WHERE Not Mod_Description like 'itrac%'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
-		-- Next process peptides with only a O18 mod, for example: Two_O18:21
+		-- Next process peptides with only an iTraq mod, for example: itrac:21
 		--
 		UPDATE #T_Tmp_MTs_to_Clone
 		SET Mod_Description_New = '', Mod_Count_New = 0
-		WHERE Mod_Description like 'Two_O18%'
+		WHERE Mod_Description like 'itrac%'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
@@ -276,7 +275,7 @@ As
 			goto Done			
 		End
 
-		exec @myError = CloneAMTsWork 'O18', @OrganismDBFileID, @ProteinCollectionFileID, @DeleteTempTables, @InfoOnly, @message output
+		exec @myError = CloneAMTsWork 'iTraq', @OrganismDBFileID, @ProteinCollectionFileID, @DeleteTempTables, @InfoOnly, @message output
 
 	End Try
 	Begin Catch
@@ -284,16 +283,16 @@ As
 			Rollback
 
 		-- Error caught; log the error then abort processing
-		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'CloneO18AMTs')
+		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'CloneiTraqAMTs')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done
 	End Catch			
 		
-Done:
+Done:	
 	
 	If @infoOnly = 0 And @myError <> 0
-		exec PostLogEntry 'Error', @message, 'CloneO18AMTs'
+		exec PostLogEntry 'Error', @message, 'CloneiTraqAMTs'
 	
 	
 	return @myError

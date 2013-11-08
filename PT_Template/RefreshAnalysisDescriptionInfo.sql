@@ -38,6 +38,7 @@ CREATE Procedure dbo.RefreshAnalysisDescriptionInfo
 **			12/09/2008 mem - Increased size of @message to varchar(4000)
 **			03/13/2010 mem - Added parameters @UpdateDMSCacheTable and @CacheUpdateJobMinimum
 **			07/13/2010 mem - Now populating Acq_Length in T_Datasets
+**			10/10/2013 mem - Now updating MyEMSLState
 **    
 *****************************************************/
 (
@@ -139,6 +140,7 @@ As
 			Storage_Path varchar(255) NOT NULL,
 			Dataset_Folder varchar(255) NOT NULL,
 			Results_Folder varchar(255) NOT NULL,
+			MyEMSLState tinyint NOT NULL,
 			Completed datetime NULL,
 			Parameter_File_Name varchar(255) NOT NULL,
 			Settings_File_Name varchar(255) NULL,
@@ -165,7 +167,7 @@ As
 		Set @S = @S + ' INSERT INTO #TmpJobsToUpdate ('
 		Set @S = @S +   ' Job, Dataset, Dataset_ID, Experiment, Campaign, Experiment_Organism, '
 		Set @S = @S +   ' Vol_Client, Vol_Server,'
-		Set @S = @S +   ' Storage_Path, Dataset_Folder, Results_Folder,'
+		Set @S = @S +   ' Storage_Path, Dataset_Folder, Results_Folder, MyEMSLState,'
 		Set @S = @S +   ' Completed, Parameter_File_Name, Settings_File_Name,'
 		Set @S = @S +   ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
 		Set @S = @S +   ' Separation_Sys_Type, PreDigest_Internal_Std, '
@@ -173,7 +175,7 @@ As
 		Set @S = @S +   ' Enzyme_ID, Labelling )'
 		Set @S = @S + ' SELECT P.Job, P.Dataset, P.DatasetID, P.Experiment, P.Campaign, P.Organism, '
 		Set @S = @S +   ' P.StoragePathClient, P.StoragePathServer,'
-		Set @S = @S +   ' '''' AS Storage_Path, P.DatasetFolder, P.ResultsFolder,'
+		Set @S = @S +   ' '''' AS Storage_Path, P.DatasetFolder, P.ResultsFolder, P.MyEMSLState,'
 		Set @S = @S +   ' P.Completed, P.ParameterFileName, P.SettingsFileName,'
 		Set @S = @S +   ' P.OrganismDBName, P.ProteinCollectionList, P.ProteinOptions,'
 		Set @S = @S +   ' P.SeparationSysType, P.[PreDigest Int Std], '
@@ -182,7 +184,7 @@ As
 		Set @S = @S + ' FROM T_Analysis_Description AS TAD INNER JOIN ('
 		Set @S = @S +   ' SELECT L.Job, R.Dataset, R.DatasetID, R.Experiment, R.Campaign, R.Organism, '
 		Set @S = @S +          ' R.StoragePathClient, R.StoragePathServer,'
-		Set @S = @S +          ' R.DatasetFolder, R.ResultsFolder, R.Completed,'
+		Set @S = @S +          ' R.DatasetFolder, R.ResultsFolder, R.MyEMSLState, R.Completed,'
 		Set @S = @S +          ' R.ParameterFileName, R.SettingsFileName,'
 		Set @S = @S +          ' R.OrganismDBName, R.ProteinCollectionList, R.ProteinOptions,'
 		Set @S = @S +          ' R.SeparationSysType, R.[PreDigest Int Std], R.[PostDigest Int Std], R.[Dataset Int Std], '
@@ -203,8 +205,9 @@ As
 			Set @S = @S +           ' IsNull(L.Vol_Server, '''') <> R.StoragePathServer OR'
 			Set @S = @S +           ' IsNull(L.Dataset_Folder, '''') <> R.DatasetFolder OR'
 			Set @S = @S +           ' IsNull(L.Results_Folder, '''') <> R.ResultsFolder OR'
+			Set @S = @S +           ' L.MyEMSLState <> R.MyEMSLState OR'
 			Set @S = @S +           ' IsNull(L.Completed, ''1/1/1980'') <> R.Completed OR'
-			Set @S = @S +      ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
+			Set @S = @S +           ' IsNull(L.Parameter_File_Name,'''') <> IsNull(R.ParameterFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Settings_File_Name,'''') <> IsNull(R.SettingsFileName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Organism_DB_Name,'''') <> IsNull(R.OrganismDBName,'''') OR'
 			Set @S = @S +           ' IsNull(L.Protein_Collection_List,'''') <> IsNull(R.ProteinCollectionList,'''') OR'
@@ -238,9 +241,36 @@ As
 			-- Either insert the old and new info in T_Analysis_Description_Updates
 			--  or preview it
 			--------------------------------------------------------------
+			Declare @AddRowToTable tinyint = 0
+			
+			SELECT @AddRowToTable = 
+				CASE WHEN TAD.Dataset <> U.Dataset OR
+			             TAD.Dataset_ID <> U.Dataset_ID OR 
+			             TAD.Experiment <> U.Experiment OR 
+			             TAD.Campaign <> U.Campaign OR 
+			             IsNull(TAD.Vol_Client, '') <> IsNull(U.Vol_Client, '') OR 
+			             IsNull(TAD.Vol_Server, '') <> IsNull(U.Vol_Server, '') OR 
+			             TAD.Storage_Path  <> U.Storage_Path OR 
+			             TAD.Dataset_Folder <> U.Dataset_Folder OR 
+			             TAD.Results_Folder <> U.Results_Folder OR 
+			             TAD.Completed <> U.Completed OR 
+			             TAD.Parameter_File_Name <> U.Parameter_File_Name OR 
+			             TAD.Settings_File_Name <> U.Settings_File_Name OR 
+			             TAD.Organism_DB_Name <> U.Organism_DB_Name OR 
+			             TAD.Protein_Collection_List <> U.Protein_Collection_List OR 
+			             TAD.Protein_Options_List <> U.Protein_Options_List OR 
+			             TAD.Separation_Sys_Type <> U.Separation_Sys_Type OR 
+			             TAD.PreDigest_Internal_Std <> U.PreDigest_Internal_Std OR 
+			             TAD.PostDigest_Internal_Std <> U.PostDigest_Internal_Std OR 
+			             TAD.Dataset_Internal_Std <> U.Dataset_Internal_Std OR 
+			             TAD.Enzyme_ID <> U.Enzyme_ID OR 
+			             TAD.Labelling <> U.Labelling 
+				THEN 1 Else 0 End
+			FROM #TmpJobsToUpdate U INNER JOIN
+			     T_Analysis_Description TAD ON U.Job = TAD.Job
 
 			Set @S = ''
-			If @infoOnly = 0
+			If @infoOnly = 0 AND @AddRowToTable = 1
 			Begin
 				Set @S = @S + ' INSERT INTO T_Analysis_Description_Updates ('
 				Set @S = @S +     ' Job, Dataset, Dataset_New, Dataset_ID, Dataset_ID_New, '
@@ -261,38 +291,41 @@ As
 				Set @S = @S +     ' Labelling, Labelling_New)'
 			End
 			
-			Set @S = @S + ' SELECT TAD.Job, TAD.Dataset, U.Dataset AS Dataset_New,'
-			Set @S = @S +        ' TAD.Dataset_ID, U.Dataset_ID AS Dataset_ID_New,'
-			Set @S = @S +        ' TAD.Experiment, U.Experiment AS Experiment_New,'
-			Set @S = @S +        ' TAD.Campaign, U.Campaign AS Campaign_New,'
-			Set @S = @S +        ' TAD.Vol_Client, U.Vol_Client AS Vol_Client_New,'
-			Set @S = @S +        ' TAD.Vol_Server, U.Vol_Server AS Vol_Server_New,'
-			Set @S = @S +        ' TAD.Storage_Path , U.Storage_Path AS Storage_Path_New,'
-			Set @S = @S +        ' TAD.Dataset_Folder, U.Dataset_Folder AS Dataset_Folder_New,'
-			Set @S = @S +        ' TAD.Results_Folder, U.Results_Folder AS Results_Folder_New,'
-			Set @S = @S +        ' TAD.Completed, U.Completed AS Completed_New,'
-			Set @S = @S +        ' TAD.Parameter_File_Name, U.Parameter_File_Name AS Parameter_File_Name_New,'
-			Set @S = @S +        ' TAD.Settings_File_Name, U.Settings_File_Name AS Settings_File_Name_New,'
-			Set @S = @S +        ' TAD.Organism_DB_Name, U.Organism_DB_Name AS Organism_DB_Name_New,'
-			Set @S = @S +        ' TAD.Protein_Collection_List, U.Protein_Collection_List AS Protein_Collection_List_New,'
-			Set @S = @S +        ' TAD.Protein_Options_List, U.Protein_Options_List AS Protein_Options_List_New,'
-			Set @S = @S +        ' TAD.Separation_Sys_Type, U.Separation_Sys_Type AS Separation_Sys_Type_New,'
-			Set @S = @S +        ' TAD.PreDigest_Internal_Std, U.PreDigest_Internal_Std AS PreDigest_Internal_Std_New,'
-			Set @S = @S +        ' TAD.PostDigest_Internal_Std, U.PostDigest_Internal_Std AS PostDigest_Internal_Std_New,'
-			Set @S = @S +        ' TAD.Dataset_Internal_Std, U.Dataset_Internal_Std AS Dataset_Internal_Std_New,'
-			Set @S = @S +        ' TAD.Enzyme_ID, U.Enzyme_ID AS Enzyme_ID_New,'
-			Set @S = @S +        ' TAD.Labelling, U.Labelling AS Labelling_New'
-			Set @S = @S + ' FROM #TmpJobsToUpdate U INNER JOIN '
-			Set @S = @S +      ' T_Analysis_Description TAD ON U.Job = TAD.Job'
-			Set @S = @S + ' ORDER BY Job'
-			
-			If @PreviewSql <> 0
-				Print @S
-			Else
-				Exec (@S)
-			--
-			SELECT @myError = @@error, @myRowCount = @@rowcount
-
+			If @infoOnly <> 0 OR @infoOnly = 0 AND @AddRowToTable = 1
+			Begin
+				Set @S = @S + ' SELECT TAD.Job, TAD.Dataset, U.Dataset AS Dataset_New,'
+				Set @S = @S +        ' TAD.Dataset_ID, U.Dataset_ID AS Dataset_ID_New,'
+				Set @S = @S +        ' TAD.Experiment, U.Experiment AS Experiment_New,'
+				Set @S = @S +        ' TAD.Campaign, U.Campaign AS Campaign_New,'
+				Set @S = @S +        ' TAD.Vol_Client, U.Vol_Client AS Vol_Client_New,'
+				Set @S = @S +        ' TAD.Vol_Server, U.Vol_Server AS Vol_Server_New,'
+				Set @S = @S +        ' TAD.Storage_Path , U.Storage_Path AS Storage_Path_New,'
+				Set @S = @S +        ' TAD.Dataset_Folder, U.Dataset_Folder AS Dataset_Folder_New,'
+				Set @S = @S +        ' TAD.Results_Folder, U.Results_Folder AS Results_Folder_New,'
+				Set @S = @S +        ' TAD.Completed, U.Completed AS Completed_New,'
+				Set @S = @S +        ' TAD.Parameter_File_Name, U.Parameter_File_Name AS Parameter_File_Name_New,'
+				Set @S = @S +        ' TAD.Settings_File_Name, U.Settings_File_Name AS Settings_File_Name_New,'
+				Set @S = @S +        ' TAD.Organism_DB_Name, U.Organism_DB_Name AS Organism_DB_Name_New,'
+				Set @S = @S +        ' TAD.Protein_Collection_List, U.Protein_Collection_List AS Protein_Collection_List_New,'
+				Set @S = @S +        ' TAD.Protein_Options_List, U.Protein_Options_List AS Protein_Options_List_New,'
+				Set @S = @S +        ' TAD.Separation_Sys_Type, U.Separation_Sys_Type AS Separation_Sys_Type_New,'
+				Set @S = @S +        ' TAD.PreDigest_Internal_Std, U.PreDigest_Internal_Std AS PreDigest_Internal_Std_New,'
+				Set @S = @S +        ' TAD.PostDigest_Internal_Std, U.PostDigest_Internal_Std AS PostDigest_Internal_Std_New,'
+				Set @S = @S +        ' TAD.Dataset_Internal_Std, U.Dataset_Internal_Std AS Dataset_Internal_Std_New,'
+				Set @S = @S +        ' TAD.Enzyme_ID, U.Enzyme_ID AS Enzyme_ID_New,'
+				Set @S = @S +        ' TAD.Labelling, U.Labelling AS Labelling_New'
+				Set @S = @S + ' FROM #TmpJobsToUpdate U INNER JOIN '
+				Set @S = @S +      ' T_Analysis_Description TAD ON U.Job = TAD.Job'
+				Set @S = @S + ' ORDER BY Job'
+				
+				If @PreviewSql <> 0
+					Print @S
+				Else
+					Exec (@S)
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+			End			
 			
 			If @PreviewSql <> 0
 				Set @infoOnly = 1
@@ -346,6 +379,7 @@ As
 					Storage_Path = U.Storage_Path,
 					Dataset_Folder = U.Dataset_Folder, 
 					Results_Folder = U.Results_Folder,
+					MyEMSLState = U.MyEMSLState,
 					Completed = U.Completed,
 					Parameter_File_Name = U.Parameter_File_Name,
 					Settings_File_Name = U.Settings_File_Name,
@@ -464,7 +498,6 @@ As
 Done:
 	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshAnalysisDescriptionInfo] TO [MTS_DB_Dev] AS [dbo]

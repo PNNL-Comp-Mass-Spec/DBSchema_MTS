@@ -31,3 +31,9 @@ insert into publication_author_xref (publication_id, author_id, listing_order) v
 insert into publication_author_xref (publication_id, author_id, listing_order) values (1080, 9  , 9);
 insert into publication_author_xref (publication_id, author_id, listing_order) values (1080, 17 , 10);
 insert into publication_author_xref (publication_id, author_id, listing_order) values (1080, 15 , 11);
+
+-- View authors defined for a publication
+SELECT X.publication_id, X.listing_order, A.*
+FROM publication_author_xref X INNER JOIN publication_authors A ON X.author_id = A.id
+WHERE X.publication_id = 1088
+ORDER BY X.listing_order

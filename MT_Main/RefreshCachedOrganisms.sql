@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.RefreshCachedOrganisms
+ALTER PROCEDURE dbo.RefreshCachedOrganisms
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Organisms
@@ -13,9 +13,11 @@ CREATE PROCEDURE dbo.RefreshCachedOrganisms
 **
 **	Auth:	mem
 **	Date:	08/01/2012 mem - Initial version
+**			10/10/2013 mem - Added parameter @UpdateCachedDataStatusTable
 **
 *****************************************************/
 (
+	@UpdateCachedDataStatusTable tinyint = 1,
 	@message varchar(255) = '' output
 )
 AS
@@ -42,6 +44,8 @@ AS
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
 	
+	Set @UpdateCachedDataStatusTable = IsNull(@UpdateCachedDataStatusTable, 1)
+	
 	---------------------------------------------------
 	-- Create the temporary table that will be used to
 	-- track the number of inserts, updates, and deletes 
@@ -53,7 +57,7 @@ AS
 	)
 		
 	Begin Try
-				
+
 		Set @CurrentLocation = 'Update Last_Refreshed in T_DMS_Cached_Data_Status'
 		-- 
 		Exec UpdateDMSCachedDataStatus 'T_DMS_Organisms', @IncrementRefreshCount = 0, @FullRefreshPerformed = 1, @LastRefreshMinimumID = 0
@@ -120,11 +124,15 @@ AS
 		Else
 		Begin
 
-			-- Update the stats in T_DMS_Cached_Data_Status
-			exec RefreshCachedDMSInfoFinalize 'RefreshCachedOrganisms', 'V_DMS_Organisms_Import', 'T_DMS_Organisms',
+			If @UpdateCachedDataStatusTable <> 0
+			Begin
+				-- Update the stats in T_DMS_Cached_Data_Status
+				exec RefreshCachedDMSInfoFinalize 'RefreshCachedOrganisms', 'V_DMS_Organisms_Import', 'T_DMS_Organisms',
 												@IncrementRefreshCount = 1, 
 												@FullRefreshPerformed = 1, 
 												@LastRefreshMinimumID = 0
+			End
+
 		End
 
 	End Try
@@ -138,6 +146,5 @@ AS
 
 Done:
 	Return @myError
-
 
 GO

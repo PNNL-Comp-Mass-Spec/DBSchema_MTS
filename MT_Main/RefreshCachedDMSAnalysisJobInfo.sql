@@ -25,6 +25,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 **			01/19/2011 mem - Now casting DS_Acq_Length to decimal(9, 2) when querying @SourceTable
 **						   - Added parameter @ShowActionTable
 **			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
+**			10/10/2013 mem - Now updating MyEMSLState
 **
 *****************************************************/
 (
@@ -140,7 +141,7 @@ AS
 		Set @S = @S +               ' Completed, ParameterFileName, SettingsFileName, '
 		Set @S = @S +               ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
 		Set @S = @S +               ' StoragePathClient, StoragePathServer, DatasetFolder, '
-		Set @S = @S +               ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +               ' ResultsFolder, MyEMSLState, Owner, Comment, SeparationSysType, '
 		Set @S = @S +               ' ResultType, [Dataset Int Std], DS_created, '
 		Set @S = @S +               ' Convert(decimal(9, 2), DS_Acq_Length), EnzymeID, '
 		Set @S = @S +               ' Labelling, [PreDigest Int Std], [PostDigest Int Std], RequestID'
@@ -151,7 +152,7 @@ AS
 		Set @S = @S +               ' Completed, ParameterFileName, SettingsFileName, '
 		Set @S = @S +               ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
 		Set @S = @S +               ' StoragePathClient, StoragePathServer, DatasetFolder, '
-		Set @S = @S +               ' ResultsFolder, Owner, Comment, SeparationSysType, '
+		Set @S = @S +               ' ResultsFolder, MyEMSLState, Owner, Comment, SeparationSysType, '
 		Set @S = @S +               ' ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, '
 		Set @S = @S +               ' Labelling, [PreDigest Int Std], [PostDigest Int Std], RequestID)'
 		Set @S = @S + ' ON (target.Job = source.Job)'
@@ -169,13 +170,14 @@ AS
 		Set @S = @S +                     ' IsNull(Target.Completed, ''1/1/1980'') <> IsNull(source.Completed, ''1/1/1980'') OR'
 		Set @S = @S +                     ' Target.ParameterFileName <> source.ParameterFileName OR'
 		Set @S = @S +                     ' IsNull(Target.SettingsFileName, '''') <> IsNull(source.SettingsFileName, '''') OR'
-		Set @S = @S +                     ' Target.OrganismDBName <> source.OrganismDBName OR'
+		Set @S = @S +         ' Target.OrganismDBName <> source.OrganismDBName OR'
 		Set @S = @S +    ' Target.ProteinCollectionList <> source.ProteinCollectionList OR'
 		Set @S = @S +                     ' Target.ProteinOptions <> source.ProteinOptions OR'
 		Set @S = @S +                     ' Target.StoragePathClient <> source.StoragePathClient OR'
 		Set @S = @S +                     ' IsNull(Target.StoragePathServer, '''') <> IsNull(source.StoragePathServer, '''') OR'
 		Set @S = @S +                     ' IsNull(Target.DatasetFolder, '''') <> IsNull(source.DatasetFolder, '''') OR'
 		Set @S = @S +                     ' IsNull(Target.ResultsFolder, '''') <> IsNull(source.ResultsFolder, '''') OR'
+		Set @S = @S +                     ' Target.MyEMSLState <> source.MyEMSLState OR'
 		Set @S = @S +                     ' IsNull(Target.Owner, '''') <> IsNull(source.Owner, '''') OR'
 		Set @S = @S +                     ' IsNull(Target.Comment, '''') <> IsNull(source.Comment, '''') OR'
 		Set @S = @S +                     ' IsNull(Target.SeparationSysType, '''') <> IsNull(source.SeparationSysType, '''') OR'
@@ -208,6 +210,7 @@ AS
 		Set @S = @S +            ' StoragePathServer = source.StoragePathServer,'
 		Set @S = @S +            ' DatasetFolder = source.DatasetFolder,'
 		Set @S = @S +            ' ResultsFolder = source.ResultsFolder,'
+		Set @S = @S +            ' MyEMSLState = source.MyEMSLState,'
 		Set @S = @S +            ' Owner = source.Owner,'
 		Set @S = @S +            ' Comment = source.Comment,'
 		Set @S = @S +            ' SeparationSysType = source.SeparationSysType,'
@@ -224,17 +227,17 @@ AS
 		Set @S = @S + '	INSERT (Job, RequestID, Priority, Dataset, Experiment, Campaign, DatasetID, '
 		Set @S = @S +         ' Organism, InstrumentName, InstrumentClass, AnalysisTool, Processor,'
 		Set @S = @S +         ' Completed, ParameterFileName, SettingsFileName, '
-		Set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
+		Set @S = @S +         ' OrganismDBName, ProteinCollectionList, ProteinOptions, '
 		Set @S = @S +         ' StoragePathClient, StoragePathServer, DatasetFolder, '
-		Set @S = @S +         ' ResultsFolder, Owner, Comment, SeparationSysType, '
-		Set @S = @S +        ' ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, '
+		Set @S = @S +         ' ResultsFolder, MyEMSLState, Owner, Comment, SeparationSysType, '
+		Set @S = @S +         ' ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, '
 		Set @S = @S +         ' Labelling, [PreDigest Int Std], [PostDigest Int Std], Last_Affected)'
 		Set @S = @S + '	VALUES ( source.Job, source.RequestID, source.Priority, source.Dataset, source.Experiment, source.Campaign, source.DatasetID, '
 		Set @S = @S +         '  source.Organism, source.InstrumentName, source.InstrumentClass, source.AnalysisTool, source.Processor,'
 		Set @S = @S +         '  source.Completed, source.ParameterFileName, source.SettingsFileName, '
 		Set @S = @S +         '  source.OrganismDBName, source.ProteinCollectionList, source.ProteinOptions, '
 		Set @S = @S +         '  source.StoragePathClient, source.StoragePathServer, source.DatasetFolder, '
-		Set @S = @S +         '  source.ResultsFolder, source.Owner, source.Comment, source.SeparationSysType, '
+		Set @S = @S +         '  source.ResultsFolder, source.MyEMSLState, source.Owner, source.Comment, source.SeparationSysType, '
 		Set @S = @S +         '  source.ResultType, source.[Dataset Int Std], source.DS_created, source.DS_Acq_Length, source.EnzymeID, '
 		Set @S = @S +         '  source.Labelling, source.[PreDigest Int Std], source.[PostDigest Int Std], GetDate())'
 		Set @S = @S + ' WHEN NOT MATCHED BY SOURCE AND '
@@ -282,7 +285,6 @@ AS
 			
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Dev] AS [dbo]
