@@ -59,6 +59,7 @@ CREATE Procedure LoadPeptidesForOneAnalysis
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			03/25/2013 mem - Now setting @completionCode to 5 if just one peptide is loaded
+**			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
 **
 *****************************************************/
 (
@@ -180,6 +181,8 @@ AS
 		Declare @Dataset  varchar(128) = ''
 		Declare @Campaign varchar(128) = ''
 		Declare @ResultFileSuffix varchar(32) = ''
+		declare @CurrentJobState int
+		declare @MyEMSLState tinyint
 
 		declare @StoragePathResults varchar(512)
 		declare @SourceServer varchar(255)
@@ -187,7 +190,9 @@ AS
 		SELECT	@ResultType = ResultType,
 				@Dataset = Dataset,
 				@Campaign = Campaign,
-				@ResultFileSuffix = IsNull(Result_File_Suffix, '')
+				@ResultFileSuffix = IsNull(Result_File_Suffix, ''),
+				@CurrentJobState = Process_State,
+				@MyEMSLState = MyEMSLState
 		FROM T_Analysis_Description
 		WHERE (Job = @job)
 		--
@@ -345,9 +350,22 @@ AS
 
 		If Len(IsNull(@StoragePathResults, '')) = 0
 		Begin
-			-- Results path is null; unable to continue
-			Set @message = 'Unable to determine results folder path for job ' + @jobStr
-			Set @myError = 60009
+			If @MyEMSLState > 0
+			Begin
+				-- Files reside in MyEMSL
+				-- They should have been added to the download queue
+				Set @CompletionCode = @CurrentJobState
+				Set @message = 'Waiting for files to be retrieved from MyEMSL for job ' + @jobStr
+				-- Note that this error code is used by LoadResultsForAvailableAnalyses
+				Set @myError = 60030
+			End
+			Else
+			Begin
+				-- Results path is null; unable to continue
+				Set @message = 'Unable to determine results folder path for job ' + @jobStr
+				Set @myError = 60009
+			End
+			
 			Goto Done
 		End
 
@@ -718,9 +736,13 @@ AS
 	-----------------------------------------------
 Done:
 
-	-- Update the process state for this job
-	--
-	Exec SetProcessState @job, @completionCode
+	If @completionCode <> @CurrentJobState
+	Begin
+		-- Update the process state for this job
+		--
+		Exec SetProcessState @job, @completionCode
+	End
+
 	
 	Return @myError
 

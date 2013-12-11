@@ -45,6 +45,7 @@ CREATE Procedure LoadResultsForAvailableAnalyses
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **			12/06/2012 mem - Expanded @message to varchar(1024)
+**			12/09/2013 mem - Now checking for return code 60030 from LoadMASICResultsForOneAnalysis or LoadPeptidesForOneAnalysis
 **    
 *****************************************************/
 (
@@ -275,6 +276,8 @@ AS
 				Else
 				Begin -- <d>
 					-- Note that error codes 60002 and 60004 are defined in SP LoadPeptidesForOneAnalysis 
+					Set @errorType = 'Error'
+					
 					If @result = 60002 or @result = 60004
 					Begin
 						If @IgnoreSynopsisFileFilterErrorsOnImport = 1
@@ -282,11 +285,14 @@ AS
 						Else
 							Set @ErrorType = 'Error'
 					End
-					Else
-						Set @ErrorType = 'Error'
-					--
+					
+					If @result = 60030
+					Begin
+						Set @ErrorType = 'Debug'
+					End
 					
 					execute PostLogEntry @ErrorType, @message, 'LoadResultsForAvailableAnalyses'
+					
 				End -- </d>
 
 				-- Update RowCount_Loaded in T_Analysis_Description
@@ -317,7 +323,6 @@ AS
 					Exec @myError = ReindexDatabase @message output
 					Set @LastReindexTime = GetDate()
 				End
-
 
 				-- check number of jobs processed
 				--

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
+CREATE Procedure LoadMASICResultsForOneAnalysis
 /****************************************************
 **
 **	Desc: 
@@ -31,6 +31,7 @@ CREATE Procedure dbo.LoadMASICResultsForOneAnalysis
 **			11/21/2011 mem - Now populating Required_File_List in #TmpResultsFolderPaths
 **						   - Now updating @message when call to LoadMASICSICStatsBulk returns an error code
 **			12/30/2011 mem - Added call to LoadToolVersionInfoOneJob
+**			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
 **    
 *****************************************************/
 (
@@ -73,7 +74,9 @@ AS
 		-----------------------------------------------
 		declare @Dataset varchar(128)
 		declare @DatasetID int
-		Declare @AnalysisToolName varchar(128)
+		declare @AnalysisToolName varchar(128)
+		declare @CurrentJobState int
+		declare @MyEMSLState tinyint
 		
 		declare @StoragePathResults varchar(512)
 		declare @SourceServer varchar(255)
@@ -83,7 +86,9 @@ AS
 		SELECT 
 			@Dataset = Dataset, 
 			@DatasetID = Dataset_ID,
-			@AnalysisToolName = Analysis_Tool
+			@AnalysisToolName = Analysis_Tool,
+			@CurrentJobState = Process_State,
+			@MyEMSLState = MyEMSLState
 		FROM T_Analysis_Description
 		WHERE (Job = @job)
 		--
@@ -127,9 +132,22 @@ AS
 
 		If Len(IsNull(@StoragePathResults, '')) = 0
 		Begin
-			-- Results path is null; unable to continue
-			Set @message = 'Unable to determine results folder path for job ' + @jobStr
-			Set @myError = 60009
+			If @MyEMSLState > 0
+			Begin
+				-- Files reside in MyEMSL
+				-- They should have been added to the download queue
+				Set @CompletionCode = @CurrentJobState
+				Set @message = 'Waiting for files to be retrieved from MyEMSL for job ' + @jobStr
+				-- Note that this error code is used by LoadResultsForAvailableAnalyses
+				Set @myError = 60030
+			End
+			Else
+			Begin
+				-- Results path is null; unable to continue
+				Set @message = 'Unable to determine results folder path for job ' + @jobStr
+				Set @myError = 60009
+			End
+			
 			Goto Done
 		End
 
@@ -444,7 +462,7 @@ AS
 			
 			If @myRowCount > 0
 				execute PostLogEntry 'Normal', @PeptideHitResetMessage, 'LoadMASICResultsForOneAnalysis'
-		    	
+		  	
 		end
 
 	End Try
@@ -469,12 +487,14 @@ AS
 	-----------------------------------------------
 Done:
 
-	-- Update the process state for this job
-	--
-	Exec SetProcessState @job, @completionCode
+	If @completionCode <> @CurrentJobState
+	Begin
+		-- Update the process state for this job
+		--
+		Exec SetProcessState @job, @completionCode
+	End
 	
-	return @myError
-
+	Return @myError
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadMASICResultsForOneAnalysis] TO [MTS_DB_Dev] AS [dbo]
