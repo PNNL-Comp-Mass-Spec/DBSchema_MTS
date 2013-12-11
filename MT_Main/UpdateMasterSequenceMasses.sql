@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create Procedure UpdateMasterSequenceMasses
+CREATE Procedure UpdateMasterSequenceMasses
 /****************************************************
 ** 
 **	Desc:	Calls CalculateMonoisotopicMassWrapper in Master_Sequences,
@@ -19,6 +19,7 @@ create Procedure UpdateMasterSequenceMasses
 **	Date:	11/28/2005
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
+**			10/11/2013 mem - Switch to SCOPE_IDENTITY()
 **    
 *****************************************************/
 (
@@ -113,7 +114,7 @@ As
 	INSERT INTO T_Current_Activity_History (Database_ID, Database_Name, Snapshot_Date, TableCount1, TableCount2, TableCount3, TableCount4)
 	VALUES (@MasterSeqDBID, @MasterSeqDB, GetDate(), @count1, 0, 0, 0)
 	--
-	SELECT @historyId = @@Identity
+	SELECT @historyId = SCOPE_IDENTITY()
 	
 
 	-----------------------------------------------------------

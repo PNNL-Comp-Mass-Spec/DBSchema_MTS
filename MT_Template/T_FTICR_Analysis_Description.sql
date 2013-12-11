@@ -28,6 +28,7 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
 	[Storage_Path] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Dataset_Folder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Results_Folder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[MyEMSLState] [tinyint] NOT NULL,
 	[Completed] [datetime] NULL,
 	[ResultType] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Separation_Sys_Type] [varchar](50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -112,6 +113,8 @@ GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Collection_List]  DEFAULT ('na') FOR [Protein_Collection_List]
 GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Options_List]  DEFAULT ('na') FOR [Protein_Options_List]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
 GO
 ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Created]  DEFAULT (getdate()) FOR [Created]
 GO

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ValidateFilesExist
+CREATE Procedure ValidateFilesExist
 /****************************************************
 **
 **	Desc: 
@@ -14,14 +14,17 @@ CREATE Procedure dbo.ValidateFilesExist
 **
 **	Auth:	mem
 **	Date:	11/21/2011 mem - Initial Version
+**			10/10/2013 mem - Added @FirstMissingFile and @ShowDebugInfo
 **
 *****************************************************/
 (
 	@FolderPath varchar(256),
 	@RequiredFileList varchar(max),
-	@FileCountFound int = 0 OUTPUT,
-	@FileCountMissing int = 0 OUTPUT,
-	@message varchar(512) = '' OUTPUT
+	@FileCountFound int = 0 output,
+	@FileCountMissing int = 0 output,
+	@message varchar(512) = '' output,
+	@FirstMissingFile varchar(512) = '' output,
+	@ShowDebugInfo tinyint = 0
 )
 AS
 	Set NoCount On
@@ -32,7 +35,7 @@ AS
 	set @myRowCount = 0
 
 	declare @CallingProcName varchar(128)
-	declare @CurrentLocation varchar(128)
+	declare @CurrentLocation varchar(512)
 	Set @CurrentLocation = 'Start'
 
 	Declare @FolderExists int
@@ -54,7 +57,10 @@ AS
 		set @FileCountFound = 0
 		set @FileCountMissing = 0
 		set @message = ''
+		set @FirstMissingFile = ''
 		
+		Set @ShowDebugInfo = IsNull(@ShowDebugInfo, 0)
+			
 		declare @result int
 
 		If Len(LTrim(RTrim(@FolderPath))) = 0
@@ -73,6 +79,7 @@ AS
 		DECLARE @hr int
 
 		Set @CurrentLocation =  'Create Scripting.FileSystemObject'
+		If @ShowDebugInfo <> 0 Print @CurrentLocation
 		--
 		EXEC @hr = sp_OACreate 'Scripting.FileSystemObject', @FSOObject OUT
 		IF @hr <> 0
@@ -85,6 +92,7 @@ AS
 		END
 
 		Set @CurrentLocation =  'Call FolderExists for ' + @FolderPath
+		If @ShowDebugInfo <> 0 Print @CurrentLocation
 		--
 		EXEC @hr = sp_OAMethod  @FSOObject, 'FolderExists', @result OUT, @FolderPath
 		IF @hr <> 0
@@ -133,7 +141,8 @@ AS
 				Begin -- <c>
 				
 					Set @FilePath = dbo.udfCombinePaths(@FolderPath, @FileName)					
-					Set @CurrentLocation =  'Call FileExists for ' + @FilePath
+					Set @CurrentLocation = 'Call FileExists for ' + @FilePath
+					If @ShowDebugInfo <> 0 Print @CurrentLocation
 					--
 					EXEC @hr = sp_OAMethod  @FSOObject, 'FileExists', @result OUT, @FilePath
 					IF @hr <> 0
@@ -150,10 +159,15 @@ AS
 					Else
 					Begin
 						Set @FileCountMissing = @FileCountMissing + 1
-						If Len(@MissingFileList) = 0
+						If @FileCountMissing = 1
+						Begin
 							Set @MissingFileList = @FileName
+							Set @FirstMissingFile = @FileName
+						End
 						Else
+						Begin
 							Set @MissingFileList = @MissingFileList + ', ' + @FileName
+						End						
 					End
 				
 				End -- </c>
@@ -206,6 +220,5 @@ AS
 	-----------------------------------------------
 Done:	
 	return @myError
-
 
 GO

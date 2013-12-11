@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.ParseFilterList
 **			04/07/2005 mem - Expanded @ValueMatchStr to varchar(128)
 **			02/23/2006 mem - Now using udfTrimToCRLF() to assure that values in T_Process_Config are truncated at the first CR or LF value
 **			08/26/2006 mem - Now including ORDER BY Process_Config_ID in the SELECT TOP 1 query to ensure that all entries are processed
+**			11/07/2013 mem - Added parameter @previewSql
 **    
 *****************************************************/
 (
@@ -28,7 +29,8 @@ CREATE PROCEDURE dbo.ParseFilterList
 	@filterValueLookupTableName varchar(256) = 'MT_Main.dbo.V_DMS_Analysis_Job_Import',
 	@filterValueLookupColumnName varchar(128) = 'Experiment',
 	@filterLookupAddnlWhereClause varchar(2000) = '',			-- Can be used to filter on additional fields in @filterValueLookupTableName; for example, "Campaign Like 'Deinococcus' AND  InstrumentClass = 'Finnigan_FTICR'"
-	@filterMatchCount int = 0 OUTPUT
+	@filterMatchCount int = 0 OUTPUT,
+	@previewSql tinyint = 0
 )
 As
 	set nocount on
@@ -45,6 +47,12 @@ As
 	declare @ValueMatchStr varchar(128)
 
 	declare @S nvarchar(4000)
+
+	declare @Lf char(1)
+	Set @Lf = char(10)
+	
+	declare @CrLf char(2)
+	Set @CrLf = char(10) + char(13)
 
 
 	TRUNCATE TABLE #TmpFilterList
@@ -114,17 +122,24 @@ As
 			Else
 			Begin -- <c>
 				Set @S = ''
-				Set @S = @S + ' INSERT INTO #TmpFilterList (Value)'
-				Set @S = @S + ' SELECT DISTINCT PT.' + @filterValueLookupColumnName
-				Set @S = @S + ' FROM '
-				Set @S = @S +   @filterValueLookupTableName + ' AS PT'
-				Set @S = @S + ' LEFT OUTER JOIN #TmpFilterList ON PT.' + @filterValueLookupColumnName + ' = #TmpFilterList.Value'
-				Set @S = @S + ' WHERE PT.' + @filterValueLookupColumnName + ' LIKE ''' + @ValueMatchStr + ''' AND'
-				Set @S = @S +      ' #TmpFilterList.Value IS NULL'
+				Set @S = @S + ' INSERT INTO #TmpFilterList (Value)' + @Lf
+				Set @S = @S + ' SELECT DISTINCT PT.' + @filterValueLookupColumnName + @Lf
+				Set @S = @S + ' FROM ' + @Lf
+				Set @S = @S +   @filterValueLookupTableName + ' AS PT' + @Lf
+				Set @S = @S + ' LEFT OUTER JOIN #TmpFilterList ON PT.' + @filterValueLookupColumnName + ' = #TmpFilterList.Value' + @Lf
+				Set @S = @S + ' WHERE PT.' + @filterValueLookupColumnName + ' LIKE ''' + @ValueMatchStr + ''' AND' + @Lf
+				Set @S = @S +      ' #TmpFilterList.Value IS NULL' + @Lf
 				If Len(@filterLookupAddnlWhereClause) > 0
-					Set @S = @S + ' AND ' + @filterLookupAddnlWhereClause
+					Set @S = @S + ' AND ' + @filterLookupAddnlWhereClause + @Lf
 
 				exec @result = sp_executesql @S
+				
+				If @PreviewSql <> 0
+				Begin
+					Print 'SQL for ' + @filterValueLookupColumnName + 's:'
+					Print @S + @CrLf
+				End
+				
 				--
 				select @myError = @result, @myRowcount = @@rowcount
 				--

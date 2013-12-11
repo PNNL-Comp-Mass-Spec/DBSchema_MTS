@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.ImportNewMSAnalyses
+CREATE Procedure ImportNewMSAnalyses
 /****************************************************
 **
 **	Desc: Imports LC-MS job entries from the analysis job table
@@ -51,6 +51,8 @@ CREATE Procedure dbo.ImportNewMSAnalyses
 **						   - Now populating DS_Acq_Length in T_FTICR_Analysis_Description
 **			05/04/2011 mem - Now skipping several filter lookup steps when @JobListOverride has jobs listed
 **			03/28/2012 mem - Now using parameters MS_Job_Minimum and MS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
+**			10/10/2013 mem - Now populating MyEMSLState
+**			11/08/2013 mem - Now passing @previewSql to ParseFilterList
 **    
 *****************************************************/
 (
@@ -456,7 +458,7 @@ As
 
 			set @expListCount = 0
 			set @filterMatchCount = 0
-			Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT, @previewSql=@previewSql
 			--
 			if @myError <> 0
 			begin
@@ -494,7 +496,7 @@ As
 			---------------------------------------------------
 			--
 			set @expListCountExcluded = 0
-			Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl
+			Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @previewSql=@previewSql
 			--
 			if @myError <> 0
 			begin
@@ -523,7 +525,7 @@ As
 			--
 			set @datasetListCount = 0
 			set @filterMatchCount = 0
-			Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT, @previewSql=@previewSql
 			--
 			if @myError <> 0
 			begin
@@ -561,7 +563,7 @@ As
 			---------------------------------------------------
 			--
 			set @datasetListCountExcluded = 0
-			Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl
+			Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @previewSql=@previewSql
 			--
 			if @myError <> 0
 			begin
@@ -609,7 +611,7 @@ As
 			set @S = @S + '	Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + '	Parameter_File_Name, Settings_File_Name,'
 			set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
-			set @S = @S + '	Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder,'
+			set @S = @S + '	Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, MyEMSLState,'
 			set @S = @S + '	Completed, ResultType, Separation_Sys_Type,'
 			set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
 			set @S = @S + ' Labelling, Created, Auto_Addition, State'
@@ -623,7 +625,7 @@ As
 		set @S = @S +   ' InstrumentClass, InstrumentName, AnalysisTool,' + @Lf
 		set @S = @S +   ' ParameterFileName, SettingsFileName,' + @Lf
 		set @S = @S +   ' OrganismDBName, ProteinCollectionList, ProteinOptions,' + @Lf
-		set @S = @S +   ' StoragePathClient, StoragePathServer, '''' AS StoragePath, DatasetFolder, ResultsFolder,' + @Lf
+		set @S = @S +   ' StoragePathClient, StoragePathServer, '''' AS StoragePath, DatasetFolder, ResultsFolder, MyEMSLState,' + @Lf
 		set @S = @S +   ' Completed, ResultType, SeparationSysType,' + @Lf
 		set @S = @S +   ' [PreDigest Int Std], [PostDigest Int Std], [Dataset Int Std],' + @Lf
 		set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew ' + @Lf
@@ -805,7 +807,6 @@ As
 	
 Done:
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User] AS [dbo]

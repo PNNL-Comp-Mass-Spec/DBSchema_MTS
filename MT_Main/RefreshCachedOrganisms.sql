@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER PROCEDURE dbo.RefreshCachedOrganisms
+CREATE PROCEDURE dbo.RefreshCachedOrganisms
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Organisms
@@ -146,5 +146,6 @@ AS
 
 Done:
 	Return @myError
+
 
 GO

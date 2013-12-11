@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE VIEW [dbo].[V_DMS_Analysis_Job_Import_Ex]
 AS
 SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID, 
@@ -14,9 +13,8 @@ SELECT Job, Priority, Dataset, Experiment, Campaign, DatasetID,
     StoragePathClient, StoragePathServer, DatasetFolder, 
     ResultsFolder, Owner, Comment, SeparationSysType, 
     ResultType, [Dataset Int Std], DS_created, DS_Acq_Length, EnzymeID, 
-    Labelling, [PreDigest Int Std], [PostDigest Int Std], Processor, RequestID
+    Labelling, [PreDigest Int Std], [PostDigest Int Std], Processor, RequestID, MyEMSLState
 FROM GIGASAX.DMS5.dbo.V_Analysis_Job_Export_Ex AS T1
-
 
 
 GO

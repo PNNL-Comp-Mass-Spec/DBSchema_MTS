@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.ImportNewMSMSAnalyses
 /****************************************************
 **
@@ -62,6 +63,8 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			03/28/2012 mem - Now using parameters MSMS_Job_Minimum and MSMS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
 **			04/26/2012 mem - Now showing warnings if jobs in @JobListOverride are not in a Peptide DB, or if those jobs are in a Peptide DB that is not defined in T_Process_Config
 **			04/18/2013 mem - Expanded [Organism_DB_Name] in #TmpNewAnalysisJobs to varchar(128)
+**			10/10/2013 mem - Now populating MyEMSLState
+**			11/07/2013 mem - Now passing @previewSql to ParseFilterList
 **
 *****************************************************/
 (
@@ -534,6 +537,7 @@ As
 		[Storage_Path] varchar(255) NOT NULL,
 		[Dataset_Folder] varchar(128) NOT NULL,
 		[Results_Folder] varchar(128) NOT NULL,
+		[MyEMSLState] tinyint NOT NULL,
 		[Completed] datetime NULL,
 		[ResultType] varchar(32) NULL,
 		[Separation_Sys_Type] varchar(50) NULL,
@@ -659,7 +663,7 @@ As
 			--
 			set @expListCount = 0
 			set @filterMatchCount = 0
-			Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			Exec @myError = ParseFilterList 'Experiment', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @filterMatchCount OUTPUT, @PreviewSql=@PreviewSql
 			--
 			if @myError <> 0
 			begin
@@ -688,6 +692,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Experiment Inclusion', Experiment 
 					FROM #TmpExperiments
+			
 			End
 
 
@@ -697,7 +702,7 @@ As
 			---------------------------------------------------
 			--
 			set @expListCountExcluded = 0
-			Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl
+			Exec @myError = ParseFilterList 'Experiment_Exclusion', @filterValueLookupTableName, 'Experiment', @SCampaignAndAddnl, @PreviewSql=@PreviewSql
 			--
 			if @myError <> 0
 			begin
@@ -726,7 +731,7 @@ As
 			--
 			set @datasetListCount = 0
 			set @filterMatchCount = 0
-			Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT
+			Exec @myError = ParseFilterList 'Dataset', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @filterMatchCount OUTPUT, @PreviewSql=@PreviewSql
 			--
 			if @myError <> 0
 			begin
@@ -764,7 +769,7 @@ As
 			---------------------------------------------------
 			--
 			set @datasetListCountExcluded = 0
-			Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl
+			Exec @myError = ParseFilterList 'Dataset_Exclusion', @filterValueLookupTableName, 'Dataset', @SCampaignAndAddnl, @PreviewSql=@PreviewSql
 			--
 			if @myError <> 0
 			begin
@@ -799,7 +804,7 @@ As
 			set @S = @S + ' Dataset_SIC_Job, Experiment_Organism, Instrument_Class, Instrument, Analysis_Tool,'
 			set @S = @S + ' Parameter_File_Name, Settings_File_Name,'
 			set @S = @S + ' Organism_DB_Name, Protein_Collection_List, Protein_Options_List,'
-			set @S = @S + ' Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder,'
+			set @S = @S + ' Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, MyEMSLState,'
 			set @S = @S + ' Completed, ResultType, Separation_Sys_Type,'
 			set @S = @S + ' PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,'
 			set @S = @S + ' Enzyme_ID, Labelling, Created_Peptide_DB, State, '
@@ -817,7 +822,7 @@ As
 			set @S = @S + '  DS.SIC_Job, PT.Experiment_Organism, PT.Instrument_Class, PT.Instrument, PT.Analysis_Tool,' + @Lf
 			set @S = @S + '  PT.Parameter_File_Name,	PT.Settings_File_Name,' + @Lf
 			set @S = @S + '  PT.Organism_DB_Name, PT.Protein_Collection_List, PT.Protein_Options_List,' + @Lf
-			set @S = @S + '  PT.Vol_Client, PT.Vol_Server, PT.Storage_Path, PT.Dataset_Folder, PT.Results_Folder,' + @Lf
+			set @S = @S + '  PT.Vol_Client, PT.Vol_Server, PT.Storage_Path, PT.Dataset_Folder, PT.Results_Folder, PT.MyEMSLState,' + @Lf
 			set @S = @S + '  PT.Completed, PT.ResultType, PT.Separation_Sys_Type,' + @Lf
 			set @S = @S + '  PT.PreDigest_Internal_Std, PT.PostDigest_Internal_Std, PT.Dataset_Internal_Std,' + @Lf
 			set @S = @S + '  PT.Enzyme_ID, PT.Labelling, PT.Created, 1 AS StateNew,' + @Lf
@@ -978,7 +983,7 @@ As
 						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
 						Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
-						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, 
+						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, MyEMSLState,
 						Completed, ResultType, Separation_Sys_Type, 
 						PreDigest_Internal_Std, PostDigest_Internal_Std, 
 						Dataset_Internal_Std, Enzyme_ID, Labelling, Created_Peptide_DB,
@@ -993,7 +998,7 @@ As
 						Experiment_Organism, Instrument_Class, Instrument, 
 						Analysis_Tool, Parameter_File_Name, Settings_File_Name, 
 						Organism_DB_Name, Protein_Collection_List, Protein_Options_List, 
-						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, 
+						Vol_Client, Vol_Server, Storage_Path, Dataset_Folder, Results_Folder, MyEMSLState,
 						Completed, ResultType, Separation_Sys_Type, 
 						PreDigest_Internal_Std, PostDigest_Internal_Std, 
 						Dataset_Internal_Std, Enzyme_ID, Labelling, Created_Peptide_DB,

@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached](
 	[Mass_Correction_ID] [int] NOT NULL,
 	[Mass_Correction_Tag] [char](8) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Description] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Description] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Monoisotopic_Mass_Correction] [float] NOT NULL,
 	[Average_Mass_Correction] [float] NULL,
 	[Affected_Atom] [char](1) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,

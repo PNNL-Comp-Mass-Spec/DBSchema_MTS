@@ -22,10 +22,11 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 	[OrganismDBName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ProteinCollectionList] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ProteinOptions] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[StoragePathClient] [varchar](8000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[StoragePathServer] [varchar](4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[StoragePathClient] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[StoragePathServer] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[DatasetFolder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[ResultsFolder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[MyEMSLState] [tinyint] NOT NULL,
 	[Owner] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Comment] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[SeparationSysType] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -42,7 +43,7 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
 (
 	[Job] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+) ON [PRIMARY]
 
 GO
 
@@ -120,6 +121,8 @@ AS
 
 GO
 ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_RequestID]  DEFAULT ((1)) FOR [RequestID]
+GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
 GO
 ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

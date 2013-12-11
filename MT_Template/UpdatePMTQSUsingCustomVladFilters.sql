@@ -19,6 +19,8 @@
 --   MT_S_oneidensis_MR1_P777 on Daffy (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --   MT_Mouse_CHF_P776 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --   MT_Human_ALZ_O18_P836
+--   MT_Mouse_MHP_Unlabeled_P929 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM, also filters on PSM_Count)
+--   MT_Mouse_MHP_Unlabeled_P933 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --
 -- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
 --
@@ -42,7 +44,8 @@ CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
 	DeltaCN2 real NOT NULL,
 	ModSymbolFilter varchar(12) NOT NULL default '',
 	MSGF_SpecProb real NOT NULL,
-	CleavageState smallint NOT NULL
+	CleavageState smallint NOT NULL,
+    PSM_Count smallint NOT NULL
  CONSTRAINT [PK_T_Custom_PMT_QS_Criteria_VP] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
@@ -51,7 +54,7 @@ CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
 
 GO
 
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
 
 CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Custom_PMT_QS_Criteria_VP] ON [dbo].[T_Custom_PMT_QS_Criteria_VP] 
@@ -86,6 +89,7 @@ ALTER PROCEDURE dbo.UpdatePMTQSUsingCustomVladFilters
 **			02/09/2012 mem - Updated to use T_Peptides.DelM_PPM
 **						   - Updated to left outer join to T_Score_Sequest
 **						   - Updated to use T_Peptides.Job
+**			11/26/2013 mem - Now filtering on Number_of_Peptides if PSM_Count is > 0 in T_Custom_PMT_QS_Criteria_VP
 **    
 *****************************************************/
 (
@@ -328,6 +332,49 @@ As
 		
 		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
 
+
+		If Exists (Select * from T_Custom_PMT_QS_Criteria_VP Where PSM_Count > 0)
+		Begin
+			Declare @PMTQSIterator int = 1000
+			Declare @PSMCountMax int
+			
+			While @PMTQSIterator > 0
+			Begin
+				SELECT TOP 1 @PMTQSIterator = PMTQS,
+				             @PSMCountMax = PSM_Count_Max
+				FROM ( SELECT PMTQS,
+				              MAX(PSM_Count) AS PSM_Count_Max
+				       FROM T_Custom_PMT_QS_Criteria_VP
+				       WHERE PMTQS < @PMTQSIterator
+				       GROUP BY PMTQS
+				       HAVING MAX(PSM_Count) > 0
+				      ) LookupQ
+				ORDER BY PMTQS DESC
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				If @myRowCount = 0
+				Begin
+					Set @PMTQSIterator = 0
+				End
+				Else
+				Begin
+					UPDATE T_Mass_Tags
+					SET PMT_Quality_Score = PMT_Quality_Score - 1
+					WHERE PMT_Quality_Score = @PMTQSIterator AND
+					      Number_Of_Peptides < @PSMCountMax
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+					If @myRowCount > 0
+					Begin
+						Set @message = 'Decremented PMT_Quality_Score for ' + Convert(varchar(12), @myRowCount) + ' AMTs with PMT_QS ' + Convert(varchar(12), @PMTQSIterator) + ' but Number_Of_Peptides < ' + Convert(varchar(12), @PSMCountMax)
+						execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
+					End
+				End
+			End 
+			
+		End
 	End
 		
 	

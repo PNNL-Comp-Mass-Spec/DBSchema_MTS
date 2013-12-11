@@ -21,6 +21,7 @@ CREATE Procedure ComparePeptideHitResultsMSGF
 **			01/07/2013 mem - Added parameters @Datasets and @DatasetIDs
 **			01/28/2013 mem - Now ignoring @Datasets and @DatasetIDs if @JobList1 and @JobList2 are defined
 **			02/15/2013 mem - Now returning FDR and PepFDR values when @ReturnOverlapPeptides=1 and comparing MSGF+ results
+**			10/22/2013 mem - Added @MaxFDR
 **    
 *****************************************************/
 (
@@ -28,7 +29,8 @@ CREATE Procedure ComparePeptideHitResultsMSGF
 	@DatasetIDs varchar(max) = '300689, 300690',	-- Can be a comma separated list
 	@JobList1 varchar(max) = '',					-- Can be a single job or a comma separated list of jobs
 	@JobList2 varchar(max) = '',					-- Can be a single job or a comma separated list of jobs
-	@CountUniquePeptides as tinyint = 0,			-- When 0, then returns PSM counts; otherwise, returns Unique Peptide counts
+	@CountUniquePeptides tinyint = 0,				-- When 0, then returns PSM counts; otherwise, returns Unique Peptide counts
+	@MaxFDR real = -1,								-- Maximum FDR value (ignored if < 0)
 	@ReturnOverlapPeptides tinyint=0,
 	@ReturnAllSet1Peptides tinyint=0,
 	@ReturnAllSet2Peptides tinyint=0,
@@ -345,7 +347,8 @@ AS
 					  ON P.Peptide_ID = SD.Peptide_ID
 					LEFT OUTER JOIN T_Score_MSGFDB DB
 					  ON P.Peptide_ID = DB.Peptide_ID
-				WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null
+				WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null AND 
+				      (@MaxFDR < 0 OR IsNull(FDR, 1) <= @MaxFDR)
 				--
 				Set @Set2RecordCount = @@RowCount
 			End
@@ -386,7 +389,8 @@ AS
 				            LEFT OUTER JOIN T_Score_MSGFDB DB
 					          ON P.Peptide_ID = DB.Peptide_ID
 				       WHERE (TAD.Dataset = @Dataset) AND
-				             NOT Seq_ID IS NULL 
+				             NOT Seq_ID IS NULL AND 
+				             (@MaxFDR < 0 OR IsNull(FDR, 1) <= @MaxFDR)
 				      ) AS RankQ
 				WHERE ScoreRank = 1
 				--
@@ -438,7 +442,8 @@ AS
 					 ON P.Peptide_ID = SD.Peptide_ID
 					LEFT OUTER JOIN T_Score_MSGFDB DB
 					  ON P.Peptide_ID = DB.Peptide_ID
-				WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null
+				WHERE (TAD.Dataset = @Dataset) AND Not Seq_ID Is Null AND 
+				      (@MaxFDR < 0 OR IsNull(FDR, 1) <= @MaxFDR)
 				--
 				Set @Set1RecordCount = @@RowCount
 			End
@@ -479,7 +484,8 @@ AS
 				            LEFT OUTER JOIN T_Score_MSGFDB DB
 					          ON P.Peptide_ID = DB.Peptide_ID
 				       WHERE (TAD.Dataset = @Dataset) AND
-				             NOT Seq_ID IS NULL 
+				             NOT Seq_ID IS NULL AND 
+				             (@MaxFDR < 0 OR IsNull(FDR, 1) <= @MaxFDR)
 				     ) AS RankQ
 				WHERE ScoreRank = 1
 				--

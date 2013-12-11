@@ -45,6 +45,7 @@ CREATE Procedure UpdateAllActivePeptideDatabases
 **			05/09/2007 mem - Now calling RefreshCachedDMSInfoIfRequired (Ticket:422)
 **			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
 **			01/25/2011 mem - Decreased @JobMapUpdateHoldoff to 0.9 hours
+**			10/11/2013 mem - Switch to SCOPE_IDENTITY()
 **    
 *****************************************************/
 (
@@ -371,7 +372,7 @@ As
 						INSERT INTO T_Current_Activity_History (Database_ID, Database_Name, Snapshot_Date, TableCount1, TableCount2, TableCount3, TableCount4)
 						VALUES (@PDB_ID, @PDB_Name, GetDate(), @count1, @count2, @count3, @count4)
 						--
-						SELECT @historyId = @@Identity
+						SELECT @historyId = SCOPE_IDENTITY()
 						
 						-- Lookup the table counts present at least 24 hours ago for this DB
 						-- If this DB doesn't have values that were present 24 hours ago, then the @count variables will remain unchanged
@@ -693,7 +694,6 @@ Done:
 	end
 
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateAllActivePeptideDatabases] TO [MTS_DB_Dev] AS [dbo]

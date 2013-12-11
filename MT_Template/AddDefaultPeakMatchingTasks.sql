@@ -44,6 +44,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			12/07/2009 mem - Changed the "Added job" display to be a Print instead of a Select
 **			03/21/2011 mem - Changed default score filters to Discriminant >= 0, Peptide Prophet >= 0, and PMT Quality Score >= 2
 **			07/13/2011 mem - Now stepping through T_Peak_Matching_Defaults twice; first to process entries where Instrument_Name does not have a percent sign, then processing those that do
+**			11/26/2013 mem - Now setting @MinimumPMTQualityScore to the most commonly used value in T_Peak_Matching_Defaults if the job does not match an entry in T_Peak_Matching_Defaults
 **     
 *****************************************************/
 (
@@ -439,6 +440,13 @@ AS
 			Set @MinimumHighDiscriminantScore = 0
 			Set @MinimumPeptideProphetProbability = 0
 			Set @MinimumPMTQualityScore = 2
+			
+			-- Set @MinimumPMTQualityScore to the most commonly used value in T_Peak_Matching_Defaults
+			SELECT TOP 1 @MinimumPMTQualityScore = Minimum_PMT_Quality_Score
+			FROM T_Peak_Matching_Defaults
+			GROUP BY Minimum_PMT_Quality_Score
+			ORDER BY COUNT(*) DESC
+			
 			Set @priority = 6
 			Set @SetStateToHoldingThisJob = @SetStateToHolding
 

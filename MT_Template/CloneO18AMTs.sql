@@ -1,4 +1,10 @@
-ALTER PROCEDURE dbo.CloneO18AMTs
+/****** Object:  StoredProcedure [dbo].[CloneO18AMTs] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE CloneO18AMTs
 /****************************************************
 ** 
 **	Desc:	Clones each AMT tag in T_Mass_Tags that has an O18 mod on the C-terminus (e.g. Two_O18:30)
@@ -298,3 +304,4 @@ Done:
 	
 	return @myError
 
+GO

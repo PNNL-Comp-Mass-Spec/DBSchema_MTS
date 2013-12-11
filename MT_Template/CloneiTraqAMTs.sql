@@ -1,4 +1,10 @@
-ALTER PROCEDURE dbo.CloneiTraqAMTs
+/****** Object:  StoredProcedure [dbo].[CloneiTraqAMTs] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE CloneiTraqAMTs
 /****************************************************
 ** 
 **	Desc:	Clones each AMT tag in T_Mass_Tags that has ITraq mods (e.g. itrac:1 or itrac:5)
@@ -6,12 +12,13 @@ ALTER PROCEDURE dbo.CloneiTraqAMTs
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
-**	Date:	11/7/2013 mem - Initial version (modelled after CloneO18AMTs)
+**	Date:	11/8/2013 mem - Initial version (modelled after CloneO18AMTs)
 **    
 *****************************************************/
 (
 	@InfoOnly tinyint = 0,
 	@PMTQualityScoreMinimum real = 1,
+	@PMTQualityScoreForITraqPeptides real = 0.5,		-- If this value is > 0, then after cloning the iTraq peptides, will set the PMT Quality Score to this value for the cloned peptides
 	@message varchar(255) = '' output
 )
 As
@@ -51,6 +58,7 @@ As
 		
 		Set @InfoOnly = IsNull(@InfoOnly, 0)
 		Set @PMTQualityScoreMinimum = IsNull(@PMTQualityScoreMinimum, 1)
+		Set @PMTQualityScoreForITraqPeptides = IsNull(@PMTQualityScoreForITraqPeptides, 0)
 		Set @message = ''
 
 		--------------------------------------------------------------
@@ -211,7 +219,7 @@ As
 		                ) CountQ
 		       ON MT.Mass_Tag_ID = CountQ.Mass_Tag_ID
 		WHERE (PMT_Quality_Score >= @PMTQualityScoreMinimum) AND
-		    (Mod_Description LIKE '%itrac%')			-- Like @ITraqModName
+		      (Mod_Description LIKE '%itrac%')			-- Like @ITraqModName
 		ORDER BY Mass_Tag_ID
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -242,41 +250,68 @@ As
 
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
+
 		
 		-----------------------------------------------------------
-		-- Populate the Mod_Description_New column
+		-- Populate the Mod_Description_New and Mod_Count_New columns
 		-----------------------------------------------------------
 
-		-- First process peptides with multiple mods, for example: IodoAcet:11,itrac:15
+		-- First update the mod_description for AMT tags that still have mods in #T_Tmp_Mass_Tag_Mod_Info (iTrac mods were excluded when that table was populated)
+		-- The Stuff() command is used to construct a comma-separated list of mod names and positions
+		-- See http://stackoverflow.com/questions/6344950/
 		--
 		UPDATE #T_Tmp_MTs_to_Clone
-		SET Mod_Description_New = SUBSTRING(Mod_Description, 1, CHARINDEX('itrac', Mod_Description) - 2), 
-			Mod_Count_New = Mod_Count - 1
-		WHERE Not Mod_Description like 'itrac%'
+		SET Mod_Description_New = ModListQ.ModList,
+		    Mod_Count_New = ModCountQ.ModCount
+		FROM #T_Tmp_MTs_to_Clone target
+		     INNER JOIN ( SELECT MTs.Mass_Tag_ID,
+		                         IsNull(Stuff(( SELECT ', ' + MTMods.Mod_Name + ':' + 
+		                                                 CONVERT(varchar(6), MTMods.Mod_Position)
+		                                        FROM #T_Tmp_Mass_Tag_Mod_Info MTMods
+		                                        WHERE MTMods.Mass_Tag_ID = MTs.Mass_Tag_ID
+		                                        FOR XML PATH ( '' ) ), 1, 2, ''), '') AS ModList
+		                  FROM #T_Tmp_MTs_to_Clone MTs
+		                  GROUP BY MTs.Mass_Tag_ID 
+		                ) ModListQ
+		       ON target.Mass_Tag_ID = ModListQ.Mass_Tag_ID
+		     INNER JOIN ( SELECT Mass_Tag_ID,
+		                         COUNT(*) AS ModCount
+		                  FROM #T_Tmp_Mass_Tag_Mod_Info
+		                  GROUP BY Mass_Tag_ID 
+		                ) ModCountQ
+		       ON target.Mass_Tag_ID = ModCountQ.Mass_Tag_ID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		-- Now update the remaining peptides to have a mod count of 0
+		--
+		UPDATE #T_Tmp_MTs_to_Clone 
+		SET Mod_Count_New = 0, Mod_Description_New = ''
+		WHERE Mod_Count_new < 0
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
 
-		-- Next process peptides with only an iTraq mod, for example: itrac:21
-		--
-		UPDATE #T_Tmp_MTs_to_Clone
-		SET Mod_Description_New = '', Mod_Count_New = 0
-		WHERE Mod_Description like 'itrac%'
-		--
-		SELECT @myError = @@error, @myRowCount = @@rowcount
+		If @InfoOnly > 0
+			select * from #T_Tmp_MTs_to_Clone order by Mass_Tag_ID
 
 
-		-- Make sure all of the peptides were updated
-		IF EXISTS (Select * from #T_Tmp_MTs_to_Clone Where Mod_Count_New < 0)
-		Begin
-			Set @myError = 50010
-			set @message = 'Entries in #T_Tmp_MTs_to_Clone have Mod_Count_New < 0; this is unexpected'
-			goto Done			
-		End
-
+		--------------------------------------------------------------
+		-- Clone the peptides in #T_Tmp_MTs_to_Clone
+		--------------------------------------------------------------
+		--		
 		exec @myError = CloneAMTsWork 'iTraq', @OrganismDBFileID, @ProteinCollectionFileID, @DeleteTempTables, @InfoOnly, @message output
 
+
+		If @myError = 0 And @InfoOnly = 0 And @PMTQualityScoreForITraqPeptides > 0
+		Begin
+			-- Update the PMT Quailty Score for any peptides with itraq mods
+			UPDATE T_Mass_Tags
+			SET PMT_Quality_Score = @PMTQualityScoreForITraqPeptides
+			WHERE (Mod_Description LIKE '%itrac%')			-- Like @ITraqModName
+			      AND PMT_Quality_Score >= @PMTQualityScoreMinimum
+		End
+		
 	End Try
 	Begin Catch
 		If @@TranCount > 0
@@ -297,3 +332,5 @@ Done:
 	
 	return @myError
 
+
+GO

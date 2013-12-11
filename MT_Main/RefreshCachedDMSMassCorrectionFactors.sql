@@ -18,6 +18,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
 **						   - Now passing @FullRefreshPerformed and @LastRefreshMinimumID to UpdateDMSCachedDataStatus
 **			07/30/2010 mem - Updated to use a single-step MERGE statement instead of three separate Delete, Update, and Insert statements
 **			08/02/2010 mem - Updated to use V_DMS_Mass_Correction_Factors_Import to obtain the information from DMS
+**			10/22/2013 mem - Now checking for Original_Source or Original_Source_Name differing
 **
 *****************************************************/
 (
@@ -92,6 +93,8 @@ AS
 				            target.Monoisotopic_Mass_Correction <> source.Monoisotopic_Mass_Correction OR
 				            IsNull(target.Average_Mass_Correction,0) <> IsNull(source.Average_Mass_Correction,0) OR
 				            target.Affected_Atom <> source.Affected_Atom OR
+				            IsNull(target.Original_Source,'') <> IsNull(source.Original_Source,'') OR
+				            IsNull(target.Original_Source_Name,'') <> IsNull(source.Original_Source_Name,'') OR
 				            IsNull(target.Empirical_Formula,'') <> IsNull(source.Empirical_Formula,'')) THEN 
 			UPDATE set Mass_Correction_Tag = source.Mass_Correction_Tag, 
 			           Description = source.Description, 

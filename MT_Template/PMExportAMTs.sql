@@ -21,14 +21,16 @@ CREATE Procedure PMExportAMTs
 **	Date:	07/17/2009
 **			10/27/2009 mem - Added parameter @MinimumCleavageState
 **			02/21/2011 mem - Added parameter @ReturnIMSConformersTable
+**			12/04/2013 mem - Updated default value for @MinimumPeptideProphetProbability to be 0 instead of 0.5
+**						   - Updated default value for @MinimumPMTQualityScore to be 2 instead of 1
 **
 ****************************************************/
 (
 	@LookupDefaults tinyint = 0,
 	@MinimumHighNormalizedScore real = 0,			-- The minimum value required for High_Normalized_Score; 0 to allow all
 	@MinimumHighDiscriminantScore real = 0,			-- The minimum High_Discriminant_Score to allow; 0 to allow all
-	@MinimumPeptideProphetProbability real = 0.5,	-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
-	@MinimumPMTQualityScore real = 1,				-- The minimum PMT_Quality_Score to allow; 0 to allow all
+	@MinimumPeptideProphetProbability real = 0,		-- The minimum High_Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MinimumPMTQualityScore real = 2,				-- The minimum PMT_Quality_Score to allow; 0 to allow all
 	@MinimumCleavageState smallint = 0,				-- The minimum Max_Cleavage_State to allow; 0 to allow all
 	@CountRowsOnly tinyint = 0,						-- When 1, then populates @AMTCount but does not return any data
 	@ReturnMTTable tinyint = 1,						-- When 1, then returns a table of Mass Tag IDs and various infor
@@ -92,6 +94,12 @@ AS
 								@message = @message output
 
 		End
+
+	If @DebugMode > 0
+		SELECT @MinimumHighNormalizedScore AS MinimumHighNormalizedScore,
+		       @MinimumHighDiscriminantScore AS MinimumHighDiscriminantScore,
+		       @MinimumPeptideProphetProbability AS MinimumPeptideProphetProbability,
+		       @MinimumPMTQualityScore AS MinimumPMTQualityScore
 
 		-------------------------------------------------
 		-- Create and populate the Score Thresholds temporary table (with just one row of data)
