@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.UpdateUserPermissions
+CREATE PROCEDURE UpdateUserPermissions
 /****************************************************
 **
 **	Desc: Updates user permissions in the current DB
@@ -164,7 +163,6 @@ AS
 	exec UpdateUserPermissionsViewDefinitions @UserList='MTS_DB_Dev, MTS_DB_Lite'
 
 	Return 0
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissions] TO [MTS_DB_Dev] AS [dbo]

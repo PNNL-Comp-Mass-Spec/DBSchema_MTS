@@ -27,6 +27,7 @@ CREATE Procedure LookupCurrentResultsFolderPathsByJob
 **			10/10/2013 mem - Adding support for MyEMSL
 **						   - Added @ShowDebugInfo
 **			12/09/2013 mem - Updated to support new states in CacheMyEMSLFiles
+**			12/11/2013 mem - Now showing more debug statements
 **    
 *****************************************************/
 (
@@ -221,15 +222,22 @@ set nocount on
 							Begin
 								If @StoragePathServer LIKE '\\MyEMSL%'
 								Begin
+									If @ShowDebugInfo > 0
+										Print '@StoragePathServer starts with \\MyEMSL'
 									Set @FolderExists = 1
 								End
 								Else
 								Begin
+									If @ShowDebugInfo > 0
+										Print 'Looking for ' + @StoragePathServer
 									exec ValidateFolderExists @StoragePathServer, @CreateIfMissing = 0, @FolderExists = @FolderExists output
 								End
 								
+								
 								If @FolderExists <> 0
 								Begin
+									If @ShowDebugInfo > 0
+										Print 'Folder exists: ' + @StoragePathServer
 									Set @StoragePathResults = @StoragePathServer
 									Set @SourceServerShare = @VolServer
 								End
@@ -252,10 +260,14 @@ set nocount on
 									Declare @LocalCacheFolderPath varchar(255)
 									Declare @LocalResultsFolderPath varchar(512)
 									
+									If @ShowDebugInfo > 0
+										Print 'Calling CacheMyEMSLFiles with ' + @RequiredFileList
+									
 									exec CacheMyEMSLFiles @Job, @RequiredFileList, 
 												@CacheState = @CacheState output, 
 												@LocalCacheFolderPath = @LocalCacheFolderPath output, 
-												@LocalResultsFolderPath = @LocalResultsFolderPath output
+												@LocalResultsFolderPath = @LocalResultsFolderPath output,
+												@ShowDebugInfo=@ShowDebugInfo
 
 									-- @CacheState values:
 									-- State 0 means the Job is not in MyEMSL
@@ -264,6 +276,14 @@ set nocount on
 									-- State 3 means the specified files have been cached locally and are ready to use
 									-- State 4 means there was an error caching the files locally (either a download error occurred, or over 24 hours has elapsed since the job was added to the queue)
 
+									If @ShowDebugInfo > 0
+									Begin
+										Print 'Return values from CacheMyEMSLFiles'
+										Print '  @CacheState = ' + convert(varchar(12), @CacheState)
+										Print '  @LocalCacheFolderPath = ' + @LocalCacheFolderPath
+										Print '  @LocalResultsFolderPath = ' + @LocalResultsFolderPath
+									End
+									
 									If @CacheState IN (1,2)
 									Begin
 										-- Still waiting for files
@@ -291,6 +311,9 @@ set nocount on
 								
 								If @FolderExists <> 0 And @ValidateFiles = 1
 								Begin
+									If @ShowDebugInfo > 0
+										Print 'Looking for ' + @StoragePathServer
+										
 									exec ValidateFilesExist @StoragePathResults, @RequiredFileList, 
 												@FileCountFound = @FileCountFound output, 
 												@FileCountMissing = @FileCountMissing output, 

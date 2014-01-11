@@ -18,11 +18,13 @@ CREATE Procedure CacheMyEMSLFile
 **	Auth:	mem
 **	Date:	10/11/2013 mem - Initial version
 **			12/09/2013 mem - Now setting @CacheState to 4 (error) if the file is in the download queue for over 48 hours
+**			12/11/2013 mem - Now populating Dataset_Folder in T_MyEMSL_Cache_Paths
+**			12/12/2013 mem - Added support for optional files
 **    
 *****************************************************/
 (
 	@Job int,
-	@Filename varchar(255),				-- Use * for "all files"
+	@Filename varchar(255),				-- File to cache; prepend the filename with "Optional:" if it is optional
 	@CacheState tinyint=0 OUTPUT,		-- Cache state
 	@Available tinyint=0 OUTPUT,		-- Will be set to 1 if the file has been successfully cached and is now ready for use
 	@LocalCacheFolderPath varchar(255) output,		-- Local path to which the files will be cached; does not include the dataset name or results folder name
@@ -65,7 +67,7 @@ AS
 	       @DatasetStoragePath = StoragePathServer,
 	       @DatasetFolder = DatasetFolder,
 	       @ResultsFolder = ResultsFolder
-	FROM T_DMS_Analysis_Job_Info_Cached 
+	FROM T_DMS_Analysis_Job_Info_Cached
 	WHERE Job = @Job	
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -115,7 +117,7 @@ AS
 	Set @CharLoc = CharIndex('\', @DatasetStoragePath, 3)
 
 	If @CharLoc > 1
-		Set @ParentPath = Substring(@DatasetStoragePath, @CharLoc, Len(@DatasetStoragePath) - @CharLoc)
+		Set @ParentPath = Substring(@DatasetStoragePath, @CharLoc + 1, Len(@DatasetStoragePath) - @CharLoc)
 	Else
 	Begin
 		-- This code shouldn't be reached
@@ -159,10 +161,21 @@ AS
 	Begin
 
 		-- Path needs to be added
-		INSERT INTO T_MyEMSL_Cache_Paths (Dataset_ID, Parent_Path, Results_Folder_Name)
-		VALUES (@DatasetID, @ParentPath, @ResultsFolder)
+		INSERT INTO T_MyEMSL_Cache_Paths (Dataset_ID, Parent_Path, Dataset_Folder, Results_Folder_Name)
+		VALUES (@DatasetID, @ParentPath, @DatasetFolder, @ResultsFolder)
 		
 		Set @CachePathID = SCOPE_IDENTITY()			
+	End
+
+	---------------------------------------------------
+	-- Check for the "Optional:" flag
+	---------------------------------------------------
+
+	Declare @Optional tinyint = 0
+	If @FileName Like 'Optional:%'
+	Begin
+		Set @FileName = Replace(@FileName, 'Optional:', '')
+		Set @Optional = 1
 	End
 
 	---------------------------------------------------
@@ -208,33 +221,34 @@ AS
 			Set @message = 'File ' + @Filename + ' for job ' + Convert(varchar(12), @Job) + ' has been in the MyEMSL download queue for over 48 hours'
 			Exec PostLogEntry 'Error', @message, 'CacheMyEMSLFile'
 		End
-		Else
-		Begin
-			If @CacheState = 1
-				Set @message = 'File is already scheduled to be cached'
+		
+	
+		If @CacheState = 1
+			Set @message = 'File is already scheduled to be cached'
+		
+		If @CacheState = 2
+			Set @message = 'File is currently being cached'
 			
-			If @CacheState = 2
-				Set @message = 'File is currently being cached'
-				
-			If (@CacheState = 2 And DATEDIFF(minute, @CacheStart, GETDATE()) > 120) OR (@CacheState = 4)
-			Begin
-				-- Either stale (in state 2 for over 2 hours) or failed (state 4)
-				
-				If @CacheState = 4
-					Set @message = 'Reset cache state to 1 for failed file'
-				Else
-					Set @message = 'Reset cache state to 1 for stale file'
-				
-				Set @message = @message + '; entry ' + Convert(varchar(12), @EntryID) + ', job ' + Convert(varchar(12), @Job)
-				
-				Set @CacheState = 1
-				
-				UPDATE T_MyEMSL_FileCache
-				SET State = @CacheState
-				WHERE Entry_ID = @EntryID
-				
-				Exec PostLogEntry 'Error', @message, 'CacheMyEMSLFile'
-			End
+		If (@CacheState = 2 And DATEDIFF(minute, @CacheStart, GETDATE()) > 120) OR (@CacheState = 4)
+		Begin
+			-- Either stale (in state 2 for over 2 hours) or failed (state 4)
+			
+			If @CacheState = 4
+				Set @message = 'Reset cache state to 1 for failed file'
+			Else
+				Set @message = 'Reset cache state to 1 for stale file'
+			
+			Set @message = @message + '; entry ' + Convert(varchar(12), @EntryID) + ', job ' + Convert(varchar(12), @Job)
+			
+			Set @CacheState = 1
+			
+			UPDATE T_MyEMSL_FileCache
+			SET State = @CacheState, 
+			    Queued = GetDate(),
+			    Optional = @Optional
+			WHERE Entry_ID = @EntryID
+			
+			Exec PostLogEntry 'Error', @message, 'CacheMyEMSLFile'
 		End
 		
 		If @CacheState = 3
@@ -243,7 +257,7 @@ AS
 			Set @Available = 1
 		End
 		
-		If @CacheState = 5
+		If @CacheState IN (5, 6)
 		Begin
 			-- File was previously cached then subsequently purged; reset back to state 1
 			--			
@@ -251,11 +265,12 @@ AS
 			
 			UPDATE T_MyEMSL_FileCache
 			SET State = @CacheState, 
-			    Queued = GetDate()     -- Reset the Queued date
+			    Queued = GetDate(),     -- Reset the Queued date
+			    Optional = @Optional
 			WHERE Entry_ID = @EntryID
 			
 			Set @message = 'Reset cache state to 1 for purged file; entry ' + Convert(varchar(12), @EntryID) + ', job ' + Convert(varchar(12), @Job)
-			Exec PostLogEntry 'Normal', @message, 'CacheMyEMSLFile'
+			Exec PostLogEntry 'Debug', @message, 'CacheMyEMSLFile'
 			
 		End
 	End
@@ -268,8 +283,8 @@ AS
 
 		Set @CacheState = 1
 		
-		INSERT INTO T_MyEMSL_FileCache (Job, Filename, State, Cache_PathID, Queued)
-		VALUES (@Job, @Filename, @CacheState, @CachePathID, GetDate())
+		INSERT INTO T_MyEMSL_FileCache (Job, Filename, State, Cache_PathID, Queued, Optional)
+		VALUES (@Job, @Filename, @CacheState, @CachePathID, GetDate(), @Optional)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 	

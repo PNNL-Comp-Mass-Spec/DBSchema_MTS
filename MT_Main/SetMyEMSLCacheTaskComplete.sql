@@ -4,13 +4,15 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create PROCEDURE SetMyEMSLCacheTaskComplete
+CREATE PROCEDURE SetMyEMSLCacheTaskComplete
 /****************************************************
 **
 **	Desc:	Sets a MyEMSL task as complete or failed
 **
 **	Auth:	mem
 **	Date:	12/09/2013 mem - Initial Version
+**			12/11/2013 mem - Added @CachedFileIDs
+**			12/12/2013 mem - Added support for Optional files
 **
 *****************************************************/
 (
@@ -18,6 +20,7 @@ create PROCEDURE SetMyEMSLCacheTaskComplete
 	@taskID int,
 	@CompletionCode int,
 	@CompletionMessage varchar(255),
+	@CachedFileIDs varchar(max),			-- Comma-separated list of the Entry_ID values for the files that were successfully cached
 	@message varchar(512) = '' output
 )
 As
@@ -53,6 +56,25 @@ As
 		Set @myError = 52001
 		Goto Done
 	End
+
+
+	---------------------------------------------------
+	-- Populate a temporary table with the IDs in @EntryIDsCached
+	---------------------------------------------------
+	
+	CREATE TABLE #Tmp_CachedFileIDs (
+		Entry_ID int NOT NULL
+	)
+	
+	INSERT INTO #Tmp_CachedFileIDs (Entry_ID)
+	SELECT Value
+	FROM dbo.udfParseDelimitedIntegerList(@CachedFileIDs, ',')
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
+	---------------------------------------------------
+	-- Start a transaction
+	---------------------------------------------------
 	
 	Declare @UpdateTran varchar(24) = 'SetTaskComplete'
 	Begin Tran @UpdateTran
@@ -61,7 +83,7 @@ As
 	
 	If @CompletionCode <> 0
 		Set @NewTaskState = 4
-	                 
+
 	---------------------------------------------------
 	-- Set the task complete
 	---------------------------------------------------
@@ -77,11 +99,23 @@ As
 
 
 	UPDATE T_MyEMSL_FileCache
-	SET State = @NewTaskState
-	WHERE Task_ID = @TaskID
+	SET State = 3
+	WHERE Task_ID = @TaskID AND Entry_ID IN (Select Entry_ID FROM #Tmp_CachedFileIDs)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 
+
+	UPDATE T_MyEMSL_FileCache
+	SET State = CASE
+	                WHEN Optional = 0 THEN 4	-- Failed
+	                ELSE 6						-- Skipped
+	            END
+	WHERE Task_ID = @TaskID AND
+	      NOT Entry_ID IN ( SELECT Entry_ID
+	                        FROM #Tmp_CachedFileIDs )
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount
+	
 		
 	Commit Tran @UpdateTran
 	

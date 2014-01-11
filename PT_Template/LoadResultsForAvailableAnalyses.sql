@@ -46,13 +46,16 @@ CREATE Procedure LoadResultsForAvailableAnalyses
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			12/09/2013 mem - Now checking for return code 60030 from LoadMASICResultsForOneAnalysis or LoadPeptidesForOneAnalysis
+**			12/11/2013 mem - Added @ShowDebugInfo
+**			12/12/2013 mem - Now passing @ShowDebugInfo to LoadPeptidesForOneAnalysis
 **    
 *****************************************************/
 (
 	@ProcessStateMatch int = 10,
 	@NextProcessState int = 15,
 	@numJobsToProcess int = 50000,
-	@numJobsProcessed int = 0 OUTPUT
+	@numJobsProcessed int = 0 OUTPUT,
+	@ShowDebugInfo tinyint = 0
 )
 AS
 	Set NoCount On
@@ -205,7 +208,8 @@ AS
 							0,		-- @UpdateExistingData
 							@message output,
 							@numLoaded output,
-							@clientStoragePerspective
+							@clientStoragePerspective,
+							@ShowDebugInfo=@ShowDebugInfo
 			
 				Set @jobProcessed = 1
 				
@@ -228,7 +232,8 @@ AS
 								@Job, 
 								@message output,
 								@numLoaded output,
-								@clientStoragePerspective
+								@clientStoragePerspective,
+								@ShowDebugInfo=@ShowDebugInfo
 				
 				Set @jobProcessed = 1
 

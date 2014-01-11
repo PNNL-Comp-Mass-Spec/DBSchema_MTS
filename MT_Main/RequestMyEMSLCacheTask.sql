@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create PROCEDURE RequestMyEMSLCacheTask
+CREATE PROCEDURE RequestMyEMSLCacheTask
 /****************************************************
 **
 **	Desc:	Requests a task to cache files for a given dataset
@@ -33,7 +33,7 @@ As
 
 	Set @taskAvailable = 0
 	Set @taskID = 0
-
+		
 	Declare @UpdateEnabled tinyint
 	
 	-- Validate that Peptide DB updating is enabled
@@ -109,9 +109,16 @@ As
 	--
 Done:
 
+	Set @message = IsNull(@message, '')
+	
 	If @myError <> 0
+	Begin
+		If @message = ''
+			Set @message = 'Unknown error, code ' + Convert(varchar(12), @myError)
+			
 		Exec PostLogEntry 'Error', @message, 'RequestMyEMSLCacheTask'
-		
+	End
+	
 	Return @myError
 
 GO

@@ -15,6 +15,7 @@ CREATE Procedure ValidateFilesExist
 **	Auth:	mem
 **	Date:	11/21/2011 mem - Initial Version
 **			10/10/2013 mem - Added @FirstMissingFile and @ShowDebugInfo
+**			12/12/2013 mem - Added support for optional files
 **
 *****************************************************/
 (
@@ -45,6 +46,7 @@ AS
 	Declare @FilePath varchar(512)
 	Declare @MissingFileList varchar(512) = ''
 	
+	Declare @Optional tinyint
 	Declare @Continue tinyint
 	
 	Begin Try
@@ -140,6 +142,13 @@ AS
 				Else
 				Begin -- <c>
 				
+					Set @Optional = 0
+					If @FileName Like 'Optional:%'
+					Begin
+						Set @FileName = Replace(@FileName, 'Optional:', '')
+						Set @Optional = 1
+					End
+						
 					Set @FilePath = dbo.udfCombinePaths(@FolderPath, @FileName)					
 					Set @CurrentLocation = 'Call FileExists for ' + @FilePath
 					If @ShowDebugInfo <> 0 Print @CurrentLocation
@@ -158,16 +167,19 @@ AS
 						Set @FileCountFound = @FileCountFound + 1
 					Else
 					Begin
-						Set @FileCountMissing = @FileCountMissing + 1
-						If @FileCountMissing = 1
+						If @Optional = 0
 						Begin
-							Set @MissingFileList = @FileName
-							Set @FirstMissingFile = @FileName
-						End
-						Else
-						Begin
-							Set @MissingFileList = @MissingFileList + ', ' + @FileName
-						End						
+							Set @FileCountMissing = @FileCountMissing + 1
+							If @FileCountMissing = 1
+							Begin
+								Set @MissingFileList = @FileName
+								Set @FirstMissingFile = @FileName
+							End
+							Else
+							Begin
+								Set @MissingFileList = @MissingFileList + ', ' + @FileName
+							End	
+						End					
 					End
 				
 				End -- </c>

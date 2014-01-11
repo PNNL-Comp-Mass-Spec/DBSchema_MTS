@@ -28,6 +28,7 @@ CREATE PROCEDURE CacheMyEMSLFiles
 **	Auth:	mem
 **	Date:	10/10/2013 mem - Initial Version
 **			12/10/2013 mem - Now checking for an error code returned by CacheMyEMSLFile
+**			12/11/2013 mem - Added @ShowDebugInfo
 **
 *****************************************************/
 (
@@ -37,7 +38,8 @@ CREATE PROCEDURE CacheMyEMSLFiles
 	@LocalCacheFolderPath varchar(255) output,		-- Local path to which the files will be cached; does not include the dataset name or results folder name
 	@LocalResultsFolderPath varchar(512) output,	-- Local path to the folder with the actual cached files
 	@message varchar(512)='' output,
-	@InfoOnly tinyint = 0
+	@InfoOnly tinyint = 0,
+	@ShowDebugInfo tinyint = 0
 )
 AS
 	Set NoCount On
@@ -122,7 +124,19 @@ AS
 				Exec PostLogEntry 'Error', @message, 'CacheMyEMSLFiles', @duplicateEntryHoldoffHours=6
 				Goto Done
 			End
-				
+			
+			If @ShowDebugInfo > 0
+			Begin
+				Print 'Called MT_Main.dbo.CacheMyEMSLFile'
+				Print '  @Job = ' + Convert(varchar(12), @job)
+				Print '  @FileName = ' + @FileName
+				Print '  @CacheState = ' + Convert(varchar(12), @CacheStateForFile)
+				Print '  @Available = ' + Convert(varchar(12), @Available)
+				Print '  @LocalCacheFolderPath = ' + @LocalCacheFolderPath
+				Print '  @LocalResultsFolderPath = ' + @LocalResultsFolderPath
+				Print '  @message = ' + @message
+			End
+			
 			If @CacheState = 0
 				Set @CacheState = @CacheStateForFile
 			Else
@@ -133,12 +147,11 @@ AS
 				If @CacheState = 1 And @CacheStateForFile = 2
 					Set @CacheState = 2
 				
-				If @Available > 0
-					Set @FileCountAvailable = @FileCountAvailable + 1
-				
 			End
+
+			If @Available > 0
+				Set @FileCountAvailable = @FileCountAvailable + 1
 			
-		
 		End -- </c>
 
 	End -- </b>
@@ -151,11 +164,21 @@ AS
 		Set @CacheState = 3
 		Set @message = 'Job ' + Convert(varchar(12), @Job) + ' has successfully had its files downloaded from MyEMSL and cached locally'
 		Set @MsgType = 'Normal'
+		if @ShowDebugInfo > 0
+			Print @message
 	End
 	Else
 	Begin
 		Set @LocalCacheFolderPath = ''
 		Set @LocalResultsFolderPath = ''
+		
+		If @ShowDebugInfo > 0
+		Begin
+			Print '@FileCountAvailable <> @FilesToCache'
+			Print '@FileCountAvailable = ' + Convert(varchar(12), @FileCountAvailable)
+			Print '@FilesToCache = ' + Convert(varchar(12), @FilesToCache)			
+		End
+		
 	End
 
 	If @CacheState = 1

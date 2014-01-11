@@ -8,7 +8,7 @@ INSERT INTO [T_Folder_Paths] VALUES ('Default Database Transaction Log Folder','
 INSERT INTO [T_Folder_Paths] VALUES ('GANET Transfer Root Folder','\\albert\GA_Net_Xfer\','H:\GA_Net_Xfer\')
 INSERT INTO [T_Folder_Paths] VALUES ('MultiAlign Parameters','\\albert\MTD_Peak_Matching\parameters\MultiAlign\','\\albert\MTD_Peak_Matching\parameters\MultiAlign\')
 INSERT INTO [T_Folder_Paths] VALUES ('MultiAlign Results','\\albert\MTD_Peak_Matching\MultiAlign_results\','L:\MTD_Peak_Matching\MultiAlign_results\')
-INSERT INTO [T_Folder_Paths] VALUES ('MyEMSL Cache Folder','','H:\MyEMSL_Cache\')
+INSERT INTO [T_Folder_Paths] VALUES ('MyEMSL Cache Folder','\\ALBERT\MyEMSL_Cache\','H:\MyEMSL_Cache\')
 INSERT INTO [T_Folder_Paths] VALUES ('Peak Matching Parameters','\\albert\MTD_Peak_Matching\parameters\auto_ini_files\','L:\MTD_Peak_Matching\parameters\auto_ini_files\')
 INSERT INTO [T_Folder_Paths] VALUES ('Peak Matching Results','\\albert\MTD_Peak_Matching\results\','L:\MTD_Peak_Matching\results\')
 INSERT INTO [T_Folder_Paths] VALUES ('Peak Matching Results Website','http://albert/pm/results/','http://albert/pm/results/')

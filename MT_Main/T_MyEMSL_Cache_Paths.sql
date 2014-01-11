@@ -7,6 +7,7 @@ CREATE TABLE [dbo].[T_MyEMSL_Cache_Paths](
 	[Cache_PathID] [int] IDENTITY(1,1) NOT NULL,
 	[Dataset_ID] [int] NOT NULL,
 	[Parent_Path] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Dataset_Folder] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Results_Folder_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
  CONSTRAINT [PK_T_MyEMSL_Cache_Paths] PRIMARY KEY CLUSTERED 
 (

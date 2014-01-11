@@ -32,6 +32,7 @@ CREATE Procedure LoadMASICResultsForOneAnalysis
 **						   - Now updating @message when call to LoadMASICSICStatsBulk returns an error code
 **			12/30/2011 mem - Added call to LoadToolVersionInfoOneJob
 **			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
+**			12/11/2013 mem - Added @ShowDebugInfo
 **    
 *****************************************************/
 (
@@ -39,7 +40,8 @@ CREATE Procedure LoadMASICResultsForOneAnalysis
 	@job int,
 	@message varchar(255)='' OUTPUT,
 	@numLoaded int=0 OUTPUT,
-	@clientStoragePerspective tinyint = 1
+	@clientStoragePerspective tinyint = 1,
+	@ShowDebugInfo tinyint = 0
 )
 AS
 	set nocount on
@@ -119,7 +121,7 @@ AS
 		VALUES (@Job, @RequiredFileList)
 		
 		Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob'
-		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
+		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
 
 		Set @CurrentLocation = 'Determine results folder path'
 
@@ -279,6 +281,9 @@ AS
 		declare @ScanStatsLoaded int
 		set @ScanStatsLoaded = 0
 		
+		If @ShowDebugInfo > 0
+			Print 'Loading ' + @ScanStatsFilePath
+			
 		exec @result = LoadMASICScanStatsBulk
 							@ScanStatsFilePath,
 							@job,
@@ -329,6 +334,9 @@ AS
 		
 		If @SICStatsFileExists = 1
 		Begin
+			If @ShowDebugInfo > 0
+				Print 'Loading ' + @ScanStatsFilePath
+			
 			exec @result = LoadMASICSICStatsBulk
 								@SICStatsFilePath,
 								@job,
@@ -373,8 +381,11 @@ AS
 		Else
 		Begin
 			Set @message = @message + '; SIC Stats file was empty for job ' + @jobStr
+			
+			If @ShowDebugInfo > 0
+				Print @message
 		End
-		
+
 		-- Append the name of the server where the data was loaded from
 		set @message = @message + '; Server: ' + IsNull(@SourceServer, '??')
 

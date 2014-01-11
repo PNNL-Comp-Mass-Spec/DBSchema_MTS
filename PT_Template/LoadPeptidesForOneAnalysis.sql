@@ -60,6 +60,8 @@ CREATE Procedure LoadPeptidesForOneAnalysis
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			03/25/2013 mem - Now setting @completionCode to 5 if just one peptide is loaded
 **			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
+**			12/12/2013 mem - If the synopsis file needs to be cached from MyEMSL, then now calling LookupCurrentResultsFolderPathsByJob a second time to assure that the additional required files are cached
+**						   - Added @ShowDebugInfo
 **
 *****************************************************/
 (
@@ -69,7 +71,9 @@ CREATE Procedure LoadPeptidesForOneAnalysis
 	@message varchar(1024)='' OUTPUT,
 	@numLoaded int=0 out,
 	@clientStoragePerspective tinyint = 1,
-	@infoOnly tinyint = 0
+	@infoOnly tinyint = 0,
+	@ShowDebugInfo tinyint = 0
+	
 )
 AS
 	Set NoCount On
@@ -318,6 +322,39 @@ AS
 					@job AS Job, 
 					@FilterSetID AS Filter_Set_ID
 
+		-----------------------------------------------
+		-- Set up input file names
+		-- For now we'll just have filenames
+		-- We'll prepend with @StoragePathResults once that is known
+		-----------------------------------------------
+		
+		Set @CurrentLocation = 'Set up input file names'
+
+		declare @RootFileName varchar(128)
+ 		declare @PeptideSynFilePath varchar(512)
+
+		declare @PeptideResultToSeqMapFilePath varchar(512)
+		declare @PeptideSeqInfoFilePath varchar(512)
+		declare @PeptideSeqModDetailsFilePath varchar(512)
+		declare @PeptideSeqToProteinMapFilePath varchar(512)
+		declare @PeptideProphetResultsFilePath varchar(512)
+		declare @MSGFResultsFilePath varchar(512)		
+		declare @ScanGroupInfoFilePath varchar(512)			-- Only used by MSGFDB
+
+		set @RootFileName = @Dataset
+		set @PeptideSynFilePath = @RootFileName + @SynFileExtension
+
+		set @PeptideResultToSeqMapFilePath = @RootFileName + @ResultToSeqMapFileExtension
+		set @PeptideSeqInfoFilePath = @RootFileName + @SeqInfoFileExtension
+		set @PeptideSeqModDetailsFilePath = @RootFileName + @SeqModDetailsFileExtension
+		set @PeptideSeqToProteinMapFilePath = @RootFileName + @SeqToProteinMapFileExtension
+		set @PeptideProphetResultsFilePath = @RootFileName + @PeptideProphetFileExtension
+		set @MSGFResultsFilePath = @RootFileName + @MSGFFileExtension
+				
+		If @ScanGroupInfoFileExtension <> ''
+			set @ScanGroupInfoFilePath = @RootFileName + @ScanGroupInfoFileExtension
+		Else
+			Set @ScanGroupInfoFilePath = ''
 
 		---------------------------------------------------
 		-- Use LookupCurrentResultsFolderPathsByJob to get 
@@ -330,14 +367,12 @@ AS
 			Source_Share varchar(128),
 			Required_File_List varchar(max)
 		)
-
-		Set @RequiredFileList = @Dataset + @SynFileExtension
 		
 		INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
-		VALUES (@Job, @RequiredFileList)
+		VALUES (@Job, @PeptideSynFilePath)
 		
 		Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob'
-		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective
+		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
 
 		Set @CurrentLocation = 'Determine results folder path'
 
@@ -358,12 +393,47 @@ AS
 				Set @message = 'Waiting for files to be retrieved from MyEMSL for job ' + @jobStr
 				-- Note that this error code is used by LoadResultsForAvailableAnalyses
 				Set @myError = 60030
+				
+				If @ShowDebugInfo <> 0
+					Print '@StoragePathResults is empty, but @MyEMSLState is > 0: ' + @message
+
+
+				-- Need to queue the additional required files to be downloaded from MyEMSL
+				--
+				Set @RequiredFileList = @PeptideResultToSeqMapFilePath + ',' + @PeptideSeqInfoFilePath + ',' + @PeptideSeqModDetailsFilePath + ',' + @PeptideSeqToProteinMapFilePath
+				
+				If @AnalysisToolName = 'Sequest'
+					Set @RequiredFileList = @RequiredFileList + ',Optional:' + @PeptideProphetResultsFilePath
+				
+				Set @RequiredFileList = @RequiredFileList + ',' + @MSGFResultsFilePath
+		
+				if @ScanGroupInfoFilePath <> ''
+					Set @RequiredFileList = @RequiredFileList + ',Optional:' + @ScanGroupInfoFilePath
+				
+				
+				-- Add the tool version info files
+				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_' + @AnalysisToolName + '.txt'				
+				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_DataExtractor.txt'
+				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_MSGF.txt'
+				
+				TRUNCATE TABLE #TmpResultsFolderPaths
+
+				INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
+				VALUES (@Job, @RequiredFileList)
+				
+				Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob for additional files'
+				Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
+
 			End
 			Else
 			Begin
 				-- Results path is null; unable to continue
 				Set @message = 'Unable to determine results folder path for job ' + @jobStr
 				Set @myError = 60009
+				
+				If @ShowDebugInfo <> 0
+					Print '@StoragePathResults is empty (and @MyEMSLState is 0): ' + @message
+
 			End
 			
 			Goto Done
@@ -372,49 +442,38 @@ AS
 		DROP TABLE #TmpResultsFolderPaths
 
 		-----------------------------------------------
-		-- Set up input file names and paths
+		-- Set up input file paths
 		-----------------------------------------------
 		
-		Set @CurrentLocation = 'Set up input file names and paths'
+		Set @CurrentLocation = 'Set up input file paths'
 
-		declare @RootFileName varchar(128)
- 		declare @PeptideSynFilePath varchar(512)
+		set @PeptideSynFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideSynFilePath)
 
-		declare @PeptideResultToSeqMapFilePath varchar(512)
-		declare @PeptideSeqInfoFilePath varchar(512)
-		declare @PeptideSeqModDetailsFilePath varchar(512)
-		declare @PeptideSeqToProteinMapFilePath varchar(512)
-		declare @PeptideProphetResultsFilePath varchar(512)
-		declare @MSGFResultsFilePath varchar(512)		
-		declare @ScanGroupInfoFilePath varchar(512)			-- Only used by MSGFDB
-
-		set @RootFileName = @Dataset
-		set @PeptideSynFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SynFileExtension)
-
-		set @PeptideResultToSeqMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @ResultToSeqMapFileExtension)
-		set @PeptideSeqInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqInfoFileExtension)
-		set @PeptideSeqModDetailsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqModDetailsFileExtension)
-		set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @SeqToProteinMapFileExtension)
-		set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @PeptideProphetFileExtension)
-		set @MSGFResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @MSGFFileExtension)
+		set @PeptideResultToSeqMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideResultToSeqMapFilePath)
+		set @PeptideSeqInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideSeqInfoFilePath)
+		set @PeptideSeqModDetailsFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideSeqModDetailsFilePath)
+		set @PeptideSeqToProteinMapFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideSeqToProteinMapFilePath)
+		set @PeptideProphetResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @PeptideProphetResultsFilePath)
+		set @MSGFResultsFilePath = dbo.udfCombinePaths(@StoragePathResults, @MSGFResultsFilePath)
 				
-		If @ScanGroupInfoFileExtension <> ''
-			set @ScanGroupInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @RootFileName + @ScanGroupInfoFileExtension)
-		Else
-			Set @ScanGroupInfoFilePath = ''
+		If @ScanGroupInfoFilePath <> ''
+			set @ScanGroupInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @ScanGroupInfoFilePath)
 
-		Declare @fileExists tinyint
-		Declare @SynFileColumnCount int
-		Declare @SynFileHeader varchar(2048) = ''
-		
 		-----------------------------------------------
 		-- Verify that the input file exists, count the number of columns, 
 		--  and determine whether or not a header row is present
 		-- Output parameter @SynFileHeader will contain the header row (if present)
 		-----------------------------------------------
+
+		Declare @fileExists tinyint
+		Declare @SynFileColumnCount int
+		Declare @SynFileHeader varchar(2048) = ''
 		
 		Set @CurrentLocation = 'Call ValidateDelimitedFile'
 		
+		If @ShowDebugInfo <> 0
+			Print 'Calling ValidateDelimitedFile for ' + @PeptideSynFilePath
+			
 		-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
 		Set @LineCountToSkip = -1
 		Exec @result = ValidateDelimitedFile @PeptideSynFilePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @SynFileColumnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 1, @HeaderLine=@SynFileHeader OUTPUT
@@ -479,7 +538,7 @@ AS
 		If @infoOnly <> 0
 		Begin
 			SELECT @LineCountToSkip AS LineCountToSkip,
-			       @SynFileColumnCount AS SynFileColumnCount,
+			      @SynFileColumnCount AS SynFileColumnCount,
 			       @SynFileHeader AS SynFileHeader,
 			       @PeptideResultToSeqMapFilePath AS PeptideResultToSeqMapFilePath,
 			       @PeptideSeqInfoFilePath AS PeptideSeqInfoFilePath,

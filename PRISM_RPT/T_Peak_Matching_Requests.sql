@@ -18,7 +18,7 @@ CREATE TABLE [dbo].[T_Peak_Matching_Requests](
 	[Comment] [varchar](2048) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Requester] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Created] [datetime] NOT NULL
-) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+) ON [PRIMARY]
 
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Requests] ADD  CONSTRAINT [DF_T_Peak_Matching_Requests_Tool]  DEFAULT ('Viper') FOR [Tool]

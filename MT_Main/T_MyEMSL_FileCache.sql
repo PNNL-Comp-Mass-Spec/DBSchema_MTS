@@ -8,8 +8,9 @@ CREATE TABLE [dbo].[T_MyEMSL_FileCache](
 	[Job] [int] NOT NULL,
 	[Filename] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[State] [tinyint] NOT NULL,
-	[Cache_PathID] [int] NULL,
-	[Queued] [datetime] NULL,
+	[Cache_PathID] [int] NOT NULL,
+	[Queued] [datetime] NOT NULL,
+	[Optional] [tinyint] NOT NULL,
 	[Task_ID] [int] NULL,
  CONSTRAINT [PK_T_MyEMSL_FileCache] PRIMARY KEY CLUSTERED 
 (
@@ -50,5 +51,12 @@ REFERENCES [T_MyEMSL_Cache_State] ([State])
 GO
 ALTER TABLE [dbo].[T_MyEMSL_FileCache] CHECK CONSTRAINT [FK_T_MyEMSL_FileCache_T_MyEMSL_Cache_State]
 GO
+ALTER TABLE [dbo].[T_MyEMSL_FileCache]  WITH CHECK ADD  CONSTRAINT [FK_T_MyEMSL_FileCache_T_MyEMSL_Cache_Task] FOREIGN KEY([Task_ID])
+REFERENCES [T_MyEMSL_Cache_Task] ([Task_ID])
+GO
+ALTER TABLE [dbo].[T_MyEMSL_FileCache] CHECK CONSTRAINT [FK_T_MyEMSL_FileCache_T_MyEMSL_Cache_Task]
+GO
 ALTER TABLE [dbo].[T_MyEMSL_FileCache] ADD  CONSTRAINT [DF_Table_1_Entered]  DEFAULT (getdate()) FOR [Queued]
+GO
+ALTER TABLE [dbo].[T_MyEMSL_FileCache] ADD  CONSTRAINT [DF_T_MyEMSL_FileCache_Optional]  DEFAULT ((0)) FOR [Optional]
 GO
