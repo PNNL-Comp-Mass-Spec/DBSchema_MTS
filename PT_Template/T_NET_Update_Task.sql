@@ -23,6 +23,10 @@ CREATE TABLE [dbo].[T_NET_Update_Task](
 ) ON [PRIMARY]
 
 GO
+GRANT INSERT ON [dbo].[T_NET_Update_Task] TO [pnl\svc-dms] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_NET_Update_Task] TO [pnl\svc-dms] AS [dbo]
+GO
 ALTER TABLE [dbo].[T_NET_Update_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_NET_Update_Task_T_NET_Update_Task_State_Name] FOREIGN KEY([Processing_State])
 REFERENCES [T_NET_Update_Task_State_Name] ([Processing_State])
 GO

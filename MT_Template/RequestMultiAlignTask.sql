@@ -499,3 +499,5 @@ GRANT VIEW DEFINITION ON [dbo].[RequestMultiAlignTask] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[RequestMultiAlignTask] TO [pnl\svc-dms] AS [dbo]
+GO

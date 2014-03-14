@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE ConvertListToWhereClause
+
+CREATE PROCEDURE dbo.ConvertListToWhereClause
 /****************************************************
 **	Desc:  Converts a list of entries to a proper SQL Where clause 
 **  containing a mix of Where xx In ('A','B') and Where xx Like ('C%') statements
@@ -127,6 +128,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [DMS_SP_User] AS [dbo]

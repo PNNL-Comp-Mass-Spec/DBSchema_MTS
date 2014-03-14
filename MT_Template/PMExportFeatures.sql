@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[PMExportFeatures] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure PMExportFeatures
@@ -15,6 +15,7 @@ CREATE Procedure PMExportFeatures
 **	Date:	07/15/2009
 **			08/24/2009 jds - Removed use of T_Match_Making_Description from the queries
 **			02/16/2011 mem - Added column Match_Score_Mode to #Tmp_MDIDList
+**			03/05/2014 mem - Added Drift_Time
 **
 ****************************************************/
 (
@@ -116,7 +117,8 @@ AS
 			       FUR.Expression_Ratio_StDev,
 			       FUR.Expression_Ratio_Charge_State_Basis_Count,
 			       FUR.Expression_Ratio_Member_Basis_Count,
-			       FUR.UMC_Results_ID
+			       FUR.UMC_Results_ID,
+			       FUR.Drift_Time
 			FROM #Tmp_MDIDList ML
 			     INNER JOIN T_FTICR_UMC_Results FUR
 			       ON ML.MD_ID = FUR.MD_ID
@@ -148,7 +150,6 @@ Done:
 
 DoneSkipLog:	
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[PMExportFeatures] TO [DMS_SP_User] AS [dbo]

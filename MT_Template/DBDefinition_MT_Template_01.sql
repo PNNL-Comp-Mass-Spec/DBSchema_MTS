@@ -92,3 +92,5 @@ GRANT CONNECT TO [MTUser] AS [dbo]
 GO
 GRANT SHOWPLAN TO [MTUser] AS [dbo]
 GO
+GRANT CONNECT TO [pnl\svc-dms] AS [dbo]
+GO

@@ -38,6 +38,7 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 **			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
 **			05/08/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
 **							 Added support for filtering on MSGF+ PepQValue
+**			03/12/2014 mem - No longer checking for proteins with long protein names
 **
 *****************************************************/
 (
@@ -1084,34 +1085,6 @@ As
 		Set @message = ''
 	End	
 
-	-----------------------------------------------
-	-- Check for proteins with long names
-	-- MTS can handle protein names up to 255 characters long
-	--  but SEQUEST will truncate protein names over 34 or 40 characters
-	--  long (depending on the version) so we're checking here to notify
-	--  the DMS admins if long protein names are encountered
-	-- Even though we're loading MSGFDB data, we'll check for long
-	--  protein names here to stay consistent with loading Sequest data
-	-----------------------------------------------
-	SELECT @LongProteinNameCount = COUNT(Distinct Reference)
-	FROM #Tmp_Peptide_SeqToProteinMap
-	WHERE Len(Reference) > 34 AND
-		  NOT (	Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
-				Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
-				Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
-				Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-				Reference LIKE 'rev[_]%' OR			-- MSGFDB reversed proteins
-				Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
-			  )
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	If @LongProteinNameCount > 0
-	Begin
-		Set @message = 'Newly imported peptides found with protein names longer than 34 characters for job ' + @jobStr + ' (' + convert(varchar(11), @LongProteinNameCount) + ' distinct proteins)'
-		execute PostLogEntry 'Error', @message, 'LoadMSGFDBPeptidesBulk'
-		Set @message = ''
-	End	
 
 	Set @LogMessage = 'Data verification complete'
 	if @LogLevel >= 2

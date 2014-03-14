@@ -1,8 +1,8 @@
 /****** Object:  Database [MT_Main] ******/
 CREATE DATABASE [MT_Main] ON  PRIMARY 
-( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2044864KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
+( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2042112KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
  LOG ON 
-( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 149056KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 30080KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MT_Main] SET COMPATIBILITY_LEVEL = 100
@@ -95,4 +95,6 @@ GO
 GRANT SHOWPLAN TO [MTUser] AS [dbo]
 GO
 GRANT CONNECT TO [pnl\d3m651] AS [dbo]
+GO
+GRANT CONNECT TO [pnl\svc-dms] AS [dbo]
 GO

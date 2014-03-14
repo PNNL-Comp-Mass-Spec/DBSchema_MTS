@@ -14,6 +14,10 @@ CREATE TABLE [dbo].[T_NET_Update_Task_Job_Map](
 ) ON [PRIMARY]
 
 GO
+GRANT INSERT ON [dbo].[T_NET_Update_Task_Job_Map] TO [pnl\svc-dms] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_NET_Update_Task_Job_Map] TO [pnl\svc-dms] AS [dbo]
+GO
 ALTER TABLE [dbo].[T_NET_Update_Task_Job_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_NET_Update_Task_Job_Map_T_Analysis_Description] FOREIGN KEY([Job])
 REFERENCES [T_Analysis_Description] ([Job])
 GO

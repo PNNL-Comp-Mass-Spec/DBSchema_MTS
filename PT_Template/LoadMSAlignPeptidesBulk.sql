@@ -21,6 +21,7 @@ CREATE Procedure dbo.LoadMSAlignPeptidesBulk
 **	Date:	12/04/2012 mem - Initial version
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			02/26/2013 mem - Expanded Mass_Correction_Tag in #Tmp_Peptide_ModSummary to varchar(128)
+**			03/12/2014 mem - No longer checking for proteins with long protein names
 **
 *****************************************************/
 (
@@ -997,34 +998,7 @@ As
 		Set @message = ''
 	End	
 
-	-----------------------------------------------
-	-- Check for proteins with long names
-	-- MTS can handle protein names up to 255 characters long
-	--  but SEQUEST will truncate protein names over 34 or 40 characters
-	--  long (depending on the version) so we're checking here to notify
-	--  the DMS admins if long protein names are encountered
-	-- Even though we're loading MSAlign data, we'll check for long
-	--  protein names here to stay consistent with loading Sequest data
-	-----------------------------------------------
-	SELECT @LongProteinNameCount = COUNT(Distinct Reference)
-	FROM #Tmp_Peptide_SeqToProteinMap
-	WHERE Len(Reference) > 34 AND
-		  NOT (	Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
-				Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
-				Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
-				Reference LIKE 'xxx.%' OR			-- Inspect reversed/scrambled proteins
-				Reference LIKE 'rev[_]%'			-- MSAlign reversed proteins
-			  )
-	--
-	SELECT @myRowCount = @@rowcount, @myError = @@error
-	--
-	If @LongProteinNameCount > 0
-	Begin
-		Set @message = 'Newly imported peptides found with protein names longer than 34 characters for job ' + @jobStr + ' (' + convert(varchar(11), @LongProteinNameCount) + ' distinct proteins)'
-		execute PostLogEntry 'Error', @message, 'LoadMSAlignPeptidesBulk'
-		Set @message = ''
-	End	
-
+	
 	Set @LogMessage = 'Data verification complete'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadMSAlignPeptidesBulk'
@@ -1579,7 +1553,7 @@ As
 			FROM #Tmp_Peptide_Import TPI
 			     INNER JOIN #Tmp_Unique_Records UR
 			       ON TPI.Result_ID = UR.Result_ID
-			     INNER JOIN T_Score_Discriminant SD
+			    INNER JOIN T_Score_Discriminant SD
 			       ON SD.Peptide_ID = UR.Peptide_ID_New
 			WHERE IsNull(SD.Peptide_Prophet_Probability, -1) <> 1 - TPI.PValue
 			--

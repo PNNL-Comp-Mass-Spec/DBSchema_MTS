@@ -146,3 +146,5 @@ GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite] AS [dbo
 GO
 GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\svc-dms] AS [dbo]
+GO

@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE UpdateUserPermissionsViewDefinitions
+
+CREATE PROCEDURE dbo.UpdateUserPermissionsViewDefinitions
 /****************************************************
 **
 **	Desc: Grants view definition permission to all stored procedures for the specified users
@@ -176,6 +177,7 @@ As
 Done:
 
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateUserPermissionsViewDefinitions] TO [MTS_DB_Dev] AS [dbo]

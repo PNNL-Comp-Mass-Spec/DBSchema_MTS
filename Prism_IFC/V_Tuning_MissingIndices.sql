@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW V_Tuning_MissingIndices
+CREATE VIEW dbo.[V_Tuning_MissingIndices]
 AS
 /* ------------------------------------------------------------------
 -- Title:	FindMissingIndexes

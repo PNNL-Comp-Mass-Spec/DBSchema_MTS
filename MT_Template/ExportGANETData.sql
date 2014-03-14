@@ -126,3 +126,5 @@ GRANT VIEW DEFINITION ON [dbo].[ExportGANETData] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[ExportGANETData] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[ExportGANETData] TO [pnl\svc-dms] AS [dbo]
+GO

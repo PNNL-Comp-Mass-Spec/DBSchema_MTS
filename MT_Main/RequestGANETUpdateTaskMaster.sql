@@ -33,6 +33,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTaskMaster
 **			04/06/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 10 sections)
 **			04/20/2010 mem - Changed default value for @ParamFileName (now using LCMSWarp with 30 sections)
 **			01/18/2012 mem - Now calling VerifyUpdateEnabled separately for PT and MT databases
+**			02/19/2014 mem - Now excluding databases with State 15 = Moved to another server
 **
 *****************************************************/
 (
@@ -142,7 +143,7 @@ As
 		INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
 		SELECT	PDB_Name, 1 As IsPeptideDB
 		FROM	T_Peptide_Database_List
-		WHERE PDB_State <> 100
+		WHERE PDB_State Not In (15, 100)
 		ORDER BY PDB_Name
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -165,7 +166,7 @@ As
 		INSERT INTO #TmpDBsToProcess (Database_Name, IsPeptideDB)
 		SELECT	MTL_Name, 0 As IsPeptideDB
 		FROM	T_MT_Database_List
-		WHERE MTL_State <> 100
+		WHERE MTL_State Not In (15, 100)
 		ORDER BY MTL_Name
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -411,4 +412,6 @@ GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTaskMaster] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[RequestGANETUpdateTaskMaster] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTaskMaster] TO [pnl\svc-dms] AS [dbo]
 GO

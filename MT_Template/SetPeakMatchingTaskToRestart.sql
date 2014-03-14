@@ -156,3 +156,5 @@ GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskToRestart] TO [MTS_DB_Lite] A
 GO
 GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskToRestart] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskToRestart] TO [pnl\svc-dms] AS [dbo]
+GO

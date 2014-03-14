@@ -126,6 +126,8 @@ AS
 		ORDER BY inserted.Job
 
 GO
+GRANT UPDATE ON [dbo].[T_Analysis_Description] TO [pnl\svc-dms] AS [dbo]
+GO
 ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Datasets] FOREIGN KEY([Dataset_ID])
 REFERENCES [T_Datasets] ([Dataset_ID])
 GO

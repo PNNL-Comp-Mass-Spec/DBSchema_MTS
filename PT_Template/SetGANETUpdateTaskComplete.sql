@@ -80,3 +80,5 @@ GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskComplete] TO [MTS_DB_Lite] AS 
 GO
 GRANT EXECUTE ON [dbo].[SetGANETUpdateTaskComplete] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[SetGANETUpdateTaskComplete] TO [pnl\svc-dms] AS [dbo]
+GO

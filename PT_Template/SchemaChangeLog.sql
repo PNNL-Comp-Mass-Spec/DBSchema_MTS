@@ -25,3 +25,5 @@ GRANT INSERT ON [dbo].[SchemaChangeLog] TO [DMS_SP_User] AS [dbo]
 GO
 GRANT INSERT ON [dbo].[SchemaChangeLog] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT INSERT ON [dbo].[SchemaChangeLog] TO [pnl\svc-dms] AS [dbo]
+GO

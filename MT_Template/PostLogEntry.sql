@@ -58,3 +58,5 @@ GRANT VIEW DEFINITION ON [dbo].[PostLogEntry] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[PostLogEntry] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[PostLogEntry] TO [pnl\svc-dms] AS [dbo]
+GO

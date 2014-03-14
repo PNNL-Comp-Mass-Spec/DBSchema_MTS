@@ -19,8 +19,9 @@
 --   MT_S_oneidensis_MR1_P777 on Daffy (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --   MT_Mouse_CHF_P776 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --   MT_Human_ALZ_O18_P836
---   MT_Mouse_MHP_Unlabeled_P929 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM, also filters on PSM_Count)
+--   MT_Mouse_MHP_Unlabeled_P929 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM; also filters on PSM_Count)
 --   MT_Mouse_MHP_Unlabeled_P933 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
+--   MT_Human_LewyBody_P947 on Proteinseqs  (uses MSGF_SpecProb and T_Peptides.DelM_PPM; also filters on Dataset_Count)
 --
 -- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
 --
@@ -45,7 +46,8 @@ CREATE TABLE [dbo].[T_Custom_PMT_QS_Criteria_VP](
 	ModSymbolFilter varchar(12) NOT NULL default '',
 	MSGF_SpecProb real NOT NULL,
 	CleavageState smallint NOT NULL,
-    PSM_Count smallint NOT NULL
+    PSM_Count smallint NOT NULL,
+	Dataset_Count smallint NOT NULL
  CONSTRAINT [PK_T_Custom_PMT_QS_Criteria_VP] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
@@ -90,6 +92,7 @@ ALTER PROCEDURE dbo.UpdatePMTQSUsingCustomVladFilters
 **						   - Updated to left outer join to T_Score_Sequest
 **						   - Updated to use T_Peptides.Job
 **			11/26/2013 mem - Now filtering on Number_of_Peptides if PSM_Count is > 0 in T_Custom_PMT_QS_Criteria_VP
+**			02/21/2014 mem - Now filtering on PMT_Quality_Score_Local if Dataset_Count is > 0 (requires that ComputePMTQualityScoreLocal be enabled)
 **    
 *****************************************************/
 (
@@ -121,6 +124,7 @@ As
 	Set @ProtonMass = 1.007276
 	
 	Declare @Continue tinyint
+	Declare @UpdatePMTScoreLocal tinyint = 0
 	
 	-------------------------------------------------------------
 	-- Validate the inputs
@@ -130,7 +134,7 @@ As
 	Set @message = ''
 
 	--------------------------------------------------------------
-	-- Create a temporary table to hold the scores to filter on
+	-- Create temporary tables that will track the new PMT Quality Score values to store
 	--------------------------------------------------------------
 
 	CREATE TABLE #TmpNewMassTagScores (
@@ -141,6 +145,17 @@ As
 	
 	CREATE UNIQUE INDEX #IX_NewMassTagScores ON #TmpNewMassTagScores (Mass_Tag_ID ASC)
 	
+	CREATE TABLE #TmpNewPeptideScores (
+		Peptide_ID int,
+		PMT_Quality_Score_Local real,
+		Filter_Match_Count int
+	)
+	
+	CREATE UNIQUE INDEX #IX_NewPeptideScores ON #TmpNewPeptideScores (Peptide_ID ASC)
+
+	--------------------------------------------------------------
+	-- Create a temporary table to hold the scores to filter on
+	--------------------------------------------------------------
 	
 	CREATE TABLE #TmpFilterScores (
 		Entry_ID int, 
@@ -154,7 +169,8 @@ As
 		MSGF_SpecProb real,
 		CleavageState smallint,					-- Exact cleavage state to match; set to -1 to match all cleavage states
 		PMTQS real,
-		MT_Match_Count int
+		MT_Match_Count int,
+		Peptide_Match_Count int
 	)
 	
 	--------------------------------------------------------------
@@ -162,7 +178,7 @@ As
 	--------------------------------------------------------------
 
 	INSERT INTO #TmpFilterScores( Entry_ID,
-	                              ExperimentFilter,
+	      ExperimentFilter,
 	                              ParamFileFilter,
 	                              ChargeState,
 	                              DeltaMassPPM,
@@ -172,7 +188,8 @@ As
 	                              MSGF_SpecProb,
 	                              CleavageState,
 	                              PMTQS,
-	                              MT_Match_Count)
+	                              MT_Match_Count,
+	                              Peptide_Match_Count)
 	SELECT Entry_ID,
 	       ExperimentFilter,
 	       ParamFileFilter,
@@ -184,7 +201,8 @@ As
 	       MSGF_SpecProb,
 	       CleavageState,
 	       PMTQS,
-	       0 AS MT_Match_Count
+	       0 AS MT_Match_Count,
+	       0 AS Peptide_Match_Count
 	FROM T_Custom_PMT_QS_Criteria_VP
     ORDER BY Entry_ID
     
@@ -200,6 +218,21 @@ As
 
 
 	--------------------------------------------------------------
+	-- Look for PMT_Quality_Score_Local values in T_Peptides
+	-- If they are defined, then they will also be updated
+	--------------------------------------------------------------
+	--
+	If Exists (Select * FROM T_Peptides WHERE PMT_Quality_Score_Local > 0)
+	Begin
+		Set @UpdatePMTScoreLocal = 1
+		
+		INSERT INTO #TmpNewPeptideScores (Peptide_ID, PMT_Quality_Score_Local, Filter_Match_Count)
+		SELECT Peptide_ID, 0, 0
+		FROM T_Peptides
+	End
+
+
+	--------------------------------------------------------------
 	-- Loop through the entries in #TmpFilterScores
 	--------------------------------------------------------------
 	
@@ -207,7 +240,7 @@ As
 	
 	Set @Continue = 1
 	While @Continue = 1
-	Begin -- <a>
+	Begin -- <a1>
 		SELECT TOP 1	@ExperimentFilter = ExperimentFilter,
 						@ParamFileFilter = ParamFileFilter,
 						@ChargeState = ChargeState,
@@ -228,7 +261,7 @@ As
 		If @myRowCount = 0
 			Set @Continue = 0
 		Else
-		Begin -- <b>
+		Begin -- <b1>
 		
 			If IsNull(@ExperimentFilter, '') = ''
 				Set @ExperimentFilter = '%'
@@ -282,21 +315,69 @@ As
 							      )
 						  ) LookupQ
 					WHERE (ABS(DelM_PPM) <= @DeltaMassPPM ) 
-				) FilterQ ON NMTS.Mass_Tag_ID = FilterQ.Mass_Tag_ID			
+				) FilterQ ON NMTS.Mass_Tag_ID = FilterQ.Mass_Tag_ID
           	--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			
-			-- Track the number of matching peptides using #TmpFilterScores
+
+			-- Track the number of matching AMT tags using #TmpFilterScores
 			UPDATE #TmpFilterScores
 			SET MT_Match_Count = @myRowCount
 			WHERE Entry_ID = @EntryID			
-		
-		End -- </b>
 
-	End -- </a>
+					
+			If @UpdatePMTScoreLocal > 0
+			Begin
+			
+				UPDATE #TmpNewPeptideScores
+				SET PMT_Quality_Score_Local = CASE WHEN @PMTQS > PMT_Quality_Score_Local THEN @PMTQS ELSE PMT_Quality_Score_Local END,
+					Filter_Match_Count = Filter_Match_Count + 1
+				FROM #TmpNewPeptideScores NPS INNER JOIN
+					(   SELECT Peptide_ID
+						FROM ( SELECT	Pep.Peptide_ID,
+										Pep.DelM_PPM
+								FROM T_Peptides Pep
+									INNER JOIN T_Analysis_Description TAD
+										ON Pep.Job = TAD.Job
+									INNER JOIN T_Mass_Tags MT
+										ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
+									INNER JOIN T_Score_Discriminant SD
+										ON Pep.Peptide_ID = SD.Peptide_ID
+									LEFT OUTER JOIN T_Score_Sequest SS
+										ON Pep.Peptide_ID = SS.Peptide_ID
+								WHERE TAD.Experiment LIKE @ExperimentFilter AND
+									  TAD.Parameter_File_Name LIKE @ParamFileFilter AND
+									  Pep.Charge_State = @ChargeState AND
+									  ISNULL(SS.XCorr, 0) >= @XCorr AND
+									  ISNULL(SS.DeltaCN2, 0) >= @DeltaCN2 AND
+									  SD.MSGF_SpecProb <= @MSGFSpecProb AND
+									  (@CleavageState < 0 Or MT.Cleavage_State_Max = @CleavageState) AND
+									  (
+										(@ModSymbolFilter = '') OR 
+										(@ModSymbolFilter = 'NoMods' And Not Pep.Peptide Like '%[*#@!$%^&]%') OR 
+										(Len(@ModSymbolFilter) > 0 AND @ModSymbolFilter <> 'NoMods' And Pep.Peptide Like '%' + @ModSymbolFilter + '%') 
+									  ) AND
+									  (
+										(@ModSymbolExclusionFilter = '') OR
+										(Len(@ModSymbolExclusionFilter) > 0 AND Not MT.Mod_Description Like '%' + @ModSymbolExclusionFilter + '%') 
+									  )
+							) LookupQ
+						WHERE (ABS(DelM_PPM) <= @DeltaMassPPM ) 
+					) FilterQ ON NPS.Peptide_ID = FilterQ.Peptide_ID
+          		--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				-- Track the number of matching peptides using #TmpFilterScores
+				UPDATE #TmpFilterScores
+				SET Peptide_Match_Count = @myRowCount
+				WHERE Entry_ID = @EntryID			
+			End
+						
+		End -- </b1>
+
+	End -- </a1>
 	
 	If @InfoOnly <> 0
-	Begin
+	Begin -- <a2>
 		-- Display the contents of #TmpFilterScores
 		--
 		SELECT *
@@ -313,9 +394,25 @@ As
 		     INNER JOIN #TmpNewMassTagScores NMTS
 		       ON MT.Mass_Tag_ID = NMTS.Mass_Tag_ID
 		ORDER BY NMTS.Mass_Tag_ID
-	End
+		
+		If @UpdatePMTScoreLocal > 0
+		Begin
+			-- Show the first 500 entries in #TmpNewPeptideScores
+			--
+			SELECT TOP 500 NPS.Peptide_ID,
+						Pep.Mass_Tag_ID,
+						Pep.PMT_Quality_Score_Local AS PMT_QS_Local_Old,
+						NPS.PMT_Quality_Score_Local AS PMT_QS_Local_New,
+						NPS.Filter_Match_Count
+			FROM T_Peptides Pep
+				INNER JOIN #TmpNewPeptideScores NPS
+				ON Pep.Peptide_ID = NPS.Peptide_ID
+			ORDER BY NPS.Peptide_ID
+		End
+		
+	End -- </a2>
 	Else
-	Begin
+	Begin -- <a3>
 		-- Store the new PMT Quality Score values
 		--
 		UPDATE T_Mass_Tags
@@ -332,14 +429,34 @@ As
 		
 		execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
 
+		If @UpdatePMTScoreLocal > 0
+		Begin
+			UPDATE T_Peptides
+			SET PMT_Quality_Score_Local = NPS.PMT_Quality_Score_Local
+			FROM T_Peptides PT
+			     INNER JOIN #TmpNewPeptideScores NPS
+			       ON PT.Peptide_ID = NPS.Peptide_ID
+			WHERE PT.PMT_Quality_Score_Local <> NPS.PMT_Quality_Score_Local
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+			-- Log the change
+			Set @message = 'Updated the PMT_Quality_Score_Local values in T_Peptides using custom tolerances based on Experiment, Charge State, DeltaMass (ppm), XCorr, DeltaCN2, and Cleavage State; Updated scores for ' + Convert(varchar(12), @myRowCount) + ' Peptides'
+			
+			execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
+		End
+
+
+		Declare @PMTQSIterator int
 
 		If Exists (Select * from T_Custom_PMT_QS_Criteria_VP Where PSM_Count > 0)
-		Begin
-			Declare @PMTQSIterator int = 1000
+		Begin -- <b2>
+			
 			Declare @PSMCountMax int
 			
+			Set @PMTQSIterator = 1000
 			While @PMTQSIterator > 0
-			Begin
+			Begin -- <c2>
 				SELECT TOP 1 @PMTQSIterator = PMTQS,
 				             @PSMCountMax = PSM_Count_Max
 				FROM ( SELECT PMTQS,
@@ -358,7 +475,8 @@ As
 					Set @PMTQSIterator = 0
 				End
 				Else
-				Begin
+				Begin -- <d1>
+				
 					UPDATE T_Mass_Tags
 					SET PMT_Quality_Score = PMT_Quality_Score - 1
 					WHERE PMT_Quality_Score = @PMTQSIterator AND
@@ -371,13 +489,81 @@ As
 						Set @message = 'Decremented PMT_Quality_Score for ' + Convert(varchar(12), @myRowCount) + ' AMTs with PMT_QS ' + Convert(varchar(12), @PMTQSIterator) + ' but Number_Of_Peptides < ' + Convert(varchar(12), @PSMCountMax)
 						execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
 					End
-				End
-			End 
+					
+				End -- </d1>
+			End -- </c2>
 			
-		End
-	End
+		End -- </b2>
 		
-	
+		
+		If Exists (Select * from T_Custom_PMT_QS_Criteria_VP Where Dataset_Count > 0)
+		Begin -- <b3>
+		
+			-- Make sure PMT_Quality_Score_Local values are defined
+			If @UpdatePMTScoreLocal = 0
+			Begin
+				Set @message = 'PMT_Quality_Score_Local values are not defined in T_Peptides; unable to filter on Dataset_Count'
+				execute PostLogEntry 'Error', @message, 'UpdatePMTQSUsingCustomVladFilters'
+				Goto Done
+			End
+			
+			Declare @DatasetCountMax int
+				
+			Set @PMTQSIterator = 1000
+			While @PMTQSIterator > 0
+			Begin -- <c3>
+				SELECT TOP 1 @PMTQSIterator = PMTQS,
+								@DatasetCountMax = Dataset_Count_Max
+				FROM ( SELECT PMTQS,
+								MAX(Dataset_Count) AS Dataset_Count_Max
+						FROM T_Custom_PMT_QS_Criteria_VP
+						WHERE PMTQS < @PMTQSIterator
+						GROUP BY PMTQS
+						HAVING MAX(Dataset_Count) > 0
+						) LookupQ
+				ORDER BY PMTQS DESC
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				If @myRowCount = 0
+				Begin
+					Set @PMTQSIterator = 0
+				End
+				Else
+				Begin -- <d2>
+				
+					UPDATE T_Mass_Tags
+					SET PMT_Quality_Score = MT.PMT_Quality_Score - 1
+					FROM T_Mass_Tags MT
+							INNER JOIN ( SELECT MT.Mass_Tag_ID,
+												COUNT(DISTINCT TAD.Dataset) AS Dataset_Count
+										FROM T_Peptides Pep
+											INNER JOIN T_Mass_Tags MT
+												ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
+											INNER JOIN T_Analysis_Description TAD
+												ON Pep.Job = TAD.Job
+										WHERE Pep.PMT_Quality_Score_Local >= @PMTQSIterator AND
+											  MT.PMT_Quality_Score = @PMTQSIterator
+										GROUP BY MT.Mass_Tag_ID 
+									) DatasetCountQ
+							ON MT.Mass_Tag_ID = DatasetCountQ.Mass_Tag_ID
+					WHERE PMT_Quality_Score = @PMTQSIterator AND
+						  DatasetCountQ.Dataset_Count < @DatasetCountMax				
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+					If @myRowCount > 0
+					Begin
+						Set @message = 'Decremented PMT_Quality_Score for ' + Convert(varchar(12), @myRowCount) + ' AMTs with PMT_QS ' + Convert(varchar(12), @PMTQSIterator) + ' but Dataset_Count < ' + Convert(varchar(12), @DatasetCountMax)
+						execute PostLogEntry 'Normal', @message, 'UpdatePMTQSUsingCustomVladFilters'
+					End
+					
+				End -- </d2>
+			End  -- </c3>
+		End -- </b3>
+
+	End -- </a3>
+
 Done:
 	return @myError
 

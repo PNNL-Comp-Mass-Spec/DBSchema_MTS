@@ -709,7 +709,7 @@ As
 			
 			-- Add an index to #T_Sequence_IDs_To_Update
 			CREATE UNIQUE CLUSTERED INDEX #IX_T_Sequence_IDs_To_Update ON #T_Sequence_IDs_To_Update(Seq_ID_Local)
-			
+							
 			-----------------------------------------------------------
 			-- Populate #T_Sequence_IDs_To_Update
 			-----------------------------------------------------------

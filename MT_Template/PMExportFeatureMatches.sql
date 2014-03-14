@@ -1,7 +1,7 @@
 /****** Object:  StoredProcedure [dbo].[PMExportFeatureMatches] ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 
 CREATE Procedure dbo.PMExportFeatureMatches
@@ -18,6 +18,7 @@ CREATE Procedure dbo.PMExportFeatureMatches
 **			10/12/2010 mem - Now returning STAC-related columns
 **						   - Added parameter @FDRThreshold
 **			02/16/2011 mem - Now customizing the name returned for the Match_Score and Del_Match_Score column
+**			03/05/2014 mem - Added Conformer_ID
 **
 ****************************************************/
 (
@@ -170,7 +171,8 @@ AS
 			Set @S = @S +        ' CONVERT(real, FUR.ElutionTime - FURD.Expected_NET) AS NETError,'
 			Set @S = @S +        ' CONVERT(tinyint, 0) AS InternalStdMatch,'
 			Set @S = @S +        ' IsNull(FURD.Uniqueness_Probability, 0) AS Uniqueness_Probability, '
-			Set @S = @S +        ' IsNull(FURD.FDR_Threshold, 1) AS FDR_Threshold'
+			Set @S = @S +        ' IsNull(FURD.FDR_Threshold, 1) AS FDR_Threshold,'
+			Set @S = @S +        ' FURD.Conformer_ID'
 			Set @S = @S + ' FROM #Tmp_MDIDList ML'
 			Set @S = @S + '      INNER JOIN T_FTICR_UMC_Results FUR'
 			Set @S = @S +        ' ON ML.MD_ID = FUR.MD_ID'
@@ -201,7 +203,8 @@ AS
 			Set @S = @S +        ' CONVERT(real, FUR.ElutionTime - FURD.Expected_NET) AS NETError,'
 			Set @S = @S +        ' CONVERT(tinyint, 1) AS InternalStdMatch,'
 			Set @S = @S +        ' IsNull(FURD.Uniqueness_Probability, 0) AS Uniqueness_Probability, '
-			Set @S = @S +        ' IsNull(FURD.FDR_Threshold, 1) AS FDR_Threshold'
+			Set @S = @S +        ' IsNull(FURD.FDR_Threshold, 1) AS FDR_Threshold,'
+			Set @S = @S +        ' NULL AS Conformer_ID'
 			Set @S = @S + ' FROM #Tmp_MDIDList ML'
 			Set @S = @S + '      INNER JOIN T_FTICR_UMC_Results FUR'
 			Set @S = @S +        ' ON ML.MD_ID = FUR.MD_ID'

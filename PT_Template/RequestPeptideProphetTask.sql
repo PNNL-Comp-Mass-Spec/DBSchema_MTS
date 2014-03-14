@@ -436,3 +436,5 @@ GRANT VIEW DEFINITION ON [dbo].[RequestPeptideProphetTask] TO [MTS_DB_Lite] AS [
 GO
 GRANT EXECUTE ON [dbo].[RequestPeptideProphetTask] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[RequestPeptideProphetTask] TO [pnl\svc-dms] AS [dbo]
+GO

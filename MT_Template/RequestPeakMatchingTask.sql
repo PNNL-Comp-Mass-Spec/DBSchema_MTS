@@ -554,6 +554,7 @@ Done:
 
 	return @myError
 
+
 GO
 GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [DMS_SP_User] AS [dbo]
 GO
@@ -562,4 +563,6 @@ GO
 GRANT VIEW DEFINITION ON [dbo].[RequestPeakMatchingTask] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[RequestPeakMatchingTask] TO [pnl\svc-dms] AS [dbo]
 GO

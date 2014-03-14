@@ -137,3 +137,5 @@ GRANT VIEW DEFINITION ON [dbo].[SetPeakMatchingTaskComplete] TO [MTS_DB_Lite] AS
 GO
 GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskComplete] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[SetPeakMatchingTaskComplete] TO [pnl\svc-dms] AS [dbo]
+GO

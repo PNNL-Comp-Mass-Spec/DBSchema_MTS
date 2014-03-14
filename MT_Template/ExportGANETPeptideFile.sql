@@ -143,3 +143,5 @@ GRANT VIEW DEFINITION ON [dbo].[ExportGANETPeptideFile] TO [MTS_DB_Lite] AS [dbo
 GO
 GRANT EXECUTE ON [dbo].[ExportGANETPeptideFile] TO [pnl\MTSProc] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[ExportGANETPeptideFile] TO [pnl\svc-dms] AS [dbo]
+GO

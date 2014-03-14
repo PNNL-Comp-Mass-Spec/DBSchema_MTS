@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE PROCEDURE dbo.RequestGANETUpdateTask
 /****************************************************
 **
@@ -508,10 +509,13 @@ As
 Done:
 	return @myError
 
+
 GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[RequestGANETUpdateTask] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\MTSProc] AS [dbo]
+GO
+GRANT EXECUTE ON [dbo].[RequestGANETUpdateTask] TO [pnl\svc-dms] AS [dbo]
 GO
