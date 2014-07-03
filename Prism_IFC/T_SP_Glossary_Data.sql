@@ -1,5 +1,5 @@
 /****** Object:  Table [T_SP_Glossary] ******/
-/****** RowCount: 507 ******/
+/****** RowCount: 502 ******/
 /****** Columns: SP_ID, Column_Name, Direction_ID, Ordinal_Position, Data_Type_Name, Field_Length, Description ******/
 INSERT INTO [T_SP_Glossary] VALUES (1,'IncludeUnused',1,2,'tinyint',1,'If True, then Unused databases are included.')
 INSERT INTO [T_SP_Glossary] VALUES (1,'IncludeDeleted',1,3,'tinyint',1,'If True, then deleted databases are included.')
