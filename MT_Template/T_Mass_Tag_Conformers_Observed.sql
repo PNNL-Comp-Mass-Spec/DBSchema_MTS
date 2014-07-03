@@ -15,23 +15,22 @@ CREATE TABLE [dbo].[T_Mass_Tag_Conformers_Observed](
  CONSTRAINT [PK_T_Mass_Tag_Conformers_Observed] PRIMARY KEY CLUSTERED 
 (
 	[Conformer_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_Mass_Tag_Conformers_Observed_MT_Charge_Conformer] ******/
-CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Mass_Tag_Conformers_Observed_MT_Charge_Conformer] ON [dbo].[T_Mass_Tag_Conformers_Observed] 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Mass_Tag_Conformers_Observed_MT_Charge_Conformer] ON [dbo].[T_Mass_Tag_Conformers_Observed]
 (
 	[Mass_Tag_ID] ASC,
 	[Charge] ASC,
 	[Conformer] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-GO
-ALTER TABLE [dbo].[T_Mass_Tag_Conformers_Observed]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tag_Conformers_Observed_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
-REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
-GO
-ALTER TABLE [dbo].[T_Mass_Tag_Conformers_Observed] CHECK CONSTRAINT [FK_T_Mass_Tag_Conformers_Observed_T_Mass_Tags]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_Conformers_Observed] ADD  CONSTRAINT [DF_T_Mass_Tag_Conformers_Observed_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_Conformers_Observed]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tag_Conformers_Observed_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
+REFERENCES [dbo].[T_Mass_Tags] ([Mass_Tag_ID])
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_Conformers_Observed] CHECK CONSTRAINT [FK_T_Mass_Tag_Conformers_Observed_T_Mass_Tags]
 GO

@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE sp_Blitz
+
+CREATE PROCEDURE [dbo].[sp_Blitz]
     @CheckUserDatabaseObjects TINYINT = 1 ,
     @CheckProcedureCache TINYINT = 0 ,
     @OutputType VARCHAR(20) = 'TABLE' ,

@@ -49,9 +49,26 @@ CREATE TABLE [dbo].[T_FTICR_Analysis_Description](
  CONSTRAINT [PK_T_FTICR_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Collection_List]  DEFAULT ('na') FOR [Protein_Collection_List]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Options_List]  DEFAULT ('na') FOR [Protein_Options_List]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Created]  DEFAULT (getdate()) FOR [Created]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Auto_Addition]  DEFAULT ((0)) FOR [Auto_Addition]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_State]  DEFAULT ((1)) FOR [State]
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])
+REFERENCES [dbo].[T_FAD_State_Name] ([FAD_State_ID])
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] CHECK CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name]
 GO
 /****** Object:  Trigger [dbo].[trig_d_FTICRAnalysisDescription] ******/
 SET ANSI_NULLS ON
@@ -104,21 +121,4 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
 		ORDER BY inserted.Job
 
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name] FOREIGN KEY([State])
-REFERENCES [T_FAD_State_Name] ([FAD_State_ID])
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] CHECK CONSTRAINT [FK_T_FTICR_Analysis_Description_T_FAD_State_Name]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Collection_List]  DEFAULT ('na') FOR [Protein_Collection_List]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Protein_Options_List]  DEFAULT ('na') FOR [Protein_Options_List]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Created]  DEFAULT (getdate()) FOR [Created]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_Auto_Addition]  DEFAULT ((0)) FOR [Auto_Addition]
-GO
-ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ADD  CONSTRAINT [DF_T_FTICR_Analysis_Description_State]  DEFAULT ((1)) FOR [State]
 GO

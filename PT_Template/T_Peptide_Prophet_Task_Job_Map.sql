@@ -11,17 +11,19 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map](
 (
 	[Task_ID] ASC,
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+GRANT INSERT ON [dbo].[T_Peptide_Prophet_Task_Job_Map] TO [pnl\svc-dms] AS [dbo]
+GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_Analysis_Description] ([Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map] CHECK CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Analysis_Description]
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Peptide_Prophet_Task] FOREIGN KEY([Task_ID])
-REFERENCES [T_Peptide_Prophet_Task] ([Task_ID])
+REFERENCES [dbo].[T_Peptide_Prophet_Task] ([Task_ID])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task_Job_Map] CHECK CONSTRAINT [FK_T_Peptide_Prophet_Task_Job_Map_T_Peptide_Prophet_Task]
 GO

@@ -233,6 +233,7 @@ As
 Done:
 	return @myError
 
+
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadMASICSICStatsBulk] TO [MTS_DB_Dev] AS [dbo]
 GO

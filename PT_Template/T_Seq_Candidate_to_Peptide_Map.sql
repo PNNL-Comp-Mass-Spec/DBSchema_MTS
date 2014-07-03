@@ -12,17 +12,17 @@ CREATE TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map](
 	[Job] ASC,
 	[Seq_ID_Local] ASC,
 	[Peptide_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides] FOREIGN KEY([Peptide_ID])
-REFERENCES [T_Peptides] ([Peptide_ID])
+REFERENCES [dbo].[T_Peptides] ([Peptide_ID])
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map] CHECK CONSTRAINT [FK_T_Seq_Candidate_to_Peptide_Map_T_Peptides]
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Seq_Candidate_to_Peptide_Map_T_Seq_Candidates] FOREIGN KEY([Job], [Seq_ID_Local])
-REFERENCES [T_Seq_Candidates] ([Job], [Seq_ID_Local])
+REFERENCES [dbo].[T_Seq_Candidates] ([Job], [Seq_ID_Local])
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_to_Peptide_Map] CHECK CONSTRAINT [FK_T_Seq_Candidate_to_Peptide_Map_T_Seq_Candidates]
 GO

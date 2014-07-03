@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW dbo.V_Usage_Stats_History
+create VIEW dbo.V_Usage_Stats_History
 AS
 SELECT TOP 100 PERCENT Posted_By, Posting_Date, 
     MAX(Usage_Count) AS Usage_Count_by_Day

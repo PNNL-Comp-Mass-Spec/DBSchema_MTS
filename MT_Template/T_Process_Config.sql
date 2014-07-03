@@ -12,17 +12,28 @@ CREATE TABLE [dbo].[T_Process_Config](
  CONSTRAINT [PK_T_Process_Config] PRIMARY KEY NONCLUSTERED 
 (
 	[Process_Config_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_Process_Config_UniqueNameValue] ******/
-CREATE UNIQUE CLUSTERED INDEX [IX_T_Process_Config_UniqueNameValue] ON [dbo].[T_Process_Config] 
+CREATE UNIQUE CLUSTERED INDEX [IX_T_Process_Config_UniqueNameValue] ON [dbo].[T_Process_Config]
 (
 	[Name] ASC,
 	[Value] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
+GO
+ALTER TABLE [dbo].[T_Process_Config]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters] FOREIGN KEY([Name])
+REFERENCES [dbo].[T_Process_Config_Parameters] ([Name])
+GO
+ALTER TABLE [dbo].[T_Process_Config] CHECK CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters]
 GO
 /****** Object:  Trigger [dbo].[trig_iu_T_Process_Config] ******/
 SET ANSI_NULLS ON
@@ -184,13 +195,4 @@ AS
 	End
 
 
-GO
-ALTER TABLE [dbo].[T_Process_Config]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters] FOREIGN KEY([Name])
-REFERENCES [T_Process_Config_Parameters] ([Name])
-GO
-ALTER TABLE [dbo].[T_Process_Config] CHECK CONSTRAINT [FK_T_Process_Config_T_Process_Config_Parameters]
-GO
-ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
-GO
-ALTER TABLE [dbo].[T_Process_Config] ADD  CONSTRAINT [DF_T_Process_Config_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

@@ -16,24 +16,23 @@ CREATE TABLE [dbo].[T_Dataset_Stats_Scans](
 (
 	[Job] ASC,
 	[Scan_Number] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_Dataset_Stats_Scans_MZ] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Dataset_Stats_Scans_MZ] ON [dbo].[T_Dataset_Stats_Scans] 
+CREATE NONCLUSTERED INDEX [IX_T_Dataset_Stats_Scans_MZ] ON [dbo].[T_Dataset_Stats_Scans]
 (
 	[Base_Peak_MZ] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_Scans]  WITH CHECK ADD  CONSTRAINT [FK_T_Dataset_Stats_Scans_T_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_Analysis_Description] ([Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_Scans] CHECK CONSTRAINT [FK_T_Dataset_Stats_Scans_T_Analysis_Description]
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_Scans]  WITH CHECK ADD  CONSTRAINT [FK_T_Dataset_Stats_Scans_T_Dataset_Scan_Type_Name] FOREIGN KEY([Scan_Type])
-REFERENCES [T_Dataset_Scan_Type_Name] ([Scan_Type])
+REFERENCES [dbo].[T_Dataset_Scan_Type_Name] ([Scan_Type])
 GO
 ALTER TABLE [dbo].[T_Dataset_Stats_Scans] CHECK CONSTRAINT [FK_T_Dataset_Stats_Scans_T_Dataset_Scan_Type_Name]
 GO

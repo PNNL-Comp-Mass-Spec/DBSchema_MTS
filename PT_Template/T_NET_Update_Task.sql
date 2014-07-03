@@ -19,7 +19,7 @@ CREATE TABLE [dbo].[T_NET_Update_Task](
  CONSTRAINT [PK_T_NET_Update_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
@@ -27,10 +27,10 @@ GRANT INSERT ON [dbo].[T_NET_Update_Task] TO [pnl\svc-dms] AS [dbo]
 GO
 GRANT UPDATE ON [dbo].[T_NET_Update_Task] TO [pnl\svc-dms] AS [dbo]
 GO
+ALTER TABLE [dbo].[T_NET_Update_Task] ADD  CONSTRAINT [DF_T_NET_Update_Task_Task_Created]  DEFAULT (getdate()) FOR [Task_Created]
+GO
 ALTER TABLE [dbo].[T_NET_Update_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_NET_Update_Task_T_NET_Update_Task_State_Name] FOREIGN KEY([Processing_State])
-REFERENCES [T_NET_Update_Task_State_Name] ([Processing_State])
+REFERENCES [dbo].[T_NET_Update_Task_State_Name] ([Processing_State])
 GO
 ALTER TABLE [dbo].[T_NET_Update_Task] CHECK CONSTRAINT [FK_T_NET_Update_Task_T_NET_Update_Task_State_Name]
-GO
-ALTER TABLE [dbo].[T_NET_Update_Task] ADD  CONSTRAINT [DF_T_NET_Update_Task_Task_Created]  DEFAULT (getdate()) FOR [Task_Created]
 GO

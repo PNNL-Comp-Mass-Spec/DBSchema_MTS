@@ -167,6 +167,7 @@ As
 Done:
 	return @myError
 
+
 GO
 GRANT VIEW DEFINITION ON [dbo].[SetGANETUpdateTaskState] TO [MTS_DB_Dev] AS [dbo]
 GO

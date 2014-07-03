@@ -13,16 +13,16 @@ CREATE TABLE [dbo].[T_Analysis_ToolVersion](
  CONSTRAINT [PK_T_Analysis_ToolVersion] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
-GO
-ALTER TABLE [dbo].[T_Analysis_ToolVersion]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_ToolVersion_T_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Analysis_ToolVersion] CHECK CONSTRAINT [FK_T_Analysis_ToolVersion_T_Analysis_Description]
 GO
 ALTER TABLE [dbo].[T_Analysis_ToolVersion] ADD  CONSTRAINT [DF_T_Analysis_ToolVersion_Entered]  DEFAULT (getdate()) FOR [Entered]
 GO
 ALTER TABLE [dbo].[T_Analysis_ToolVersion] ADD  CONSTRAINT [DF_T_Analysis_ToolVersion_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Analysis_ToolVersion]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_ToolVersion_T_Analysis_Description] FOREIGN KEY([Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Analysis_ToolVersion] CHECK CONSTRAINT [FK_T_Analysis_ToolVersion_T_Analysis_Description]
 GO

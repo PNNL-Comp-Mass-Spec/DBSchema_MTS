@@ -10,12 +10,12 @@ CREATE TABLE [dbo].[T_Analysis_Filter_Flags](
 (
 	[Filter_ID] ASC,
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
 ALTER TABLE [dbo].[T_Analysis_Filter_Flags]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Filter_Flags_T_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_Analysis_Description] ([Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Analysis_Filter_Flags] CHECK CONSTRAINT [FK_T_Analysis_Filter_Flags_T_Analysis_Description]
 GO

@@ -17,6 +17,7 @@ CREATE Procedure LoadPeptideProphetResults
 **	Date:	07/06/2006
 **			07/07/2006 mem - Updated to only post a warning if a job has null rows but all of the null rows have charge 6+ or higher
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			04/30/2014 mem - Now posting a warning if null peptide prophet values are found, but less than 5% of the total rows is null
 **
 *****************************************************/
 (
@@ -281,7 +282,7 @@ AS
 			-----------------------------------------------
 			-- See if any rows have null Peptide Prophet values for this job
 			-- Ignore charge states > 5
-			-- Post an error if any are found
+			-- Post an error if at least 5% of the rows are null
 			-----------------------------------------------
 			--
 			Set @RowCountTotal = 0
@@ -302,7 +303,12 @@ AS
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 
+			Declare @FractionNull float = 0
+			If @RowCountTotal > 0
+				Set @FractionNull = @RowCountNull / Cast(@RowCountTotal As float)
+				
 			Set @IncompleteJob = 0
+			
 			If @RowCountNull > 0 Or @CheckForMissingJobs = 1
 			Begin
 
@@ -320,10 +326,19 @@ AS
 				End
 				Else
 				Begin
-					set @message = @message + '; furthermore, ' + Convert(varchar(12), @RowCountNullCharge5OrLess) + ' of the rows have charge state 5+ or less'
-					set @MessageType = 'Error'
-			
-					Set @IncompleteJob = 1		
+					If @FractionNull > 0.05
+					Begin
+						set @message = @message + '; furthermore, ' + Convert(varchar(12), @RowCountNullCharge5OrLess) + ' of the rows have charge state 5+ or less'
+						set @MessageType = 'Error'
+					
+						Set @IncompleteJob = 1		
+					End
+					Else
+					Begin
+						Declare @PctNull varchar(24) = Convert(varchar(12), Convert(decimal(5,1), @FractionNull * 100))
+						set @message = @message + ' (' + @PctNull + '% are null)'
+						set @MessageType = 'Warning'
+					End
 				End
 
 				If @CheckForMissingJobs = 1
@@ -403,6 +418,7 @@ AS
 	-----------------------------------------------
 Done:	
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadPeptideProphetResults] TO [MTS_DB_Dev] AS [dbo]

@@ -13,14 +13,14 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task](
  CONSTRAINT [PK_T_Peptide_Prophet_DB_Update_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Update_Task_Task_Created]  DEFAULT (getdate()) FOR [Task_Created]
+GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_DB_Update_Task_T_Peptide_Prophet_DB_Update_Task_State_Name] FOREIGN KEY([Processing_State])
-REFERENCES [T_Peptide_Prophet_DB_Update_Task_State_Name] ([Processing_State])
+REFERENCES [dbo].[T_Peptide_Prophet_DB_Update_Task_State_Name] ([Processing_State])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task] CHECK CONSTRAINT [FK_T_Peptide_Prophet_DB_Update_Task_T_Peptide_Prophet_DB_Update_Task_State_Name]
-GO
-ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Update_Task] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Update_Task_Task_Created]  DEFAULT (getdate()) FOR [Task_Created]
 GO

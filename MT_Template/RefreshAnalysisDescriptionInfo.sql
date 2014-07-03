@@ -31,6 +31,7 @@ CREATE Procedure RefreshAnalysisDescriptionInfo
 **			12/09/2008 mem - Increased size of @message to varchar(4000)
 **			07/13/2010 mem - Now populating Dataset_Acq_Length in T_Analysis_Description, T_FTICR_Analysis_Description, and T_Analysis_Description_Updates
 **			10/10/2013 mem - Now updating MyEMSLState
+**			04/01/2014 mem - Using Select distinct to assure the job list is unique
 **    
 *****************************************************/
 (
@@ -138,7 +139,8 @@ As
 			Separation_Sys_Type, PreDigest_Internal_Std, 
 			PostDigest_Internal_Std, Dataset_Internal_Std,
 			Enzyme_ID, Labelling )
-		SELECT P.Job, P.Dataset, P.DatasetID, P.Dataset_Acq_Length, 
+		SELECT DISTINCT 
+		    P.Job, P.Dataset, P.DatasetID, P.Dataset_Acq_Length, 
 		    P.Experiment, P.Campaign, P.Organism,
 		    P.StoragePathClient, P.StoragePathServer,
 			'' AS Storage_Path, P.DatasetFolder, P.ResultsFolder, P.MyEMSLState,
@@ -286,16 +288,20 @@ As
 			--------------------------------------------------------------
 
 			Set @JobList = Null
-			SELECT @JobList = Coalesce(@JobList + ', ', '') + Convert(varchar(12), TAD.job)
-			FROM #TmpJobsToUpdate U INNER JOIN 
-				 T_Analysis_Description TAD ON U.Job = TAD.Job AND TAD.State <> 1
-			WHERE IsNull(TAD.Results_Folder, '')         <> U.Results_Folder OR
-				  IsNull(TAD.Completed, '1/1/1980')      <> U.Completed OR
-				  IsNull(TAD.Parameter_File_Name, '')    <> ISNULL(U.Parameter_File_Name, '') OR
-				  IsNull(TAD.Settings_File_Name, '')     <> ISNULL(U.Settings_File_Name, '') OR
-				  IsNull(TAD.Organism_DB_Name,'')        <> IsNull(U.Organism_DB_Name,'') OR
-				  IsNull(TAD.Protein_Collection_List,'') <> IsNull(U.Protein_Collection_List,'') OR
-				  IsNull(TAD.Protein_Options_List,'')    <> IsNull(U.Protein_Options_List,'')
+			SELECT @JobList = Coalesce(@JobList + ', ', '') + Convert(varchar(12), JobQ.job)
+			FROM ( SELECT DISTINCT TAD.Job
+			       FROM #TmpJobsToUpdate U
+			            INNER JOIN T_Analysis_Description TAD
+			              ON U.Job = TAD.Job AND
+			                 TAD.State <> 1
+			       WHERE IsNull(TAD.Results_Folder, '')          <> U.Results_Folder OR
+			             IsNull(TAD.Completed, '1/1/1980')       <> U.Completed OR
+			             IsNull(TAD.Parameter_File_Name, '')     <> ISNULL(U.Parameter_File_Name, '') OR
+			             IsNull(TAD.Settings_File_Name, '')      <> ISNULL(U.Settings_File_Name, '') OR
+			             IsNull(TAD.Organism_DB_Name, '')        <> IsNull(U.Organism_DB_Name, '') OR
+			             IsNull(TAD.Protein_Collection_List, '') <> IsNull(U.Protein_Collection_List, '') OR
+			             IsNull(TAD.Protein_Options_List, '')    <> IsNull(U.Protein_Options_List, '') 
+			      ) JobQ
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
 

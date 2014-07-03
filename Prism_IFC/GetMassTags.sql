@@ -497,8 +497,6 @@ Done:
 GO
 GRANT EXECUTE ON [dbo].[GetMassTags] TO [DMS_SP_User] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetMassTags] TO [dmswebuser] AS [dbo]
-GO
 GRANT VIEW DEFINITION ON [dbo].[GetMassTags] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetMassTags] TO [MTS_DB_Lite] AS [dbo]

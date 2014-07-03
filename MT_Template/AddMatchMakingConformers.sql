@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.AddMatchMakingConformers
+CREATE PROCEDURE AddMatchMakingConformers
 /****************************************************
 **
 **	Desc:	Examines the UMCs and matching AMT tags for the given MD_ID
@@ -29,6 +29,7 @@ CREATE PROCEDURE dbo.AddMatchMakingConformers
 **			03/23/2011 mem - Now updating Last_Affected in T_Mass_Tag_Conformers_Observed
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			06/26/2012 mem - Now choosing the newest job in T_Analysis_Description if an experiment has multiple datasets and/or jobs
+**			04/01/2014 mem - Added @MergeChargeStates
 **    
 *****************************************************/
 (
@@ -36,6 +37,7 @@ CREATE PROCEDURE dbo.AddMatchMakingConformers
 	@MaxFDRThreshold real = 0.95,				-- Set to a value less than 1 to filter by FDR
 	@MinimumUniquenessProbability real = 0.5,	-- Set to a value greater than 0 to filter by Uniqueness Probability (UP)
 	@DriftTimeTolerance real = 2,				-- Matching conformers must have drift times within this tolerance
+	@MergeChargeStates tinyint = 1,				-- When 1, then ignores charge state when finding conformers
 	@FilterByExperimentMSMS tinyint = 1,		-- When 1, then requires that each identified AMT tag also be observed by MS/MS for this experiment
 	@message varchar(255) = '' output,
 	@MaxIterations int = 0,
@@ -240,8 +242,7 @@ AS
 			Exec PostLogEntry 'Normal', @message, 'AddMatchMakingConformers'
 		End
 	End
-	
-	
+
 	-----------------------------------------------------
 	-- Step through the data by decreasing abundance
 	-----------------------------------------------------
@@ -274,7 +275,7 @@ AS
 			SELECT @ConformerIDMatch = Conformer_ID
 			FROM T_Mass_Tag_Conformers_Observed
 			WHERE Mass_Tag_ID = @MassTagID AND
-			      Charge = @Charge AND
+			      (Charge = @Charge Or @MergeChargeStates > 0) AND
 			      ABS(Drift_Time_Avg - @DriftTime) <= @DriftTimeTolerance
 			--
 			If @@rowcount = 0
@@ -290,7 +291,8 @@ AS
 				
 				SELECT @ConformerNum = IsNull(MAX(Conformer), 0) + 1
 				FROM T_Mass_Tag_Conformers_Observed
-				WHERE (Mass_Tag_ID = @MassTagID) AND (Charge = @Charge)
+				WHERE (Mass_Tag_ID = @MassTagID) AND 
+				      (Charge = @Charge Or @MergeChargeStates > 0)
 				
 				
 				INSERT INTO T_Mass_Tag_Conformers_Observed( Mass_Tag_ID,
@@ -400,6 +402,5 @@ AS
 Done:
 
 	Return @myError
-
 
 GO

@@ -40,6 +40,7 @@ CREATE Procedure MakeNewPeptideDB
 **			03/24/2008 mem - Changed value for @dbState from 1 to 5
 **			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
+**			04/14/2014 mem - Now checking for the name containing a space or carriage return	
 **    
 *****************************************************/
 (
@@ -69,6 +70,17 @@ AS
 
 	Declare @sql varchar(1024)
 
+	---------------------------------------------------
+	-- Check for invalid characters in @newDBNameRoot
+	---------------------------------------------------
+	
+	Set @newDBNameRoot = LTrim(RTrim(IsNull(@newDBNameRoot, '')))
+	
+	Exec @myError = ValidateDBName @newDBNameRoot, @message output
+	
+	If @myError <> 0
+		Goto Done
+		
    	---------------------------------------------------
 	-- Verify organism against DMS
 	---------------------------------------------------

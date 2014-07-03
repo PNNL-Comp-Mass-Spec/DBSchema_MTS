@@ -65,6 +65,7 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			04/18/2013 mem - Expanded [Organism_DB_Name] in #TmpNewAnalysisJobs to varchar(128)
 **			10/10/2013 mem - Now populating MyEMSLState
 **			11/07/2013 mem - Now passing @previewSql to ParseFilterList
+**			03/25/2014 mem - Now assuring that Valid_Peptide_DB is accurate, even if cached information in MT_Main is not yet up-to-date
 **
 *****************************************************/
 (
@@ -165,7 +166,8 @@ As
 		PeptideDBName varchar(128) NULL,
 		PeptideDBID int NULL,
 		PeptideDBServer varchar(128) NULL,
-		PeptideDBPath varchar(256) NULL
+		PeptideDBPath varchar(256) NULL,
+		Entry_ID int identity(1,1)
 	)
 
 	CREATE TABLE #TmpFilterList (
@@ -198,8 +200,18 @@ As
 			Value varchar(128) NULL
 		)
 
+	---------------------------------------------------
+	-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
+	---------------------------------------------------
+	--
+	Exec @myError = LookupPeptideDBLocations @message = @message output
+
+	If @myError <> 0
+		Goto Done
+
+
 	If Len(@JobListOverride) > 0
-	Begin
+	Begin -- <a1>
 		---------------------------------------------------
 		-- Populate a temporary table with the jobs in @JobListOverride
 		---------------------------------------------------
@@ -278,8 +290,59 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
+
+		-- Look for jobs that apparently are not yet in a peptide DB
+		-- If any exist, we will double check things by explicitly checking each Peptide DB in #T_Peptide_Database_List
+		If Exists (SELECT * FROM #T_Tmp_JobListOverride WHERE Valid_Peptide_DB = 'No' AND Peptide_DB Is Null)		
+		Begin -- <b1>
+
+			-- Loop through the peptide database(s) to see if the jobs exist in the Peptide DB, yet MT_Main does not yet have this information cached
+			--
+			Declare @EntryID int = -1
+			
+			Set @continue = 1
+			While @continue = 1
+			Begin -- <c1>
+				Set @peptideDBName = ''
+				Set @peptideDBServer = ''
+				Set @peptideDBID = 0
+				
+				SELECT TOP 1 @peptideDBName = PeptideDBName,
+				             @peptideDBServer = PeptideDBServer,
+				             @peptideDBID = PeptideDBID,
+				             @peptideDBPath = PeptideDBPath,
+				             @EntryID = Entry_ID
+				FROM #T_Peptide_Database_List
+				WHERE Entry_ID > @EntryID
+				ORDER BY Entry_ID
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				If @myRowCount = 0
+					Set @continue = 0
+				Else
+				Begin -- <d1>
+					set @S = ''
+					set @S = @S + ' UPDATE #T_Tmp_JobListOverride'
+					set @S = @S + ' SET Valid_Peptide_DB = ''Yes'''
+					set @S = @S + ' FROM #T_Tmp_JobListOverride Target INNER JOIN '
+					set @S = @S + '  ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT ON Target.JobOverride = PT.Job'
+					set @S = @S + ' WHERE Valid_Peptide_DB = ''No'''
+
+					If @PreviewSql <> 0
+						Print @S + @Lf
+						
+					Exec (@S)
+				
+				End -- </d1>
+				
+			End -- </c1>
+
+		End -- </b1>
+		
+		
 		If @InfoOnly <> 0
-		Begin
+		Begin -- </b2>
 
 			set @S = ''
 			set @S = @S + ' SELECT JobListQ.JobOverride,  Dataset, AnalysisTool, ResultType, Completed, Peptide_DB, ' + @Lf
@@ -303,8 +366,9 @@ As
 			End
 				
 			Exec (@S)
-		End
-	End
+		End -- </b2>
+		
+	End -- </a1>
 	
 	---------------------------------------------------
 	-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
@@ -340,7 +404,7 @@ As
 	declare @ErrorOccurred tinyint = 0
 	
 	If @UsingJobListOverride = 0
-	Begin
+	Begin -- <a2>
 		exec GetProcessConfigValueInt 'MSMS_Job_Minimum', @DefaultValue=0, @ConfigValue=@JobMinimum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
 	
 		If @ErrorOccurred > 0
@@ -358,16 +422,7 @@ As
 			Exec PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
 			Goto Done
 		End	
-	End
-	
-	---------------------------------------------------
-	-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
-	---------------------------------------------------
-	--
-	Exec @myError = LookupPeptideDBLocations @message = @message output
-	
-	If @myError <> 0
-		Goto Done
+	End -- </a2>
 	
 	---------------------------------------------------
 	-- Count the number of Enzyme_ID entries in T_Process_Config
@@ -579,7 +634,7 @@ As
 	--
 	Set @continue = 1
 	While @continue = 1
-	Begin -- <PepDB>
+	Begin -- <a3>
 		Set @peptideDBName = ''
 		Set @peptideDBServer = ''
 		Set @peptideDBID = 0
@@ -596,7 +651,7 @@ As
 		If @myRowCount = 0
 			Set @continue = 0
 		Else
-		Begin -- <a>
+		Begin -- <b3>
 			---------------------------------------------------
 			-- Define the table where we will look up jobs from
 			---------------------------------------------------
@@ -631,7 +686,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <c3>
 				INSERT INTO #TmpJobsByDualKeyFilters (Job)
 				SELECT Convert(int, Value)
 				FROM #TmpFilterList
@@ -651,7 +706,7 @@ As
 					DELETE FROM #TmpJobsByDualKeyFilters
 					WHERE Job > @JobMaximum
 				
-			End
+			End -- </c3>
 
 			
 			---------------------------------------------------
@@ -672,7 +727,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- </c4>
 				INSERT INTO #TmpExperiments (Experiment)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -693,7 +748,7 @@ As
 					SELECT 'Experiment Inclusion', Experiment 
 					FROM #TmpExperiments
 			
-			End
+			End -- </c4>
 
 
 			---------------------------------------------------
@@ -711,7 +766,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <c5>
 				INSERT INTO #TmpExperimentsExcluded (Experiment)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -721,7 +776,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Experiment Exclusion', Experiment 
 					FROM #TmpExperimentsExcluded
-			End
+			End -- </c5>
 
 
 			---------------------------------------------------
@@ -740,7 +795,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <c6>
 				INSERT INTO #TmpDatasets (Dataset)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -760,7 +815,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Dataset Inclusion', Dataset 
 					FROM #TmpDatasets
-			End
+			End -- </c6>
 
 
 			---------------------------------------------------
@@ -838,7 +893,7 @@ As
 				set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON PT.Job = JobListQ.JobOverride ' + @Lf
 			End
 			Else			
-			Begin
+			Begin -- <c7>
 				set @S = @S + 'WHERE (' + @Lf
 					set @S = @S + @SCampaignAndAddnl
 					
@@ -898,7 +953,7 @@ As
 				Begin
 					set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) ' + @Lf
 				End
-			End
+			End -- </c7>
 			
 			set @S = @S + ') As LookupQ' + @Lf
 			set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description)' + @Lf
@@ -955,7 +1010,7 @@ As
 
 			-- Display the contents of #TmpNewAnalysisJobs (if not empty)
 			If Exists (SELECT TOP 1 * FROM #TmpNewAnalysisJobs)
-			Begin
+			Begin -- <c8>
 				If @PreviewSql <> 0
 				Begin
 					If Exists (SELECT TOP 1 * FROM #TmpNewAnalysisJobs WHERE Valid >= 250)
@@ -1023,7 +1078,7 @@ As
 					execute PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
 					Set @message = ''
 				End
-			End
+			End -- </c8>
 					
 			DELETE FROM #T_Peptide_Database_List
 			WHERE PeptideDBName = @peptideDBName
@@ -1040,8 +1095,8 @@ As
 				End
 			End
 
-		End -- </a>
-	End -- </PepDB>
+		End -- </b3>
+	End -- </a3>
 
 	-- how many rows did we add?
 	--

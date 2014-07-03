@@ -26,4 +26,5 @@ FROM ( SELECT QualityScores.PMT_Quality_Score,
      LEFT OUTER JOIN V_Filter_Set_Overview FSO
        ON PMTQS.PMT_Quality_Score = FSO.PMT_Quality_Score_Value
 
+
 GO

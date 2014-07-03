@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.RequestPeptideProphetTaskMaster
+create PROCEDURE RequestPeptideProphetTaskMaster
 /****************************************************
 **
 **	Desc:	For each database listed in T_PT_Database_List, calls the RequestPeptideProphetTask SP

@@ -10,17 +10,26 @@ CREATE TABLE [dbo].[T_MultiAlign_Task_Jobs](
  CONSTRAINT [PK_T_MultiAlign_Task_Jobs_Entry_ID] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_MultiAlign_Task_Jobs_Task_ID_Job] ******/
-CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MultiAlign_Task_Jobs_Task_ID_Job] ON [dbo].[T_MultiAlign_Task_Jobs] 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MultiAlign_Task_Jobs_Task_ID_Job] ON [dbo].[T_MultiAlign_Task_Jobs]
 (
 	[Task_ID] ASC,
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
+REFERENCES [dbo].[T_FTICR_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] CHECK CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_FTICR_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_MultiAlign_Task] FOREIGN KEY([Task_ID])
+REFERENCES [dbo].[T_MultiAlign_Task] ([Task_ID])
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] CHECK CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_MultiAlign_Task]
 GO
 /****** Object:  Trigger [dbo].[trig_d_T_MultiAlign_Task_Jobs] ******/
 SET ANSI_NULLS ON
@@ -132,14 +141,4 @@ AS
 		 ) JobQ ON MaT.Task_ID = JobQ.Task_ID
 
 
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_FTICR_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] CHECK CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_FTICR_Analysis_Description]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_MultiAlign_Task] FOREIGN KEY([Task_ID])
-REFERENCES [T_MultiAlign_Task] ([Task_ID])
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] CHECK CONSTRAINT [FK_T_MultiAlign_Task_Jobs_T_MultiAlign_Task]
 GO

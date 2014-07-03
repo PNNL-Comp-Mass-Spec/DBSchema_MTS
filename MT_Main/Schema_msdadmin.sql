@@ -1,3 +1,3 @@
 /****** Object:  Schema [msdadmin] ******/
-CREATE SCHEMA [msdadmin] AUTHORIZATION [msdadmin]
+CREATE SCHEMA [msdadmin]
 GO

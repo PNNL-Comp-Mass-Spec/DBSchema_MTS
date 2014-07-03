@@ -18,9 +18,23 @@ CREATE TABLE [dbo].[T_Datasets](
  CONSTRAINT [PK_T_Datasets] PRIMARY KEY CLUSTERED 
 (
 	[Dataset_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Created]  DEFAULT (getdate()) FOR [Created]
+GO
+ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Dataset_Process_State]  DEFAULT ((0)) FOR [Dataset_Process_State]
+GO
+ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY([Dataset_Process_State])
+REFERENCES [dbo].[T_Dataset_Process_State] ([ID])
+GO
+ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State]
 GO
 /****** Object:  Trigger [dbo].[trig_d_Datasets] ******/
 SET ANSI_NULLS ON
@@ -125,18 +139,4 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Dataset_ID = inserted.Dataset_ID
 		ORDER BY inserted.Dataset_ID
 
-GO
-ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Analysis_Description] FOREIGN KEY([SIC_Job])
-REFERENCES [T_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Analysis_Description]
-GO
-ALTER TABLE [dbo].[T_Datasets]  WITH CHECK ADD  CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State] FOREIGN KEY([Dataset_Process_State])
-REFERENCES [T_Dataset_Process_State] ([ID])
-GO
-ALTER TABLE [dbo].[T_Datasets] CHECK CONSTRAINT [FK_T_Datasets_T_Dataset_Process_State]
-GO
-ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Created]  DEFAULT (getdate()) FOR [Created]
-GO
-ALTER TABLE [dbo].[T_Datasets] ADD  CONSTRAINT [DF_T_Datasets_Dataset_Process_State]  DEFAULT ((0)) FOR [Dataset_Process_State]
 GO

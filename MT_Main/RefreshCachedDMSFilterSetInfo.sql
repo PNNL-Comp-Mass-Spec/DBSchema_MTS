@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSFilterSetInfo
+CREATE PROCEDURE RefreshCachedDMSFilterSetInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Filter_Set_Overview_Cached, 
@@ -239,7 +239,6 @@ Done:
 	drop table #Tmp_UpdateSummary
 	
 	Return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[RefreshCachedDMSFilterSetInfo] TO [MTS_DB_Dev] AS [dbo]

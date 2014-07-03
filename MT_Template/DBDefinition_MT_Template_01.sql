@@ -58,8 +58,6 @@ ALTER DATABASE [MT_Template_01] SET READ_COMMITTED_SNAPSHOT OFF
 GO
 ALTER DATABASE [MT_Template_01] SET HONOR_BROKER_PRIORITY OFF 
 GO
-ALTER DATABASE [MT_Template_01] SET  READ_WRITE 
-GO
 ALTER DATABASE [MT_Template_01] SET RECOVERY FULL 
 GO
 ALTER DATABASE [MT_Template_01] SET  MULTI_USER 
@@ -67,6 +65,35 @@ GO
 ALTER DATABASE [MT_Template_01] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [MT_Template_01] SET DB_CHAINING OFF 
+GO
+USE [MT_Template_01]
+GO
+/****** Object:  User [D3J410] ******/
+CREATE USER [D3J410] FOR LOGIN [PNL\D3J410] WITH DEFAULT_SCHEMA=[D3J410]
+GO
+/****** Object:  User [msdadmin] ******/
+CREATE USER [msdadmin] FOR LOGIN [PNL\MSDADMIN] WITH DEFAULT_SCHEMA=[msdadmin]
+GO
+/****** Object:  User [MTAdmin] ******/
+CREATE USER [MTAdmin] FOR LOGIN [mtadmin] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [MTS_DB_Dev] ******/
+CREATE USER [MTS_DB_Dev] FOR LOGIN [Albert\MTS_DB_Dev]
+GO
+/****** Object:  User [MTS_DB_Lite] ******/
+CREATE USER [MTS_DB_Lite] FOR LOGIN [Albert\MTS_DB_Lite]
+GO
+/****** Object:  User [MTS_DB_Reader] ******/
+CREATE USER [MTS_DB_Reader] FOR LOGIN [Albert\MTS_DB_Reader]
+GO
+/****** Object:  User [MTUser] ******/
+CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [pnl\MTSProc] ******/
+CREATE USER [pnl\MTSProc] FOR LOGIN [PNL\MTSProc] WITH DEFAULT_SCHEMA=[pnl\MTSProc]
+GO
+/****** Object:  User [pnl\svc-dms] ******/
+CREATE USER [pnl\svc-dms] FOR LOGIN [PNL\svc-dms] WITH DEFAULT_SCHEMA=[dbo]
 GO
 GRANT CONNECT TO [D3J410] AS [dbo]
 GO
@@ -93,4 +120,6 @@ GO
 GRANT SHOWPLAN TO [MTUser] AS [dbo]
 GO
 GRANT CONNECT TO [pnl\svc-dms] AS [dbo]
+GO
+ALTER DATABASE [MT_Template_01] SET  READ_WRITE 
 GO

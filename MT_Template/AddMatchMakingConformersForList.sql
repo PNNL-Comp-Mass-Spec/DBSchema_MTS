@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.AddMatchMakingConformersForList
+CREATE PROCEDURE AddMatchMakingConformersForList
 /****************************************************
 **
 **	Desc:	Calls AddMatchMakingConformers for each MDID in @MDIDList
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.AddMatchMakingConformersForList
 **	Date:	02/21/2011 mem - Initial version
 **			02/22/2011 mem - Added parameter @SortMode
 **			11/09/2011 mem - Added @DriftTimeToleranceFinal
+**			04/01/2014 mem - Added @MergeChargeStates
 **    
 *****************************************************/
 (
@@ -26,6 +27,7 @@ CREATE PROCEDURE dbo.AddMatchMakingConformersForList
 	@MaxFDRThreshold real = 0.95,				-- Set to a value less than 1 to filter by FDR
 	@MinimumUniquenessProbability real = 0.5,	-- Set to a value greater than 0 to filter by Uniqueness Probability (UP)
 	@DriftTimeTolerance real = 1000,			-- When processing each MDID, matching conformers must have drift times within this tolerance; defaults to a large value so we can intially create just one conformer for each charge state of each AMT tag ID
+	@MergeChargeStates tinyint = 1,				-- When 1, then ignores charge state when finding conformers
 	@FilterByExperimentMSMS tinyint = 1,		-- When 1, then requires that each identified AMT tag also be observed by MS/MS for this experiment
 	@SortMode tinyint = 0,						-- 0=Sort by AMT_Count_FDR columns in T_Match_Making_Description; 1=Sort by @MDIDList order
 	@message varchar(255) = '' output,
@@ -153,11 +155,13 @@ AS
 			Set @Continue = 0
 		Else
 		Begin -- <b>
+		
 			Exec @myError = AddMatchMakingConformers 
 									@MDID = @MDID,
 									@MaxFDRThreshold =@MaxFDRThreshold,
 									@MinimumUniquenessProbability =@MinimumUniquenessProbability,
 									@DriftTimeTolerance = @DriftTimeTolerance,
+									@MergeChargeStates = @MergeChargeStates,
 									@FilterByExperimentMSMS = @FilterByExperimentMSMS,
 									@InfoOnly = @InfoOnly,
 									@MaxIterations = @MaxIterations
@@ -171,11 +175,10 @@ AS
 	-----------------------------------------------------
 	--
 	If @DriftTimeToleranceFinal > 0
-		exec @myError = AddConformersViaSplitting @DriftTimeToleranceFinal, @InfoOnly = @InfoOnly
+		exec @myError = AddConformersViaSplitting @DriftTimeToleranceFinal, @MergeChargeStates, @InfoOnly = @InfoOnly
 		
 Done:
 
 	Return @myError
-
 
 GO

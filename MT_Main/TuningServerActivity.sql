@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create Procedure TuningServerActivity
+
+CREATE Procedure dbo.TuningServerActivity
 /****************************************************
 **
 **	Desc: 
@@ -244,4 +245,9 @@ Done:
 	
 	Return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[TuningServerActivity] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[TuningServerActivity] TO [MTS_DB_Lite] AS [dbo]
 GO

@@ -57,17 +57,9 @@ CREATE TABLE [dbo].[T_Quantitation_Description](
  CONSTRAINT [PK_T_Quantitation_Description] PRIMARY KEY CLUSTERED 
 (
 	[Quantitation_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
-GO
-
-/****** Object:  Index [IX_T_Quantitation_Description_Quantitation_State_include_QID] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Quantitation_Description_Quantitation_State_include_QID] ON [dbo].[T_Quantitation_Description] 
-(
-	[Quantitation_State] ASC
-)
-INCLUDE ( [Quantitation_ID]) WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
 GRANT DELETE ON [dbo].[T_Quantitation_Description] TO [DMS_SP_User] AS [dbo]
 GO
@@ -77,10 +69,12 @@ GRANT SELECT ON [dbo].[T_Quantitation_Description] TO [DMS_SP_User] AS [dbo]
 GO
 GRANT UPDATE ON [dbo].[T_Quantitation_Description] TO [DMS_SP_User] AS [dbo]
 GO
-ALTER TABLE [dbo].[T_Quantitation_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_Description_T_Quantitation_State_Name] FOREIGN KEY([Quantitation_State])
-REFERENCES [T_Quantitation_State_Name] ([Quantitation_State])
-GO
-ALTER TABLE [dbo].[T_Quantitation_Description] CHECK CONSTRAINT [FK_T_Quantitation_Description_T_Quantitation_State_Name]
+/****** Object:  Index [IX_T_Quantitation_Description_Quantitation_State_include_QID] ******/
+CREATE NONCLUSTERED INDEX [IX_T_Quantitation_Description_Quantitation_State_include_QID] ON [dbo].[T_Quantitation_Description]
+(
+	[Quantitation_State] ASC
+)
+INCLUDE ( 	[Quantitation_ID]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_QuantitationProcessingState]  DEFAULT ((1)) FOR [Quantitation_State]
 GO
@@ -149,4 +143,9 @@ GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Match_Score_Mode]  DEFAULT ((0)) FOR [Match_Score_Mode]
 GO
 ALTER TABLE [dbo].[T_Quantitation_Description] ADD  CONSTRAINT [DF_T_Quantitation_Description_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Quantitation_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Quantitation_Description_T_Quantitation_State_Name] FOREIGN KEY([Quantitation_State])
+REFERENCES [dbo].[T_Quantitation_State_Name] ([Quantitation_State])
+GO
+ALTER TABLE [dbo].[T_Quantitation_Description] CHECK CONSTRAINT [FK_T_Quantitation_Description_T_Quantitation_State_Name]
 GO

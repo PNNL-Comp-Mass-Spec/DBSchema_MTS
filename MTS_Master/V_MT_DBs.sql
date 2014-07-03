@@ -4,6 +4,8 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
+
 CREATE VIEW [dbo].[V_MT_DBs]
 AS
 SELECT Server_Name,
@@ -41,6 +43,8 @@ WHERE (Server_Active = 1 AND State_ID >= 15 OR
       NOT MT_DB_Name IN ( SELECT MT_DB_Name
                           FROM V_MTS_MT_DBs
                           WHERE Server_Active = 1 AND State_ID < 15 )
+
+
 
 
 GO

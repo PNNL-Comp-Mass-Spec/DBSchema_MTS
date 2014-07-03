@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.AddConformersViaSplitting
+CREATE PROCEDURE AddConformersViaSplitting
 /****************************************************
 **
 **	Desc:	Examines the observed drift times for each conformer in T_Mass_Tag_Conformers_Observed
@@ -21,10 +21,12 @@ CREATE PROCEDURE dbo.AddConformersViaSplitting
 **	Auth:	mem
 **	Date:	11/09/2010 mem - Initial version
 **			06/21/2013 mem - Moved determination of the next available conformer number for a given mass_tag_id to within the while loop processing each row in #Tmp_NewConformers
+**			04/01/2014 mem - Added @MergeChargeStates
 **    
 *****************************************************/
 (
 	@DriftTimeTolerance real = 0.35,			-- Matching conformers must have drift times within this tolerance
+	@MergeChargeStates tinyint = 1,				-- When 1, then ignores charge state when finding conformers
 	@ConformerIDFilterList varchar(max) = '',	
 	@InfoOnly tinyint = 0
 )
@@ -210,7 +212,7 @@ AS
 		--
 		-- This will define the new conformers that need to be added to T_Mass_Tag_Conformers_Observed
 		--
-		-- When computing Max_Conformer, we group by Mass_tag_id and charge, then add 1
+		-- When computing Max_Conformer, we group by Mass_Tag_ID and optionally by charge, then add 1
 		-----------------------------------------------------
 		--
 		INSERT INTO #Tmp_NewConformers ( Conformer_ID,
@@ -264,9 +266,10 @@ AS
 						Begin
 							Set @ConformerNumNew = 1
 							
-							SELECT @ConformerNumNew = MAX(Conformer) +1
+							SELECT @ConformerNumNew = MAX(Conformer) + 1
 							FROM T_Mass_Tag_Conformers_Observed
-							WHERE Mass_Tag_ID = @MassTagID AND Charge = @Charge
+							WHERE Mass_Tag_ID = @MassTagID AND 
+							      (Charge = @Charge OR @MergeChargeStates > 0)
 							
 							
 							INSERT INTO T_Mass_Tag_Conformers_Observed( Mass_Tag_ID,
@@ -506,6 +509,5 @@ AS
 Done:
 
 	Return @myError
-
 
 GO

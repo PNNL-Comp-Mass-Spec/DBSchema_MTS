@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE Procedure QueryAllMassTagDatabasesForNTerminalPeptides
 /****************************************************
 ** 
@@ -224,7 +225,7 @@ As
 				Set @Sql = @Sql +       ' MTPM.Residue_Start,'
 				Set @Sql = @Sql +       ' MT.Mass_Tag_ID,'
 				Set @Sql = @Sql +       ' MT.Peptide,'
-				Set @Sql = @Sql +       ' MT.Monoisotopic_Mass,'
+				Set @Sql = @Sql +     ' MT.Monoisotopic_Mass,'
 				Set @Sql = @Sql +      ' MT.Peptide_Obs_Count_Passing_Filter,'
 				Set @Sql = @Sql +       ' MT.High_Normalized_Score,'
 				Set @Sql = @Sql +       ' MT.High_Peptide_Prophet_Probability,'
@@ -332,4 +333,9 @@ Done:
 
 	return @myError
 
+
+GO
+GRANT VIEW DEFINITION ON [dbo].[QueryAllMassTagDatabasesForNTerminalPeptides] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[QueryAllMassTagDatabasesForNTerminalPeptides] TO [MTS_DB_Lite] AS [dbo]
 GO

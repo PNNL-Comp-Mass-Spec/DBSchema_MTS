@@ -38,35 +38,29 @@ CREATE TABLE [dbo].[T_Analysis_Job](
  CONSTRAINT [T_Analysis_Job_PK] PRIMARY KEY CLUSTERED 
 (
 	[Job_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_Analysis_Job_Server_Database] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Analysis_Job_Server_Database] ON [dbo].[T_Analysis_Job] 
+CREATE NONCLUSTERED INDEX [IX_T_Analysis_Job_Server_Database] ON [dbo].[T_Analysis_Job]
 (
 	[Task_Server] ASC,
 	[Task_Database] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_Analysis_Job_ToolID_TaskDB] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Analysis_Job_ToolID_TaskDB] ON [dbo].[T_Analysis_Job] 
+CREATE NONCLUSTERED INDEX [IX_T_Analysis_Job_ToolID_TaskDB] ON [dbo].[T_Analysis_Job]
 (
 	[Tool_ID] ASC,
 	[Task_Database] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Job_State_Name] FOREIGN KEY([State_ID])
-REFERENCES [T_Analysis_Job_State_Name] ([State_ID])
-GO
-ALTER TABLE [dbo].[T_Analysis_Job] CHECK CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Job_State_Name]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Tool] FOREIGN KEY([Tool_ID])
-REFERENCES [T_Analysis_Tool] ([Tool_ID])
-GO
-ALTER TABLE [dbo].[T_Analysis_Job] CHECK CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Tool]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Analysis_Job] ADD  CONSTRAINT [DF_T_Analysis_Job_Priority]  DEFAULT ((3)) FOR [Priority]
 GO
@@ -77,4 +71,14 @@ GO
 ALTER TABLE [dbo].[T_Analysis_Job] ADD  CONSTRAINT [DF_T_Analysis_Job_Analysis_Manager_Error]  DEFAULT ((0)) FOR [Analysis_Manager_Error]
 GO
 ALTER TABLE [dbo].[T_Analysis_Job] ADD  CONSTRAINT [DF_T_Analysis_Job_Analysis_Manager_Warning]  DEFAULT ((0)) FOR [Analysis_Manager_Warning]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Job_State_Name] FOREIGN KEY([State_ID])
+REFERENCES [dbo].[T_Analysis_Job_State_Name] ([State_ID])
+GO
+ALTER TABLE [dbo].[T_Analysis_Job] CHECK CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Job_State_Name]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Tool] FOREIGN KEY([Tool_ID])
+REFERENCES [dbo].[T_Analysis_Tool] ([Tool_ID])
+GO
+ALTER TABLE [dbo].[T_Analysis_Job] CHECK CONSTRAINT [FK_T_Analysis_Job_T_Analysis_Tool]
 GO

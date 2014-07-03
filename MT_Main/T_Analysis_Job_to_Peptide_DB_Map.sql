@@ -14,22 +14,21 @@ CREATE TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map](
 (
 	[Job] ASC,
 	[PDB_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_Analysis_Job_to_Peptide_DB_Map] ******/
-CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Analysis_Job_to_Peptide_DB_Map] ON [dbo].[T_Analysis_Job_to_Peptide_DB_Map] 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_Analysis_Job_to_Peptide_DB_Map] ON [dbo].[T_Analysis_Job_to_Peptide_DB_Map]
 (
 	[PDB_ID] ASC,
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_Peptide_Database_List] FOREIGN KEY([PDB_ID])
-REFERENCES [T_Peptide_Database_List] ([PDB_ID])
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map] CHECK CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_Peptide_Database_List]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map] ADD  CONSTRAINT [DF_T_Analysis_Job_to_Peptide_DB_Map_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_Peptide_Database_List] FOREIGN KEY([PDB_ID])
+REFERENCES [dbo].[T_Peptide_Database_List] ([PDB_ID])
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map] CHECK CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_Peptide_Database_List]
 GO

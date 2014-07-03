@@ -18,12 +18,12 @@ CREATE TABLE [dbo].[T_Internal_Std_to_Protein_Map](
 (
 	[Seq_ID] ASC,
 	[Internal_Std_Protein_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
 ALTER TABLE [dbo].[T_Internal_Std_to_Protein_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Internal_Std_to_Protein_Map_T_Internal_Std_Proteins] FOREIGN KEY([Internal_Std_Protein_ID])
-REFERENCES [T_Internal_Std_Proteins] ([Internal_Std_Protein_ID])
+REFERENCES [dbo].[T_Internal_Std_Proteins] ([Internal_Std_Protein_ID])
 GO
 ALTER TABLE [dbo].[T_Internal_Std_to_Protein_Map] CHECK CONSTRAINT [FK_T_Internal_Std_to_Protein_Map_T_Internal_Std_Proteins]
 GO

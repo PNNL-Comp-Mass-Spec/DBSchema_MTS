@@ -24,45 +24,28 @@ CREATE TABLE [dbo].[T_Histogram_Cache](
  CONSTRAINT [PK_T_Histogram_Cache] PRIMARY KEY CLUSTERED 
 (
 	[Histogram_Cache_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_Histogram_Cache_Histogram_Mode] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Histogram_Mode] ON [dbo].[T_Histogram_Cache] 
+CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Histogram_Mode] ON [dbo].[T_Histogram_Cache]
 (
 	[Histogram_Mode] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
-
 /****** Object:  Index [IX_T_Histogram_Cache_Query_Date] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Query_Date] ON [dbo].[T_Histogram_Cache] 
+CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Query_Date] ON [dbo].[T_Histogram_Cache]
 (
 	[Query_Date] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
-
 /****** Object:  Index [IX_T_Histogram_Cache_Score_Min_Max] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Score_Min_Max] ON [dbo].[T_Histogram_Cache] 
+CREATE NONCLUSTERED INDEX [IX_T_Histogram_Cache_Score_Min_Max] ON [dbo].[T_Histogram_Cache]
 (
 	[Score_Minimum] ASC,
 	[Score_Maximum] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Cache_State_Name] FOREIGN KEY([Histogram_Cache_State])
-REFERENCES [T_Histogram_Cache_State_Name] ([Histogram_Cache_State])
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Cache_State_Name]
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Mode_Name] FOREIGN KEY([Histogram_Mode])
-REFERENCES [T_Histogram_Mode_Name] ([Histogram_Mode])
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Mode_Name]
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter] CHECK  (([Result_Type_Filter]='' OR [Result_Type_Filter]='Peptide_Hit' OR [Result_Type_Filter]='XT_Peptide_Hit'))
-GO
-ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Score_Minimum]  DEFAULT (0) FOR [Score_Minimum]
 GO
@@ -93,4 +76,18 @@ GO
 ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Histogram_Cache_State]  DEFAULT (0) FOR [Histogram_Cache_State]
 GO
 ALTER TABLE [dbo].[T_Histogram_Cache] ADD  CONSTRAINT [DF_T_Histogram_Cache_Auto_Update]  DEFAULT (0) FOR [Auto_Update]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Cache_State_Name] FOREIGN KEY([Histogram_Cache_State])
+REFERENCES [dbo].[T_Histogram_Cache_State_Name] ([Histogram_Cache_State])
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Cache_State_Name]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Mode_Name] FOREIGN KEY([Histogram_Mode])
+REFERENCES [dbo].[T_Histogram_Mode_Name] ([Histogram_Mode])
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [FK_T_Histogram_Cache_T_Histogram_Mode_Name]
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache]  WITH CHECK ADD  CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter] CHECK  (([Result_Type_Filter]='' OR [Result_Type_Filter]='Peptide_Hit' OR [Result_Type_Filter]='XT_Peptide_Hit'))
+GO
+ALTER TABLE [dbo].[T_Histogram_Cache] CHECK CONSTRAINT [CK_T_Histogram_Cache_Result_Type_Filter]
 GO

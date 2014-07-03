@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE Procedure QueryAllMassTagDatabasesForPeakMatchingStats
+
+CREATE Procedure dbo.QueryAllMassTagDatabasesForPeakMatchingStats
 /****************************************************
 ** 
 **	Desc: Queries each database to obtain stats on the 
@@ -272,6 +273,7 @@ Done:
 		SELECT 'Done: Processed ' + Convert(varchar(9), @processCount) + ' databases' As Message
 
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[QueryAllMassTagDatabasesForPeakMatchingStats] TO [MTS_DB_Dev] AS [dbo]

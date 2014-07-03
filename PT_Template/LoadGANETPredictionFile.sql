@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure LoadGANETPredictionFile
 /****************************************************
 **
@@ -297,6 +298,7 @@ AS
 	-----------------------------------------------
 Done:	
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadGANETPredictionFile] TO [MTS_DB_Dev] AS [dbo]

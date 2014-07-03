@@ -30,9 +30,60 @@ CREATE TABLE [dbo].[T_MultiAlign_Task](
  CONSTRAINT [PK_T_MultiAlign_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Param_File_Name]  DEFAULT ('') FOR [Param_File_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Priority]  DEFAULT ((5)) FOR [Priority]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Task_JobCount]  DEFAULT ((0)) FOR [Job_Count]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Creation_Date]  DEFAULT (getdate()) FOR [Task_Created]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
+REFERENCES [dbo].[T_Peak_Matching_NET_Value_Type_Name] ([NET_Value_Type])
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_NET_Value_Type_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
+REFERENCES [dbo].[T_Peak_Matching_Task_State_Name] ([Processing_State])
+ON UPDATE CASCADE
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_Task_State_Name]
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Param_File_Name],''))=(0) AND charindex(char((13)),isnull([Param_File_Name],''))=(0)))
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF]
 GO
 /****** Object:  Trigger [dbo].[trig_i_T_MultiAlign_Task] ******/
 SET ANSI_NULLS ON
@@ -137,55 +188,4 @@ AS
 
 	End
 
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
-REFERENCES [T_Peak_Matching_NET_Value_Type_Name] ([NET_Value_Type])
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_NET_Value_Type_Name]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
-REFERENCES [T_Peak_Matching_Task_State_Name] ([Processing_State])
-ON UPDATE CASCADE
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [FK_T_MultiAlign_Task_T_Peak_Matching_Task_State_Name]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Param_File_Name],''))=(0) AND charindex(char((13)),isnull([Param_File_Name],''))=(0)))
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] CHECK CONSTRAINT [CK_T_MultiAlign_Task_ParamFileName_CRLF]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Param_File_Name]  DEFAULT ('') FOR [Param_File_Name]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Priority]  DEFAULT ((5)) FOR [Priority]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Task_JobCount]  DEFAULT ((0)) FOR [Job_Count]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Creation_Date]  DEFAULT (getdate()) FOR [Task_Created]
-GO
-ALTER TABLE [dbo].[T_MultiAlign_Task] ADD  CONSTRAINT [DF_T_MultiAlign_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

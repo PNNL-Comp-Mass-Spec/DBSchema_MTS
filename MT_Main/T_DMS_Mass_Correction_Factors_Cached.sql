@@ -18,9 +18,17 @@ CREATE TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached](
  CONSTRAINT [PK_DMS_Mass_Correction_Factors_Cached] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Correction_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Affected_Atom]  DEFAULT ('-') FOR [Affected_Atom]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source]  DEFAULT ('') FOR [Original_Source]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source_Name]  DEFAULT ('') FOR [Original_Source_Name]
+GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO
 /****** Object:  Trigger [dbo].[trig_u_DMS_Mass_Correction_Factors_Cached] ******/
 SET ANSI_NULLS ON
@@ -46,12 +54,4 @@ AS
 			FROM T_DMS_Mass_Correction_Factors_Cached MCF INNER JOIN 
 				 inserted ON MCF.Mass_Correction_ID = inserted.Mass_Correction_ID
 
-GO
-ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Affected_Atom]  DEFAULT ('-') FOR [Affected_Atom]
-GO
-ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source]  DEFAULT ('') FOR [Original_Source]
-GO
-ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Original_Source_Name]  DEFAULT ('') FOR [Original_Source_Name]
-GO
-ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ADD  CONSTRAINT [DF_T_Mass_Correction_Factors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

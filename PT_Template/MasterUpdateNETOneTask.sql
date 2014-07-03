@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.MasterUpdateNETOneTask
 /****************************************************
 **
@@ -336,6 +337,7 @@ UpdateJobStates:
 
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[MasterUpdateNETOneTask] TO [MTS_DB_Dev] AS [dbo]

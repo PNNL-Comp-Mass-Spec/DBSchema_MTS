@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE BackupPTTemplateDatabase
+create PROCEDURE BackupPTTemplateDatabase
 /****************************************************
 **
 **	Desc: Backs up the PT Template DB to PT_Template_01

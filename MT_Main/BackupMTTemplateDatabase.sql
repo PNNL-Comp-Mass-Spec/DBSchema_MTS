@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE BackupMTTemplateDatabase
+create PROCEDURE BackupMTTemplateDatabase
 /****************************************************
 **
 **	Desc: Backs up the MT Template DB to MT_Template_01

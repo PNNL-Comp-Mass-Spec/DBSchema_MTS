@@ -1,8 +1,8 @@
 /****** Object:  Database [MT_Main] ******/
 CREATE DATABASE [MT_Main] ON  PRIMARY 
-( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2042112KB , MAXSIZE = UNLIMITED, FILEGROWTH = 80KB )
+( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2046720KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 30080KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 454976KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MT_Main] SET COMPATIBILITY_LEVEL = 100
@@ -58,8 +58,6 @@ ALTER DATABASE [MT_Main] SET READ_COMMITTED_SNAPSHOT OFF
 GO
 ALTER DATABASE [MT_Main] SET HONOR_BROKER_PRIORITY OFF 
 GO
-ALTER DATABASE [MT_Main] SET  READ_WRITE 
-GO
 ALTER DATABASE [MT_Main] SET RECOVERY FULL 
 GO
 ALTER DATABASE [MT_Main] SET  MULTI_USER 
@@ -67,6 +65,38 @@ GO
 ALTER DATABASE [MT_Main] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [MT_Main] SET DB_CHAINING OFF 
+GO
+USE [MT_Main]
+GO
+/****** Object:  User [d3m578] ******/
+CREATE USER [d3m578] FOR LOGIN [PNL\D3M578] WITH DEFAULT_SCHEMA=[d3m578]
+GO
+/****** Object:  User [msdadmin] ******/
+CREATE USER [msdadmin] FOR LOGIN [PNL\MSDADMIN] WITH DEFAULT_SCHEMA=[msdadmin]
+GO
+/****** Object:  User [MTAdmin] ******/
+CREATE USER [MTAdmin] FOR LOGIN [mtadmin] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [MTS_DB_Dev] ******/
+CREATE USER [MTS_DB_Dev] FOR LOGIN [Pogo\MTS_DB_Dev]
+GO
+/****** Object:  User [MTS_DB_Lite] ******/
+CREATE USER [MTS_DB_Lite] FOR LOGIN [Pogo\MTS_DB_Lite]
+GO
+/****** Object:  User [MTS_DB_Reader] ******/
+CREATE USER [MTS_DB_Reader] FOR LOGIN [Pogo\MTS_DB_Reader]
+GO
+/****** Object:  User [MTUser] ******/
+CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [PNL\D3M580] ******/
+CREATE USER [PNL\D3M580] FOR LOGIN [PNL\D3M580] WITH DEFAULT_SCHEMA=[PNL\D3M580]
+GO
+/****** Object:  User [pnl\MTSProc] ******/
+CREATE USER [pnl\MTSProc] FOR LOGIN [PNL\MTSProc] WITH DEFAULT_SCHEMA=[pnl\MTSProc]
+GO
+/****** Object:  User [pnl\svc-dms] ******/
+CREATE USER [pnl\svc-dms] FOR LOGIN [PNL\svc-dms] WITH DEFAULT_SCHEMA=[dbo]
 GO
 GRANT CONNECT TO [d3m578] AS [dbo]
 GO
@@ -97,4 +127,6 @@ GO
 GRANT CONNECT TO [pnl\d3m651] AS [dbo]
 GO
 GRANT CONNECT TO [pnl\svc-dms] AS [dbo]
+GO
+ALTER DATABASE [MT_Main] SET  READ_WRITE 
 GO

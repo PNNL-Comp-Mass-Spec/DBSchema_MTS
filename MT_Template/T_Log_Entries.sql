@@ -13,9 +13,13 @@ CREATE TABLE [dbo].[T_Log_Entries](
  CONSTRAINT [PK_T_Log_Entries] PRIMARY KEY CLUSTERED 
 (
 	[Entry_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_posting_time]  DEFAULT (getdate()) FOR [posting_time]
+GO
+ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_Log_Entries] ******/
 SET ANSI_NULLS ON
@@ -70,8 +74,4 @@ AS
 
 	End
 
-GO
-ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_posting_time]  DEFAULT (getdate()) FOR [posting_time]
-GO
-ALTER TABLE [dbo].[T_Log_Entries] ADD  CONSTRAINT [DF_T_Log_Entries_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

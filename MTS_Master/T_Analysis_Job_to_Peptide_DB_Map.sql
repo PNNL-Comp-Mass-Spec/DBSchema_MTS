@@ -16,12 +16,12 @@ CREATE TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map](
 	[Server_ID] ASC,
 	[Job] ASC,
 	[Peptide_DB_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_MTS_Servers] FOREIGN KEY([Server_ID])
-REFERENCES [T_MTS_Servers] ([Server_ID])
+REFERENCES [dbo].[T_MTS_Servers] ([Server_ID])
 GO
 ALTER TABLE [dbo].[T_Analysis_Job_to_Peptide_DB_Map] CHECK CONSTRAINT [FK_T_Analysis_Job_to_Peptide_DB_Map_T_MTS_Servers]
 GO

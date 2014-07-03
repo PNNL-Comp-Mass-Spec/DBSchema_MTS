@@ -15,9 +15,18 @@ CREATE TABLE [dbo].[T_Analysis_Tool](
  CONSTRAINT [T_Analysis_Tool_PK] PRIMARY KEY CLUSTERED 
 (
 	[Tool_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Tool_Active]  DEFAULT ((1)) FOR [Tool_Active]
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Cache_Update_State]  DEFAULT ((1)) FOR [Cache_Update_State]
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Tool_T_Analysis_Task_Cache_Update_State_Name] FOREIGN KEY([Cache_Update_State])
+REFERENCES [dbo].[T_Analysis_Task_Cache_Update_State_Name] ([Cache_Update_State])
+GO
+ALTER TABLE [dbo].[T_Analysis_Tool] CHECK CONSTRAINT [FK_T_Analysis_Tool_T_Analysis_Task_Cache_Update_State_Name]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_Analysis_Tool] ******/
 SET ANSI_NULLS ON
@@ -56,13 +65,4 @@ AS
 	End
 
 
-GO
-ALTER TABLE [dbo].[T_Analysis_Tool]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Tool_T_Analysis_Task_Cache_Update_State_Name] FOREIGN KEY([Cache_Update_State])
-REFERENCES [T_Analysis_Task_Cache_Update_State_Name] ([Cache_Update_State])
-GO
-ALTER TABLE [dbo].[T_Analysis_Tool] CHECK CONSTRAINT [FK_T_Analysis_Tool_T_Analysis_Task_Cache_Update_State_Name]
-GO
-ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Tool_Active]  DEFAULT ((1)) FOR [Tool_Active]
-GO
-ALTER TABLE [dbo].[T_Analysis_Tool] ADD  CONSTRAINT [DF_T_Analysis_Tool_Cache_Update_State]  DEFAULT ((1)) FOR [Cache_Update_State]
 GO

@@ -41,6 +41,7 @@ CREATE Procedure MakeNewMassTagDB
 **			06/06/2007 mem - Updated default MTL_Import_Holdoff from 48 to 12 hours
 **			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
+**			04/14/2014 mem - Now checking for the name containing a space or carriage return
 **    
 *****************************************************/
 (
@@ -92,6 +93,17 @@ AS
 		Set @proteinDBName = '(na)'
 		
 	Set @InfoOnly = IsNull(@InfoOnly, 0)
+
+	---------------------------------------------------
+	-- Check for invalid characters in @newDBNameRoot
+	---------------------------------------------------
+	
+	Set @newDBNameRoot = LTrim(RTrim(IsNull(@newDBNameRoot, '')))
+	
+	Exec @myError = ValidateDBName @newDBNameRoot, @message output
+	
+	If @myError <> 0
+		Goto Done
 
 	---------------------------------------------------
 	-- Verify peptide DB (or DBs)

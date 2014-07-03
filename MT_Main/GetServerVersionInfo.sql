@@ -3,7 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE GetServerVersionInfo
+create PROCEDURE GetServerVersionInfo
 /****************************************************
 ** 
 **	Desc: Returns the version numbers of the current instance of Sql Server
@@ -101,7 +101,7 @@ As
 
 Done:
 	Return @myError
-	
+
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetServerVersionInfo] TO [MTS_DB_Dev] AS [dbo]
 GO

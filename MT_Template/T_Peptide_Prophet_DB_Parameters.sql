@@ -21,9 +21,13 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_DB_Parameters](
 (
 	[Charge_State] ASC,
 	[Tryptic_State] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Parameters] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Parameters_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Parameters] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Parameters_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_Peptide_Prophet_DB_Parameters] ******/
 SET ANSI_NULLS ON
@@ -59,8 +63,4 @@ AS
 			 inserted ON PPDP.Charge_State = inserted.Charge_State
 	End
 
-GO
-ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Parameters] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Parameters_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
-GO
-ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Parameters] ADD  CONSTRAINT [DF_T_Peptide_Prophet_DB_Parameters_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

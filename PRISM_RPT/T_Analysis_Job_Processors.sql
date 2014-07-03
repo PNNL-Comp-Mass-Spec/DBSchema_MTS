@@ -14,13 +14,24 @@ CREATE TABLE [dbo].[T_Analysis_Job_Processors](
  CONSTRAINT [T_Analysis_Job_Processors_PK] PRIMARY KEY NONCLUSTERED 
 (
 	[ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY],
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
  CONSTRAINT [IX_T_Analysis_Job_Processors] UNIQUE NONCLUSTERED 
 (
 	[Processor_Name] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_State]  DEFAULT ('E') FOR [State]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_Processors_T_Analysis_Job_Processor_State_Name] FOREIGN KEY([State])
+REFERENCES [dbo].[T_Analysis_Job_Processor_State_Name] ([State])
+GO
+ALTER TABLE [dbo].[T_Analysis_Job_Processors] CHECK CONSTRAINT [FK_T_Analysis_Job_Processors_T_Analysis_Job_Processor_State_Name]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_Analysis_Job_Processors] ******/
 SET ANSI_NULLS ON
@@ -62,15 +73,4 @@ AS
 			 inserted ON T_Analysis_Job_Processors.ID = inserted.ID
 	End
 
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_Processors]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Job_Processors_T_Analysis_Job_Processor_State_Name] FOREIGN KEY([State])
-REFERENCES [T_Analysis_Job_Processor_State_Name] ([State])
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_Processors] CHECK CONSTRAINT [FK_T_Analysis_Job_Processors_T_Analysis_Job_Processor_State_Name]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_State]  DEFAULT ('E') FOR [State]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
-GO
-ALTER TABLE [dbo].[T_Analysis_Job_Processors] ADD  CONSTRAINT [DF_T_Analysis_Job_Processors_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

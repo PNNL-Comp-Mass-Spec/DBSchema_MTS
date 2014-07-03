@@ -15,19 +15,21 @@ CREATE TABLE [dbo].[T_Seq_Candidate_ModSummary](
  CONSTRAINT [PK_T_Seq_Candidate_ModSummary] PRIMARY KEY CLUSTERED 
 (
 	[Seq_Candidate_ModSummary_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_Seq_Candidate_ModSummary_Mass_Correction_Tag] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Seq_Candidate_ModSummary_Mass_Correction_Tag] ON [dbo].[T_Seq_Candidate_ModSummary] 
+CREATE NONCLUSTERED INDEX [IX_T_Seq_Candidate_ModSummary_Mass_Correction_Tag] ON [dbo].[T_Seq_Candidate_ModSummary]
 (
 	[Mass_Correction_Tag] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_ModSummary]  WITH CHECK ADD  CONSTRAINT [FK_T_Seq_Candidate_ModSummary_T_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_Analysis_Description] ([Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
 GO
 ALTER TABLE [dbo].[T_Seq_Candidate_ModSummary] CHECK CONSTRAINT [FK_T_Seq_Candidate_ModSummary_T_Analysis_Description]
 GO

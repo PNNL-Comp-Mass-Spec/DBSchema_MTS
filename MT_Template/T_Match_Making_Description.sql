@@ -59,34 +59,9 @@ CREATE TABLE [dbo].[T_Match_Making_Description](
  CONSTRAINT [PK_T_MatchMaking_Description] PRIMARY KEY CLUSTERED 
 (
 	[MD_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description] FOREIGN KEY([MD_Reference_Job])
-REFERENCES [T_FTICR_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description]
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode] FOREIGN KEY([Match_Score_Mode])
-REFERENCES [T_MMD_Match_Score_Mode] ([Match_Score_Mode])
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode]
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name] FOREIGN KEY([MD_State])
-REFERENCES [T_MMD_State_Name] ([MD_State])
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name]
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name] FOREIGN KEY([MD_Type])
-REFERENCES [T_MMD_Type_Name] ([MD_Type])
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name]
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection] FOREIGN KEY([PMT_Collection_ID])
-REFERENCES [T_PMT_Collection] ([PMT_Collection_ID])
-GO
-ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection]
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_MatchMaking_Description_mmState]  DEFAULT ((1)) FOR [MD_State]
 GO
@@ -119,4 +94,29 @@ GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_Match_Score_Mode]  DEFAULT ((0)) FOR [Match_Score_Mode]
 GO
 ALTER TABLE [dbo].[T_Match_Making_Description] ADD  CONSTRAINT [DF_T_Match_Making_Description_STAC_Used_Prior_Probability]  DEFAULT ((0)) FOR [STAC_Used_Prior_Probability]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description] FOREIGN KEY([MD_Reference_Job])
+REFERENCES [dbo].[T_FTICR_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_FTICR_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode] FOREIGN KEY([Match_Score_Mode])
+REFERENCES [dbo].[T_MMD_Match_Score_Mode] ([Match_Score_Mode])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Match_Score_Mode]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name] FOREIGN KEY([MD_State])
+REFERENCES [dbo].[T_MMD_State_Name] ([MD_State])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_State_Name]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name] FOREIGN KEY([MD_Type])
+REFERENCES [dbo].[T_MMD_Type_Name] ([MD_Type])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_MMD_Type_Name]
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection] FOREIGN KEY([PMT_Collection_ID])
+REFERENCES [dbo].[T_PMT_Collection] ([PMT_Collection_ID])
+GO
+ALTER TABLE [dbo].[T_Match_Making_Description] CHECK CONSTRAINT [FK_T_Match_Making_Description_T_PMT_Collection]
 GO

@@ -12,22 +12,21 @@ CREATE TABLE [dbo].[T_Mass_Tag_Mod_Info](
  CONSTRAINT [PK_T_Mass_Tag_Mod_Info] PRIMARY KEY NONCLUSTERED 
 (
 	[Entry_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
-
 /****** Object:  Index [IX_T_Mass_Tag_Mod_Info_Mass_Tag_ID_Mod_Position] ******/
-CREATE CLUSTERED INDEX [IX_T_Mass_Tag_Mod_Info_Mass_Tag_ID_Mod_Position] ON [dbo].[T_Mass_Tag_Mod_Info] 
+CREATE CLUSTERED INDEX [IX_T_Mass_Tag_Mod_Info_Mass_Tag_ID_Mod_Position] ON [dbo].[T_Mass_Tag_Mod_Info]
 (
 	[Mass_Tag_ID] ASC,
 	[Mod_Position] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-GO
-ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tag_Mod_Info_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
-REFERENCES [T_Mass_Tags] ([Mass_Tag_ID])
-GO
-ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info] CHECK CONSTRAINT [FK_T_Mass_Tag_Mod_Info_T_Mass_Tags]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
 ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info] ADD  CONSTRAINT [DF_T_Mass_Tag_Mod_Info_Entered]  DEFAULT (getdate()) FOR [Entered]
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info]  WITH CHECK ADD  CONSTRAINT [FK_T_Mass_Tag_Mod_Info_T_Mass_Tags] FOREIGN KEY([Mass_Tag_ID])
+REFERENCES [dbo].[T_Mass_Tags] ([Mass_Tag_ID])
+GO
+ALTER TABLE [dbo].[T_Mass_Tag_Mod_Info] CHECK CONSTRAINT [FK_T_Mass_Tag_Mod_Info_T_Mass_Tags]
 GO

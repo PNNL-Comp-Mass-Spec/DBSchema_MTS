@@ -93,8 +93,6 @@ AS
 
 Done:
 	return @myError
-
-
 GO
 GRANT VIEW DEFINITION ON [dbo].[MakeGANETTransferFolderForDB] TO [MTS_DB_Dev] AS [dbo]
 GO

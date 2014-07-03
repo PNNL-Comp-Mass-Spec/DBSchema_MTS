@@ -20,28 +20,28 @@ CREATE TABLE [dbo].[T_Joined_Job_Details](
 (
 	[Joined_Job_ID] ASC,
 	[Section] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY],
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
  CONSTRAINT [IX_T_Joined_Job_Details] UNIQUE NONCLUSTERED 
 (
 	[Joined_Job_ID] ASC,
 	[Source_Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
-GO
-ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID] FOREIGN KEY([Joined_Job_ID])
-REFERENCES [T_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID]
-GO
-ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job] FOREIGN KEY([Source_Job])
-REFERENCES [T_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job]
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Gap_to_Next_Section_Minutes]  DEFAULT (0) FOR [Gap_to_Next_Section_Minutes]
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Scan_Number_Added]  DEFAULT (0) FOR [Scan_Number_Added]
 GO
 ALTER TABLE [dbo].[T_Joined_Job_Details] ADD  CONSTRAINT [DF_T_Joined_Job_Details_Scan_Time_Added]  DEFAULT (0) FOR [Scan_Time_Added]
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID] FOREIGN KEY([Joined_Job_ID])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_MetaJob_ID]
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details]  WITH CHECK ADD  CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job] FOREIGN KEY([Source_Job])
+REFERENCES [dbo].[T_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Joined_Job_Details] CHECK CONSTRAINT [FK_T_Joined_Job_Details_T_Analysis_Description_Source_Job]
 GO

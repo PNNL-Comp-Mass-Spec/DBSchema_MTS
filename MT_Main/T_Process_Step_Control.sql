@@ -15,9 +15,34 @@ CREATE TABLE [dbo].[T_Process_Step_Control](
  CONSTRAINT [PK_T_Process_Step_Control] PRIMARY KEY CLUSTERED 
 (
 	[Processing_Step_Name] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Execution_State]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Date]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Description]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Update_Count]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Pause_Location]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Affected]) TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Entered_By]) TO [DMS_SP_User] AS [dbo]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Execution_State]  DEFAULT (0) FOR [Execution_State]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States] FOREIGN KEY([Execution_State])
+REFERENCES [dbo].[T_Process_Step_Control_States] ([Execution_State])
+GO
+ALTER TABLE [dbo].[T_Process_Step_Control] CHECK CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_Process_Step_Control] ******/
 SET ANSI_NULLS ON
@@ -57,29 +82,4 @@ AS
 	End
 
 
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Execution_State]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Date]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Description]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Query_Update_Count]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Pause_Location]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Last_Affected]) TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Process_Step_Control] ([Entered_By]) TO [DMS_SP_User] AS [dbo]
-GO
-ALTER TABLE [dbo].[T_Process_Step_Control]  WITH CHECK ADD  CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States] FOREIGN KEY([Execution_State])
-REFERENCES [T_Process_Step_Control_States] ([Execution_State])
-GO
-ALTER TABLE [dbo].[T_Process_Step_Control] CHECK CONSTRAINT [FK_T_Process_Step_Control_T_Process_Step_Control_States]
-GO
-ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Execution_State]  DEFAULT (0) FOR [Execution_State]
-GO
-ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
-GO
-ALTER TABLE [dbo].[T_Process_Step_Control] ADD  CONSTRAINT [DF_T_Process_Step_Control_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

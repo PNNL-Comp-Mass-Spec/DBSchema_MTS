@@ -23,16 +23,31 @@ CREATE TABLE [dbo].[T_MT_Database_List](
  CONSTRAINT [PK_T_MT_Database_List] PRIMARY KEY CLUSTERED 
 (
 	[MTL_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_MT_Database_List] ******/
-CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MT_Database_List] ON [dbo].[T_MT_Database_List] 
+CREATE UNIQUE NONCLUSTERED INDEX [IX_T_MT_Database_List] ON [dbo].[T_MT_Database_List]
 (
 	[MTL_Name] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Import_Holdoff]  DEFAULT ((12)) FOR [MTL_Import_Holdoff]
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Created]  DEFAULT (getdate()) FOR [MTL_Created]
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Max_Jobs_To_Process]  DEFAULT (500) FOR [MTL_Max_Jobs_To_Process]
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_DB_Schema_Version]  DEFAULT (2.0) FOR [MTL_DB_Schema_Version]
+GO
+ALTER TABLE [dbo].[T_MT_Database_List]  WITH CHECK ADD  CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name] FOREIGN KEY([MTL_State])
+REFERENCES [dbo].[T_MT_Database_State_Name] ([ID])
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] CHECK CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name]
 GO
 /****** Object:  Trigger [dbo].[trig_d_MT_Database_List] ******/
 SET ANSI_NULLS ON
@@ -124,17 +139,4 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.MTL_ID = inserted.MTL_ID
 
 
-GO
-ALTER TABLE [dbo].[T_MT_Database_List]  WITH CHECK ADD  CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name] FOREIGN KEY([MTL_State])
-REFERENCES [T_MT_Database_State_Name] ([ID])
-GO
-ALTER TABLE [dbo].[T_MT_Database_List] CHECK CONSTRAINT [FK_T_MT_Database_List_T_MT_Database_State_Name]
-GO
-ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Import_Holdoff]  DEFAULT ((12)) FOR [MTL_Import_Holdoff]
-GO
-ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Created]  DEFAULT (getdate()) FOR [MTL_Created]
-GO
-ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_Max_Jobs_To_Process]  DEFAULT (500) FOR [MTL_Max_Jobs_To_Process]
-GO
-ALTER TABLE [dbo].[T_MT_Database_List] ADD  CONSTRAINT [DF_T_MT_Database_List_MTL_DB_Schema_Version]  DEFAULT (2.0) FOR [MTL_DB_Schema_Version]
 GO

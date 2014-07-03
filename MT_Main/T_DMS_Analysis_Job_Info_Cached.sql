@@ -42,31 +42,43 @@ CREATE TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached](
  CONSTRAINT [PK_T_DMS_Analysis_Job_Info_Cached] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_DMS_Analysis_Job_Info_Cached_Dataset] ******/
-CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Dataset] ON [dbo].[T_DMS_Analysis_Job_Info_Cached] 
+CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Dataset] ON [dbo].[T_DMS_Analysis_Job_Info_Cached]
 (
 	[Dataset] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_DMS_Analysis_Job_Info_Cached_Experiment] ******/
-CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached] 
+CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached]
 (
 	[Experiment] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_DMS_Analysis_Job_Info_Cached_Organism_Experiment] ******/
-CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Organism_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached] 
+CREATE NONCLUSTERED INDEX [IX_T_DMS_Analysis_Job_Info_Cached_Organism_Experiment] ON [dbo].[T_DMS_Analysis_Job_Info_Cached]
 (
 	[Organism] ASC,
 	[Experiment] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_RequestID]  DEFAULT ((1)) FOR [RequestID]
+GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
+GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO
 /****** Object:  Trigger [dbo].[trig_u_DMS_Analysis_Job_Info_Cached] ******/
 SET ANSI_NULLS ON
@@ -119,10 +131,4 @@ AS
 				 inserted ON AJ.Job = inserted.Job
 	End
 
-GO
-ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_RequestID]  DEFAULT ((1)) FOR [RequestID]
-GO
-ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
-GO
-ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ADD  CONSTRAINT [DF_T_DMS_Analysis_Job_Info_Cached_Last_Affected]  DEFAULT (getdate()) FOR [Last_Affected]
 GO

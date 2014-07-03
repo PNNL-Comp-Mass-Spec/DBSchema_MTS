@@ -4,8 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-
 CREATE VIEW [dbo].[V_Peak_Matching_Tasks]
 AS
 SELECT AnTool.Tool_Name,
@@ -44,6 +42,7 @@ FROM T_Analysis_Job AJ
        ON AJ.Job_ID = AJTJ.Job_ID
 WHERE AJ.State_ID < 100 AND 
       ISNULL(AJ.MD_State, 0) <> 7
+
 
 
 GO

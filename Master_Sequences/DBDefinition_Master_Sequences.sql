@@ -1,8 +1,8 @@
 /****** Object:  Database [Master_Sequences] ******/
 CREATE DATABASE [Master_Sequences] ON  PRIMARY 
-( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 153202624KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 185375168KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 1898240KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 224448KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [Master_Sequences] SET COMPATIBILITY_LEVEL = 100
@@ -58,8 +58,6 @@ ALTER DATABASE [Master_Sequences] SET READ_COMMITTED_SNAPSHOT OFF
 GO
 ALTER DATABASE [Master_Sequences] SET HONOR_BROKER_PRIORITY OFF 
 GO
-ALTER DATABASE [Master_Sequences] SET  READ_WRITE 
-GO
 ALTER DATABASE [Master_Sequences] SET RECOVERY FULL 
 GO
 ALTER DATABASE [Master_Sequences] SET  MULTI_USER 
@@ -67,6 +65,29 @@ GO
 ALTER DATABASE [Master_Sequences] SET PAGE_VERIFY CHECKSUM  
 GO
 ALTER DATABASE [Master_Sequences] SET DB_CHAINING OFF 
+GO
+USE [Master_Sequences]
+GO
+/****** Object:  User [MTAdmin] ******/
+CREATE USER [MTAdmin] FOR LOGIN [mtadmin] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [MTS_DB_Dev] ******/
+CREATE USER [MTS_DB_Dev] FOR LOGIN [ProteinSeqs2\MTS_DB_Dev]
+GO
+/****** Object:  User [MTS_DB_Lite] ******/
+CREATE USER [MTS_DB_Lite] FOR LOGIN [ProteinSeqs2\MTS_DB_Lite]
+GO
+/****** Object:  User [MTS_DB_Reader] ******/
+CREATE USER [MTS_DB_Reader] FOR LOGIN [ProteinSeqs2\MTS_DB_Reader]
+GO
+/****** Object:  User [MTUser] ******/
+CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
+GO
+/****** Object:  User [PNL\D3M578] ******/
+CREATE USER [PNL\D3M578] FOR LOGIN [PNL\D3M578] WITH DEFAULT_SCHEMA=[PNL\D3M578]
+GO
+/****** Object:  User [PNL\D3M580] ******/
+CREATE USER [PNL\D3M580] FOR LOGIN [PNL\D3M580] WITH DEFAULT_SCHEMA=[PNL\D3M580]
 GO
 GRANT CONNECT TO [MTAdmin] AS [dbo]
 GO
@@ -83,4 +104,6 @@ GO
 GRANT SHOWPLAN TO [MTS_DB_Reader] AS [dbo]
 GO
 GRANT CONNECT TO [MTUser] AS [dbo]
+GO
+ALTER DATABASE [Master_Sequences] SET  READ_WRITE 
 GO

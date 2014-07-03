@@ -56,23 +56,54 @@ CREATE TABLE [dbo].[T_Analysis_Description](
  CONSTRAINT [PK_T_Analysis_Description] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
-) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
 
 GO
+GRANT UPDATE ON [dbo].[T_Analysis_Description] TO [pnl\svc-dms] AS [dbo]
+GO
+SET ANSI_PADDING ON
 
+GO
 /****** Object:  Index [IX_T_Analysis_Description_Instrument] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Instrument] ON [dbo].[T_Analysis_Description] 
+CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Instrument] ON [dbo].[T_Analysis_Description]
 (
 	[Instrument] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-
 /****** Object:  Index [IX_T_Analysis_Description_Process_State] ******/
-CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Process_State] ON [dbo].[T_Analysis_Description] 
+CREATE NONCLUSTERED INDEX [IX_T_Analysis_Description_Process_State] ON [dbo].[T_Analysis_Description]
 (
 	[Process_State] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Protein_Collection_List]  DEFAULT ('na') FOR [Protein_Collection_List]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Protein_Options_List]  DEFAULT ('na') FOR [Protein_Options_List]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Created]  DEFAULT (getdate()) FOR [Created]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Process_State]  DEFAULT ((0)) FOR [Process_State]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)) FOR [Import_Priority]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Param_File]  DEFAULT ('') FOR [Regression_Param_File]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Retry_Load_Count]  DEFAULT ((0)) FOR [Retry_Load_Count]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Failure_Count]  DEFAULT ((0)) FOR [Regression_Failure_Count]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Datasets] FOREIGN KEY([Dataset_ID])
+REFERENCES [dbo].[T_Datasets] ([Dataset_ID])
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Datasets]
+GO
+ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Process_State] FOREIGN KEY([Process_State])
+REFERENCES [dbo].[T_Process_State] ([ID])
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Process_State]
 GO
 /****** Object:  Trigger [dbo].[trig_d_AnalysisJob] ******/
 SET ANSI_NULLS ON
@@ -125,34 +156,4 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
 		ORDER BY inserted.Job
 
-GO
-GRANT UPDATE ON [dbo].[T_Analysis_Description] TO [pnl\svc-dms] AS [dbo]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Datasets] FOREIGN KEY([Dataset_ID])
-REFERENCES [T_Datasets] ([Dataset_ID])
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Datasets]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description]  WITH CHECK ADD  CONSTRAINT [FK_T_Analysis_Description_T_Process_State] FOREIGN KEY([Process_State])
-REFERENCES [T_Process_State] ([ID])
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] CHECK CONSTRAINT [FK_T_Analysis_Description_T_Process_State]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Protein_Collection_List]  DEFAULT ('na') FOR [Protein_Collection_List]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Protein_Options_List]  DEFAULT ('na') FOR [Protein_Options_List]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_MyEMSLState]  DEFAULT ((0)) FOR [MyEMSLState]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Created]  DEFAULT (getdate()) FOR [Created]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Process_State]  DEFAULT ((0)) FOR [Process_State]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Import_Priority]  DEFAULT ((5)) FOR [Import_Priority]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Param_File]  DEFAULT ('') FOR [Regression_Param_File]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Retry_Load_Count]  DEFAULT ((0)) FOR [Retry_Load_Count]
-GO
-ALTER TABLE [dbo].[T_Analysis_Description] ADD  CONSTRAINT [DF_T_Analysis_Description_Regression_Failure_Count]  DEFAULT ((0)) FOR [Regression_Failure_Count]
 GO

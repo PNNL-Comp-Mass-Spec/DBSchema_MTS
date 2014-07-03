@@ -1,3 +1,3 @@
 /****** Object:  Schema [grk] ******/
-CREATE SCHEMA [grk] AUTHORIZATION [grk]
+CREATE SCHEMA [grk]
 GO

@@ -32,9 +32,80 @@ CREATE TABLE [dbo].[T_Peak_Matching_Task](
  CONSTRAINT [PK_T_Peak_Matching_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT INSERT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Confirmed_Only]  DEFAULT ((0)) FOR [Confirmed_Only]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Mod_List]  DEFAULT ('') FOR [Mod_List]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Ini_File_Name]  DEFAULT ('') FOR [Ini_File_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Priority]  DEFAULT ((5)) FOR [Priority]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Creation_Date]  DEFAULT (getdate()) FOR [PM_Created]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
+REFERENCES [dbo].[T_FTICR_Analysis_Description] ([Job])
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description] FOREIGN KEY([MD_ID])
+REFERENCES [dbo].[T_Match_Making_Description] ([MD_ID])
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
+REFERENCES [dbo].[T_Peak_Matching_NET_Value_Type_Name] ([NET_Value_Type])
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
+REFERENCES [dbo].[T_Peak_Matching_Task_State_Name] ([Processing_State])
+ON UPDATE CASCADE
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name]
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Ini_File_Name],''))=(0) AND charindex(char((13)),isnull([Ini_File_Name],''))=(0)))
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF]
 GO
 /****** Object:  Trigger [dbo].[trig_i_T_PeakMatchingTask] ******/
 SET ANSI_NULLS ON
@@ -142,75 +213,4 @@ AS
 
 	End
 
-GO
-GRANT DELETE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
-GO
-GRANT INSERT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
-GO
-GRANT SELECT ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
-GO
-GRANT UPDATE ON [dbo].[T_Peak_Matching_Task] TO [DMS_SP_User] AS [dbo]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description] FOREIGN KEY([Job])
-REFERENCES [T_FTICR_Analysis_Description] ([Job])
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_FTICR_Analysis_Description]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description] FOREIGN KEY([MD_ID])
-REFERENCES [T_Match_Making_Description] ([MD_ID])
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Match_Making_Description]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name] FOREIGN KEY([NET_Value_Type])
-REFERENCES [T_Peak_Matching_NET_Value_Type_Name] ([NET_Value_Type])
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_NET_Value_Type_Name]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name] FOREIGN KEY([Processing_State])
-REFERENCES [T_Peak_Matching_Task_State_Name] ([Processing_State])
-ON UPDATE CASCADE
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [FK_T_Peak_Matching_Task_T_Peak_Matching_Task_State_Name]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task]  WITH CHECK ADD  CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF] CHECK  ((charindex(char((10)),isnull([Ini_File_Name],''))=(0) AND charindex(char((13)),isnull([Ini_File_Name],''))=(0)))
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] CHECK CONSTRAINT [CK_T_Peak_Matching_Task_IniFileName_CRLF]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Confirmed_Only]  DEFAULT ((0)) FOR [Confirmed_Only]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Mod_List]  DEFAULT ('') FOR [Mod_List]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Normalized_Score]  DEFAULT ((1.0)) FOR [Minimum_High_Normalized_Score]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_High_Discriminant_Score]  DEFAULT ((0)) FOR [Minimum_High_Discriminant_Score]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_Peptide_Prophet_Probability]  DEFAULT ((0)) FOR [Minimum_Peptide_Prophet_Probability]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Minimum_PMT_Quality_Score]  DEFAULT ((0)) FOR [Minimum_PMT_Quality_Score]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Filter]  DEFAULT ('') FOR [Experiment_Filter]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Experiment_Exclusion_Filter]  DEFAULT ('') FOR [Experiment_Exclusion_Filter]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Only_Use_PMTs_From_Dataset]  DEFAULT ((0)) FOR [Limit_To_PMTs_From_Dataset]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Internal_Std_Explicit]  DEFAULT ('') FOR [Internal_Std_Explicit]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_NET_Value_Type]  DEFAULT ((0)) FOR [NET_Value_Type]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Ini_File_Name]  DEFAULT ('') FOR [Ini_File_Name]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Output_Folder_Name]  DEFAULT ('') FOR [Output_Folder_Name]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_State]  DEFAULT ((1)) FOR [Processing_State]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Priority]  DEFAULT ((5)) FOR [Priority]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Error_Code]  DEFAULT ((0)) FOR [Processing_Error_Code]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Processing_Warning_Code]  DEFAULT ((0)) FOR [Processing_Warning_Code]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Creation_Date]  DEFAULT (getdate()) FOR [PM_Created]
-GO
-ALTER TABLE [dbo].[T_Peak_Matching_Task] ADD  CONSTRAINT [DF_T_Peak_Matching_Task_Entered_By]  DEFAULT (suser_sname()) FOR [Entered_By]
 GO

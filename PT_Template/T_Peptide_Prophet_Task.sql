@@ -16,12 +16,16 @@ CREATE TABLE [dbo].[T_Peptide_Prophet_Task](
  CONSTRAINT [PK_T_Peptide_Prophet_Task] PRIMARY KEY CLUSTERED 
 (
 	[Task_ID] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 ) ON [PRIMARY]
 
 GO
+GRANT INSERT ON [dbo].[T_Peptide_Prophet_Task] TO [pnl\svc-dms] AS [dbo]
+GO
+GRANT UPDATE ON [dbo].[T_Peptide_Prophet_Task] TO [pnl\svc-dms] AS [dbo]
+GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task]  WITH CHECK ADD  CONSTRAINT [FK_T_Peptide_Prophet_Task_T_Peptide_Prophet_Task_State_Name] FOREIGN KEY([Processing_State])
-REFERENCES [T_Peptide_Prophet_Task_State_Name] ([Processing_State])
+REFERENCES [dbo].[T_Peptide_Prophet_Task_State_Name] ([Processing_State])
 GO
 ALTER TABLE [dbo].[T_Peptide_Prophet_Task] CHECK CONSTRAINT [FK_T_Peptide_Prophet_Task_T_Peptide_Prophet_Task_State_Name]
 GO

@@ -1,3 +1,3 @@
 /****** Object:  Schema [dmswebuser] ******/
-CREATE SCHEMA [dmswebuser] AUTHORIZATION [dmswebuser]
+CREATE SCHEMA [dmswebuser]
 GO
