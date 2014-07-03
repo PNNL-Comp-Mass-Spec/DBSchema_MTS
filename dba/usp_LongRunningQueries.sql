@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE PROC dbo.usp_LongRunningQueries
 AS
 /**************************************************************************************************************

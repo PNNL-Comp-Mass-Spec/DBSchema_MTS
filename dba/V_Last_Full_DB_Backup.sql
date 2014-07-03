@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE VIEW V_Last_Full_DB_Backup
 AS
 SELECT SysDB.name,
@@ -17,6 +16,5 @@ FROM master.dbo.sysdatabases AS SysDB
                              [type] = 'D' -- Full DB Backups as Type D
                        GROUP BY database_name ) AS BUSet
        ON SysDB.name = BUSet.database_name
-
 
 GO

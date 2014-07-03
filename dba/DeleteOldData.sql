@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.DeleteOldData
+CREATE PROCEDURE DeleteOldData
 /****************************************************
 **
 **	Desc: 
@@ -12,6 +12,7 @@ CREATE PROCEDURE dbo.DeleteOldData
 **
 **	Auth:	mem
 **	Date:	06/28/2013 mem - Initial release
+**			04/01/2014 mem - Now calling DeleteOldQueryStats
 **    
 *****************************************************/
 (
@@ -19,6 +20,8 @@ CREATE PROCEDURE dbo.DeleteOldData
 	@BlockingHistoryMonthsToRetain tinyint = 1,
 	@QueryHistoryMonthsToRetain tinyint = 1,
 	@JobStatsHistoryMonthsToRetain tinyint = 1,
+	@QueryStatsMonthsToRetain tinyint = 3,
+	@QueryStatsExpensiveMonthsToRetain tinyint = 15,
 	@message varchar(1024) = ''
 )
 As
@@ -31,10 +34,12 @@ As
 
 	Set @message = ''
 	
-	Set @BlockingHistoryMonthsToRetain = IsNull(@BlockingHistoryMonthsToRetain, 1)
-	Set @QueryHistoryMonthsToRetain =    IsNull(@QueryHistoryMonthsToRetain, 1)
-	Set @JobStatsHistoryMonthsToRetain = IsNull(@JobStatsHistoryMonthsToRetain, 1)
-	
+	Set @BlockingHistoryMonthsToRetain     = IsNull(@BlockingHistoryMonthsToRetain, 1)
+	Set @QueryHistoryMonthsToRetain        = IsNull(@QueryHistoryMonthsToRetain, 1)
+	Set @JobStatsHistoryMonthsToRetain     = IsNull(@JobStatsHistoryMonthsToRetain, 1)
+	Set @QueryStatsMonthsToRetain          = IsNull(@QueryStatsMonthsToRetain, 3)
+	Set @QueryStatsExpensiveMonthsToRetain = IsNull(@QueryStatsExpensiveMonthsToRetain, 15)		
+
 	If @BlockingHistoryMonthsToRetain < 1
 		Set @BlockingHistoryMonthsToRetain = 1
 
@@ -43,6 +48,12 @@ As
 		
 	If @JobStatsHistoryMonthsToRetain < 1
 		Set @JobStatsHistoryMonthsToRetain = 1
+
+	If @QueryStatsMonthsToRetain < 1
+		Set @QueryStatsMonthsToRetain = 1
+
+	If @QueryStatsExpensiveMonthsToRetain < 6
+		Set @QueryStatsExpensiveMonthsToRetain = 6
 		
 	---------------------------------------------------
 	-- Create a temporary table to hold the dba tables to cleanup
@@ -137,6 +148,11 @@ As
 			
 		
 	If @infoOnly <> 0
+	Begin
+		---------------------------------------------------
+		-- Preview rows to delete
+		---------------------------------------------------
+		
 		SELECT TStats.SourceTable,
 		       TStats.MonthsToRetain,
 		       TStats.RowsToKeep,
@@ -149,8 +165,13 @@ As
 		       ON TStats.SourceTable = TSize.Table_Name
 		ORDER BY TStats.SourceTable
 
+		Exec DeleteOldQueryStats @infoOnly, @QueryStatsMonthsToRetain, @QueryStatsExpensiveMonthsToRetain
+	End
 	Else
 	Begin
+		---------------------------------------------------
+		-- Delete old data
+		---------------------------------------------------
 		
 		Set @Continue = 1
 		Set @EntryID = 0
@@ -167,7 +188,6 @@ As
 			ORDER BY Entry_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			--
 
 			If @myRowCount = 0
 				Set @Continue = 0
@@ -197,6 +217,8 @@ As
 
 		If Len(@message) > 0
 			Exec PostLogEntry 'Normal', @message, 'DeleteOldData'
+				
+		Exec DeleteOldQueryStats @infoOnly, @QueryStatsMonthsToRetain, @QueryStatsExpensiveMonthsToRetain
 			
 	End
 
