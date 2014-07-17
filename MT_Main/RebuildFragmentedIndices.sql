@@ -18,11 +18,14 @@ CREATE PROCEDURE dbo.RebuildFragmentedIndices
 **	Date:	11/12/2007
 **			10/15/2012 mem - Added spaces prior to printing debug messages
 **			10/18/2012 mem - Added parameter @VerifyUpdateEnabled
+**			07/16/2014 mem - Now showing table with detailed index info when @infoOnly = 1
+**						   - Changed default value for @MaxFragmentation from 15 to 25
+**						   - Changed default value for @TrivialPageCount from 12 to 22
 **    
 *****************************************************/
 (
-	@MaxFragmentation int = 15,
-	@TrivialPageCount int = 12,
+	@MaxFragmentation int = 25,
+	@TrivialPageCount int = 22,
 	@VerifyUpdateEnabled tinyint = 1,		-- When non-zero, then calls VerifyUpdateEnabled to assure that database updating is enabled
 	@infoOnly tinyint = 1,
 	@message varchar(1024) = '' output
@@ -60,8 +63,8 @@ As
 	-- Validate the inputs
 	---------------------------------------
 	--
-	Set @MaxFragmentation = IsNull(@MaxFragmentation, 15)
-	Set @TrivialPageCount = IsNull(@TrivialPageCount, 12)
+	Set @MaxFragmentation = IsNull(@MaxFragmentation, 25)
+	Set @TrivialPageCount = IsNull(@TrivialPageCount, 22)
 	Set @VerifyUpdateEnabled = IsNull(@VerifyUpdateEnabled, 1)
 	Set @infoOnly = IsNull(@infoOnly, 1)
 	Set @message = ''
@@ -71,23 +74,25 @@ As
 	---------------------------------------
 	--
 	CREATE TABLE dbo.#TmpIndicesToProcess(
-		[UniqueID] int Identity(1,1) NOT NULL,
-		[objectid] [int] NULL,
-		[indexid] [int] NULL,
-		[partitionnum] [int] NULL,
-		[frag] [float] NULL
+		UniqueID int Identity(1,1) NOT NULL,
+		objectid int NULL,
+		indexid int NULL,
+		partitionnum int NULL,
+		frag float NULL,
+		page_count int NULL
 	) ON [PRIMARY]
-
+	
 	---------------------------------------
 	-- Conditionally select tables and indexes from the sys.dm_db_index_physical_stats function 
 	-- and convert object and index IDs to names. 
 	---------------------------------------
 	--
-	INSERT INTO #TmpIndicesToProcess (objectid, indexid, partitionnum, frag)
+	INSERT INTO #TmpIndicesToProcess (objectid, indexid, partitionnum, frag, page_count)
 	SELECT object_id,
 	       index_id,
 	       partition_number,
-	       avg_fragmentation_in_percent
+	       avg_fragmentation_in_percent, 
+	       page_count
 	FROM sys.dm_db_index_physical_stats ( DB_ID(), NULL, NULL, NULL, 'LIMITED' )
 	WHERE avg_fragmentation_in_percent > @MaxFragmentation
 	  AND index_id > 0 -- cannot defrag a heap 
@@ -104,9 +109,49 @@ As
 		Goto Done
 	End
 
-	---------------------------------------
+
+	If @InfoOnly > 0
+	Begin
+		------------------------------------------
+		-- Show information on the indices
+		------------------------------------------
+		--
+		SELECT NameQ.ObjectName,
+			IndexQ.IndexName,
+			IndexSizes.Table_Row_Count,
+			IndexSizes.Index_Row_Count,
+			IndexSizes.Space_Reserved_MB,
+			IndexSizes.fill_factor,
+			Cast(convert(decimal(9,1), SourceQ.frag) AS varchar(12)) + '%' As Avg_fragmentation,
+			SourceQ.page_count,
+			SourceQ.objectid AS Object_ID,
+			sourceQ.indexid as Index_ID,
+			SourceQ.partitionnum As Partition_number
+		FROM #TmpIndicesToProcess As SourceQ
+			INNER JOIN ( SELECT o.name AS ObjectName,
+								QUOTENAME(s.name) AS SchemaName,
+								o.object_id
+						FROM sys.objects AS o
+							JOIN sys.schemas AS s
+								ON s.schema_id = o.schema_id ) NameQ
+			ON SourceQ.objectid = NameQ.object_id
+			INNER JOIN ( SELECT name AS IndexName,
+								index_id,
+								object_id
+						FROM sys.indexes ) AS IndexQ
+			ON SourceQ.indexid = IndexQ.index_id AND
+				SourceQ.objectid = IndexQ.object_id
+			INNER JOIN V_Table_Index_Sizes IndexSizes
+			ON NameQ.ObjectName = IndexSizes.Table_Name AND
+				IndexQ.IndexName = IndexSizes.Index_Name
+		
+		Select 'See the messages pane (text output) for the Alter Index commands that would be used' AS Message
+		
+	End
+	
+	--------------------------------------------------------------
 	-- Loop through #TmpIndicesToProcess and process the indices
-	---------------------------------------
+	--------------------------------------------------------------
 	--
 	Set @StartTime = GetDate()
 	Set @continue = 1
@@ -227,9 +272,9 @@ As
 
 	If @IndexCountProcessed > 0
 	Begin
-		---------------------------------------
+		-----------------------------------------------------------
 		-- Log the reindex
-		---------------------------------------
+		-----------------------------------------------------------
 		
 		Set @message = 'Reindexed ' + Convert(varchar(12), @IndexCountProcessed) + ' indices in ' + convert(varchar(12), Convert(decimal(9,1), DateDiff(second, @StartTime, GetDate()) / 60.0)) + ' minutes'
 		Exec PostLogEntry 'Normal', @message, 'RebuildFragmentedIndices'
@@ -241,7 +286,6 @@ Done:
 	DROP TABLE #TmpIndicesToProcess 
 
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RebuildFragmentedIndices] TO [MTS_DB_Dev] AS [dbo]
