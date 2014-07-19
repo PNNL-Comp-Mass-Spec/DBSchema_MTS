@@ -16,13 +16,15 @@ CREATE PROCEDURE dbo.RebuildMTSDBIndices
 **	Auth:	mem
 **	Date:	10/15/2012
 **			10/18/2012 mem - Added parameter @PauseMTSProcessing
+**			07/17/2014 mem - Changed default value for @MaxFragmentation from 15 to 25
+**						   - Changed default value for @TrivialPageCount from 12 to 22
 **    
 *****************************************************/
 (
 	@DBNameMatchList varchar(2048) = 'MT[_]%,PT[_]%',	-- Comma-separated list of databases on this server to include; can include wildcard symbols since used with a LIKE clause.  Use % to process every database on the server (skips DBs that don't have RebuildFragmentedIndices).  Leave blank to ignore this parameter
 	@IncludeMTSInterfaceAndControlDBs tinyint = 1,		-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
-	@MaxFragmentation int = 15,
-	@TrivialPageCount int = 12,
+	@MaxFragmentation int = 25,
+	@TrivialPageCount int = 22,
 	@PauseMTSProcessing tinyint = 1,
 	@InfoOnly tinyint = 1,								-- Set to 1 to display the SQL that would be run
 	@message varchar(255) = '' OUTPUT
