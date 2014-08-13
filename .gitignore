@@ -1,0 +1,4 @@
+.hg/
+.hgignore
+dba/Master_DDL_Script/Ignore*
+MasterDB.lnk
