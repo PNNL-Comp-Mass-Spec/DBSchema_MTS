@@ -3,22 +3,24 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE VIEW [dbo].[V_Active_MT_DBs]
 AS
 SELECT S.Server_Name,
        D.MT_DB_Name,
        D.State_ID,
+	   SN.Name As State,
        D.Last_Affected,
        D.[Description],
        D.Organism,
        D.Campaign,
-       D.DB_Schema_Version       
+       D.DB_Schema_Version	   
 FROM dbo.T_MTS_MT_DBs AS D
      INNER JOIN dbo.T_MTS_Servers AS S
        ON D.Server_ID = S.Server_ID
+	 Inner Join T_MT_Database_State_Name SN On D.State_ID = SN.ID
 WHERE (S.Active = 1) AND
       (NOT (D.State_ID IN (10, 15, 100)))
+
 
 
 GO
