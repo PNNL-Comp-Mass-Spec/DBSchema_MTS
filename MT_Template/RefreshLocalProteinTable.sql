@@ -35,6 +35,7 @@ CREATE Procedure dbo.RefreshLocalProteinTable
 **						   - Switched to using a common table expression (CTE) when querying MT_Main.dbo.V_DMS_Protein_Collection_Members_Import
 **			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_Info
 **			02/17/2011 mem - Now posting a log entry before adding new proteins to T_Proteins
+**			09/04/2014 mem - Now excluding values of '<Fill In>' or '(na)' in T_Process_Config for 'Protein_Collection_Filter'
 **    
 *****************************************************/
 (
@@ -214,7 +215,9 @@ As
 		FROM (SELECT Value
 				FROM T_Process_Config
 				WHERE [Name] = 'Protein_Collection_Filter' AND 
-					Len(IsNull(Value, '')) > 0
+					Len(IsNull(Value, '')) > 0 And 
+					Not IsNull(Value, '') In ('<Fill In>', '(na)') And
+					IsNull(Value, '') <> 'Non-existent%'
 			  ) SourceQ LEFT OUTER JOIN #T_Tmp_Protein_Collection_List Target ON
 				SourceQ.Value = Target.Protein_Collection_Name
 		WHERE Target.Protein_Collection_Name Is Null
@@ -272,6 +275,7 @@ As
 			If @ForceLegacyDBProcessing = 0
 			Begin
 				Set @message = 'No protein collection lists are defined in T_Analysis_Description or in T_Process_Config'
+				-- Note that error code 40000 is treated as a warning, not an error
 				Set @myError = 40000
 				goto Done
 			End
@@ -809,12 +813,22 @@ As
 Done:
 	If @myError <> 0
 	Begin
-		Set @message = @message + ' (Error ' + Convert(varchar(12), @myError) + ')'
-		
-		If @infoOnly = 0
-			execute PostLogEntry 'Error', @message, 'RefreshLocalProteinTable'
+		If @myError = 40000
+		Begin
+			If @infoOnly = 0
+				execute PostLogEntry 'Warning', @message, 'RefreshLocalProteinTable'
+			Else
+				Select @message As WarningMsg
+		End
 		Else
-			Select @message As TheMessage
+		Begin
+			Set @message = @message + ' (Error ' + Convert(varchar(12), @myError) + ')'
+			
+			If @infoOnly = 0
+				execute PostLogEntry 'Error', @message, 'RefreshLocalProteinTable'
+			Else
+				Select @message As ErrorMsg
+		End
 	End
 	Else
 	Begin
