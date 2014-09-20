@@ -39,6 +39,7 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 **			05/08/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
 **							 Added support for filtering on MSGF+ PepQValue
 **			03/12/2014 mem - No longer checking for proteins with long protein names
+**			09/17/2014 mem - Now testing the MSGF SpecProb filter against TPI.SpecProb instead of #Tmp_MSGF_Results.SpecProb
 **
 *****************************************************/
 (
@@ -739,7 +740,7 @@ As
 			@RankScoreComparison varchar(2),
 			@RankScoreThreshold smallint,
 
-			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, or Inspect results
+			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, Inspect, or MSGF+ results
 			@MSGFSpecProbThreshold real,
 			
 			@MSGFDbSpecProbComparison varchar(2),
@@ -840,12 +841,9 @@ As
 			Set @UseMSGFPlusQValueFilter = 0
 			Set @UseMSGFPlusPepQValueFilter = 0
 			
-			If @MSGFCountLoaded > 0
-			Begin
-				If @MSGFSpecProbComparison IN ('<', '<=') AND @MSGFSpecProbThreshold < 1
-					Set @UseMSGFFilter = 1
-			End
-			
+			If @MSGFSpecProbComparison IN ('<', '<=') AND @MSGFSpecProbThreshold < 1
+				Set @UseMSGFFilter = 1
+					
 			If @MSGFDbSpecProbComparison IN ('<', '<=') AND @MSGFDbSpecProbThreshold < 1
 				Set @UseMSGFDbSpecProbFilter = 1
 				
@@ -869,9 +867,6 @@ As
 			Set @Sql = @Sql +          ' #Tmp_Peptide_ResultToSeqMap RTSM ON TPI.Result_ID = RTSM.Result_ID INNER JOIN'
 			Set @Sql = @Sql +          ' #Tmp_Peptide_SeqInfo PSI ON RTSM.Seq_ID_Local = PSI.Seq_ID_Local INNER JOIN'
 			Set @Sql = @Sql +      ' #Tmp_Peptide_SeqToProteinMap STPM ON PSI.Seq_ID_Local = STPM.Seq_ID_Local'
-
-			If @UseMSGFFilter = 1
-				Set @Sql = @Sql +      ' INNER JOIN #Tmp_MSGF_Results MSGF ON TPI.Result_ID = MSGF.Result_ID '
 				 
 			-- Construct the Where clause		
 			Set @W = ''
@@ -881,7 +876,7 @@ As
 			Set @W = @W +	' PSI.Monoisotopic_Mass ' + @MassComparison + Convert(varchar(11), @MassThreshold)
 
 			If @UseMSGFFilter = 1
-				Set @W = @W +      ' AND IsNull(MSGF.SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
+				Set @W = @W +      ' AND IsNull(TPI.SpecProb, 1) ' + @MSGFSpecProbComparison + Convert(varchar(11), @MSGFSpecProbThreshold)
 	 
 			If @UseMSGFDbSpecProbFilter = 1
 				Set @W = @W +      ' AND IsNull(TPI.SpecProb, 1) ' + @MSGFDbSpecProbComparison + Convert(varchar(11), @MSGFDbSpecProbThreshold)
