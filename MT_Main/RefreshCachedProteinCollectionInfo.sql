@@ -17,6 +17,7 @@ CREATE PROCEDURE RefreshCachedProteinCollectionInfo
 **	Date:	12/13/2010 mem - Initial version
 **			08/01/2012 mem - Now using Cached_RowVersion and Collection_RowVersion to determine new/changed protein collection entries
 **			08/02/2012 mem - Turned ANSI_WARNINGS back on since we were getting error "Heterogeneous queries require the ANSI_NULLS and ANSI_WARNINGS options to be set for the connection"
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -213,7 +214,7 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedProteinCollectionInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
@@ -221,6 +222,5 @@ AS
 
 Done:
 	Return @myError
-
 
 GO

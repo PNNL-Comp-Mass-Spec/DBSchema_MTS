@@ -15,6 +15,7 @@ CREATE PROCEDURE RefreshCachedDMSFilterSetInfo
 **	Auth:	mem
 **	Date:	08/02/2010 mem - Initial Version
 **			10/03/2011 mem - Now populating T_DMS_Filter_Set_Criteria_Names_Cached
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -229,7 +230,7 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSFilterSetInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch

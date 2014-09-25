@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSDatasetInfo
+CREATE PROCEDURE RefreshCachedDMSDatasetInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Dataset_Info_Cached using DMS
@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSDatasetInfo
 **			03/03/2011 mem - Now populating [File Size MB]
 **			10/17/2012 mem - Now populating Instrument_Data_Purged
 **			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -258,14 +259,13 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSDatasetInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 			
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSDatasetInfo] TO [MTS_DB_Dev] AS [dbo]

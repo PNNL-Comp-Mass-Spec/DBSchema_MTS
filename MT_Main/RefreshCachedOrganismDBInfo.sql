@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedOrganismDBInfo
+CREATE PROCEDURE RefreshCachedOrganismDBInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Organism_DB_Info
@@ -16,6 +16,7 @@ CREATE PROCEDURE dbo.RefreshCachedOrganismDBInfo
 **	Date:	12/14/2010 mem - Initial version
 **			08/01/2012 mem - Now using Cached_RowVersion and OrgFile_RowVersion to determine new/changed protein collection entries
 **			04/12/2013 mem - Added parameter @UpdateCachedDataStatusTable
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -121,13 +122,12 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedOrganismDBInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 
 Done:
 	Return @myError
-
 
 GO

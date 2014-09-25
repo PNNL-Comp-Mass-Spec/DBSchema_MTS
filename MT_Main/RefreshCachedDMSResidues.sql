@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSResidues
+CREATE PROCEDURE RefreshCachedDMSResidues
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Residues_Cached using DMS
@@ -13,6 +13,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSResidues
 **
 **	Auth:	mem
 **	Date:	08/02/2010 mem - Initial Version
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -127,7 +128,7 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSResidues')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
@@ -137,6 +138,5 @@ Done:
 	drop table #Tmp_UpdateSummary
 	
 	Return @myError
-
 
 GO

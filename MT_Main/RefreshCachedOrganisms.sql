@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.RefreshCachedOrganisms
+
+CREATE PROCEDURE RefreshCachedOrganisms
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Organisms
@@ -14,6 +15,7 @@ CREATE PROCEDURE dbo.RefreshCachedOrganisms
 **	Auth:	mem
 **	Date:	08/01/2012 mem - Initial version
 **			10/10/2013 mem - Added parameter @UpdateCachedDataStatusTable
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -139,13 +141,12 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedOrganisms')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 
 Done:
 	Return @myError
-
 
 GO

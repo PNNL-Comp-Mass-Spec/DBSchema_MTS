@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
+CREATE PROCEDURE RefreshCachedDMSMassCorrectionFactors
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Mass_Correction_Factors_Cached using DMS
@@ -19,6 +19,7 @@ CREATE PROCEDURE dbo.RefreshCachedDMSMassCorrectionFactors
 **			07/30/2010 mem - Updated to use a single-step MERGE statement instead of three separate Delete, Update, and Insert statements
 **			08/02/2010 mem - Updated to use V_DMS_Mass_Correction_Factors_Import to obtain the information from DMS
 **			10/22/2013 mem - Now checking for Original_Source or Original_Source_Name differing
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **
 *****************************************************/
 (
@@ -135,14 +136,13 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSMassCorrectionFactors')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 			
 Done:
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSMassCorrectionFactors] TO [MTS_DB_Dev] AS [dbo]

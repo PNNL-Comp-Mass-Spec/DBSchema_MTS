@@ -22,6 +22,7 @@ CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
 **			12/14/2010 mem - Now calling RefreshCachedOrganismDBInfo
 **			10/17/2011 mem - Now setting @SourceMTSServer to '' when calling 'RefreshCachedDMSAnalysisJobInfo' or 'RefreshCachedDMSDatasetInfo'
 **			08/01/2012 mem - Now calling RefreshCachedOrganisms
+**			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **    
 *****************************************************/
 (
@@ -251,7 +252,7 @@ As
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSInfoIfRequired')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
