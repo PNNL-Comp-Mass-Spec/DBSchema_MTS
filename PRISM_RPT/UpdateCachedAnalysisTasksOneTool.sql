@@ -13,6 +13,7 @@ CREATE PROCEDURE dbo.UpdateCachedAnalysisTasksOneTool
 **	Date:	12/21/2007
 **			01/02/2008 mem - Now updating Last_NewTask_Date in T_Analysis_Task_Candidate_DBs when Task_Count_New is > 0
 **			01/09/2008 mem - Now setting @CheckForSkippedDBs to 0 if @ServerNameFilter and @DBNameFilter are not blank
+**			10/22/2014 mem - Now setting @duplicateEntryHoldoffHours to 4 when calling LocalErrorHandler
 **
 *****************************************************/
 (
@@ -379,7 +380,7 @@ As
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'UpdateCachedAnalysisTasksOneTool')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
-								@ErrorNum = @myError output, @message = @message output
+								@ErrorNum = @myError output, @message = @message output, @duplicateEntryHoldoffHours = 4
 		Goto Done
 	End Catch
 

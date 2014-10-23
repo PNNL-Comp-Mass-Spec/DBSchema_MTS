@@ -53,6 +53,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 **			01/31/2011 mem - Changed required tool version to %3.48.44[1-9]%
 **			08/17/2011 mem - Changed required tool version to %3.48.44[8-9]% or %3.48.45[0-9]%
 **			11/10/2011 mem - Changed required tool version to %3.49.4[6-7][0-9]%
+**			10/22/2014 mem - Updated @duplicateEntryHoldoffHours to 2
 **
 *****************************************************/
 (
@@ -712,7 +713,7 @@ As
 						Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestPeakMatchingTaskMaster')
 						exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 												@ErrorNum = @myError output, @message = @message output,
-								                @duplicateEntryHoldoffHours = 1
+								                @duplicateEntryHoldoffHours = 2
 					End Catch
 					
 				End -- </c>
@@ -758,7 +759,7 @@ As
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RequestPeakMatchingTaskMaster')
 		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
 								@ErrorNum = @myError output, @message = @message output,
-								@duplicateEntryHoldoffHours = 1
+								@duplicateEntryHoldoffHours = 2
 		Goto Done
 	End Catch
 
