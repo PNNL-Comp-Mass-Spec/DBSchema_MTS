@@ -22,6 +22,9 @@
 --   MT_Mouse_MHP_Unlabeled_P929 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM; also filters on PSM_Count)
 --   MT_Mouse_MHP_Unlabeled_P933 on Pogo  (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --   MT_Human_LewyBody_P947 on Proteinseqs  (uses MSGF_SpecProb and T_Peptides.DelM_PPM; also filters on Dataset_Count)
+--   MT_Human_LewyBody_P1010 on Proteinseqs (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
+--   MT_Human_LewyBody_P1011 on Proteinseqs (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
+--   MT_Human_LewyBody_P1012 on Proteinseqs (uses MSGF_SpecProb and T_Peptides.DelM_PPM)
 --
 -- UpdatePMTQSUsingCustomVladFiltersHumanALZ is in MT_Human_ALZ_P514 on Elmer
 --
