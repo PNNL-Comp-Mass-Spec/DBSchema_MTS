@@ -23,14 +23,16 @@ CREATE Procedure PMExportPeptidesForJobs
 **			01/28/2011 mem - Added parameter @MSGFThreshold and now returning MSGF_SpecProb
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/06/2012 mem - Added support for MSGFDB and MSAlign (types MSG_Peptide_Hit and MSA_Peptide_Hit)
+**			11/11/2014 mem - Updated call to PMExportAMTTables to not return the conformer, mods, or charges table
+**						   - Updated defaults
 **
 ****************************************************/
 (
 	@JobList varchar(max) = '',
 	@LookupDefaults tinyint = 0,					-- If non-zero, then lookup default filter values using T_Peak_Matching_Defaults
 	@MinimumDiscriminantScore real = 0,				-- The minimumDiscriminant_Score to allow; 0 to allow all
-	@MinimumPeptideProphetProbability real = 0.5,	-- The minimum Peptide_Prophet_Probability value to allow; 0 to allow all
-	@MSGFThreshold real = 1,						-- If less than 1, then will filter the results using MSGF (for example, using 1E-9)
+	@MinimumPeptideProphetProbability real = 0,	-- The minimum Peptide_Prophet_Probability value to allow; 0 to allow all
+	@MSGFThreshold real = 1E-9,						-- If less than 1, then will filter the results using MSGF (for example, using 1E-9)
 	@MinimumPMTQualityScore real = 0,				-- The minimum PMT_Quality_Score to allow; 0 to allow all
 	@MinimumCleavageState smallint = 0,				-- The minimum Cleavage_State to allow; 0 to allow all
 
@@ -39,12 +41,12 @@ CREATE Procedure PMExportPeptidesForJobs
 	@MaxValueSelectionMode tinyint = 0,				-- 0 means use Peak_Area, 1 means use Peak_SN_Ratio, 2 means use XCorr or Hyperscore or MQScore, 3 means Log_Evalue (only applicable for XTandem) or FScore (only applicable for Inspect)
 	@ReportHighestScoreStatsInJob tinyint = 1,		-- Only applicable if @GroupByPeptide = 1 and if @MaxValueSelectionMode is not 3 or 4; when 1, then finds the entry with the max area or SN_Ratio, but updates the Sequest/X!Tandem score stats to reflect the highest scores in the analysis job
 
-	@MinXCorrFullyTrypticCharge1 real = 1.9,		-- Only used for fully tryptic peptides
-	@MinXCorrFullyTrypticCharge2 real = 2.2,		-- Only used for fully tryptic peptides
-	@MinXCorrFullyTrypticCharge3 real = 3.75,		-- Only used for fully tryptic peptides
-	@MinXCorrPartiallyTrypticCharge1 real = 4.0,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
-	@MinXCorrPartiallyTrypticCharge2 real = 4.3,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
-	@MinXCorrPartiallyTrypticCharge3 real = 4.7,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
+	@MinXCorrFullyTrypticCharge1 real = 0,		-- Only used for fully tryptic peptides
+	@MinXCorrFullyTrypticCharge2 real = 0,		-- Only used for fully tryptic peptides
+	@MinXCorrFullyTrypticCharge3 real = 0,		-- Only used for fully tryptic peptides
+	@MinXCorrPartiallyTrypticCharge1 real = 0,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
+	@MinXCorrPartiallyTrypticCharge2 real = 0,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
+	@MinXCorrPartiallyTrypticCharge3 real = 0,	-- Only used if @MinimumCleavageState is < 2; will also be applied to non-tryptic peptides if @MinimumCleavageState is 0
 	@MinDelCn2 real = 0.1,
 
 	@JobPeptideFilterTableName varchar(128) = '',	-- If provided, then will filter the results to only include peptides defined in this table; the table must have fields Job and Peptide and the peptides must be in the format A.BCDEFGH.I
@@ -1327,7 +1329,11 @@ AS
 				
 				Set @AMTCount = @myRowCount
 				
-				Exec @myError = PMExportAMTTables @ReturnMTTable, @ReturnProteinTable, @ReturnProteinMapTable, @message= @message output
+				Exec @myError = PMExportAMTTables @ReturnMTTable, @ReturnProteinTable, @ReturnProteinMapTable, 
+				                      @ReturnIMSConformersTable=0, 
+				                      @ReturnMTModsTable=0, 
+				                      @ReturnMTChargesTable=0, 
+				                      @message=@message output
 			End
 			Else
 			Begin
@@ -1386,6 +1392,9 @@ Done:
 		
 	If @myError <> 0 
 	Begin
+		If IsNull(@message, '') = ''
+			Set @message = 'Unknown error, code ' + Cast(@myError as Varchar(12))
+				
 		Execute PostLogEntry 'Error', @message, 'PMExportPeptidesForJobs'
 		Print @message
 	End

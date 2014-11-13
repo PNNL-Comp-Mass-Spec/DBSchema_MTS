@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure PMExportAMTs
 /****************************************************	
 **  Desc:	
@@ -23,6 +24,7 @@ CREATE Procedure PMExportAMTs
 **			02/21/2011 mem - Added parameter @ReturnIMSConformersTable
 **			12/04/2013 mem - Updated default value for @MinimumPeptideProphetProbability to be 0 instead of 0.5
 **						   - Updated default value for @MinimumPMTQualityScore to be 2 instead of 1
+**			11/11/2014 mem - Added parameters @ReturnMTModsTable and @ReturnMTChargesTable
 **
 ****************************************************/
 (
@@ -37,6 +39,8 @@ CREATE Procedure PMExportAMTs
 	@ReturnProteinTable tinyint = 1,				-- When 1, then also returns a table of Proteins that the Mass Tag IDs map to
 	@ReturnProteinMapTable tinyint = 1,				-- When 1, then also returns the mapping information of Mass_Tag_ID to Protein
 	@ReturnIMSConformersTable tinyint = 1,			-- When 1, then also returns T_Mass_Tag_Conformers_Observed
+	@ReturnMTModsTable tinyint = 1,					-- When 1, then also returns T_Mass_Tag_Mod_Info (with mod masses pulled from MT_Main)	
+	@ReturnMTChargesTable tinyint = 1,				-- When 1, then also returns a table summarizing the charge state observation stats
 	@AMTCount int = 0 output,						-- The number of AMT tags that pass the thresholds
 	@AMTLastAffectedMax datetime = null output,		-- The maximum Last_Affected value for the AMT tags that pass the thresholds
 	@PreviewSql tinyint = 0,
@@ -73,6 +77,8 @@ AS
 		Set @ReturnProteinTable = IsNull(@ReturnProteinTable, 1)
 		Set @ReturnProteinMapTable = IsNull(@ReturnProteinMapTable, 1)
 		Set @ReturnIMSConformersTable = IsNull(@ReturnIMSConformersTable, 1)
+		Set @ReturnMTModsTable = IsNull(@ReturnMTModsTable, 1)
+		Set @ReturnMTChargesTable = IsNull(@ReturnMTChargesTable, 1)
 
 		Set @PreviewSql = IsNull(@PreviewSql, 0)
 
@@ -144,7 +150,9 @@ AS
 							@ReturnMTTable = @ReturnMTTable,
 							@ReturnProteinTable = @ReturnProteinTable,
 							@ReturnProteinMapTable = @ReturnProteinMapTable,
-							@ReturnIMSConformersTable = @ReturnIMSConformersTable,
+			                @ReturnIMSConformersTable = @ReturnIMSConformersTable,
+				            @ReturnMTModsTable = @ReturnMTModsTable, 
+				            @ReturnMTChargesTable = @ReturnMTChargesTable, 
 							@AMTCount = @AMTCount output,
 							@AMTLastAffectedMax = @AMTLastAffectedMax output,
 							@PreviewSql = @PreviewSql,
@@ -171,6 +179,9 @@ Done:
 		
 	If @myError <> 0 
 	Begin
+		If IsNull(@message, '') = ''
+			Set @message = 'Unknown error, code ' + Cast(@myError as Varchar(12))
+
 		Execute PostLogEntry 'Error', @message, 'PMExportAMTs'
 		Print @message
 	End

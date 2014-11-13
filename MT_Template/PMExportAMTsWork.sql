@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE Procedure dbo.PMExportAMTsWork
 /****************************************************	
 **  Desc:	
@@ -26,6 +27,7 @@ CREATE Procedure dbo.PMExportAMTsWork
 **			11/03/2009 mem - Updated to use #Tmp_FilteredMTs to track the MTs found by SP PMPopulateAMTTable
 **			10/12/2010 mem - Explicitly passing @FDRThreshold=0 to PMPopulateAMTTable
 **			02/21/2011 mem - Added parameter @ReturnIMSConformersTable
+**			11/11/2014 mem - Added parameters @ReturnMTModsTable and @ReturnMTChargesTable
 **
 ****************************************************/
 (
@@ -34,6 +36,8 @@ CREATE Procedure dbo.PMExportAMTsWork
 	@ReturnProteinTable tinyint = 1,				-- When 1, then also returns a table of Proteins that the Mass Tag IDs map to
 	@ReturnProteinMapTable tinyint = 1,				-- When 1, then also returns the mapping information of Mass_Tag_ID to Protein
 	@ReturnIMSConformersTable tinyint = 1,			-- When 1, then also returns T_Mass_Tag_Conformers_Observed
+	@ReturnMTModsTable tinyint = 1,					-- When 1, then also returns T_Mass_Tag_Mod_Info (with mod masses pulled from MT_Main)	
+	@ReturnMTChargesTable tinyint = 1,				-- When 1, then also returns a table summarizing the charge state observation stats
 	@AMTCount int = 0 output,						-- The number of AMT tags that pass the thresholds
 	@AMTLastAffectedMax datetime = null output,		-- The maximum Last_Affected value for the AMT tags that pass the thresholds
 	@PreviewSql tinyint = 0,
@@ -79,6 +83,8 @@ AS
 		Set @ReturnProteinTable = IsNull(@ReturnProteinTable, 1)
 		Set @ReturnProteinMapTable = IsNull(@ReturnProteinMapTable, 1)
 		Set @ReturnIMSConformersTable = IsNull(@ReturnIMSConformersTable, 1)
+		Set @ReturnMTModsTable = IsNull(@ReturnMTModsTable, 1)
+		Set @ReturnMTChargesTable = IsNull(@ReturnMTChargesTable, 1)
 
 		Set @PreviewSql = IsNull(@PreviewSql, 0)
 		Set @DebugMode = IsNull(@DebugMode, 0)
@@ -273,8 +279,15 @@ AS
 			-- Return the data
 			-------------------------------------------------	
 
-			Exec PMExportAMTTables @ReturnMTTable, @ReturnProteinTable, @ReturnProteinMapTable, @ReturnIMSConformersTable
-			
+			Exec @myError = PMExportAMTTables 
+			                          @ReturnMTTable = @ReturnMTTable, 
+			                          @ReturnProteinTable = @ReturnProteinTable, 
+			                          @ReturnProteinMapTable = @ReturnProteinMapTable, 
+			                          @ReturnIMSConformersTable = @ReturnIMSConformersTable,
+				                      @ReturnMTModsTable = @ReturnMTModsTable, 
+				                      @ReturnMTChargesTable = @ReturnMTChargesTable, 
+				                      @message = @message output
+
 		End
 		
 	End Try
@@ -293,6 +306,9 @@ Done:
 		
 	If @myError <> 0 
 	Begin
+		If IsNull(@message, '') = ''
+			Set @message = 'Unknown error, code ' + Cast(@myError as Varchar(12))
+
 		Execute PostLogEntry 'Error', @message, 'PMExportAMTsWork'
 		Print @message
 	End

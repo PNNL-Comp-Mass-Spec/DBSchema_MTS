@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE Procedure dbo.RefreshLocalProteinTable
+CREATE Procedure RefreshLocalProteinTable
 /****************************************************
 **
 **	Desc:	Updates local copy of the Protein table from 
@@ -846,7 +845,6 @@ Done:
 	End
 	
 	return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshLocalProteinTable] TO [MTS_DB_Dev] AS [dbo]
