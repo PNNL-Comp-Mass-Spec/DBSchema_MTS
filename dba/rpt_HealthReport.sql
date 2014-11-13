@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE [dbo].[rpt_HealthReport] (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @EmailFlag BIT = 1)
+CREATE PROCEDURE dbo.rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @EmailFlag BIT = 1)
 AS
 
 /**************************************************************************************************************
@@ -93,6 +92,7 @@ AS
 **																Changed Blocking History to pull historical data the same as the Long Running Queries section
 **																Added current version of dba to the footer of the report
 **																Changed Long running queries data gathering to use RunTime instead of calculating it from Start_Time and DateStamp
+**	11/11/2014		Matthew Monroe								Now ignoring jobs that started over 60 days ago
 ***************************************************************************************************************/
     
 BEGIN
@@ -397,8 +397,8 @@ BEGIN
 		[Enabled] INT,
 		StartTime DATETIME,
 		StopTime DATETIME,
-		AvgRunTime NUMERIC(12,2),
-		LastRunTime NUMERIC(12,2),
+		AvgRunTime NUMERIC(12,2),		-- Average runtime, in seconds
+		LastRunTime NUMERIC(12,2),		-- Last runtime, in seconds
 		RunTimeStatus NVARCHAR(30),
 		LastRunOutcome NVARCHAR(20)
 		)	
@@ -882,6 +882,11 @@ BEGIN
 		Last_Run_Date NVARCHAR(20)
 		)
 
+	-- Only examine jobs that started within the last 60 days
+	-- Format code 112 is yyyymmdd
+	-- This is required for comparison to run_date in msdb..sysjobhistory
+	Declare @JobDateThreshold varchar(8) = Convert(varchar(8), DateAdd(Day, -60, GetDate()), 112)
+	
 	INSERT INTO #TEMPJOB (Job_ID,[Owner],Name,Category,[Enabled],Last_Run_Outcome,Last_Run_Date)
 	SELECT sj.job_id, 
 		SUSER_SNAME(sj.owner_sid) AS [Owner],
@@ -897,6 +902,7 @@ BEGIN
 		ON sjs.job_id = sj.job_id
 	JOIN msdb..syscategories sc
 		ON sj.category_id = sc.category_id	
+	WHERE last_run_date >= @JobDateThreshold
 	
 	INSERT INTO #JOBSTATUS (JobName,[Owner],Category,[Enabled],StartTime,StopTime,AvgRunTime,LastRunTime,RunTimeStatus,LastRunOutcome)
 	SELECT
