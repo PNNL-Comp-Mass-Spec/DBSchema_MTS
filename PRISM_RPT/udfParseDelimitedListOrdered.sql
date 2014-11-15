@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE FUNCTION dbo.udfParseDelimitedListOrdered
+CREATE FUNCTION udfParseDelimitedListOrdered
 /****************************************************	
 **	Parses the text in @DelimitedList and returns a table
 **	 containing the values.  The table includes column EntryID
@@ -18,6 +17,7 @@ CREATE FUNCTION dbo.udfParseDelimitedListOrdered
 **
 **	Auth:	mem
 **	Date:	10/16/2007
+**			03/27/2013 mem - Now replacing Tab characters, carriage returns and line feeds with @Delimiter
 **  
 ****************************************************/
 (
@@ -40,6 +40,21 @@ BEGIN
 	
 	If Len(@DelimitedList) > 0
 	Begin -- <a>
+		
+		-- Replace any CR or LF characters with @Delimiter
+		If @DelimitedList Like '%' + Char(13) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(13),  @Delimiter)))
+
+		If @DelimitedList Like '%' + Char(10) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(10),  @Delimiter)))
+
+		If @Delimiter <> Char(9)
+		Begin
+			-- Replace any tab characters with @Delimiter
+			If @DelimitedList Like '%' + Char(9)  + '%'
+				Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(9),  @Delimiter)))
+		End
+		
 		Set @StartPosition = 1
 		Set @continue = 1
 		While @continue = 1
@@ -70,6 +85,5 @@ BEGIN
 	
 	RETURN
 END
-
 
 GO

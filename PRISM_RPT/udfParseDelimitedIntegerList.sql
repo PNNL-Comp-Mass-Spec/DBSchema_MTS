@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE FUNCTION udfParseDelimitedIntegerList
 /****************************************************	
 **	Parses the text in @DelimitedList and returns a table
@@ -17,6 +16,8 @@ CREATE FUNCTION udfParseDelimitedIntegerList
 **	Auth:	mem
 **	Date:	11/30/2006
 **			03/14/2007 mem - Changed @DelimitedList parameter from varchar(8000) to varchar(max)
+**			04/02/2012 mem - Now removing Tab characters
+**			03/27/2013 mem - Now replacing carriage return and line feed characters with @Delimiter
 **  
 ****************************************************/
 (
@@ -37,6 +38,21 @@ BEGIN
 	
 	If Len(@DelimitedList) > 0
 	Begin -- <a>
+		
+		-- Replace any CR or LF characters with @Delimiter
+		If @DelimitedList Like '%' + Char(13) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(13),  @Delimiter)))
+
+		If @DelimitedList Like '%' + Char(10) + '%'
+			Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(10),  @Delimiter)))
+
+		If @Delimiter <> Char(9)
+		Begin
+			-- Replace any tab characters with @Delimiter
+			If @DelimitedList Like '%' + Char(9)  + '%'
+				Set @DelimitedList = LTrim(RTrim(Replace(@DelimitedList, Char(9),  @Delimiter)))
+		End
+		
 		Set @StartPosition = 1
 		Set @continue = 1
 		While @continue = 1
@@ -50,12 +66,15 @@ BEGIN
 
 			If @DelimiterPos > @StartPosition
 			Begin -- <c>
-				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))
-				
+				Set @Value = LTrim(RTrim(SubString(@DelimitedList, @StartPosition, @DelimiterPos - @StartPosition)))			
+			
 				If Len(@Value) > 0 And IsNumeric(@Value) = 1
+				Begin
 					INSERT INTO @tmpValues (Value)
 					VALUES (Convert(int, @Value))
-			end -- </c>
+				End
+				
+			End -- </c>
 
 			Set @StartPosition = @DelimiterPos + 1
 		End -- </b>
