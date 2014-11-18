@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
-/****** RowCount: 45 ******/
+/****** RowCount: 46 ******/
 /****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
@@ -24,6 +24,7 @@ INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Instrument_Class','FTICR a
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Job_Maximum','FTICR analysis job import',0,1,'Maximum FTICR anlaysis job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Job_Minimum','FTICR analysis job import',0,1,'Minimum FTICR anlaysis job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MS_Result_Type','FTICR analysis job import',1,99,'Allow FTICR analysis jobs that produce this type of result')
+INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Instrument_Class','Peptide_Hit analysis job import',0,99,'Allow Peptide_Hit analysis jobs that are associated with datasets that were produced on this type of MS/MS instrument')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Job_Maximum','MS/MS analysis job import',0,1,'Maximum MS/MS job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Job_Minimum','MS/MS analysis job import',0,1,'Minimum MS/MS job number to import')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('MSMS_Result_Type','MS/MS analysis job import',1,99,'Allow MS/MS analysis jobs that produce this type of result')

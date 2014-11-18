@@ -4,8 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE Procedure dbo.ImportNewMSMSAnalyses
+CREATE Procedure ImportNewMSMSAnalyses
 /****************************************************
 **
 **	Desc: Imports entries from the analysis job table
@@ -66,6 +65,7 @@ CREATE Procedure dbo.ImportNewMSMSAnalyses
 **			10/10/2013 mem - Now populating MyEMSLState
 **			11/07/2013 mem - Now passing @previewSql to ParseFilterList
 **			03/25/2014 mem - Now assuring that Valid_Peptide_DB is accurate, even if cached information in MT_Main is not yet up-to-date
+**			11/17/2014 mem - Added option to filter by Instrument_Class using process config parameter MSMS_Instrument_Class
 **
 *****************************************************/
 (
@@ -109,6 +109,7 @@ As
 	declare @filterMatchCount int
 
 	declare @FilterOnEnzymeID tinyint
+	declare @FilterOnInstrumentClass tinyint
 	
 	declare @UsingJobListOverride tinyint
 	set @UsingJobListOverride = 0
@@ -439,6 +440,20 @@ As
 		Set @FilterOnEnzymeID = 0
 
 	---------------------------------------------------
+	-- Count the number of MSMS_Instrument_Class entries in T_Process_Config
+	---------------------------------------------------
+	--
+	Set @filterMatchCount = 0
+	SELECT @filterMatchCount = COUNT(*)
+	FROM T_Process_Config
+	WHERE [Name] = 'MSMS_Instrument_Class'
+	--
+	If @filterMatchCount > 0
+		Set	@FilterOnInstrumentClass = 1
+	Else
+		Set @FilterOnInstrumentClass = 0
+
+	---------------------------------------------------
 	-- Get minimum GANET Fit threshold for this database
 	-- The minimum GANET fit has typically been replaced
 	--  with minimum R-Squared; so the 'GANET_Fit_Minimum_Import'
@@ -544,12 +559,18 @@ As
 	set @SAddnl = @SAddnl + ' AND ResultType IN (SELECT Value FROM T_Process_Config'
 	set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Result_Type'' AND Len(Value) > 0)' + @Lf
 
-	if @FilterOnEnzymeID = 1
+	If @FilterOnEnzymeID = 1
 	Begin
 		Set @SAddnl = @SAddnl + ' AND Enzyme_ID IN (SELECT Value FROM T_Process_Config'
 		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''Enzyme_ID'' AND Len(Value) > 0)' + @Lf
 	End
 
+	If @FilterOnInstrumentClass = 1
+	Begin
+		Set @SAddnl = @SAddnl + ' AND Instrument_Class IN (SELECT Value FROM T_Process_Config'
+		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Instrument_Class'' AND Len(Value) > 0)' + @Lf
+	End
+	
 	-- Combine the Campaign filter with the additional filters
 	set @SCampaignAndAddnl = @SCampaign + ' AND ' + @SAddnl	
 	
@@ -1119,7 +1140,6 @@ Done:
 
 
 	return @myError
-
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User] AS [dbo]
