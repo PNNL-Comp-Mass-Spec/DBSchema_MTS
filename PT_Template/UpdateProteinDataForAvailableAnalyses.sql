@@ -21,6 +21,7 @@ CREATE Procedure dbo.UpdateProteinDataForAvailableAnalyses
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			01/17/2012 mem - Added 'rev[_]%' as a potential prefix for reversed proteins (MS-GFDB)
 **			12/12/2012 mem - Added 'xxx[_]%' as a potential prefix for reversed proteins (MSGF+)
+**			11/25/2014 mem - Now ignoring null Protein_Collection_IDs in T_Proteins when Protein_Collection_List is empty or 'na'
 **    
 *****************************************************/
 (
@@ -44,6 +45,7 @@ AS
 	Declare @MatchCount int
 	Set @MatchCount = 0
 	
+	Declare @ProteinCollectionList varchar(1024)	
 	Declare @message varchar(512)
 	
 	----------------------------------------------
@@ -126,38 +128,50 @@ AS
 					Else
 					Begin -- <e>
 						
-						Set @MatchCount = 0
+						-- Check whether this job used a legacy fasta file							
+						Set @ProteinCollectionList = ''
 						
-						SELECT @MatchCount = COUNT(DISTINCT Prot.Ref_ID)
-						FROM T_Peptides Pep
-						     INNER JOIN T_Peptide_to_Protein_Map PPM
-						       ON Pep.Peptide_ID = PPM.Peptide_ID
-						     INNER JOIN T_Proteins Prot
-						       ON PPM.Ref_ID = Prot.Ref_ID
-						WHERE Pep.Job = @Job AND
-						      Prot.Protein_Collection_ID IS NULL AND
-						      NOT (	Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
-									Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
-									Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
-									Prot.Reference LIKE 'xxx.%'	OR			-- Inspect reversed/scrambled proteins
-									Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
-									Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
-						           )
-
-						If @MatchCount > 0
+						SELECT @ProteinCollectionList = Protein_Collection_List
+						FROM T_Analysis_Description
+						WHERE Job = @Job
+						
+						If (IsNull(@ProteinCollectionList, '') Not In ('', 'na'))
 						Begin
-							Set @message = 'Job ' + Convert(varchar(12), @Job) + ' has ' + Convert(varchar(12), @MatchCount) + ' protein'
-							If @MatchCount = 1
-								Set @message = @message + ' that does not have '
-							Else
-								Set @message = @message + 's that do not have '
-							
-							Set @message = @message + 'a valid protein collection defined; this likely indicates a problem'
-							
-							execute PostLogEntry 'Error', @message, 'UpdateProteinDataForAvailableAnalyses'
-							Set @message = ''
-						End
 
+							Set @MatchCount = 0
+							
+							SELECT @MatchCount = COUNT(DISTINCT Prot.Ref_ID)
+							FROM T_Peptides Pep
+							     INNER JOIN T_Peptide_to_Protein_Map PPM
+							       ON Pep.Peptide_ID = PPM.Peptide_ID
+							     INNER JOIN T_Proteins Prot
+							       ON PPM.Ref_ID = Prot.Ref_ID
+							WHERE Pep.Job = @Job AND
+							      Prot.Protein_Collection_ID IS NULL AND
+							      NOT (	Prot.Reference LIKE 'reversed[_]%' OR	-- MTS reversed proteins
+										Prot.Reference LIKE 'scrambled[_]%' OR	-- MTS scrambled proteins
+										Prot.Reference LIKE '%[:]reversed' OR	-- X!Tandem decoy proteins
+										Prot.Reference LIKE 'xxx.%'	OR			-- Inspect reversed/scrambled proteins
+										Prot.Reference LIKE 'rev[_]%' OR		-- MSGFDB reversed proteins
+										Prot.Reference LIKE 'xxx[_]%'			-- MSGF+ reversed proteins
+									)
+
+							If @MatchCount > 0
+							Begin
+
+								Set @message = 'Job ' + Convert(varchar(12), @Job) + ' has ' + Convert(varchar(12), @MatchCount) + ' protein'
+								If @MatchCount = 1
+									Set @message = @message + ' that does not have '
+								Else
+									Set @message = @message + 's that do not have '
+								
+								Set @message = @message + 'a valid protein collection defined; this likely indicates a problem'
+								
+								execute PostLogEntry 'Error', @message, 'UpdateProteinDataForAvailableAnalyses'
+								Set @message = ''
+							End
+						End 
+						
 					End -- </e>
 					
 				End -- </d>
