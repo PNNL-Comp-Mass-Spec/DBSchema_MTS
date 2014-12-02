@@ -18,6 +18,7 @@ CREATE PROCEDURE UpdateDatasetToSICMapping
 **	Date:	12/13/2004
 **			01/24/2005 mem - Added @SkipDefinedDatasets parameter
 **			06/11/2013 mem - Changed logic for choosing SIC jobs
+**			12/01/2014 mem - Added new MASIC parameter files
 **    
 *****************************************************/
 	@ProcessStateMatch int = 10,
@@ -50,11 +51,17 @@ AS
 	)
 
 	Insert into #Tmp_PrefOrder (Param_file_Name) 
-	Values ('ITRAQ_LTQ-FT_10ppm_ReporterTol0.015Da_2009-12-22.xml'), 
+	Values 
+	    ('ITRAQ_LTQ-FT_10ppm_ReporterTol0.015Da_2014-08-06.xml'),
+	    ('ITRAQ_LTQ-FT_10ppm_ReporterTol0.015Da_2009-12-22.xml'), 
+	    ('ITRAQ8_LTQ-FT_10ppm_ReporterTol0.015Da_2014-08-06.xml'),
 		('ITRAQ8_LTQ-FT_10ppm_ReporterTol0.015Da_2009-12-22.xml'), 
 		('ITRAQ_LTQ-FT_10ppm_2008-09-05.xml'), 
 		('ITRAQ8_LTQ-FT_10ppm_2009-12-24.xml'), 
+		('TMT10_LTQ-FT_10ppm_ReporterTol0.003Da_2014-08-06.xml'),
+		('TMT6_LTQ-FT_10ppm_ReporterTol0.015Da_2014-08-06.xml'),
 		('TMT6_LTQ-FT_10ppm_ReporterTol0.015Da_2010-12-13.xml'), 
+		('LTQ-FT_10ppm_2014-08-06.xml'),
 		('LTQ-FT_10ppm_2008-08-22.xml'), 
 		('Default_2008-08-22.xml'), 
 		('TIC_Only_2008-11-07.xml')
