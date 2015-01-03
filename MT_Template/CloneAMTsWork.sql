@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create PROCEDURE CloneAMTsWork
+CREATE PROCEDURE CloneAMTsWork
 /****************************************************
 ** 
 **	Desc:	Performs the work of cloning AMT tags in temporary table #T_Tmp_MTs_to_Clone
@@ -12,7 +12,8 @@ create PROCEDURE CloneAMTsWork
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
-**	Date:	11/7/2013 mem - Initial version (refactored from CloneO18AMTs)
+**	Date:	11/07/2013 mem - Initial version (refactored from CloneO18AMTs)
+**			01/02/2015 mem - Added column Rank_Hit
 **    
 *****************************************************/
 (
@@ -359,7 +360,7 @@ As
 			--
 			INSERT INTO T_Peptides( Peptide_ID, Job, Scan_Number, Number_Of_Scans, Charge_State, MH, Multiple_Proteins, Peptide, Mass_Tag_ID, 
 				GANET_Obs, State_ID, Scan_Time_Peak_Apex, Peak_Area, Peak_SN_Ratio, Max_Obs_Area_In_Job, 
-				PMT_Quality_Score_Local, DelM_PPM)				
+				PMT_Quality_Score_Local, DelM_PPM, Rank_Hit)
 			SELECT Pep.Peptide_ID + @PeptideIDAddon,
 				Pep.Job,
 				Pep.Scan_Number,
@@ -376,7 +377,8 @@ As
 				Pep.Peak_SN_Ratio,
 				Pep.Max_Obs_Area_In_Job,
 				Pep.PMT_Quality_Score_Local,
-				Pep.DelM_PPM
+				Pep.DelM_PPM,
+				Ppe.Rank_Hit
 			FROM T_Peptides Pep
 				INNER JOIN #T_Tmp_MTs_to_Clone MT
 				ON Pep.Mass_Tag_ID = MT.Mass_Tag_ID
@@ -544,5 +546,6 @@ Done:
 	End
 		
 	return @myError
+
 
 GO
