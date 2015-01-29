@@ -1302,7 +1302,7 @@ As
 				10.75,			-- MScore is set to 10.75 for all Inspect results
 				1,				-- PassFilt is set to 1 for all Inspect results
 				TPI.FScore,		-- Storing Inspect FScore in the Peptide_Prophet_FScore column of T_Score_Discriminant
-				1 - TPI.PValue	-- 1 minus Inspect PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column
+				1 - TPI.PValue	-- 1 minus Inspect PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column (Note: the STAC algorithm used by VIPER weights peptides by Peptide_Prophet_Probability)
 			FROM #Tmp_Peptide_Import TPI INNER JOIN 
 				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
 			ORDER BY UR.Peptide_ID_New
@@ -1859,6 +1859,7 @@ As
 	
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadInspectPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]

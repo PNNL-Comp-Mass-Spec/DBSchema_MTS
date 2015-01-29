@@ -1373,7 +1373,7 @@ As
 				1,					-- DiscriminantScore is set to 1 for all MSGFDB results
 				0.5,				-- DiscriminantScoreNorm is set to 0.5 for all MSGFDB results
 				NULL,				-- FScore is set to Null for all MSGFDB results
-				1 - TPI.PValue,		-- 1 minus MSGFDB PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column
+				1 - TPI.PValue,		-- 1 minus MSGFDB PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column (Note: the STAC algorithm used by VIPER weights peptides by Peptide_Prophet_Probability)
 				TPI.SpecProb		-- We store the MSGF_SpecProb value from MSGFDB in T_Score_Discriminant; if MSGF was run separately, then this value will get updated below via the call to StoreMSGFValues
 			FROM #Tmp_Peptide_Import TPI INNER JOIN 
 				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
@@ -1985,6 +1985,7 @@ As
 	
 Done:
 	Return @myError
+
 
 
 GO
