@@ -27,3 +27,7 @@ ORDER BY UT.Task_ID
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_NET_Update_Task_Summary] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_NET_Update_Task_Summary] TO [MTS_DB_Lite] AS [dbo]
+GO

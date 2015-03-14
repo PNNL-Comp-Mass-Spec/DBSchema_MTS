@@ -36,3 +36,7 @@ FROM V_SIC_Job_to_PeptideHit_Map SJPM
           DSSIC_1.Optimal_Peak_Apex_Scan_Number = DSScans.Scan_Number
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_SIC_Stats_for_PeptideHit_Job] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_SIC_Stats_for_PeptideHit_Job] TO [MTS_DB_Lite] AS [dbo]
+GO

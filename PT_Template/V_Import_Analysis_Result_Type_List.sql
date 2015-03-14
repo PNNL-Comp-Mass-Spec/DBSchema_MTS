@@ -12,3 +12,7 @@ WHERE (Name = 'Import_Result_Type')
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Import_Analysis_Result_Type_List] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Import_Analysis_Result_Type_List] TO [MTS_DB_Lite] AS [dbo]
+GO

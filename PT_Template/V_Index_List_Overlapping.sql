@@ -27,3 +27,7 @@ ORDER BY l1.TableName, l1.IndexName
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Index_List_Overlapping] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Index_List_Overlapping] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -15,3 +15,7 @@ FROM dbo.T_Log_Entries
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Log_Report] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Log_Report] TO [MTS_DB_Lite] AS [dbo]
+GO

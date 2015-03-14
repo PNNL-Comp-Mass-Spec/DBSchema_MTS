@@ -14,3 +14,7 @@ WHERE (Name IN ('Organism_DB_File_Name',
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Import_Organism_DB_Filters] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Import_Organism_DB_Filters] TO [MTS_DB_Lite] AS [dbo]
+GO

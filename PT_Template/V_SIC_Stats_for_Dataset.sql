@@ -28,3 +28,7 @@ FROM dbo.T_Dataset_Stats_Scans SurveyScanInfo INNER JOIN
     DSStatsSIC.Optimal_Peak_Apex_Scan_Number = PeakApexInfo.Scan_Number
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_SIC_Stats_for_Dataset] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_SIC_Stats_for_Dataset] TO [MTS_DB_Lite] AS [dbo]
+GO

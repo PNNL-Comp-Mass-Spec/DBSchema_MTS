@@ -22,3 +22,7 @@ FROM T_Proteins Prot
        ON Pep.Seq_ID = S.Seq_ID
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Protein_Export] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Protein_Export] TO [MTS_DB_Lite] AS [dbo]
+GO

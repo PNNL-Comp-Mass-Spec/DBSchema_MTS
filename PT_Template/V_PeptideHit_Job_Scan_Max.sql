@@ -40,3 +40,7 @@ FROM ( SELECT TAD.Job,
        ON Q1.Job = Q2.Job
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Max] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Max] TO [MTS_DB_Lite] AS [dbo]
+GO

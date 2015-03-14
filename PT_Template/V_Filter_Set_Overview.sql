@@ -54,3 +54,7 @@ FROM (SELECT CONVERT(int, LTRIM(RTRIM(Value))) AS Filter_Set_ID,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Filter_Set_Overview] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Filter_Set_Overview] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -36,3 +36,7 @@ AS (
  ORDER BY t.Schema_Name, t.Table_Name, t.Index_Name
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Table_Index_Sizes] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Table_Index_Sizes] TO [MTS_DB_Lite] AS [dbo]
+GO

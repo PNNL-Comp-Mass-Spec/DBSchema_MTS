@@ -17,3 +17,7 @@ FROM T_Analysis_ToolVersion ATV
        ON ATV.Job = AD.Job
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Analysis_ToolVersion] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Analysis_ToolVersion] TO [MTS_DB_Lite] AS [dbo]
+GO

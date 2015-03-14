@@ -33,3 +33,7 @@ FROM ( SELECT Pep.Job,
        ON TAD.Job = InnerQ.Job
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Stats_Ex] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Stats_Ex] TO [MTS_DB_Lite] AS [dbo]
+GO

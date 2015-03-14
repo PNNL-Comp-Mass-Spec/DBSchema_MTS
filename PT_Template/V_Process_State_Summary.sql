@@ -14,3 +14,7 @@ GROUP BY TAD.Analysis_Tool, TAD.Process_State, PS.Name
 ORDER BY TAD.Analysis_Tool, TAD.Process_State
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Process_State_Summary] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Process_State_Summary] TO [MTS_DB_Lite] AS [dbo]
+GO

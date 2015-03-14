@@ -146,3 +146,7 @@ WHERE (TAD.ResultType = 'MSA_Peptide_Hit')
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_GANET_Peptides] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_GANET_Peptides] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -49,3 +49,7 @@ FROM dbo.T_Analysis_Description TAD
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_MSMS_Analysis_Jobs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_MSMS_Analysis_Jobs] TO [MTS_DB_Lite] AS [dbo]
+GO

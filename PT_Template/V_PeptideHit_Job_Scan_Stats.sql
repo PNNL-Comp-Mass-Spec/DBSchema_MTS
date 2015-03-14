@@ -22,3 +22,7 @@ GROUP BY dbo.T_Analysis_Description.Job
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Stats] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_PeptideHit_Job_Scan_Stats] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -355,3 +355,7 @@ AS
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[ComparePeptideHitResultsAggregateWork] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[ComparePeptideHitResultsAggregateWork] TO [MTS_DB_Lite] AS [dbo]
+GO

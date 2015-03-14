@@ -9,3 +9,7 @@ SELECT Data
 FROM T_ToolVersionInfoContents
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_ToolVersionInfo_Append] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_ToolVersionInfo_Append] TO [MTS_DB_Lite] AS [dbo]
+GO
