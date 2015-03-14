@@ -30,3 +30,7 @@ WHERE NOT EXISTS ( SELECT *
       OBJECTPROPERTY(i.[object_id], 'IsUserTable') = 1
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_UnusedIndices] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_UnusedIndices] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -51,3 +51,7 @@ WHERE (SS.RankXC = 1 AND Pep.Peptide LIKE '[rk-].%[rk].%' AND
        (SS.RankXC = 1 AND SS.XCorr >= 5)
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_GtL_Filtered_Peptides_KJA] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_GtL_Filtered_Peptides_KJA] TO [MTS_DB_Lite] AS [dbo]
+GO

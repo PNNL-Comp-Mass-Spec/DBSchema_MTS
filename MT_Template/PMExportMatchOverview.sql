@@ -172,3 +172,7 @@ DoneSkipLog:
 GO
 GRANT EXECUTE ON [dbo].[PMExportMatchOverview] TO [DMS_SP_User] AS [dbo]
 GO
+GRANT VIEW DEFINITION ON [dbo].[PMExportMatchOverview] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[PMExportMatchOverview] TO [MTS_DB_Lite] AS [dbo]
+GO

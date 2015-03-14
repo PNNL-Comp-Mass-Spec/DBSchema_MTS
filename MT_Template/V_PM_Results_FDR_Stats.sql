@@ -19,3 +19,7 @@ FROM T_Peak_Matching_Task PM
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_PM_Results_FDR_Stats] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_PM_Results_FDR_Stats] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -99,3 +99,7 @@ FROM dbo.T_Analysis_Description_Updates
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Analysis_Description_Updates] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Analysis_Description_Updates] TO [MTS_DB_Lite] AS [dbo]
+GO

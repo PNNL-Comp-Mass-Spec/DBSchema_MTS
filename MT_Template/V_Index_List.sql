@@ -23,3 +23,7 @@ WHERE (idx.indid > 0) AND (INDEXPROPERTY(tbl.id, idx.name,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Index_List] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Index_List] TO [MTS_DB_Lite] AS [dbo]
+GO

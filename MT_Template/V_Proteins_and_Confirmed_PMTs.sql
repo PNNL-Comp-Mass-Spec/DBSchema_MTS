@@ -19,3 +19,7 @@ WHERE (URD.Match_State = 6) AND (MMD.MD_State <> 6)
 GROUP BY MT.Mass_Tag_ID, MTPM.Ref_ID
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Proteins_and_Confirmed_PMTs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Proteins_and_Confirmed_PMTs] TO [MTS_DB_Lite] AS [dbo]
+GO

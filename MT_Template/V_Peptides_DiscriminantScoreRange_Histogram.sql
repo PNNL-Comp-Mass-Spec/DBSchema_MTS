@@ -39,3 +39,7 @@ FROM (SELECT CASE WHEN DiscriminantScoreNorm IS NULL
 GROUP BY DiscriminantScore_Bin
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptides_DiscriminantScoreRange_Histogram] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptides_DiscriminantScoreRange_Histogram] TO [MTS_DB_Lite] AS [dbo]
+GO

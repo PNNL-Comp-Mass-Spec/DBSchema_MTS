@@ -25,3 +25,7 @@ FROM T_Mass_Tag_Conformers_Predicted MTC
        ON MT.Mass_Tag_ID = MTN.Mass_Tag_ID
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tag_Conformers_Predicted] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tag_Conformers_Predicted] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -30,3 +30,7 @@ FROM sys.dm_db_index_usage_stats S
 WHERE S.[database_id] = DB_ID() 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_IndexUsage] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_IndexUsage] TO [MTS_DB_Lite] AS [dbo]
+GO

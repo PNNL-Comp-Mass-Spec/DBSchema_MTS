@@ -28,3 +28,7 @@ FROM (SELECT MTPM.Mass_Tag_ID, MTPM.Ref_ID,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tag_to_Protein_Map_Full_Sequence] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tag_to_Protein_Map_Full_Sequence] TO [MTS_DB_Lite] AS [dbo]
+GO

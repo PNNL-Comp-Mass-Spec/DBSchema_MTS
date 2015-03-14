@@ -37,3 +37,7 @@ GROUP BY S.Mass_Tag_ID, S.CompareMTID, S.Monoisotopic_Mass, S.CompareMass, S.NET
          S.Peptide, S.ComparePeptide, S.PMTQS, S.ComparePMTQS, S.MassDiffPPM, S.NETDiff, S.MassAvg, S.NETAvg
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tags_Near_Duplicates_PlusProteins] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tags_Near_Duplicates_PlusProteins] TO [MTS_DB_Lite] AS [dbo]
+GO

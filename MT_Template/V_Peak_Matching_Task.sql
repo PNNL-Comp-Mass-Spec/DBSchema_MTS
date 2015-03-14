@@ -22,3 +22,7 @@ FROM T_Peak_Matching_Task PM
        ON FAD.Job = PM.Job
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peak_Matching_Task] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peak_Matching_Task] TO [MTS_DB_Lite] AS [dbo]
+GO

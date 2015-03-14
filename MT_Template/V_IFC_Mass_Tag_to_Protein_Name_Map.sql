@@ -16,3 +16,7 @@ FROM dbo.T_Mass_Tag_to_Protein_Map MTPM INNER JOIN
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_Mass_Tag_to_Protein_Name_Map] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_Mass_Tag_to_Protein_Name_Map] TO [MTS_DB_Lite] AS [dbo]
+GO

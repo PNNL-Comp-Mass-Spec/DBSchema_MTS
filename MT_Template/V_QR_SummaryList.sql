@@ -49,3 +49,7 @@ FROM T_Quantitation_Description QD INNER JOIN
     T_Quantitation_State_Name QSN ON QD.Quantitation_State = QSN.Quantitation_State
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_QR_SummaryList] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_QR_SummaryList] TO [MTS_DB_Lite] AS [dbo]
+GO

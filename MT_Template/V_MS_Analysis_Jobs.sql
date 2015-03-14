@@ -51,3 +51,7 @@ FROM dbo.T_FTICR_Analysis_Description AS TAD
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_MS_Analysis_Jobs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_MS_Analysis_Jobs] TO [MTS_DB_Lite] AS [dbo]
+GO

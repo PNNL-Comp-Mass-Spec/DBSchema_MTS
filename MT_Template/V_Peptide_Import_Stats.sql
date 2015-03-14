@@ -42,3 +42,7 @@ FROM ( SELECT Entry_ID,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptide_Import_Stats] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peptide_Import_Stats] TO [MTS_DB_Lite] AS [dbo]
+GO

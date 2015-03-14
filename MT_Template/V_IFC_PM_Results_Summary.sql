@@ -58,3 +58,7 @@ FROM dbo.T_Match_Making_Description MMD
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_PM_Results_Summary] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_PM_Results_Summary] TO [MTS_DB_Lite] AS [dbo]
+GO

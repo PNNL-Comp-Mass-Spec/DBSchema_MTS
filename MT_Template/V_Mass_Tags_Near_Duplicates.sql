@@ -45,3 +45,7 @@ WHERE (Abs(MassDiffPPM) < 6)
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tags_Near_Duplicates] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Mass_Tags_Near_Duplicates] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -28,3 +28,7 @@ WHERE QD.Quantitation_State IN (1,2,3,5)
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_MD_ID_to_QID_Map] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_MD_ID_to_QID_Map] TO [MTS_DB_Lite] AS [dbo]
+GO

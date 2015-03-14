@@ -14,3 +14,7 @@ FROM dbo.T_Process_Config PC INNER JOIN
 ORDER BY PCP.[Function], PC.Name
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Config_Info] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Config_Info] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -39,3 +39,7 @@ FROM (SELECT TAD.Dataset_ID, P.Scan_Number, P.Charge_State,
     SequestQ.Mass_Tag_ID = XTandemQ.Mass_Tag_ID
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Sequest_vs_XTandem] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Sequest_vs_XTandem] TO [MTS_DB_Lite] AS [dbo]
+GO

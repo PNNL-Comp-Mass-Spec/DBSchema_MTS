@@ -193,3 +193,7 @@ DoneSkipLog:
 GO
 GRANT EXECUTE ON [dbo].[PMExportAMTs] TO [DMS_SP_User] AS [dbo]
 GO
+GRANT VIEW DEFINITION ON [dbo].[PMExportAMTs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[PMExportAMTs] TO [MTS_DB_Lite] AS [dbo]
+GO

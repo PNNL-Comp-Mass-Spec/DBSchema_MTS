@@ -69,3 +69,7 @@ FROM dbo.T_Match_Making_Description AS MMD
 WHERE (FUR_Heavy.Pair_UMC_Ind >= 0) AND (FUR_Heavy.FPR_Type_ID > 0 AND FUR_Heavy.FPR_Type_ID % 2 = 0)
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_PM_Results_Pairs] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_PM_Results_Pairs] TO [MTS_DB_Lite] AS [dbo]
+GO

@@ -39,3 +39,7 @@ FROM V_Peak_Matching_Task PM
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peak_Matching_Task2] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Peak_Matching_Task2] TO [MTS_DB_Lite] AS [dbo]
+GO

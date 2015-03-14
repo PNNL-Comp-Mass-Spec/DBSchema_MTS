@@ -46,3 +46,7 @@ SELECT DISTINCT 'Observation Count Filter' AS Filter_Type,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Filter_Set_Overview_Ex] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Filter_Set_Overview_Ex] TO [MTS_DB_Lite] AS [dbo]
+GO

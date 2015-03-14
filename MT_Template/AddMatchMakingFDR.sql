@@ -70,3 +70,7 @@ As
 GO
 GRANT EXECUTE ON [dbo].[AddMatchMakingFDR] TO [DMS_SP_User] AS [dbo]
 GO
+GRANT VIEW DEFINITION ON [dbo].[AddMatchMakingFDR] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[AddMatchMakingFDR] TO [MTS_DB_Lite] AS [dbo]
+GO

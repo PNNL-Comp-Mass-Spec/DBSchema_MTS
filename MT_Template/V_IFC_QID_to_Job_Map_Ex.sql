@@ -23,3 +23,7 @@ FROM dbo.T_Quantitation_Description QD INNER JOIN
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_QID_to_Job_Map_Ex] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_IFC_QID_to_Job_Map_Ex] TO [MTS_DB_Lite] AS [dbo]
+GO

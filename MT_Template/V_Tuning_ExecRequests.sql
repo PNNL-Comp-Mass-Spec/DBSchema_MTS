@@ -47,3 +47,7 @@ WHERE NOT ExecRequests.sql_handle IS NULL
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_ExecRequests] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_Tuning_ExecRequests] TO [MTS_DB_Lite] AS [dbo]
+GO

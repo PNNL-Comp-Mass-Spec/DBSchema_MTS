@@ -14,3 +14,7 @@ FROM (SELECT Name, Value AS Protein_DB_Name
       WHERE (Name = 'Peptide_DB_Name')) N
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_External_Databases] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_External_Databases] TO [MTS_DB_Lite] AS [dbo]
+GO

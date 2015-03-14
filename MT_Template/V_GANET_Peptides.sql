@@ -164,3 +164,7 @@ GROUP BY Job, Scan_Number, Peptide, Mod_Description, Mass_Tag_ID, Charge_State,
 
 
 GO
+GRANT VIEW DEFINITION ON [dbo].[V_GANET_Peptides] TO [MTS_DB_Dev] AS [dbo]
+GO
+GRANT VIEW DEFINITION ON [dbo].[V_GANET_Peptides] TO [MTS_DB_Lite] AS [dbo]
+GO
