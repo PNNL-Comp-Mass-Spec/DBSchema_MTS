@@ -26,8 +26,6 @@ SELECT Src.Dataset,
        Src.[Dataset Folder Path],
        Src.[Storage Folder],
        Src.Storage,
-       Src.[Compressed State],
-       Src.[Compressed Date],
        Src.ID,
        Src.[Acquisition Start],
        Src.[Acquisition End],
@@ -37,6 +35,7 @@ SELECT Src.Dataset,
        Src.[File Size MB],
        Src.Instrument_Data_Purged
 FROM GIGASAX.DMS5.dbo.V_Dataset_Export Src
+
 
 
 GO

@@ -22,6 +22,7 @@ CREATE PROCEDURE RefreshCachedDMSDatasetInfo
 **			10/17/2012 mem - Now populating Instrument_Data_Purged
 **			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
+**			07/13/2015 mem - Remove [Compressed State] and [Compressed Date]
 **
 *****************************************************/
 (
@@ -135,7 +136,7 @@ AS
 		Set @S = @S +                 ' [Well Number], [Dataset Int Std], Type, Operator, Comment, '
 		Set @S = @S +                 ' Rating, Request, State, Created, [Folder Name], '
 		Set @S = @S +                 ' [Dataset Folder Path], [Storage Folder], Storage, ' 
-		Set @S = @S +                 ' [Compressed State], [Compressed Date], ID, '
+		Set @S = @S +                 ' ID, '
 		Set @S = @S +                 ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
 		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged'
 		Set @S = @S + '          FROM ' + @SourceTable
@@ -145,7 +146,7 @@ AS
 		Set @S = @S +                 ' [Well Number], [Dataset Int Std], Type, Operator, Comment, '
 		Set @S = @S +                 ' Rating, Request, State, Created, [Folder Name], '
 		Set @S = @S +                 ' [Dataset Folder Path], [Storage Folder], Storage, '
-		Set @S = @S +                 ' [Compressed State], [Compressed Date], ID, '
+		Set @S = @S +                 ' ID, '
 		Set @S = @S +                 ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
 		Set @S = @S +                 ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged)'
 		Set @S = @S + ' ON (target.ID = source.ID)'
@@ -170,8 +171,6 @@ AS
 		Set @S = @S +                     ' IsNull(Target.[Dataset Folder Path], '''') <> IsNull(source.[Dataset Folder Path], '''') OR '
 		Set @S = @S +          ' IsNull(Target.[Storage Folder], '''') <> IsNull(source.[Storage Folder], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.Storage, '''') <> IsNull(source.Storage, '''') OR '
-		Set @S = @S +                     ' IsNull(Target.[Compressed State], -1) <> IsNull(source.[Compressed State], -1) OR '
-		Set @S = @S +                     ' IsNull(Target.[Compressed Date], '''') <> IsNull(source.[Compressed Date], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Acquisition Start], '''') <> IsNull(source.[Acquisition Start], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Acquisition End], '''') <> IsNull(source.[Acquisition End], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Scan Count], -1) <> IsNull(source.[Scan Count], -1) OR '
@@ -199,8 +198,6 @@ AS
 		Set @S = @S +          ' [Dataset Folder Path] = source.[Dataset Folder Path],'
 		Set @S = @S +          ' [Storage Folder] = source.[Storage Folder],'
 		Set @S = @S +          ' Storage = source.Storage,'
-		Set @S = @S +          ' [Compressed State] = source.[Compressed State],'
-		Set @S = @S +          ' [Compressed Date] = source.[Compressed Date],'
 		Set @S = @S +          ' ID = source.ID,'
 		Set @S = @S +          ' [Acquisition Start] = source.[Acquisition Start],'
 		Set @S = @S +          ' [Acquisition End] = source.[Acquisition End],'
@@ -216,15 +213,15 @@ AS
 		Set @S = @S +         ' [Well Number], [Dataset Int Std], Type, Operator, Comment, '
 		Set @S = @S +         ' Rating, Request, State, Created, [Folder Name], '
 		Set @S = @S +         ' [Dataset Folder Path], [Storage Folder], Storage,' 
-		Set @S = @S +         ' [Compressed State], [Compressed Date], ID, '
+		Set @S = @S +         ' ID, '
 		Set @S = @S +         ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
 		Set @S = @S +         ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged, Last_Affected)'
 		Set @S = @S + '	VALUES ( source.Dataset, source.Experiment, source.Organism, source.Instrument,'
-		Set @S = @S +          ' source.[Separation Type], source.[LC Column], source.[Wellplate Number],'
+		Set @S = @S +       ' source.[Separation Type], source.[LC Column], source.[Wellplate Number],'
 		Set @S = @S +          ' source.[Well Number], source.[Dataset Int Std], source.Type, source.Operator, source.Comment,'
 		Set @S = @S +          ' source.Rating, source.Request, source.State, source.Created, source.[Folder Name],'
 		Set @S = @S +          ' source.[Dataset Folder Path], source.[Storage Folder], source.Storage,'
-		Set @S = @S +          ' source.[Compressed State], source.[Compressed Date], source.ID,'
+		Set @S = @S +          ' source.ID,'
 		Set @S = @S +          ' source.[Acquisition Start], source.[Acquisition End], source.[Scan Count], [File Size MB],'
 		Set @S = @S +          ' source.[PreDigest Int Std], source.[PostDigest Int Std], source.Instrument_Data_Purged, GetDate())'
 		Set @S = @S + ' WHEN NOT MATCHED BY SOURCE AND '
