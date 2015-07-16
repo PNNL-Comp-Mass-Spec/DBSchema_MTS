@@ -41,7 +41,7 @@ ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Databa
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Demand_Import]  DEFAULT ((0)) FOR [PDB_Demand_Import]
 GO
-ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Max_Jobs_To_Process]  DEFAULT ((50)) FOR [PDB_Max_Jobs_To_Process]
+ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_Max_Jobs_To_Process]  DEFAULT ((500)) FOR [PDB_Max_Jobs_To_Process]
 GO
 ALTER TABLE [dbo].[T_Peptide_Database_List] ADD  CONSTRAINT [DF_T_Peptide_Database_List_PDB_DB_Schema_Version]  DEFAULT ((2)) FOR [PDB_DB_Schema_Version]
 GO
