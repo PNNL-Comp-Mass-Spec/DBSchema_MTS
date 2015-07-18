@@ -10,11 +10,13 @@ CREATE PROCEDURE DynamicPivot
 **			a PIVOT query against a table
 **
 **			Modelled after code posted to http://www.experts-exchange.com/articles/Microsoft/Development/MS-SQL-Server/SQL-Server-2005/Dynamic-Pivot-Procedure-for-SQL-Server.html
-**			Original versio by Mark Wills, posted 05/15/09 at 12:32 PM
+**			Original version by Mark Wills, posted 05/15/09 at 12:32 PM
 **
 **
 **	Auth:	mem
 **	Date:	09/23/2009 mem - Initial version
+**			07/16/2015 mem - Now supports views
+**						   - Added parameter @ReplaceNulls
 **
 *****************************************************/
 (
@@ -24,6 +26,7 @@ CREATE PROCEDURE DynamicPivot
 	@Pivot_Value_Column varchar(2000),			-- Column name to aggregate (e.g. Abundance)
 	@Pivot_Column_List varchar(2000),			-- Column name to examine to determine the column header names (e.g. Condition)
 	@Pivot_Column_Style_Code varchar(4),		-- Number format to apply to the column headers (only useful if your headers will be dates); For example, use "106" for format dates as "dd mmm yyyy"
+	@ReplaceNulls tinyint = 1,					-- When 1, then replaces nulls in the results with zeroes
 	@infoOnly TINYINT = 0,
 	@message varchar(512)='' output,
 	@PivotSQL nvarchar(max)='' output
@@ -44,6 +47,9 @@ AS
 	Set @Pivot_Column_List = IsNull(@Pivot_Column_List, '')
 	Set @Pivot_Column_Style_Code = LTrim(IsNull(@Pivot_Column_Style_Code, ''))
 	
+	Set @ReplaceNulls = IsNull(@ReplaceNulls, 1)
+	Set @infoOnly = IsNull(@infoOnly, 1)
+	
 	Set @message= ''
 	Set @PivotSQL = ''
 	
@@ -56,9 +62,12 @@ AS
 	
 	If NOT EXISTS (SELECT * FROM SYS.TABLES WHERE Name = @SourceTable)
 	Begin
-		Set @myError = 50000
-		Set @message = 'Source table not found: ' + @SourceTable
-		Goto Done
+		If NOT EXISTS (SELECT * FROM SYS.VIEWS WHERE Name = @SourceTable)
+		Begin
+			Set @myError = 50000
+			Set @message = 'Source table not found: ' + @SourceTable
+			Goto Done
+		End
 	End
 	
 	
@@ -75,21 +84,52 @@ AS
 	If @infoOnly <> 0
 		Print @sql
 	
-   execute sp_executesql @sql,
+    execute sp_executesql @sql,
 						 N'@columns varchar(max) output',
 						 @columns=@columns output 
  
-	set @PivotSQL = N'SELECT * FROM 
-	   (SELECT '+@Pivot_On_Source_Column+','+@Pivot_Column_List+','+@Pivot_Value_Column+' FROM '+@SourceTable+') src
-	   PIVOT
-	   ('+@Pivot_Value_Aggregate+'('+@Pivot_Value_Column+') FOR '+@Pivot_Column_List+' IN ('+@columns+') ) pvt
-	   ORDER BY 1'
-       
-	If @infoOnly <> 0
-		Print @PivotSQL
+	If @ReplaceNulls = 0
+	Begin
+		set @PivotSQL = N'SELECT * FROM 
+		(SELECT '+@Pivot_On_Source_Column+','+@Pivot_Column_List+','+@Pivot_Value_Column+' FROM '+@SourceTable+') src
+		PIVOT
+		('+@Pivot_Value_Aggregate+'('+@Pivot_Value_Column+') FOR '+@Pivot_Column_List+' IN ('+@columns+') ) pvt
+		ORDER BY 1'
+	       
+		If @infoOnly <> 0
+			Print @PivotSQL
+		Else
+			execute sp_executesql @PivotSQL
+	End
 	Else
-		execute sp_executesql @PivotSQL
+	Begin
+	
+		-- Construct the sql for obtaining the data with Nulls replaced with 0's
+		Declare @columnsNoNull varchar(max)
+		set @sql = N'set @columnsNoNull = substring((select '', IsNull([''+convert(varchar,'+@Pivot_Column_List+@Pivot_Column_Style_Code+')+''], 0) AS ['' + convert(varchar,'+@Pivot_Column_List+@Pivot_Column_Style_Code+')+'']'' from '+@SourceTable+' group by '+@Pivot_Column_List+' for xml path('''')),2,8000)'
 
+		If @infoOnly <> 0
+			Print @sql
+		
+		execute sp_executesql @sql,
+							N'@columnsNoNull varchar(max) output',
+							@columnsNoNull=@columnsNoNull output 
+
+		set @PivotSQL = N'SELECT ' + @Pivot_On_Source_Column + ', ' + @columnsNoNull + 
+						' FROM (SELECT * 
+								FROM (SELECT ' + @Pivot_On_Source_Column + ',' + @Pivot_Column_List + ',' + @Pivot_Value_Column +
+									' FROM ' + @SourceTable + ') src
+									PIVOT
+										(' + @Pivot_Value_Aggregate + '(' + @Pivot_Value_Column + ') FOR ' + @Pivot_Column_List + ' IN (' + @columns + ') ) pvt
+							) PivotQ
+						ORDER BY 1'
+	       
+		If @infoOnly <> 0
+			Print @PivotSQL
+		Else
+			execute sp_executesql @PivotSQL
+	End
+	
 	---------------------------------------------------
 	-- Exit
 	---------------------------------------------------
