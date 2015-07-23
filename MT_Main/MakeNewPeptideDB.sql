@@ -41,6 +41,7 @@ CREATE Procedure MakeNewPeptideDB
 **			04/23/2013 mem - Now adding the new database to the DatabaseSettings table in the dba database
 **			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
 **			04/14/2014 mem - Now checking for the name containing a space or carriage return	
+**			07/21/2015 mem - Switched to using ScrubWhitespace to remove whitespace (including space, tab, and carriage return)
 **    
 *****************************************************/
 (
@@ -74,13 +75,17 @@ AS
 	-- Check for invalid characters in @newDBNameRoot
 	---------------------------------------------------
 	
-	Set @newDBNameRoot = LTrim(RTrim(IsNull(@newDBNameRoot, '')))
+	Set @newDBNameRoot = dbo.ScrubWhitespace(IsNull(@newDBNameRoot, ''))
 	
 	Exec @myError = ValidateDBName @newDBNameRoot, @message output
 	
 	If @myError <> 0
 		Goto Done
-		
+	
+	Set @organism = dbo.ScrubWhitespace(IsNull(@organism, ''))
+	
+	Set @OrganismDBFileList = dbo.ScrubWhitespace(IsNull(@OrganismDBFileList, ''))
+	
    	---------------------------------------------------
 	-- Verify organism against DMS
 	---------------------------------------------------
@@ -110,8 +115,8 @@ AS
 	---------------------------------------------------
 	-- Populate @dataStoragePath and @logStoragePath If required
 	---------------------------------------------------
-	Set @dataStoragePath = LTrim(RTrim(IsNull(@dataStoragePath, '')))
-	Set @logStoragePath = LTrim(RTrim(IsNull(@logStoragePath, '')))
+	Set @dataStoragePath = dbo.ScrubWhitespace(IsNull(@dataStoragePath, ''))
+	Set @logStoragePath = dbo.ScrubWhitespace(IsNull(@logStoragePath, ''))
 
 	If Len(@dataStoragePath) = 0 Or Len(@logStoragePath) = 0
 	Begin

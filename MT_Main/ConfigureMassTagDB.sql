@@ -21,6 +21,7 @@ CREATE PROCEDURE ConfigureMassTagDB
 **			07/27/2006 mem - Updated to use @OrganismDBFileList to also populate Protein_Collection_Filter
 **			05/15/2007 mem - Expanded several input parameters to varchar(max)
 **			10/28/2011 mem - Added parameter @PeptideImportMSGFSpecProbFilter
+**			07/21/2015 mem - Switched to using ScrubWhitespace to remove whitespace (including space, tab, and carriage return)
 **    
 *****************************************************/
 (
@@ -57,11 +58,33 @@ AS
 	
 	set @message = ''
 
-	declare @organism varchar(64)
-	set @organism = ''
-
+	Declare @organism varchar(64) = ''
 	Declare @S varchar(512)
-		
+	
+	---------------------------------------------------
+	-- Remove any leading or trailing whitespace
+	---------------------------------------------------
+	--	
+	Set @MTDBName = dbo.ScrubWhitespace(IsNull(@MTDBName , ''))
+	Set @campaign = dbo.ScrubWhitespace(IsNull(@campaign, ''))
+	Set @peptideDBName = dbo.ScrubWhitespace(IsNull(@peptideDBName, ''))
+	Set @proteinDBName = dbo.ScrubWhitespace(IsNull(@proteinDBName, ''))
+	Set @OrganismDBFileList = dbo.ScrubWhitespace(IsNull(@OrganismDBFileList, ''))
+	Set @ParameterFileList = dbo.ScrubWhitespace(IsNull(@ParameterFileList, ''))
+	
+	Set @PeptideImportFilterIDList = dbo.ScrubWhitespace(IsNull(@PeptideImportFilterIDList , ''))
+	Set @PMTQualityScoreSetList = dbo.ScrubWhitespace(IsNull(@PMTQualityScoreSetList, ''))
+	Set @SeparationTypeList = dbo.ScrubWhitespace(IsNull(@SeparationTypeList, ''))
+
+	Set @ExperimentFilterList = dbo.ScrubWhitespace(IsNull(@ExperimentFilterList, ''))
+	Set @ExperimentExclusionFilterList = dbo.ScrubWhitespace(IsNull(@ExperimentExclusionFilterList, ''))
+	Set @DatasetFilterList = dbo.ScrubWhitespace(IsNull(@DatasetFilterList, ''))
+	Set @DatasetExclusionFilterList = dbo.ScrubWhitespace(IsNull(@DatasetExclusionFilterList, ''))
+
+	Set @DatasetDateMinimum = dbo.ScrubWhitespace(IsNull(@DatasetDateMinimum, ''))
+
+	Set @PeptideImportMSGFSpecProbFilter = dbo.ScrubWhitespace(IsNull(@PeptideImportMSGFSpecProbFilter, ''))
+	
 	---------------------------------------------------
 	-- Lookup the organism name for @peptideDBName
 	-- If no match is found, then @organism will remain blank
@@ -84,14 +107,14 @@ AS
 	Exec AddUpdateConfigEntry @MTDBName, 'Peptide_DB_Name', @peptideDBName
 	Exec AddUpdateConfigEntry @MTDBName, 'Protein_DB_Name', @proteinDBName
 
-	If Len(IsNull(@OrganismDBFileList, '')) > 0
+	If Len(@OrganismDBFileList) > 0
 	Begin
 		Exec @myError = ConfigureOrganismDBFileFilters @MTDBName, @OrganismDBFileList, @message = @message output
 		
 		if @myError <> 0
 		Begin
 			If Len(IsNull(@message, '')) = 0
-				Set @message = 'Error calling ConfigureOrganismDBFileFilters with @OrganismDBFileList = ' + IsNull(@OrganismDBFileList, '')
+				Set @message = 'Error calling ConfigureOrganismDBFileFilters with @OrganismDBFileList = ' + @OrganismDBFileList
 			goto done
 		end
 	End
