@@ -22,6 +22,7 @@ CREATE Procedure dbo.LoadMSAlignPeptidesBulk
 **			12/06/2012 mem - Expanded @message to varchar(1024)
 **			02/26/2013 mem - Expanded Mass_Correction_Tag in #Tmp_Peptide_ModSummary to varchar(128)
 **			03/12/2014 mem - No longer checking for proteins with long protein names
+**			08/31/2015 mem - Add support for MSAlign synopsis files with 22 columns
 **
 *****************************************************/
 (
@@ -152,6 +153,11 @@ As
 		Set @SynFileVersion = '2012'
 	End
 
+	If @SynFileColCount = 22
+	Begin
+		Set @SynFileVersion = '2013'
+	End
+
 	If @SynFileVersion = ''
 	Begin
 		-- Unrecognized version
@@ -194,12 +200,14 @@ As
 		goto Done
 	end
 	
-	-- Future: add additional columns
-	If @SynFileVersion IN ('Future_Version')
+	-- Add additional columns
+	If @SynFileVersion IN ('2013')
 	Begin
-		-- Add FDR columns
+		-- Add columns that were added for MSAlign_Histone
+		-- (these columns are blank for MSAlign results)
 		ALTER Table #Tmp_Peptide_Import ADD
-			FutureColumn real NULL
+			Species_ID varchar(24) NULL,
+			FragMethod varchar(24) NULL
 	End
 	
 	CREATE CLUSTERED INDEX #IX_Tmp_Peptide_Import_Result_ID ON #Tmp_Peptide_Import (Result_ID)
@@ -1848,7 +1856,6 @@ As
 
 Done:
 	Return @myError
-
 
 
 GO

@@ -35,6 +35,7 @@ CREATE Procedure ProcessCandidateSequencesForOneAnalysis
 **			12/05/2012 mem - Added parameter @infoOnly; now populating T_Sequence_Mod_Info
 **			12/06/2012 mem - No longer populating T_Sequence_Mod_Info
 **			               - Now examining DeleteCandidateSequences in T_Process_Step_Control
+**			08/31/2015 mem - Now checking for entries in T_Seq_Candidates with duplicate Seq_ID values
 **    
 *****************************************************/
 (
@@ -445,6 +446,34 @@ As
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
+
+		-- In rare occurrences for MSAlign results, two results can have the same
+		-- Clean_Sequence, Mod_Count, and Mod_Description, but different Monoisotopic_Mass values
+		-- This will result in two entries in T_Seq_Candidates, each with Add_Sequence = 1
+		-- Example from job 997139
+		-- Seq_ID_Local   Mod_Description         Monoisotopic_Mass   Seq_id
+		-- 2015	          Acetyl:1,-108227.:976	  2950.4839017	      500695394
+		-- 2693	          Acetyl:1,-108227.:976	  2837.3998437	      500695394
+		
+		-- Use an Update query to change Add_Sequence back to 0 for the 2nd and subsequent entries
+
+		UPDATE T_Seq_Candidates
+		SET Add_Sequence = 0
+		FROM T_Seq_Candidates Target
+		     INNER JOIN ( SELECT Seq_ID,
+		                         MIN(Seq_ID_Local) AS Seq_ID_Local_First
+		                  FROM T_Seq_Candidates
+		                  WHERE Job = @Job
+		                  GROUP BY Seq_ID
+		                  HAVING (COUNT(*) > 1) 
+		                ) DuplicatesQ
+		       ON Target.Seq_ID = DuplicatesQ.Seq_ID AND
+		          Target.Seq_ID_Local <> DuplicatesQ.Seq_ID_Local_First
+		WHERE Target.Job = @Job
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+
+		
 		If @infoOnly <> 0
 		Begin
 			SELECT Seq_ID, Clean_Sequence, Mod_Count, Mod_Description, Monoisotopic_Mass, Add_Sequence
@@ -655,6 +684,7 @@ Done:
 	End
 
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ProcessCandidateSequencesForOneAnalysis] TO [MTS_DB_Dev] AS [dbo]
