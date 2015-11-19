@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE PROCEDURE dbo.GetMassTagsPlusConformers
 /****************************************************************
 **  Desc: Returns mass tags and NET values relevant for PMT peak matching
@@ -23,6 +22,7 @@ CREATE PROCEDURE dbo.GetMassTagsPlusConformers
 **			02/29/2012 mem - Updated #Tmp_MTandConformer_Details to include PMT_QS
 **			               - Added parameters @AMTCount and @infoOnly
 **			07/25/2012 mem - Updated #Tmp_MTandConformer_Details to include NET_Count, NET_StDev, Drift_Time_Obs_Count, and Drift_Time_StDev
+**			11/18/2015 mem - Fix invalid field names in Group By clause when @JobToFilterOnByDataset is non-zero
 **  
 ****************************************************************/
 (
@@ -169,9 +169,9 @@ As
 		     LEFT OUTER JOIN T_Mass_Tag_Conformers_Observed MTC ON MT.Mass_Tag_ID = MTC.Mass_Tag_ID
 		WHERE TAD.Dataset = @DatasetToFilterOn AND
 		      P.Max_Obs_Area_In_Job = 1
-		GROUP BY MT.Mass_Tag_ID, MT.Monoisotopic_Mass, MTN.PNET, 
+		GROUP BY MT.Mass_Tag_ID, MT.Monoisotopic_Mass, MTN.PNET, MT.PMT_Quality_Score,
 		         MTC.Conformer_ID, MTC.Charge, MTC.Conformer, MTC.Drift_Time_Avg,
-		         MTC.Drift_Time_Obs_Count, MTC.Drift_Time_StDev
+		         MTC.Obs_Count, MTC.Drift_Time_StDev
 		--
 		SELECT @AMTCount = @@RowCount
 		
@@ -249,11 +249,11 @@ As
 		                                         Conformer,
 		                                         Drift_Time_Avg,
 		                                         Drift_Time_Obs_Count,
-		                                         Drift_Time_StDev)
+		             Drift_Time_StDev)
 		SELECT MT.Mass_Tag_ID,
 		       MT.Monoisotopic_Mass,
 		       CASE
-		           WHEN @NETValueType = 1 THEN MTN.PNET
+		     WHEN @NETValueType = 1 THEN MTN.PNET
 		           ELSE MTN.Avg_GANET
 		       END AS NET_Value_to_Use,
 		       CASE

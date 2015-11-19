@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE PROCEDURE dbo.GetMassTagsGANETParam
 /****************************************************************
 **  Desc: Returns mass tags and NET values relevant for PMT peak matching
@@ -37,6 +36,7 @@ CREATE PROCEDURE dbo.GetMassTagsGANETParam
 **			               - Added parameters @AMTCount and @infoOnly
 **			07/25/2012 mem - Updated #Tmp_MTandConformer_Details to include NET_Count, NET_StDev, Drift_Time_Obs_Count, and Drift_Time_StDev
 **			02/12/2014 mem - Now passing @infoOnly to GetMassTagsPassingFiltersWork
+**			11/18/2015 mem - Add missing reference to PMT_Quality_Score in the Group By clause when @JobToFilterOnByDataset is non-zero
 **  
 ****************************************************************/
 (
@@ -189,7 +189,7 @@ As
 		     INNER JOIN T_Analysis_Description TAD ON P.Job = TAD.Job
 		WHERE TAD.Dataset = @DatasetToFilterOn AND
 		      P.Max_Obs_Area_In_Job = 1
-		GROUP BY MT.Mass_Tag_ID, MT.Monoisotopic_Mass, MTN.PNET
+		GROUP BY MT.Mass_Tag_ID, MT.Monoisotopic_Mass, MTN.PNET, MT.PMT_Quality_Score
 		--
 		SELECT @AMTCount = @@RowCount
 		
