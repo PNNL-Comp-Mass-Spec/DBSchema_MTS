@@ -33,5 +33,3 @@ WHERE NOT EXISTS ( SELECT *
 GO
 GRANT VIEW DEFINITION ON [dbo].[V_Tuning_UnusedIndices] TO [d3m578] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[V_Tuning_UnusedIndices] TO [PNL\D3M580] AS [dbo]
-GO
