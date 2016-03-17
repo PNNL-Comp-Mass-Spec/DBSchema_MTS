@@ -375,7 +375,7 @@ BEGIN
 		BEGIN
 			SELECT @SQL = 
 				'USE '+ CHAR(13) + '[' + @DBName + ']'  + CHAR(13)+ CHAR(10) + 
-				+ 'IF  EXISTS (SELECT * FROM sys.triggers WHERE [name] = ''tr_DDL_SchemaChangeLog'') DROP TRIGGER tr_DDL_SchemaChangeLog ON DATABASE'
+				+ 'IF EXISTS (SELECT * FROM sys.triggers WHERE [name] = ''tr_DDL_SchemaChangeLog'') DROP TRIGGER tr_DDL_SchemaChangeLog ON DATABASE'
 			EXEC(@SQL)
 			
 			UPDATE #TEMP
@@ -436,10 +436,9 @@ BEGIN
 	SELECT 'HealthReport','ShowSchemaChanges',NULL,'Variable for the HealthReport',0 UNION ALL
 	SELECT 'HealthReport','ShowModifiedServerConfig',NULL,'Variable for the HealthReport',1 UNION ALL
 	SELECT 'HealthReport','ShowBackups',NULL,'Variable for the HealthReport',0 UNION ALL
-	SELECT 'HealthReport','ShowLogBackups',NULL,'Variable for the HealthReport',0 UNION ALL
 	SELECT 'HealthReport','ShowPerfStats',NULL,'Variable for the HealthReport',0 UNION ALL
 	SELECT 'HealthReport','ShowCPUStats',NULL,'Variable for the HealthReport',0 UNION ALL
-	SELECT 'HealthReport','ShowLogBackups',NULL,'Variable for the HealthReport',1 UNION ALL
+	SELECT 'HealthReport','ShowLogBackups',NULL,'Variable for the HealthReport',0 UNION ALL
 	SELECT 'HealthReport','ShowEmptySections',NULL,'Variable for the HealthReport',0
 END
 GO
@@ -1029,33 +1028,6 @@ BEGIN
 		OtherProcessPerecnt INT,
 		DateStamp DATETIME
 		)
-END
-GO
-
-IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='DataDictionary_Tables')
-BEGIN
-	CREATE TABLE dbo.DataDictionary_Tables(
-		SchemaName SYSNAME NOT NULL,
-		TableName SYSNAME NOT NULL,
-		TableDescription VARCHAR(4000) NOT NULL
-			CONSTRAINT DF_DataDictionary_TableDescription DEFAULT (''),
-			CONSTRAINT PK_DataDictionary_Tables 
-				PRIMARY KEY CLUSTERED (SchemaName,TableName)
-		)
-END
-GO
-
-IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='DataDictionary_Fields')
-BEGIN
-	CREATE TABLE dbo.DataDictionary_Fields(
-		SchemaName SYSNAME NOT NULL,
-		TableName SYSNAME NOT NULL,
-		FieldName SYSNAME NOT NULL,
-		FieldDescription VARCHAR(4000) NOT NULL
-			CONSTRAINT DF_DataDictionary_FieldDescription DEFAULT (''),
-			CONSTRAINT PK_DataDictionary_Fields 
-				PRIMARY KEY CLUSTERED (SchemaName,TableName,FieldName)
-	)
 END
 
 GO
@@ -2399,260 +2371,259 @@ AS
 ***************************************************************************************************************/
 
 BEGIN
-
-CREATE TABLE #FILESTATS (
-	[DBName] NVARCHAR(128),
-	[DBID] INT,
-	[FileID] INT,	
-	[FileName] NVARCHAR(255),
-	[LogicalFileName] NVARCHAR(255),
-	[VLFCount] INT,
-	DriveLetter NCHAR(1),
-	FileMBSize BIGINT,
-	[FileMaxSize] NVARCHAR(30),
-	FileGrowth NVARCHAR(30),
-	FileMBUsed BIGINT,
-	FileMBEmpty BIGINT,
-	FilePercentEmpty NUMERIC(12,2),
-	LargeLDF INT,
-	[FileGroup] NVARCHAR(100),
-	NumberReads BIGINT,
-	KBytesRead NUMERIC(20,2),
-	NumberWrites BIGINT,
-	KBytesWritten NUMERIC(20,2),
-	IoStallReadMS BIGINT,
-	IoStallWriteMS BIGINT,
-	Cum_IO_GB NUMERIC(20,2),
-	IO_Percent NUMERIC(12,2)
-	)
-
-CREATE TABLE #LOGSPACE (
-	[DBName] NVARCHAR(128) NOT NULL,
-	[LogSize] NUMERIC(20,2) NOT NULL,
-	[LogPercentUsed] NUMERIC(12,2) NOT NULL,
-	[LogStatus] INT NOT NULL
-	)
-
-CREATE TABLE #DATASPACE (
-	[DBName] NVARCHAR(128) NULL,
-	[Fileid] INT NOT NULL,
-	[FileGroup] INT NOT NULL,
-	[TotalExtents] NUMERIC(20,2) NOT NULL,
-	[UsedExtents] NUMERIC(20,2) NOT NULL,
-	[FileLogicalName] NVARCHAR(128) NULL,
-	[Filename] NVARCHAR(255) NOT NULL
-	)
-
-CREATE TABLE #TMP_DB (
-	[DBName] NVARCHAR(128)
-	) 
-
-DECLARE @SQL NVARCHAR(MAX), @DBName NVARCHAR(128), @SQLVer NVARCHAR(20)
-
-SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
-
-SET @SQL = 'DBCC SQLPERF (LOGSPACE) WITH NO_INFOMSGS' 
-
-INSERT INTO #LOGSPACE ([DBName],LogSize,LogPercentUsed,LogStatus)
-EXEC(@SQL)
-
-CREATE INDEX IDX_tLogSpace_Database ON #LOGSPACE ([DBName])
-
-INSERT INTO #TMP_DB 
-SELECT LTRIM(RTRIM(name)) AS [DBName]
-FROM sys.databases
-WHERE is_subscribed = 0
-AND [state] = 0
-ORDER BY name
-
-CREATE INDEX IDX_TMPDB_Database ON #TMP_DB ([DBName])
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
-
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-DBCC SHOWFILESTATS WITH NO_INFOMSGS'
-
-INSERT INTO #DATASPACE ([Fileid],[FileGroup],[TotalExtents],[UsedExtents],[FileLogicalName],[Filename])
-EXEC (@SQL)
-
-UPDATE #DATASPACE
-SET [DBName] = @DBName
-WHERE COALESCE([DBName],'') = ''
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-
-END
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
- 
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #FILESTATS (
-	[DBName],
-	[DBID],
-	[FileID],	
-	[DriveLetter],
-	[Filename],
-	[LogicalFileName],
-	[Filegroup],
-	[FileMBSize],
-	[FileMaxSize],
-	[FileGrowth],
-	[FileMBUsed],
-	[FileMBEmpty],
-	[FilePercentEmpty])
-SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
-		DB_ID() AS [DBID],
-		SF.FileID AS [FileID],
-		LEFT(SF.[FileName], 1) AS DriveLetter,		
-		LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
-		SF.name AS LogicalFileName,
-		COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
-		(SF.size * 8)/1024 AS [FileMBSize], 
-		CASE SF.maxsize 
-			WHEN -1 THEN N''Unlimited'' 
-			ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
-			END AS FileMaxSize, 
-		(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((CAST(growth AS BIGINT) * 8192)/(1024.0*1024.0))) + '' MB''
-			ELSE CONVERT (NVARCHAR, growth) + '' %'' 
-			END) AS FileGrowth,
-		CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
-		(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
-		(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
-			CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
-FROM sys.sysfiles SF
-JOIN sys.databases SDB
-	ON db_id() = SDB.[database_id]
-JOIN sys.dm_io_virtual_file_stats(NULL,NULL) b
-	ON db_id() = b.[database_id] AND SF.fileid = b.[file_id]
-LEFT OUTER 
-JOIN #DATASPACE DSP
-	ON DSP.[Filename] COLLATE DATABASE_DEFAULT = SF.[Filename] COLLATE DATABASE_DEFAULT
-LEFT OUTER 
-JOIN #LOGSPACE LSP
-	ON LSP.[DBName] = SDB.Name
-GROUP BY SDB.Name,SF.FileID,SF.[FileName],SF.name,SF.groupid,SF.size,SF.maxsize,SF.[status],growth,DSP.UsedExtents,LSP.LogSize,LSP.LogPercentUsed'
-
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-
-DROP TABLE #LOGSPACE
-DROP TABLE #DATASPACE
-
-UPDATE f
-SET f.NumberReads = b.num_of_reads,
-	f.KBytesRead = b.num_of_bytes_read / 1024,
-	f.NumberWrites = b.num_of_writes,
-	f.KBytesWritten = b.num_of_bytes_written / 1024,
-	f.IoStallReadMS = b.io_stall_read_ms,
-	f.IoStallWriteMS = b.io_stall_write_ms,
-	f.Cum_IO_GB = b.CumIOGB,
-	f.IO_Percent = b.IOPercent
-FROM #FILESTATS f
-JOIN (SELECT database_ID, [file_id], num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms, 
-			CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(20,2)) / 1024 AS CumIOGB,
-			CAST(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024 / 
-				SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
-		FROM sys.dm_io_virtual_file_stats(NULL,NULL)
-		GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
-ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
-
-UPDATE b
-SET b.LargeLDF = 
-	CASE WHEN b.FileMBSize > a.FileMBSize THEN 1
-	ELSE 2 
+	
+	CREATE TABLE #FILESTATS (
+		[DBName] NVARCHAR(128),
+		[DBID] INT,
+		[FileID] INT,	
+		[FileName] NVARCHAR(255),
+		[LogicalFileName] NVARCHAR(255),
+		[VLFCount] INT,
+		DriveLetter NCHAR(1),
+		FileMBSize BIGINT,
+		[FileMaxSize] NVARCHAR(30),
+		FileGrowth NVARCHAR(30),
+		FileMBUsed BIGINT,
+		FileMBEmpty BIGINT,
+		FilePercentEmpty NUMERIC(12,2),
+		LargeLDF INT,
+		[FileGroup] NVARCHAR(100),
+		NumberReads BIGINT,
+		KBytesRead NUMERIC(20,2),
+		NumberWrites BIGINT,
+		KBytesWritten NUMERIC(20,2),
+		IoStallReadMS BIGINT,
+		IoStallWriteMS BIGINT,
+		Cum_IO_GB NUMERIC(20,2),
+		IO_Percent NUMERIC(12,2)
+		)
+	
+	CREATE TABLE #LOGSPACE (
+		[DBName] NVARCHAR(128) NOT NULL,
+		[LogSize] NUMERIC(20,2) NOT NULL,
+		[LogPercentUsed] NUMERIC(12,2) NOT NULL,
+		[LogStatus] INT NOT NULL
+		)
+	
+	CREATE TABLE #DATASPACE (
+		[DBName] NVARCHAR(128) NULL,
+		[Fileid] INT NOT NULL,
+		[FileGroup] INT NOT NULL,
+		[TotalExtents] NUMERIC(20,2) NOT NULL,
+		[UsedExtents] NUMERIC(20,2) NOT NULL,
+		[FileLogicalName] NVARCHAR(128) NULL,
+		[Filename] NVARCHAR(255) NOT NULL
+		)
+	
+	CREATE TABLE #TMP_DB (
+		[DBName] NVARCHAR(128)
+		) 
+	
+	DECLARE @SQL NVARCHAR(MAX), @DBName NVARCHAR(128), @SQLVer NVARCHAR(20)
+	
+	SELECT @SQLVer = LEFT(CONVERT(NVARCHAR(20),SERVERPROPERTY('productversion')),4)
+	
+	SET @SQL = 'DBCC SQLPERF (LOGSPACE) WITH NO_INFOMSGS' 
+	
+	INSERT INTO #LOGSPACE ([DBName],LogSize,LogPercentUsed,LogStatus)
+	EXEC(@SQL)
+	
+	CREATE INDEX IDX_tLogSpace_Database ON #LOGSPACE ([DBName])
+	
+	INSERT INTO #TMP_DB 
+	SELECT LTRIM(RTRIM(name)) AS [DBName]
+	FROM sys.databases
+	WHERE is_subscribed = 0
+	AND [state] = 0
+	ORDER BY name
+	
+	CREATE INDEX IDX_TMPDB_Database ON #TMP_DB ([DBName])
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN
+		
+		SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+		DBCC SHOWFILESTATS WITH NO_INFOMSGS'
+		
+		INSERT INTO #DATASPACE ([Fileid],[FileGroup],[TotalExtents],[UsedExtents],[FileLogicalName],[Filename])
+		EXEC (@SQL)
+		
+		UPDATE #DATASPACE
+		SET [DBName] = @DBName
+		WHERE COALESCE([DBName],'') = ''
+		
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+		
 	END
-FROM #FILESTATS a
-JOIN #FILESTATS b
-ON a.[DBName] = b.[DBName] 
-AND a.[FileName] LIKE '%mdf' 
-AND b.[FileName] LIKE '%ldf'
-
-/* VLF INFO - USES SAME TMP_DB TO GATHER STATS */
-CREATE TABLE #VLFINFO (
-	[DBName] NVARCHAR(128) NULL,
-	RecoveryUnitId NVARCHAR(3),
-	FileID NVARCHAR(3), 
-	FileSize NUMERIC(20,0),
-	StartOffset BIGINT, 
-	FSeqNo BIGINT, 
-	[Status] CHAR(1),
-	Parity NVARCHAR(4),
-	CreateLSN NUMERIC(25,0)
-	)
-
-IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
-BEGIN
--- (SQL 2008R2 And Below)
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
-
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #VLFINFO (FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
-EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
-EXEC(@SQL)
-
-SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-END
-ELSE BEGIN
--- (SQL 2012 And Above)
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
-
-WHILE @DBName IS NOT NULL 
-BEGIN
- 
-SET @SQL = 'USE ' + '[' +@DBName + ']' + '
-INSERT INTO #VLFINFO (RecoveryUnitID, FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
-EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
-EXEC(@SQL)
-
-SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
-EXEC(@SQL)
-
-SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
-END
-END
-
-DROP TABLE #TMP_DB
-
-UPDATE a
-SET a.VLFCount = (SELECT COUNT(1) FROM #VLFINFO WHERE [DBName] = REPLACE(REPLACE(a.DBName,'[',''),']',''))
-FROM #FILESTATS a
-WHERE COALESCE(a.[FileGroup],'') = ''
-
-DROP TABLE #VLFINFO
-
-SELECT * FROM #FILESTATS
-
-IF @InsertFlag = 1
-BEGIN
-
-DECLARE @FileStatsID INT
-
-SELECT @FileStatsID = COALESCE(MAX(FileStatsID),0) + 1 FROM [dba].dbo.FileStatsHistory
-
-INSERT INTO dbo.FileStatsHistory (FileStatsID, [DBName], [DBID], [FileID], [FileName], LogicalFileName, VLFCount, DriveLetter, FileMBSize, FileMaxSize, FileGrowth, FileMBUsed, 
-	FileMBEmpty, FilePercentEmpty, LargeLDF, [FileGroup], NumberReads, KBytesRead, NumberWrites, KBytesWritten, IoStallReadMS, IoStallWriteMS, Cum_IO_GB, IO_Percent)
-SELECT @FileStatsID AS FileStatsID,[DBName], [DBID], [FileID], [FileName], LogicalFileName, VLFCount, DriveLetter, FileMBSize, FileMaxSize, FileGrowth, FileMBUsed, 
-	FileMBEmpty, FilePercentEmpty, LargeLDF, [FileGroup], NumberReads, KBytesRead, NumberWrites, KBytesWritten, IoStallReadMS, IoStallWriteMS, Cum_IO_GB, IO_Percent
-FROM #FILESTATS
-
-END
-DROP TABLE #FILESTATS
-END
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN	 
+		SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+		INSERT INTO #FILESTATS (
+			[DBName],
+			[DBID],
+			[FileID],	
+			[DriveLetter],
+			[Filename],
+			[LogicalFileName],
+			[Filegroup],
+			[FileMBSize],
+			[FileMaxSize],
+			[FileGrowth],
+			[FileMBUsed],
+			[FileMBEmpty],
+			[FilePercentEmpty])
+		SELECT	DBName = ''' + '[' + @dbname + ']' + ''',
+				DB_ID() AS [DBID],
+				SF.FileID AS [FileID],
+				LEFT(SF.[FileName], 1) AS DriveLetter,		
+				LTRIM(RTRIM(REVERSE(SUBSTRING(REVERSE(SF.[Filename]),0,CHARINDEX(''\'',REVERSE(SF.[Filename]),0))))) AS [Filename],
+				SF.name AS LogicalFileName,
+				COALESCE(filegroup_name(SF.groupid),'''') AS [Filegroup],
+				(SF.size * 8)/1024 AS [FileMBSize], 
+				CASE SF.maxsize 
+					WHEN -1 THEN N''Unlimited'' 
+					ELSE CONVERT(NVARCHAR(15), (CAST(SF.maxsize AS BIGINT) * 8)/1024) + N'' MB'' 
+					END AS FileMaxSize, 
+				(CASE WHEN SF.[status] & 0x100000 = 0 THEN CONVERT(NVARCHAR,CEILING((CAST(growth AS BIGINT) * 8192)/(1024.0*1024.0))) + '' MB''
+					ELSE CONVERT (NVARCHAR, growth) + '' %'' 
+					END) AS FileGrowth,
+				CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBUsed],
+				(SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT) AS [FileMBEmpty],
+				(CAST(((SF.size * 8)/1024 - CAST(COALESCE(((DSP.UsedExtents * 64.00) / 1024), LSP.LogSize *(LSP.LogPercentUsed/100)) AS BIGINT)) AS DECIMAL) / 
+					CAST(CASE WHEN COALESCE((SF.size * 8)/1024,0) = 0 THEN 1 ELSE (SF.size * 8)/1024 END AS DECIMAL)) * 100 AS [FilePercentEmpty]			
+		FROM sys.sysfiles SF
+		JOIN sys.databases SDB
+			ON db_id() = SDB.[database_id]
+		JOIN sys.dm_io_virtual_file_stats(NULL,NULL) b
+			ON db_id() = b.[database_id] AND SF.fileid = b.[file_id]
+		LEFT OUTER 
+		JOIN #DATASPACE DSP
+			ON DSP.[Filename] COLLATE DATABASE_DEFAULT = SF.[Filename] COLLATE DATABASE_DEFAULT
+		LEFT OUTER 
+		JOIN #LOGSPACE LSP
+			ON LSP.[DBName] = SDB.Name
+		GROUP BY SDB.Name,SF.FileID,SF.[FileName],SF.name,SF.groupid,SF.size,SF.maxsize,SF.[status],growth,DSP.UsedExtents,LSP.LogSize,LSP.LogPercentUsed'
+		
+		EXEC(@SQL)
+		
+		SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+	END
+	
+	DROP TABLE #LOGSPACE
+	DROP TABLE #DATASPACE
+	
+	UPDATE f
+	SET f.NumberReads = b.num_of_reads,
+		f.KBytesRead = b.num_of_bytes_read / 1024,
+		f.NumberWrites = b.num_of_writes,
+		f.KBytesWritten = b.num_of_bytes_written / 1024,
+		f.IoStallReadMS = b.io_stall_read_ms,
+		f.IoStallWriteMS = b.io_stall_write_ms,
+		f.Cum_IO_GB = b.CumIOGB,
+		f.IO_Percent = b.IOPercent
+	FROM #FILESTATS f
+	JOIN (SELECT database_ID, [file_id], num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms, 
+				CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(20,2)) / 1024 AS CumIOGB,
+				CAST(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024 / 
+					SUM(CAST(SUM(num_of_bytes_read + num_of_bytes_written) / 1048576 AS DECIMAL(12,2)) / 1024) OVER() * 100 AS DECIMAL(5, 2)) AS IOPercent
+			FROM sys.dm_io_virtual_file_stats(NULL,NULL)
+			GROUP BY database_id, [file_id],num_of_reads, num_of_bytes_read, num_of_writes, num_of_bytes_written, io_stall_read_ms, io_stall_write_ms) AS b
+	ON f.[DBID] = b.[database_id] AND f.fileid = b.[file_id]
+	
+	UPDATE b
+	SET b.LargeLDF = 
+		CASE WHEN b.FileMBSize > a.FileMBSize THEN 1
+		ELSE 2 
+		END
+	FROM #FILESTATS a
+	JOIN #FILESTATS b
+	ON a.[DBName] = b.[DBName] 
+	AND a.[FileName] LIKE '%mdf' 
+	AND b.[FileName] LIKE '%ldf'
+	
+	/* VLF INFO - USES SAME TMP_DB TO GATHER STATS */
+	CREATE TABLE #VLFINFO (
+		[DBName] NVARCHAR(128) NULL,
+		RecoveryUnitId NVARCHAR(3),
+		FileID NVARCHAR(3), 
+		FileSize NUMERIC(20,0),
+		StartOffset BIGINT, 
+		FSeqNo BIGINT, 
+		[Status] CHAR(1),
+		Parity NVARCHAR(4),
+		CreateLSN NUMERIC(25,0)
+		)
+	
+	IF CAST(@SQLVer AS NUMERIC(4,2)) < 11
+	BEGIN
+	-- (SQL 2008R2 And Below)
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN
+	
+	SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+	INSERT INTO #VLFINFO (FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
+	EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
+	EXEC(@SQL)
+	
+	SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
+	EXEC(@SQL)
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+	END
+	END
+	ELSE BEGIN
+	-- (SQL 2012 And Above)
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB)
+	
+	WHILE @DBName IS NOT NULL 
+	BEGIN
+	 
+	SET @SQL = 'USE ' + '[' +@DBName + ']' + '
+	INSERT INTO #VLFINFO (RecoveryUnitID, FileID,FileSize,StartOffset,FSeqNo,[Status],Parity,CreateLSN)
+	EXEC(''DBCC LOGINFO WITH NO_INFOMSGS'');'
+	EXEC(@SQL)
+	
+	SET @SQL = 'UPDATE #VLFINFO SET DBName = ''' +@DBName+ ''' WHERE DBName IS NULL;'
+	EXEC(@SQL)
+	
+	SET @DBName = (SELECT MIN([DBName]) FROM #TMP_DB WHERE [DBName] > @DBName)
+	END
+	END
+	
+	DROP TABLE #TMP_DB
+	
+	UPDATE a
+	SET a.VLFCount = (SELECT COUNT(1) FROM #VLFINFO WHERE [DBName] = REPLACE(REPLACE(a.DBName,'[',''),']',''))
+	FROM #FILESTATS a
+	WHERE COALESCE(a.[FileGroup],'') = ''
+	
+	DROP TABLE #VLFINFO
+	
+	SELECT * FROM #FILESTATS
+	
+	IF @InsertFlag = 1
+	BEGIN
+	
+	DECLARE @FileStatsID INT
+	
+	SELECT @FileStatsID = COALESCE(MAX(FileStatsID),0) + 1 FROM [dba].dbo.FileStatsHistory
+	
+	INSERT INTO dbo.FileStatsHistory (FileStatsID, [DBName], [DBID], [FileID], [FileName], LogicalFileName, VLFCount, DriveLetter, FileMBSize, FileMaxSize, FileGrowth, FileMBUsed, 
+		FileMBEmpty, FilePercentEmpty, LargeLDF, [FileGroup], NumberReads, KBytesRead, NumberWrites, KBytesWritten, IoStallReadMS, IoStallWriteMS, Cum_IO_GB, IO_Percent)
+	SELECT @FileStatsID AS FileStatsID,[DBName], [DBID], [FileID], [FileName], LogicalFileName, VLFCount, DriveLetter, FileMBSize, FileMaxSize, FileGrowth, FileMBUsed, 
+		FileMBEmpty, FilePercentEmpty, LargeLDF, [FileGroup], NumberReads, KBytesRead, NumberWrites, KBytesWritten, IoStallReadMS, IoStallWriteMS, Cum_IO_GB, IO_Percent
+	FROM #FILESTATS
+	
+	END
+	DROP TABLE #FILESTATS
+	END
 GO
 
 IF NOT EXISTS(SELECT * 
@@ -3010,603 +2981,6 @@ BEGIN
 	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1
 
 END
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_PopulateDataDictionary' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_PopulateDataDictionary AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_PopulateDataDictionary
-AS
-
-/**************************************************************************************************************
-**  Purpose: RUN THIS TO POPULATE DATA DICTIONARY PROCESS TABLES
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    DECLARE @TableCount INT,
-        @FieldCount INT
-    INSERT  INTO dbo.DataDictionary_Tables ( SchemaName, TableName )
-            SELECT  SRC.TABLE_SCHEMA,
-                    TABLE_NAME
-            FROM    INFORMATION_SCHEMA.TABLES AS SRC
-                    LEFT JOIN dbo.DataDictionary_Tables AS DEST
-                        ON SRC.table_Schema = DEST.SchemaName
-                           AND SRC.table_name = DEST.TableName
-            WHERE   DEST.SchemaName IS NULL
-                    AND SRC.table_Type = 'BASE TABLE'
-                    AND OBJECTPROPERTY(OBJECT_ID(QUOTENAME(SRC.TABLE_SCHEMA)
-                                                 + '.'
-                                                 + QUOTENAME(SRC.TABLE_NAME)),
-                                       'IsMSShipped') = 0
-    SET @TableCount = @@ROWCOUNT
-    INSERT  INTO dbo.DataDictionary_Fields
-            (
-              SchemaName,
-              TableName,
-              FieldName
-            )
-            SELECT  C.TABLE_SCHEMA,
-                    C.TABLE_NAME,
-                    C.COLUMN_NAME
-            FROM    INFORMATION_SCHEMA.COLUMNS AS C
-                    INNER JOIN dbo.DataDictionary_Tables AS T
-                        ON C.TABLE_SCHEMA = T.SchemaName
-                           AND C.TABLE_NAME = T.TableName
-                    LEFT JOIN dbo.DataDictionary_Fields AS F
-                        ON C.TABLE_SCHEMA = F.SchemaName
-                           AND C.TABLE_NAME = F.TableName
-                           AND C.COLUMN_NAME = F.FieldName
-            WHERE   F.SchemaName IS NULL
-                    AND OBJECTPROPERTY(OBJECT_ID(QUOTENAME(C.TABLE_SCHEMA)
-                                                 + '.'
-                                                 + QUOTENAME(C.TABLE_NAME)),
-                                       'IsMSShipped') = 0
-    SET @FieldCount = @@ROWCOUNT
-    RAISERROR ( 'DATA DICTIONARY: %i tables & %i fields added', 10, 1,
-        @TableCount, @FieldCount ) WITH NOWAIT
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_UpdateDataDictionaryTable' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_UpdateDataDictionaryTable AS SELECT 1') 
-END
-GO
-
-ALTER PROC dbo.dd_UpdateDataDictionaryTable
-    @SchemaName sysname = N'dbo',
-    @TableName sysname, 
-    @TableDescription VARCHAR(7000) = '' 
-AS
-
-/**************************************************************************************************************
-**  Purpose: USE THIS TO MANUALLY UPDATE AN INDIVIDUAL TABLE/FIELD, THEN RUN POPULATE SCRIPT AGAIN
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    UPDATE  dbo.DataDictionary_Tables
-    SET     TableDescription = ISNULL(@TableDescription, '')
-    WHERE   SchemaName = @SchemaName
-            AND TableName = @TableName
-    RETURN @@ROWCOUNT
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_UpdateDataDictionaryField' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_UpdateDataDictionaryField AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_UpdateDataDictionaryField
-    @SchemaName sysname = N'dbo',
-    @TableName sysname, 
-    @FieldName sysname, 
-    @FieldDescription VARCHAR(7000) = '' 
-AS
-
-/**************************************************************************************************************
-**  Purpose: USE THIS TO MANUALLY UPDATE AN INDIVIDUAL TABLE/FIELD, THEN RUN POPULATE SCRIPT AGAIN
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    UPDATE  dbo.DataDictionary_Fields
-    SET     FieldDescription = ISNULL(@FieldDescription, '')
-    WHERE   SchemaName = @SchemaName
-            AND TableName = @TableName
-            AND FieldName = @FieldName
-    RETURN @@ROWCOUNT
-GO
-
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_TestDataDictionaryTables' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_TestDataDictionaryTables AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_TestDataDictionaryTables
-AS
-
-/**************************************************************************************************************
-**  Purpose: RUN THIS TO FIND TABLES AND/OR FIELDS THAT ARE MISSING DATA
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    DECLARE @TableList TABLE
-        (
-          SchemaName sysname NOT NULL,
-          TableName SYSNAME NOT NULL,
-          PRIMARY KEY CLUSTERED ( SchemaName, TableName )
-        )
-    DECLARE @RecordCount INT
-    EXEC dbo.dd_PopulateDataDictionary -- Ensure the dbo.DataDictionary tables are up-to-date.
-    INSERT  INTO @TableList ( SchemaName, TableName )
-            SELECT  SchemaName,
-                    TableName
-            FROM    dbo.DataDictionary_Tables
-            WHERE   TableName NOT LIKE 'MSp%' -- ???
-                    AND TableName NOT LIKE 'sys%' -- Exclude standard system tables.
-                    AND TableDescription = ''
-    SET @RecordCount = @@ROWCOUNT
-    IF @RecordCount > 0 
-        BEGIN
-            PRINT ''
-            PRINT 'The following recordset shows the tables for which data dictionary descriptions are missing'
-            PRINT ''
-            SELECT  LEFT(SchemaName, 15) AS SchemaName,
-                    LEFT(TableName, 30) AS TableName
-            FROM    @TableList
-            UNION ALL
-            SELECT  '',
-                    '' -- Used to force a blank line
-            RAISERROR ( '%i table(s) lack descriptions', 16, 1, @RecordCount )
-                WITH NOWAIT
-        END
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_TestDataDictionaryFields' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_TestDataDictionaryFields AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_TestDataDictionaryFields
-AS
-
-/**************************************************************************************************************
-**  Purpose: RUN THIS TO FIND TABLES AND/OR FIELDS THAT ARE MISSING DATA
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    DECLARE @RecordCount INT
-    DECLARE @FieldList TABLE
-        (
-          SchemaName sysname NOT NULL,
-          TableName SYSNAME NOT NULL,
-          FieldName sysname NOT NULL,
-          PRIMARY KEY CLUSTERED ( SchemaName, TableName, FieldName )
-        )
-    EXEC dbo.dd_PopulateDataDictionary -- Ensure the dbo.DataDictionary tables are up-to-date.
-    INSERT  INTO @FieldList
-            (
-              SchemaName,
-              TableName,
-              FieldName
-            )
-            SELECT  SchemaName,
-                    TableName,
-                    FieldName
-            FROM    dbo.DataDictionary_Fields
-            WHERE   TableName NOT LIKE 'MSp%' -- ???
-                    AND TableName NOT LIKE 'sys%' -- Exclude standard system tables.
-                    AND FieldDescription = ''
-    SET @RecordCount = @@ROWCOUNT
-    IF @RecordCount > 0 
-        BEGIN
-            PRINT ''
-            PRINT 'The following recordset shows the tables/fields for which data dictionary descriptions are missing'
-            PRINT ''
-            SELECT  LEFT(SchemaName, 15) AS SchemaName,
-                    LEFT(TableName, 30) AS TableName,
-                    LEFT(FieldName, 30) AS FieldName
-            FROM    @FieldList
-            UNION ALL
-            SELECT  '',
-                    '',
-                    '' -- Used to force a blank line
-            RAISERROR ( '%i field(s) lack descriptions', 16, 1, @RecordCount )
-                WITH NOWAIT
-        END
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_ApplyDataDictionary' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_ApplyDataDictionary AS SELECT 1') 
-END
-GO
-
-ALTER PROC dbo.dd_ApplyDataDictionary
-AS
-
-/**************************************************************************************************************
-**  Purpose: RUN THIS WHEN YOU ARE READY TO APPLY DATA DICTIONARY TO THE EXTENDED PROPERTIES TABLES
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    DECLARE @SQLVersion VARCHAR(30),
-        @SchemaOrUser sysname
-
-    SET @SQLVersion = CONVERT(VARCHAR, SERVERPROPERTY('ProductVersion'))
-    IF CAST(LEFT(@SQLVersion, CHARINDEX('.', @SQLVersion) - 1) AS TINYINT) < 9 
-        SET @SchemaOrUser = 'User'
-    ELSE 
-        SET @SchemaOrUser = 'Schema'
-
-    DECLARE @SchemaName sysname,
-        @TableName sysname,
-        @FieldName sysname,
-        @ObjectDescription VARCHAR(7000)
-	
-    DECLARE csr_dd CURSOR FAST_FORWARD
-        FOR SELECT  DT.SchemaName,
-                    DT.TableName,
-                    DT.TableDescription
-            FROM    dbo.DataDictionary_Tables AS DT
-                    INNER JOIN INFORMATION_SCHEMA.TABLES AS T
-                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
-                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
-            WHERE   DT.TableDescription <> ''
-	
-    OPEN csr_dd
-    FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName, @ObjectDescription
-    WHILE @@FETCH_STATUS = 0
-        BEGIN
-            IF EXISTS ( SELECT  1
-                        FROM    ::fn_listextendedproperty(NULL, @SchemaOrUser,
-                                                        @SchemaName, 'table',
-                                                        @TableName, default,
-                                                        default) ) 
-                EXECUTE sp_updateextendedproperty N'MS_Description',
-                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
-                    @TableName, NULL, NULL
-            ELSE 
-                EXECUTE sp_addextendedproperty N'MS_Description',
-                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
-                    @TableName, NULL, NULL
-	
-            RAISERROR ( 'DOCUMENTED TABLE: %s', 10, 1, @TableName ) WITH NOWAIT
-            FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName,
-                @ObjectDescription
-        END
-    CLOSE csr_dd
-    DEALLOCATE csr_dd
-    DECLARE csr_ddf CURSOR FAST_FORWARD
-        FOR SELECT  DT.SchemaName,
-                    DT.TableName,
-                    DT.FieldName,
-                    DT.FieldDescription
-            FROM    dbo.DataDictionary_Fields AS DT
-                    INNER JOIN INFORMATION_SCHEMA.COLUMNS AS T
-                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
-                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
-                           AND DT.FieldName COLLATE Latin1_General_CI_AS = T.COLUMN_NAME COLLATE Latin1_General_CI_AS
-            WHERE   DT.FieldDescription <> ''
-    OPEN csr_ddf
-    FETCH NEXT FROM csr_ddf INTO @SchemaName, @TableName, @FieldName,
-        @ObjectDescription
-    WHILE @@FETCH_STATUS = 0
-        BEGIN
-            IF EXISTS ( SELECT  *
-                        FROM    ::fn_listextendedproperty(NULL, @SchemaOrUser,
-                                                        @SchemaName, 'table',
-                                                        @TableName, 'column',
-                                                        @FieldName) ) 
-                EXECUTE sp_updateextendedproperty N'MS_Description',
-                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
-                    @TableName, N'column', @FieldName
-            ELSE 
-                EXECUTE sp_addextendedproperty N'MS_Description',
-                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
-                    @TableName, N'column', @FieldName
-            RAISERROR ( 'DOCUMENTED FIELD: %s.%s', 10, 1, @TableName,
-                @FieldName ) WITH NOWAIT
-            FETCH NEXT FROM csr_ddf INTO @SchemaName, @TableName, @FieldName,
-                @ObjectDescription
-        END
-    CLOSE csr_ddf
-    DEALLOCATE csr_ddf
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_ScavengeDataDictionaryTables' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_ScavengeDataDictionaryTables AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_ScavengeDataDictionaryTables
-AS
-
-/**************************************************************************************************************
-**  Purpose:
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-    SET NOCOUNT ON
-    IF OBJECT_ID('tempdb..#DataDictionaryTables') IS NOT NULL 
-        DROP TABLE #DataDictionaryTables
-    DECLARE @SchemaOrUser sysname,
-        @SQLVersion VARCHAR(30),
-        @SchemaName sysname 
-    SET @SQLVersion = CONVERT(VARCHAR, SERVERPROPERTY('ProductVersion'))
-    SET @SchemaName = ''
-    DECLARE @SchemaList TABLE
-        (
-          SchemaName sysname NOT NULL
-                             PRIMARY KEY CLUSTERED
-        )
-    INSERT  INTO @SchemaList ( SchemaName )
-            SELECT DISTINCT
-                    TABLE_SCHEMA
-            FROM    INFORMATION_SCHEMA.TABLES
-            WHERE   TABLE_TYPE = 'BASE TABLE'
-    IF CAST(LEFT(@SQLVersion, CHARINDEX('.', @SQLVersion) - 1) AS TINYINT) < 9 
-        SET @SchemaOrUser = 'User'
-    ELSE 
-        SET @SchemaOrUser = 'Schema'
-	
-    CREATE TABLE #DataDictionaryTables
-        (
-          objtype sysname NOT NULL,
-          TableName sysname NOT NULL,
-          PropertyName sysname NOT NULL,
-          TableDescription VARCHAR(7000) NULL
-        )
-    WHILE @SchemaName IS NOT NULL
-        BEGIN
-            TRUNCATE TABLE #DataDictionaryTables
-		
-            SELECT  @SchemaName = MIN(SchemaName)
-            FROM    @SchemaList
-            WHERE   SchemaName > @SchemaName
-		
-            IF @SchemaName IS NOT NULL 
-                BEGIN
-                    RAISERROR ( 'Scavenging schema %s', 10, 1, @SchemaName )
-                        WITH NOWAIT
-                    INSERT  INTO #DataDictionaryTables
-                            (
-                              objtype,
-                              TableName,
-                              PropertyName,
-                              TableDescription
-						
-                            )
-                            SELECT  objtype,
-                                    objname,
-                                    name,
-                                    CONVERT(VARCHAR(7000), value)
-                            FROM    ::fn_listextendedproperty(NULL,
-                                                            @SchemaOrUser,
-                                                            @SchemaName,
-                                                            'table', default,
-                                                            default, default)
-                            WHERE   name = 'MS_DESCRIPTION'
-                    UPDATE  DT_DEST
-                    SET     DT_DEST.TableDescription = DT_SRC.TableDescription
-                    FROM    #DataDictionaryTables AS DT_SRC
-                            INNER JOIN dbo.DataDictionary_Tables AS DT_DEST
-                                ON DT_SRC.TableName COLLATE Latin1_General_CI_AS = DT_DEST.TableName COLLATE Latin1_General_CI_AS
-                    WHERE   DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName COLLATE Latin1_General_CI_AS
-                            AND DT_SRC.TableDescription IS NOT NULL
-                            AND DT_SRC.TableDescription <> ''
-                END
-        END
-    IF OBJECT_ID('tempdb..#DataDictionaryTables') IS NOT NULL 
-        DROP TABLE #DataDictionaryTables
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'dd_ScavengeDataDictionaryFields' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.dd_ScavengeDataDictionaryFields AS SELECT 1')
-END
-GO
-
-ALTER PROC dbo.dd_ScavengeDataDictionaryFields
-AS
-
-/**************************************************************************************************************
-**  Purpose:
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-SET NOCOUNT ON
-IF OBJECT_ID('tempdb..#DataDictionaryFields') IS NOT NULL
-     DROP TABLE #DataDictionaryFields
-IF OBJECT_ID('tempdb..#TableList') IS NOT NULL
-     DROP TABLE #TableList
-DECLARE 
-    @SchemaOrUser sysname,
-    @SQLVersion VARCHAR(30),
-    @SchemaName sysname ,
-    @TableName sysname
-SET @SQLVersion = CONVERT(VARCHAR,SERVERPROPERTY('ProductVersion'))
-
-CREATE TABLE #TableList(SchemaName sysname NOT null,TableName sysname NOT NULL)
-INSERT INTO #TableList(SchemaName,TableName)
-SELECT TABLE_SCHEMA,TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-WHERE TABLE_TYPE='BASE TABLE'
-
-IF CAST(LEFT(@SQLVersion,CHARINDEX('.',@SQLVersion)-1) AS TINYINT) <9
-    SET @SchemaOrUser = 'User'
-ELSE
-    SET @SchemaOrUser='Schema'
-
-CREATE TABLE #DataDictionaryFields (
-    objtype sysname  NOT NULL,
-    FieldName sysname NOT NULL,
-    PropertyName sysname NOT NULL,
-    FieldDescription VARCHAR(7000) NULL
-)
-DECLARE csr_dd CURSOR FAST_FORWARD FOR
-    SELECT SchemaName,TableName
-    FROM #TableList
-OPEN csr_dd
-
-FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName
-WHILE @@FETCH_STATUS = 0
-    BEGIN
-        TRUNCATE TABLE #DataDictionaryFields
-
-        RAISERROR('Scavenging schema.table %s.%s',10,1,@SchemaName,@TableName) WITH NOWAIT
-    INSERT INTO #DataDictionaryFields
-                ( objtype ,
-                  FieldName ,
-                  PropertyName ,
-                  FieldDescription
-                )
-        SELECT objtype ,
-                objname ,
-                   name ,
-                   CONVERT(VARCHAR(7000),value )
-        FROM   ::fn_listextendedproperty(NULL, @SchemaOrUser, @SchemaName, 'table', @TableName, 'column', default)
-        WHERE name='MS_DESCRIPTION'
-
-        UPDATE DT_DEST
-        SET DT_DEST.FieldDescription = DT_SRC.FieldDescription
-        FROM #DataDictionaryFields AS DT_SRC
-            INNER JOIN dbo.DataDictionary_Fields AS DT_DEST
-            ON DT_SRC.FieldName COLLATE Latin1_General_CI_AS = DT_DEST.FieldName COLLATE Latin1_General_CI_AS
-        WHERE DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName	COLLATE Latin1_General_CI_AS
-        AND DT_DEST.TableName COLLATE Latin1_General_CI_AS = @TableName	COLLATE Latin1_General_CI_AS
-        AND DT_SRC.FieldDescription IS NOT NULL AND DT_SRC.FieldDescription<>''
-        FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName
-    END
-CLOSE csr_dd
-DEALLOCATE csr_dd
-IF OBJECT_ID('tempdb..#DataDictionaryFields') IS NOT NULL
-     DROP TABLE #DataDictionaryFields
-IF OBJECT_ID('tempdb..#TableList') IS NOT NULL
-     DROP TABLE #TableList
-GO
-
-IF NOT EXISTS(SELECT * 
-		FROM INFORMATION_SCHEMA.ROUTINES
-		WHERE ROUTINE_NAME = 'sp_ViewTableExtendedProperties' 
-		  AND ROUTINE_SCHEMA = 'dbo'
-		  AND ROUTINE_TYPE = 'PROCEDURE'
-)
-BEGIN
-	EXEC ('CREATE PROC dbo.sp_ViewTableExtendedProperties AS SELECT 1')
-END
-GO
-
-ALTER PROCEDURE dbo.sp_ViewTableExtendedProperties (@tablename nvarchar(255))
-AS
-
-/**************************************************************************************************************
-**  Purpose:
-**
-**  Revision History  
-**  
-**  Date			Author					Version				Revision  
-**  ----------		--------------------	-------------		-------------
-**  11/06/2012		Michael Rounds			1.0					Comments creation
-***************************************************************************************************************/
-
-DECLARE @cmd NVARCHAR (255)
-
-SET @cmd = 'SELECT objtype, objname, name, value FROM fn_listextendedproperty (NULL, ''schema'', ''dbo'', ''table'', ''' + @TABLENAME + ''', ''column'', default);'
-
-EXEC sp_executesql @cmd
-
 GO
 
 IF NOT EXISTS(SELECT * 
@@ -4407,8 +3781,7 @@ BEGIN
 	
 	/* LongQueries */
 	INSERT INTO #LONGQUERIES (DateStamp, [ElapsedTime(ss)], Session_ID, [DBName], Login_Name, SQL_Text)
-	SELECT MAX(DateStamp) AS DateStamp,RunTime AS [ElapsedTime(ss)],Session_ID,
-		[DBName] AS [DBName],Login_Name,Formatted_SQL_Text AS SQL_Text
+	SELECT MAX(DateStamp) AS DateStamp,RunTime AS [ElapsedTime(ss)],Session_ID,[DBName] AS [DBName],Login_Name,Formatted_SQL_Text AS SQL_Text
 	FROM [dba].dbo.QueryHistory QH
 		LEFT OUTER JOIN (SELECT Value FROM AlertSettings 
 					                 WHERE AlertName = 'LongRunningQueries' AND 
@@ -6956,7 +6329,636 @@ GO
 USE [dba]
 GO
 
-----RUN THIS TO POPULATE DATA DICTIONARY PROCESS TABLES
+IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='DataDictionary_Tables')
+BEGIN
+	CREATE TABLE dbo.DataDictionary_Tables(
+		SchemaName SYSNAME NOT NULL,
+		TableName SYSNAME NOT NULL,
+		TableDescription VARCHAR(4000) NOT NULL
+			CONSTRAINT DF_DataDictionary_TableDescription DEFAULT (''),
+			CONSTRAINT PK_DataDictionary_Tables 
+				PRIMARY KEY CLUSTERED (SchemaName,TableName)
+		)
+END
+GO
+
+IF NOT EXISTS(SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='DataDictionary_Fields')
+BEGIN
+	CREATE TABLE dbo.DataDictionary_Fields(
+		SchemaName SYSNAME NOT NULL,
+		TableName SYSNAME NOT NULL,
+		FieldName SYSNAME NOT NULL,
+		FieldDescription VARCHAR(4000) NOT NULL
+			CONSTRAINT DF_DataDictionary_FieldDescription DEFAULT (''),
+			CONSTRAINT PK_DataDictionary_Fields 
+				PRIMARY KEY CLUSTERED (SchemaName,TableName,FieldName)
+	)
+END
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_PopulateDataDictionary' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_PopulateDataDictionary AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_PopulateDataDictionary
+AS
+
+/**************************************************************************************************************
+**  Purpose: RUN THIS TO POPULATE DATA DICTIONARY PROCESS TABLES
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    DECLARE @TableCount INT,
+        @FieldCount INT
+    INSERT  INTO dbo.DataDictionary_Tables ( SchemaName, TableName )
+            SELECT  SRC.TABLE_SCHEMA,
+                    TABLE_NAME
+            FROM    INFORMATION_SCHEMA.TABLES AS SRC
+                    LEFT JOIN dbo.DataDictionary_Tables AS DEST
+                        ON SRC.table_Schema = DEST.SchemaName
+                           AND SRC.table_name = DEST.TableName
+            WHERE   DEST.SchemaName IS NULL
+                    AND SRC.table_Type = 'BASE TABLE'
+                    AND OBJECTPROPERTY(OBJECT_ID(QUOTENAME(SRC.TABLE_SCHEMA)
+                                                 + '.'
+                                                 + QUOTENAME(SRC.TABLE_NAME)),
+                                       'IsMSShipped') = 0
+    SET @TableCount = @@ROWCOUNT
+    INSERT  INTO dbo.DataDictionary_Fields
+            (
+              SchemaName,
+              TableName,
+              FieldName
+            )
+            SELECT  C.TABLE_SCHEMA,
+                    C.TABLE_NAME,
+                    C.COLUMN_NAME
+            FROM    INFORMATION_SCHEMA.COLUMNS AS C
+                    INNER JOIN dbo.DataDictionary_Tables AS T
+                        ON C.TABLE_SCHEMA = T.SchemaName
+                           AND C.TABLE_NAME = T.TableName
+                    LEFT JOIN dbo.DataDictionary_Fields AS F
+                        ON C.TABLE_SCHEMA = F.SchemaName
+                           AND C.TABLE_NAME = F.TableName
+                           AND C.COLUMN_NAME = F.FieldName
+            WHERE   F.SchemaName IS NULL
+                    AND OBJECTPROPERTY(OBJECT_ID(QUOTENAME(C.TABLE_SCHEMA)
+                                                 + '.'
+                                                 + QUOTENAME(C.TABLE_NAME)),
+                                       'IsMSShipped') = 0
+    SET @FieldCount = @@ROWCOUNT
+    RAISERROR ( 'DATA DICTIONARY: %i tables & %i fields added', 10, 1,
+        @TableCount, @FieldCount ) WITH NOWAIT
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_UpdateDataDictionaryTable' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_UpdateDataDictionaryTable AS SELECT 1') 
+END
+GO
+
+ALTER PROC dbo.dd_UpdateDataDictionaryTable
+    @SchemaName sysname = N'dbo',
+    @TableName sysname, 
+    @TableDescription VARCHAR(7000) = '' 
+AS
+
+/**************************************************************************************************************
+**  Purpose: USE THIS TO MANUALLY UPDATE AN INDIVIDUAL TABLE/FIELD, THEN RUN POPULATE SCRIPT AGAIN
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    UPDATE  dbo.DataDictionary_Tables
+    SET     TableDescription = ISNULL(@TableDescription, '')
+    WHERE   SchemaName = @SchemaName
+            AND TableName = @TableName
+    RETURN @@ROWCOUNT
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_UpdateDataDictionaryField' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_UpdateDataDictionaryField AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_UpdateDataDictionaryField
+    @SchemaName sysname = N'dbo',
+    @TableName sysname, 
+    @FieldName sysname, 
+    @FieldDescription VARCHAR(7000) = '' 
+AS
+
+/**************************************************************************************************************
+**  Purpose: USE THIS TO MANUALLY UPDATE AN INDIVIDUAL TABLE/FIELD, THEN RUN POPULATE SCRIPT AGAIN
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    UPDATE  dbo.DataDictionary_Fields
+    SET     FieldDescription = ISNULL(@FieldDescription, '')
+    WHERE   SchemaName = @SchemaName
+            AND TableName = @TableName
+            AND FieldName = @FieldName
+    RETURN @@ROWCOUNT
+GO
+
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_TestDataDictionaryTables' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_TestDataDictionaryTables AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_TestDataDictionaryTables
+AS
+
+/**************************************************************************************************************
+**  Purpose: RUN THIS TO FIND TABLES AND/OR FIELDS THAT ARE MISSING DATA
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    DECLARE @TableList TABLE
+        (
+          SchemaName sysname NOT NULL,
+          TableName SYSNAME NOT NULL,
+          PRIMARY KEY CLUSTERED ( SchemaName, TableName )
+        )
+    DECLARE @RecordCount INT
+    EXEC dbo.dd_PopulateDataDictionary -- Ensure the dbo.DataDictionary tables are up-to-date.
+    INSERT  INTO @TableList ( SchemaName, TableName )
+            SELECT  SchemaName,
+                    TableName
+            FROM    dbo.DataDictionary_Tables
+            WHERE   TableName NOT LIKE 'MSp%' -- ???
+                    AND TableName NOT LIKE 'sys%' -- Exclude standard system tables.
+                    AND TableDescription = ''
+    SET @RecordCount = @@ROWCOUNT
+    IF @RecordCount > 0 
+        BEGIN
+            PRINT ''
+            PRINT 'The following recordset shows the tables for which data dictionary descriptions are missing'
+            PRINT ''
+            SELECT  LEFT(SchemaName, 15) AS SchemaName,
+                    LEFT(TableName, 30) AS TableName
+            FROM    @TableList
+            UNION ALL
+            SELECT  '',
+                    '' -- Used to force a blank line
+            RAISERROR ( '%i table(s) lack descriptions', 16, 1, @RecordCount )
+                WITH NOWAIT
+        END
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_TestDataDictionaryFields' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_TestDataDictionaryFields AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_TestDataDictionaryFields
+AS
+
+/**************************************************************************************************************
+**  Purpose: RUN THIS TO FIND TABLES AND/OR FIELDS THAT ARE MISSING DATA
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    DECLARE @RecordCount INT
+    DECLARE @FieldList TABLE
+        (
+          SchemaName sysname NOT NULL,
+          TableName SYSNAME NOT NULL,
+          FieldName sysname NOT NULL,
+          PRIMARY KEY CLUSTERED ( SchemaName, TableName, FieldName )
+        )
+    EXEC dbo.dd_PopulateDataDictionary -- Ensure the dbo.DataDictionary tables are up-to-date.
+    INSERT  INTO @FieldList
+            (
+              SchemaName,
+              TableName,
+              FieldName
+            )
+            SELECT  SchemaName,
+                    TableName,
+                    FieldName
+            FROM    dbo.DataDictionary_Fields
+            WHERE   TableName NOT LIKE 'MSp%' -- ???
+                    AND TableName NOT LIKE 'sys%' -- Exclude standard system tables.
+                    AND FieldDescription = ''
+    SET @RecordCount = @@ROWCOUNT
+    IF @RecordCount > 0 
+        BEGIN
+            PRINT ''
+            PRINT 'The following recordset shows the tables/fields for which data dictionary descriptions are missing'
+            PRINT ''
+            SELECT  LEFT(SchemaName, 15) AS SchemaName,
+                    LEFT(TableName, 30) AS TableName,
+                    LEFT(FieldName, 30) AS FieldName
+            FROM    @FieldList
+            UNION ALL
+            SELECT  '',
+                    '',
+                    '' -- Used to force a blank line
+            RAISERROR ( '%i field(s) lack descriptions', 16, 1, @RecordCount )
+                WITH NOWAIT
+        END
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_ApplyDataDictionary' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_ApplyDataDictionary AS SELECT 1') 
+END
+GO
+
+ALTER PROC dbo.dd_ApplyDataDictionary
+AS
+
+/**************************************************************************************************************
+**  Purpose: RUN THIS WHEN YOU ARE READY TO APPLY DATA DICTIONARY TO THE EXTENDED PROPERTIES TABLES
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    DECLARE @SQLVersion VARCHAR(30),
+        @SchemaOrUser sysname
+
+    SET @SQLVersion = CONVERT(VARCHAR, SERVERPROPERTY('ProductVersion'))
+    IF CAST(LEFT(@SQLVersion, CHARINDEX('.', @SQLVersion) - 1) AS TINYINT) < 9 
+        SET @SchemaOrUser = 'User'
+    ELSE 
+        SET @SchemaOrUser = 'Schema'
+
+    DECLARE @SchemaName sysname,
+        @TableName sysname,
+        @FieldName sysname,
+        @ObjectDescription VARCHAR(7000)
+	
+    DECLARE csr_dd CURSOR FAST_FORWARD
+        FOR SELECT  DT.SchemaName,
+                    DT.TableName,
+                    DT.TableDescription
+            FROM    dbo.DataDictionary_Tables AS DT
+                    INNER JOIN INFORMATION_SCHEMA.TABLES AS T
+                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
+                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
+            WHERE   DT.TableDescription <> ''
+	
+    OPEN csr_dd
+    FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName, @ObjectDescription
+    WHILE @@FETCH_STATUS = 0
+        BEGIN
+            IF EXISTS ( SELECT  1
+                        FROM    ::fn_listextendedproperty(NULL, @SchemaOrUser,
+                                                        @SchemaName, 'table',
+                                                        @TableName, default,
+                                                        default) ) 
+                EXECUTE sp_updateextendedproperty N'MS_Description',
+                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
+                    @TableName, NULL, NULL
+            ELSE 
+                EXECUTE sp_addextendedproperty N'MS_Description',
+                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
+                    @TableName, NULL, NULL
+	
+            RAISERROR ( 'DOCUMENTED TABLE: %s', 10, 1, @TableName ) WITH NOWAIT
+            FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName,
+                @ObjectDescription
+        END
+    CLOSE csr_dd
+    DEALLOCATE csr_dd
+    DECLARE csr_ddf CURSOR FAST_FORWARD
+        FOR SELECT  DT.SchemaName,
+                    DT.TableName,
+                    DT.FieldName,
+                    DT.FieldDescription
+            FROM    dbo.DataDictionary_Fields AS DT
+                    INNER JOIN INFORMATION_SCHEMA.COLUMNS AS T
+                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
+                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
+                           AND DT.FieldName COLLATE Latin1_General_CI_AS = T.COLUMN_NAME COLLATE Latin1_General_CI_AS
+            WHERE   DT.FieldDescription <> ''
+    OPEN csr_ddf
+    FETCH NEXT FROM csr_ddf INTO @SchemaName, @TableName, @FieldName,
+        @ObjectDescription
+    WHILE @@FETCH_STATUS = 0
+        BEGIN
+            IF EXISTS ( SELECT  *
+                        FROM    ::fn_listextendedproperty(NULL, @SchemaOrUser,
+                                                        @SchemaName, 'table',
+                                                        @TableName, 'column',
+                                                        @FieldName) ) 
+                EXECUTE sp_updateextendedproperty N'MS_Description',
+                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
+                    @TableName, N'column', @FieldName
+            ELSE 
+                EXECUTE sp_addextendedproperty N'MS_Description',
+                    @ObjectDescription, @SchemaOrUser, @SchemaName, N'table',
+                    @TableName, N'column', @FieldName
+            RAISERROR ( 'DOCUMENTED FIELD: %s.%s', 10, 1, @TableName,
+                @FieldName ) WITH NOWAIT
+            FETCH NEXT FROM csr_ddf INTO @SchemaName, @TableName, @FieldName,
+                @ObjectDescription
+        END
+    CLOSE csr_ddf
+    DEALLOCATE csr_ddf
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_ScavengeDataDictionaryTables' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_ScavengeDataDictionaryTables AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_ScavengeDataDictionaryTables
+AS
+
+/**************************************************************************************************************
+**  Purpose:
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+    SET NOCOUNT ON
+    IF OBJECT_ID('tempdb..#DataDictionaryTables') IS NOT NULL 
+        DROP TABLE #DataDictionaryTables
+    DECLARE @SchemaOrUser sysname,
+        @SQLVersion VARCHAR(30),
+        @SchemaName sysname 
+    SET @SQLVersion = CONVERT(VARCHAR, SERVERPROPERTY('ProductVersion'))
+    SET @SchemaName = ''
+    DECLARE @SchemaList TABLE
+        (
+          SchemaName sysname NOT NULL
+                             PRIMARY KEY CLUSTERED
+        )
+    INSERT  INTO @SchemaList ( SchemaName )
+            SELECT DISTINCT
+                    TABLE_SCHEMA
+            FROM    INFORMATION_SCHEMA.TABLES
+            WHERE   TABLE_TYPE = 'BASE TABLE'
+    IF CAST(LEFT(@SQLVersion, CHARINDEX('.', @SQLVersion) - 1) AS TINYINT) < 9 
+        SET @SchemaOrUser = 'User'
+    ELSE 
+        SET @SchemaOrUser = 'Schema'
+	
+    CREATE TABLE #DataDictionaryTables
+        (
+          objtype sysname NOT NULL,
+          TableName sysname NOT NULL,
+          PropertyName sysname NOT NULL,
+          TableDescription VARCHAR(7000) NULL
+        )
+    WHILE @SchemaName IS NOT NULL
+        BEGIN
+            TRUNCATE TABLE #DataDictionaryTables
+		
+            SELECT  @SchemaName = MIN(SchemaName)
+            FROM    @SchemaList
+            WHERE   SchemaName > @SchemaName
+		
+            IF @SchemaName IS NOT NULL 
+                BEGIN
+                    RAISERROR ( 'Scavenging schema %s', 10, 1, @SchemaName )
+                        WITH NOWAIT
+                    INSERT  INTO #DataDictionaryTables
+                            (
+                              objtype,
+                              TableName,
+                              PropertyName,
+                              TableDescription
+						
+                            )
+                            SELECT  objtype,
+                                    objname,
+                                    name,
+                                    CONVERT(VARCHAR(7000), value)
+                            FROM    ::fn_listextendedproperty(NULL,
+                                                            @SchemaOrUser,
+                                                            @SchemaName,
+                                                            'table', default,
+                                                            default, default)
+                            WHERE   name = 'MS_DESCRIPTION'
+                    UPDATE  DT_DEST
+                    SET     DT_DEST.TableDescription = DT_SRC.TableDescription
+                    FROM    #DataDictionaryTables AS DT_SRC
+                            INNER JOIN dbo.DataDictionary_Tables AS DT_DEST
+                                ON DT_SRC.TableName COLLATE Latin1_General_CI_AS = DT_DEST.TableName COLLATE Latin1_General_CI_AS
+                    WHERE   DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName COLLATE Latin1_General_CI_AS
+                            AND DT_SRC.TableDescription IS NOT NULL
+                            AND DT_SRC.TableDescription <> ''
+                END
+        END
+    IF OBJECT_ID('tempdb..#DataDictionaryTables') IS NOT NULL 
+        DROP TABLE #DataDictionaryTables
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'dd_ScavengeDataDictionaryFields' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.dd_ScavengeDataDictionaryFields AS SELECT 1')
+END
+GO
+
+ALTER PROC dbo.dd_ScavengeDataDictionaryFields
+AS
+
+/**************************************************************************************************************
+**  Purpose:
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+SET NOCOUNT ON
+IF OBJECT_ID('tempdb..#DataDictionaryFields') IS NOT NULL
+     DROP TABLE #DataDictionaryFields
+IF OBJECT_ID('tempdb..#TableList') IS NOT NULL
+     DROP TABLE #TableList
+DECLARE 
+    @SchemaOrUser sysname,
+    @SQLVersion VARCHAR(30),
+    @SchemaName sysname ,
+    @TableName sysname
+SET @SQLVersion = CONVERT(VARCHAR,SERVERPROPERTY('ProductVersion'))
+
+CREATE TABLE #TableList(SchemaName sysname NOT null,TableName sysname NOT NULL)
+INSERT INTO #TableList(SchemaName,TableName)
+SELECT TABLE_SCHEMA,TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_TYPE='BASE TABLE'
+
+IF CAST(LEFT(@SQLVersion,CHARINDEX('.',@SQLVersion)-1) AS TINYINT) <9
+    SET @SchemaOrUser = 'User'
+ELSE
+    SET @SchemaOrUser='Schema'
+
+CREATE TABLE #DataDictionaryFields (
+    objtype sysname  NOT NULL,
+    FieldName sysname NOT NULL,
+    PropertyName sysname NOT NULL,
+    FieldDescription VARCHAR(7000) NULL
+)
+DECLARE csr_dd CURSOR FAST_FORWARD FOR
+    SELECT SchemaName,TableName
+    FROM #TableList
+OPEN csr_dd
+
+FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName
+WHILE @@FETCH_STATUS = 0
+    BEGIN
+        TRUNCATE TABLE #DataDictionaryFields
+
+        RAISERROR('Scavenging schema.table %s.%s',10,1,@SchemaName,@TableName) WITH NOWAIT
+    INSERT INTO #DataDictionaryFields
+                ( objtype ,
+                  FieldName ,
+                  PropertyName ,
+                  FieldDescription
+                )
+        SELECT objtype ,
+                objname ,
+                   name ,
+                   CONVERT(VARCHAR(7000),value )
+        FROM   ::fn_listextendedproperty(NULL, @SchemaOrUser, @SchemaName, 'table', @TableName, 'column', default)
+        WHERE name='MS_DESCRIPTION'
+
+        UPDATE DT_DEST
+        SET DT_DEST.FieldDescription = DT_SRC.FieldDescription
+        FROM #DataDictionaryFields AS DT_SRC
+            INNER JOIN dbo.DataDictionary_Fields AS DT_DEST
+            ON DT_SRC.FieldName COLLATE Latin1_General_CI_AS = DT_DEST.FieldName COLLATE Latin1_General_CI_AS
+        WHERE DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName	COLLATE Latin1_General_CI_AS
+        AND DT_DEST.TableName COLLATE Latin1_General_CI_AS = @TableName	COLLATE Latin1_General_CI_AS
+        AND DT_SRC.FieldDescription IS NOT NULL AND DT_SRC.FieldDescription<>''
+        FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName
+    END
+CLOSE csr_dd
+DEALLOCATE csr_dd
+IF OBJECT_ID('tempdb..#DataDictionaryFields') IS NOT NULL
+     DROP TABLE #DataDictionaryFields
+IF OBJECT_ID('tempdb..#TableList') IS NOT NULL
+     DROP TABLE #TableList
+GO
+
+IF NOT EXISTS(SELECT * 
+		FROM INFORMATION_SCHEMA.ROUTINES
+		WHERE ROUTINE_NAME = 'sp_ViewTableExtendedProperties' 
+		  AND ROUTINE_SCHEMA = 'dbo'
+		  AND ROUTINE_TYPE = 'PROCEDURE'
+)
+BEGIN
+	EXEC ('CREATE PROC dbo.sp_ViewTableExtendedProperties AS SELECT 1')
+END
+GO
+
+ALTER PROCEDURE dbo.sp_ViewTableExtendedProperties (@tablename nvarchar(255))
+AS
+
+/**************************************************************************************************************
+**  Purpose:
+**
+**  Revision History  
+**  
+**  Date			Author					Version				Revision  
+**  ----------		--------------------	-------------		-------------
+**  11/06/2012		Michael Rounds			1.0					Comments creation
+***************************************************************************************************************/
+
+DECLARE @cmd NVARCHAR (255)
+
+SET @cmd = 'SELECT objtype, objname, name, value FROM fn_listextendedproperty (NULL, ''schema'', ''dbo'', ''table'', ''' + @TABLENAME + ''', ''column'', default);'
+
+EXEC sp_executesql @cmd
+
+GO
+
+TRUNCATE TABLE DataDictionary_Fields
+GO
+
+TRUNCATE TABLE DataDictionary_Tables
+GO
+
 EXEC [dba].dbo.dd_PopulateDataDictionary
 GO
 ----RUN ALL THESE UPDATES TO POPULATE THE TABLES AND FIELDS
