@@ -6028,7 +6028,7 @@ EXEC @ReturnCode = msdb..sp_add_jobschedule @job_id=@jobId, @name=N'Check for bl
 		@active_start_date=20110308, 
 		@active_end_date=99991231, 
 		@active_start_time=70027, 
-		@active_end_time=190000
+		@active_end_time=200000
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 EXEC @ReturnCode = msdb..sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
