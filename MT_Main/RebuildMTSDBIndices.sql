@@ -18,13 +18,19 @@ CREATE PROCEDURE dbo.RebuildMTSDBIndices
 **			10/18/2012 mem - Added parameter @PauseMTSProcessing
 **			07/17/2014 mem - Changed default value for @MaxFragmentation from 15 to 25
 **						   - Changed default value for @TrivialPageCount from 12 to 22
+**			03/17/2016 mem - Added new parameters:
+**								@PercentFreeSpace; ignored if 0 or 100 (note that FillFactor is 100 - @PercentFreeSpace so when @PercentFreeSpace is 10, FillFactor is 90)
+**								@MinFragmentation; will reorganize indices with fragmentation over this threshold but below @MaxFragmentation
+**						   - Now preferentially uses stored procedure dba_indexDefrag_sp in the dba database instead of RebuildFragmentedIndices
 **    
 *****************************************************/
 (
 	@DBNameMatchList varchar(2048) = 'MT[_]%,PT[_]%',	-- Comma-separated list of databases on this server to include; can include wildcard symbols since used with a LIKE clause.  Use % to process every database on the server (skips DBs that don't have RebuildFragmentedIndices).  Leave blank to ignore this parameter
 	@IncludeMTSInterfaceAndControlDBs tinyint = 1,		-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
-	@MaxFragmentation int = 25,
-	@TrivialPageCount int = 22,
+	@MinFragmentation int = 5,			-- Indices with a fragmentation value between @MinFragmentation and @MaxFragmentation are reorganized
+	@MaxFragmentation int = 25,			-- Indices with fragmentation values over this threshold are rebuilt
+	@TrivialPageCount int = 8,			-- Microsoft recommends ignoring indices less than 8 pages in length (8 pages is one extent); thus this should be 8 or larger
+	@PercentFreeSpace int = 10,			-- Used to define FillFactor; @PercentFreeSpace=10 means FillFactor = 90; ignored if 0 or 100
 	@PauseMTSProcessing tinyint = 1,
 	@InfoOnly tinyint = 1,								-- Set to 1 to display the SQL that would be run
 	@message varchar(255) = '' OUTPUT
@@ -42,15 +48,27 @@ As
 
 	Set @IncludeMTSInterfaceAndControlDBs = IsNull(@IncludeMTSInterfaceAndControlDBs, 0)
 
-	Set @MaxFragmentation = IsNull(@MaxFragmentation, 15)
+	Set @MinFragmentation = IsNull(@MinFragmentation, 5)
+	If @MinFragmentation < 0
+		Set @MinFragmentation = 0
+	If @MinFragmentation > 50
+		Set @MinFragmentation = 50
+
+	Set @MaxFragmentation = IsNull(@MaxFragmentation, 25)
 	If @MaxFragmentation < 0
 		Set @MaxFragmentation = 0
 	If @MaxFragmentation > 100
 		Set @MaxFragmentation = 100
 			
-	Set @TrivialPageCount = IsNull(@TrivialPageCount, 12)
+	Set @TrivialPageCount = IsNull(@TrivialPageCount, 8)
 	If @TrivialPageCount < 0
 		Set @TrivialPageCount = 0
+
+	Set @PercentFreeSpace = IsNull(@PercentFreeSpace, 10)
+	If @PercentFreeSpace < 0
+		Set @PercentFreeSpace = 0
+	If @PercentFreeSpace > 100
+		Set @PercentFreeSpace = 100
 
 	Set @PauseMTSProcessing = IsNull(@PauseMTSProcessing, 1)
 	Set @InfoOnly = IsNull(@InfoOnly, 1)
@@ -65,6 +83,7 @@ As
 	Declare @SqlParams nvarchar(4000)
 	
 	Declare @continue tinyint
+	Declare @skipThisDB tinyint
 	Declare @DBProcessCount int
 	Set @DBProcessCount = 0
 	
@@ -171,10 +190,56 @@ As
 		Goto Done
 	End
 
+	---------------------------------------
+	-- Look for stored procedure dba_indexDefrag_sp in the dba database
+	---------------------------------------
+	
+	Declare @UseDbaIndexDefrag tinyint = 0
+	Declare @defragProcedureName varchar(32) = 'RebuildFragmentedIndices'
+	
+	If Exists (Select * from sys.databases where [name] = 'dba')
+	Begin
+		
+		-- Look for the dba_indexDefrag_sp procedure
+		--
+		Set @Sql = 'SELECT @MatchCount = COUNT(*) FROM dba.Sys.Procedures WHERE Name = ''dba_indexDefrag_sp'''
+		Set @SqlParams = '@MatchCount int output'
+		Set @MatchCount = 0
+		
+		Exec @myError = sp_executesql @Sql, @SqlParams, @MatchCount output
+
+		If @MatchCount = 0
+		Begin
+			If @InfoOnly <> 0
+				Print 'Warning: Stored procedure dba_indexDefrag_sp not found in the dba database'
+			Else
+				Exec PostLogEntry 'Error', 'Stored procedure dba_indexDefrag_sp not found in the dba database', 'RebuildDMSDBIndices'
+		End
+		Else
+		Begin
+			Set @UseDbaIndexDefrag = 1
+			Set @defragProcedureName = 'dba..dba_indexDefrag_sp'
+		End
+	End
+	Else
+	Begin
+		If @InfoOnly <> 0
+			Print 'dba database not found; cannot use dba_indexDefrag_sp'
+		Else
+			Exec PostLogEntry 'Error', 'dba database not found; cannot use dba_indexDefrag_sp', 'RebuildDMSDBIndices'
+	End
+
+	---------------------------------------
+	-- Initialize @LastLogTime and possibly post an initial log entry
+	---------------------------------------
+	--
+	SELECT @myRowCount = COUNT(*)
+	FROM #Tmp_DB_List
+
 	Set @LastLogTime = GetUTCDate()
 	If @myRowCount >= 4 And @InfoOnly = 0
 	Begin
-		Set @LogMsg = 'Calling RebuildFragmentedIndices for ' + Convert(varchar(12), @myRowCount) + ' databases'
+		Set @LogMsg = 'Calling ' + @defragProcedureName + ' for ' + Convert(varchar(12), @myRowCount) + ' databases'
 		Exec PostLogEntry 'Progress', @LogMsg, 'RebuildMTSDBIndices'
 	End
 
@@ -201,7 +266,6 @@ As
 	---------------------------------------
 	-- Loop through the databases in #Tmp_DB_List
 	-- and call RebuildFragmentedIndices for each
-	-- Then process the remaining DBs
 	---------------------------------------
 	--
 	Set @continue = 1
@@ -223,6 +287,10 @@ As
 			DELETE FROM #Tmp_DB_List
 			WHERE @DBName = DatabaseName
 
+			Set @skipThisDB = 0
+	
+			If @UseDbaIndexDefrag = 0
+			Begin
 			-- Make sure the database contains stored procedure RebuildFragmentedIndices
 			Set @Sql = 'SELECT @MatchCount = COUNT(*) FROM [' + @DBName + '].Sys.Procedures WHERE Name = ''RebuildFragmentedIndices'''
 			Set @SqlParams = '@MatchCount int output'
@@ -236,10 +304,16 @@ As
 					Print 'Warning: Skipping ' + @DBName + ' since procedure RebuildFragmentedIndices not found'
 					
 				Set @DBSkipCount = @DBSkipCount + 1
+					Set @skipThisDB = 1
+				End
 			End
-			Else
+						
+			If @skipThisDB = 0
 			Begin
-				Set @LogMsg = 'Calling [' + @DBName + '].dbo.RebuildFragmentedIndices'
+				If @UseDbaIndexDefrag = 0
+					Set @LogMsg = 'Calling [' + @DBName + '].dbo.RebuildFragmentedIndices'
+				Else
+					Set @LogMsg = 'Calling dba..dba_indexDefrag_sp for database ' +  @DBName
 										
 				If @InfoOnly <> 0
 					Print @LogMsg
@@ -250,18 +324,72 @@ As
 					Exec PostLogEntry 'Progress', @LogMsg, 'RebuildMTSDBIndices'
 				End
 					
-				Set @Sql = 'exec [' + @DBName + '].dbo.RebuildFragmentedIndices @MaxFragmentation, @TrivialPageCount, @VerifyUpdateEnabled, @infoOnly, @message output'
-				Set @SqlParams = '@MaxFragmentation int, @TrivialPageCount int, @VerifyUpdateEnabled tinyint, @infoOnly tinyint, @message varchar(1024) output'
-				Set @message = ''
-				Set @VerifyUpdateEnabled = 0
+				If @UseDbaIndexDefrag = 0
+				Begin
+					Set @Sql = 'exec [' + @DBName + '].dbo.RebuildFragmentedIndices @MaxFragmentation, @TrivialPageCount, @PercentFreeSpace, @VerifyUpdateEnabled, @infoOnly, @message output'
+					Set @SqlParams = '@MaxFragmentation int, @TrivialPageCount int, @PercentFreeSpace int, @VerifyUpdateEnabled tinyint, @infoOnly tinyint, @message varchar(1024) output'
+					Set @message = ''
+					Set @VerifyUpdateEnabled = 0
 
-				Exec @myError = sp_executesql @Sql, @SqlParams, @MaxFragmentation, @TrivialPageCount, @VerifyUpdateEnabled, @infoOnly, @message output
+					Exec @myError = sp_executesql @Sql, @SqlParams, @MaxFragmentation, @TrivialPageCount, @PercentFreeSpace, @VerifyUpdateEnabled, @infoOnly, @message output
+				End
+				Else
+				Begin
 				
+					If @minFragmentation > @MaxFragmentation
+						Set @minFragmentation = @MaxFragmentation
+						
+					Set @Sql = ''
+					Set @Sql = @Sql + ' EXECUTE dba.dbo.dba_indexDefrag_sp '
+					
+					If @infoOnly = 0
+					Begin
+						Set @Sql = @Sql + '  @executeSQL       = 1'
+						Set @Sql = @Sql + ', @debugMode        = 0'
+					End
+					Else
+					Begin
+						Set @Sql = @Sql + '  @executeSQL       = 0'
+						Set @Sql = @Sql + ', @debugMode        = 1'
+					End
+
+					Set @Sql = @Sql + ' , @printCommands        = 1'					
+					Set @Sql = @Sql + ' , @printFragmentation   = 1'
+					Set @Sql = @Sql + ' , @forceRescan          = 1'					-- If index scan times are slow when @scanMode is SAMPLED, set this to 0
+					Set @Sql = @Sql + ' , @scanMode             = ''SAMPLED'''
+					Set @Sql = @Sql + ' , @maxDopRestriction    = 1'
+					Set @Sql = @Sql + ' , @minPageCount         = ' + Cast(@TrivialPageCount as nvarchar(9))
+					Set @Sql = @Sql + ' , @maxPageCount         = NULL'
+					Set @Sql = @Sql + ' , @minFragmentation     = ' + Cast(@minFragmentation as nvarchar(6))  -- Tables with fragmentation between @minFragmentation and @MaxFragmentation will be reorganized instead of rebuilt
+					Set @Sql = @Sql + ' , @rebuildThreshold     = ' + Cast(@MaxFragmentation as nvarchar(6))
+					Set @Sql = @Sql + ' , @fillFactor           = ' + Cast((100-@PercentFreeSpace) as nvarchar(6))
+					Set @Sql = @Sql + ' , @defragDelay          = ''00:00:02'''			 -- Wait 2 seconds between each index
+					Set @Sql = @Sql + ' , @defragOrderColumn    = ''range_scan_count'''
+					Set @Sql = @Sql + ' , @defragSortOrder      = ''DESC'''
+					Set @Sql = @Sql + ' , @excludeMaxPartition  = 0'
+					Set @Sql = @Sql + ' , @timeLimit            = 720'					 -- 12 hours
+					Set @Sql = @Sql + ' , @database             = ''' + @DBName + ''''
+					Set @Sql = @Sql + ' , @tableName            = NULL'					 -- All Tables
+				
+					Set @SqlParams = ''
+				
+					If @infoOnly > 0
+						Print @Sql
+
+					Exec @myError = sp_executesql @Sql, @SqlParams
+				End
+						
 				If @myError <> 0
 				Begin
-					Set @LogMsg = 'Error calling RebuildFragmentedIndices in ' + @DBName
-					If IsNull(@message, '') <> ''
-						Set @LogMsg = @LogMsg + ': ' + @message
+					If @UseDbaIndexDefrag = 0
+					Begin
+						Set @LogMsg = 'Error calling RebuildFragmentedIndices in ' + @DBName
+						If IsNull(@message, '') <> ''
+							Set @LogMsg = @LogMsg + ': ' + @message
+					End
+					Else
+						Set @LogMsg = 'Error calling dba..dba_indexDefrag_sp for ' + @DBName
+
 					Exec PostLogEntry 'Error', @LogMsg, 'RebuildMTSDBIndices'
 					
 				End
