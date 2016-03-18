@@ -120,7 +120,7 @@ IF NOT EXISTS (SELECT * FROM msdb..sysoperators WHERE name = 'SQL_DBA')
 BEGIN
 	EXEC msdb..sp_add_operator @name=N'SQL_DBA', 
 			@enabled=1,
-			@email_address=N'matthew.monroe@pnnl.gov'
+			@email_address=N'EMSL-Prism.Users.DB_Operators@pnnl.gov'
 END
 GO
 
@@ -128,7 +128,7 @@ IF NOT EXISTS (SELECT * FROM msdb..sysoperators WHERE name = 'SQL_DBA_vtext')
 BEGIN
 	EXEC msdb..sp_add_operator @name=N'SQL_DBA_vtext', 
 			@enabled=1,
-			@email_address=N'matthew.monroe@pnnl.gov'
+			@email_address=N'EMSL-Prism.Users.DB_Operators@pnnl.gov'
 END
 GO
 /*=======================================================================================================================

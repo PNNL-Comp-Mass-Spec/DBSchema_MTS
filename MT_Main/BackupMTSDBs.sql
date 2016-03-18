@@ -30,6 +30,7 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **						   - Changed the default compression level to 4
 **			06/28/2013 mem - Now performing a log backup of the Model DB after the full backup to prevent the model DB's log file from growing over time (it grows because the Model DB's recovery model is "Full", and a database backup is a logged operation)
 **			07/01/2013 mem - Added parameter @NativeSqlServerBackup (requires that procedure DatabaseBackup and related procedures from Ola Hallengren's Maintenance Solution be installed in the master DB)
+**			03/18/2016 mem - Update e-mail address for the MAILTO_ONERROR parameter
 **    
 *****************************************************/
 (
@@ -608,7 +609,7 @@ As
 				If @Verify <> 0
 					Set @Sql = @Sql + ' VERIFY,'
 					
-				Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogPathBase + ''', MAILTO_ONERROR = ''matthew.monroe@pnl.gov''"'
+				Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogPathBase + ''', MAILTO_ONERROR = ''EMSL-Prism.Users.DB_Operators@pnnl.gov''"'
 				
 				If @InfoOnly = 0
 				Begin -- <c3>
@@ -791,7 +792,7 @@ As
 					End
 				
 					Set @DBBackupStatusLogFileName = @DBBackupStatusLogPathBase + @BackupFileBaseName + '.log'
-					Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogFileName + ''', MAILTO_ONERROR = ''matthew.monroe@pnl.gov''"'
+					Set @Sql = @Sql + ' LOGTO=''' + @DBBackupStatusLogFileName + ''', MAILTO_ONERROR = ''EMSL-Prism.Users.DB_Operators@pnnl.gov''"'
 					
 					Set @SqlRestore = '-SQL "RESTORE VERIFYONLY FROM ' + @BackupFileList + '"'
 				End
