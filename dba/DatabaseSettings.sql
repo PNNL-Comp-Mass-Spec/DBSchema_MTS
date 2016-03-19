@@ -5,16 +5,27 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[DatabaseSettings](
 	[DBName] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[SchemaTracking] [bit] NULL,
-	[LogFileAlerts] [bit] NULL,
-	[LongQueryAlerts] [bit] NULL,
-	[Reindex] [bit] NULL,
+	[SchemaTracking] [bit] NOT NULL,
+	[LogFileAlerts] [bit] NOT NULL,
+	[LongQueryAlerts] [bit] NOT NULL,
+	[Reindex] [bit] NOT NULL,
+	[HealthReport] [bit] NOT NULL,
  CONSTRAINT [pk_DatabaseSettings] PRIMARY KEY CLUSTERED 
 (
 	[DBName] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ADD  CONSTRAINT [df_DatabaseSettings_Schema]  DEFAULT ((0)) FOR [SchemaTracking]
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ADD  CONSTRAINT [df_DatabaseSettings_LogFiles]  DEFAULT ((1)) FOR [LogFileAlerts]
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ADD  CONSTRAINT [df_DatabaseSettings_LongQueries]  DEFAULT ((1)) FOR [LongQueryAlerts]
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ADD  CONSTRAINT [df_DatabaseSettings_Reindex]  DEFAULT ((0)) FOR [Reindex]
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ADD  CONSTRAINT [df_DatabaseSettings_HealthReport]  DEFAULT ((1)) FOR [HealthReport]
 GO
 /****** Object:  Trigger [dbo].[tr_d_DatabaseSettings] ******/
 SET ANSI_NULLS ON
@@ -53,7 +64,7 @@ BEGIN
 		BEGIN
 			SELECT @SQL = 
 				'USE '+ CHAR(13) + '[' + @DBName + ']'  + CHAR(13)+ CHAR(10) + 
-				+ 'IF  EXISTS (SELECT * FROM sys.triggers WHERE [name] = ''tr_DDL_SchemaChangeLog'') DROP TRIGGER tr_DDL_SchemaChangeLog ON DATABASE'
+				+ 'IF EXISTS (SELECT * FROM sys.triggers WHERE [name] = ''tr_DDL_SchemaChangeLog'') DROP TRIGGER tr_DDL_SchemaChangeLog ON DATABASE'
 			EXEC(@SQL)
 			
 			UPDATE #TEMP

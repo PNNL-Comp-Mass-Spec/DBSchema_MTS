@@ -6,7 +6,6 @@ GO
 
 CREATE PROC dbo.dd_TestDataDictionaryFields
 AS
-
 /**************************************************************************************************************
 **  Purpose: RUN THIS TO FIND TABLES AND/OR FIELDS THAT ARE MISSING DATA
 **
@@ -16,7 +15,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
     SET NOCOUNT ON
     DECLARE @RecordCount INT
     DECLARE @FieldList TABLE

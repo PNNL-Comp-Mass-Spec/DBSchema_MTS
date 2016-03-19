@@ -6,5 +6,5 @@ INSERT INTO [AlertContacts] VALUES ('CPUAlert','EMSL-Prism.Users.DB_Operators@pn
 INSERT INTO [AlertContacts] VALUES ('HealthReport','EMSL-Prism.Users.DB_Operators@pnnl.gov','','')
 INSERT INTO [AlertContacts] VALUES ('LogFiles','','','')
 INSERT INTO [AlertContacts] VALUES ('LongRunningJobs','EMSL-Prism.Users.DB_Operators@pnnl.gov','','')
-INSERT INTO [AlertContacts] VALUES ('LongRunningQueries','','','')
+INSERT INTO [AlertContacts] VALUES ('LongRunningQueries','EMSL-Prism.Users.DB_Operators@pnnl.gov','','')
 INSERT INTO [AlertContacts] VALUES ('TempDB','EMSL-Prism.Users.DB_Operators@pnnl.gov','','')

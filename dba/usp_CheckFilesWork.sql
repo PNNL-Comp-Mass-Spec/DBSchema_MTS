@@ -3,13 +3,13 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROC dbo.usp_CheckFilesWork
+
+CREATE PROC [dbo].[usp_CheckFilesWork]
 (
 	@CheckTempDB BIT = 0,
 	@WarnGrowingLogFiles BIT = 0
 )
 AS
-
 /**************************************************************************************************************
 **  Purpose: 
 **
@@ -24,14 +24,12 @@ AS
 **																Changed SELECT from #TEMP to FileStatsHistory since it doesn't exist anymore
 **					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
 **						from SSC
-**	05/14/2013		Matthew Monroe			1.2.1				Now treating @MinFileSizeMB as 0 MB if null
-**	05/28/2013		Matthew Monroe			1.2.2				Now querying on LogFileAlerts = 1 in DatabaseSettings
+**	06/13/2013		Michael Rounds			1.3					Added AlertSettings Enabled column to determine if the alert is enabled.
+**	07/23/2013		Michael Rounds			1.4					Tweaked to support Case-sensitive
 ***************************************************************************************************************/
-
 BEGIN
-
 	SET NOCOUNT ON
-
+	
 	DECLARE @QueryValue INT, 
 			@QueryValue2 INT, 
 			@HTML NVARCHAR(MAX), 
@@ -45,11 +43,11 @@ BEGIN
 	SELECT @ServerName = CONVERT(NVARCHAR(128), SERVERPROPERTY('servername'))  
 	
 	/*Grab AlertSettings for the specified DB category*/
-	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' 
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND [Enabled] = 1
 			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
-	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' 
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND [Enabled] = 1
 			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
-	SELECT @MinFileSizeMB = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'MinFileSizeMB' 
+	SELECT @MinFileSizeMB = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'MinFileSizeMB' AND [Enabled] = 1
 			AND (@CheckTempDB = 0 AND AlertName = 'LogFiles' OR @CheckTempDB = 1 AND AlertName = 'TempDB')
 	SELECT @EmailList = EmailList,
 			@CellList = CellList	
@@ -58,7 +56,7 @@ BEGIN
 	/*Populate TEMPLogFiles table with Already Grown Log Files or Already Grown TEMPDB files*/
 	CREATE TABLE #TEMPLogFiles (
 		[DBName] NVARCHAR(128),
-		[Filename] NVARCHAR(255),
+		[FileName] NVARCHAR(255),
 		PreviousFileSize BIGINT,
 		PrevPercentEmpty NUMERIC(12,2),
 		CurrentFileSize BIGINT,
@@ -68,19 +66,19 @@ BEGIN
 	-- Find log files that have grown
 	-- and are at least @MinFileSizeMB in size
 	INSERT INTO #TEMPLogFiles
-	SELECT t.[DBName],t.[Filename],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
+	SELECT t.[DBName],t.[FileName],t.FileMBSize AS PreviousFileSize,t.FilePercentEmpty AS PrevPercentEmpty,t2.FileMBSize AS CurrentFileSize,t2.FilePercentEmpty AS CurrPercentEmpty
 	FROM [dba].dbo.FileStatsHistory t
 	JOIN [dba].dbo.FileStatsHistory t2
 		ON t.[DBName] = t2.[DBName] 
-		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM [dba].dbo.FileStatsHistory) 
+		AND t.[FileName] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT COALESCE(MAX(FileStatsID) -1,1) FROM [dba].dbo.FileStatsHistory) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
-	WHERE t2.FileMBSize > IsNull(@MinFileSizeMB, 0)
-	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
-	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
+	WHERE t2.FileMBSize > COALESCE(@MinFileSizeMB,0)
+	      AND (@CheckTempDB = 0 AND t2.[FileName] LIKE '%ldf' OR 
+	           @CheckTempDB = 1 AND t2.[FileName] LIKE '%mdf')
 	      AND t.FileMBSize < t2.FileMBSize
 	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                             AND t2.[DBName] IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 1) 
+	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
 	            OR
 	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
@@ -160,7 +158,6 @@ BEGIN
 	END
 	/*Stop of Files Already Grown*/	
 	
-	
 	/* Populate TEMP3 table with log files that are likely to grow (since the amount of free space is below a threshold) */
 	CREATE TABLE #TEMP3 (
 		[DBName] NVARCHAR(128),
@@ -174,20 +171,20 @@ BEGIN
 	-- Find log files that are less than @QueryValue percent empty	
 	-- and are at least @MinFileSizeMB in size
 	INSERT INTO #TEMP3
-	SELECT t.[DBName],t.[Filename],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
+	SELECT t.[DBName],t.[FileName],t2.FileMBSize,t2.FileMBUsed,t2.FileMBEmpty,t2.FilePercentEmpty
 	FROM [dba].dbo.FileStatsHistory t
 	JOIN [dba].dbo.FileStatsHistory t2
 		ON t.[DBName] = t2.[DBName] 
-		AND t.[Filename] = t2.[FileName] 
-		AND t.FileStatsID = (SELECT MIN(FileStatsID) FROM [dba].dbo.FileStatsHistory) 
+		AND t.[FileName] = t2.[FileName] 
+		AND t.FileStatsID = (SELECT COALESCE(MAX(FileStatsID) -1,1) FROM [dba].dbo.FileStatsHistory) 
 		AND t2.FileStatsID = (SELECT MAX(FileStatsID) FROM [dba].dbo.FileStatsHistory)
-	WHERE t2.FilePercentEmpty < @QueryValue
-	      AND t2.FileMBSize > IsNull(@MinFileSizeMB, 0)
-	      AND (@CheckTempDB = 0 AND t2.[Filename] LIKE '%ldf' OR 
-	           @CheckTempDB = 1 AND t2.[Filename] LIKE '%mdf')
+	WHERE t2.FilePercentEmpty < COALESCE(@QueryValue,0)
+	      AND t2.FileMBSize > COALESCE(@MinFileSizeMB,0)
+	      AND (@CheckTempDB = 0 AND t2.[FileName] LIKE '%ldf' OR 
+	           @CheckTempDB = 1 AND t2.[FileName] LIKE '%mdf')
 	      AND t.FileMBSize <> t2.FileMBSize
 	      AND ( @CheckTempDB = 0 AND t2.[DBName] NOT IN ('model','tempdb','[model]','[tempdb]')
-	                       AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
+	                             AND t2.[DBName] NOT IN (SELECT [DBName] FROM [dba].dbo.DatabaseSettings WHERE LogFileAlerts = 0) 
 	            OR
 	            @CheckTempDB = 1 AND t2.[DBName] IN ('tempdb', '[tempdb]')
 	           )
@@ -197,7 +194,7 @@ BEGIN
 	FROM #TEMP3 a
 	JOIN #TEMPLogFiles b
 		ON a.[DBName] = b.[DBName]
-		AND a.[Filename] = b.[Filename]
+		AND a.[FileName] = b.[FileName]
 	
 	/*Start of Growing Log Files or Growing TempDB*/
 	IF EXISTS (SELECT * FROM #TEMP3) AND @WarnGrowingLogFiles <> 0

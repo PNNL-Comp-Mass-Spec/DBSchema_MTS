@@ -4,8 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE VIEW [dbo].[V_QueryStats] 
+CREATE VIEW V_QueryStats 
 As 
 (
 	SELECT QS.Entry_ID,
@@ -17,6 +16,7 @@ As
 	              ELSE QS.statement_end_offset
 	          END - QS.statement_start_offset) / 2 + 1) AS Sql_Stmt,
 	       QS.execution_count,
+	       Cast(total_elapsed_time_ms / 1000.0 / execution_count AS decimal(9, 2)) AS Avg_elapsed_time_sec,
 	       QS.total_elapsed_time_ms,
 	       QS.min_elapsed_time_ms,
 	       QS.max_elapsed_time_ms,
@@ -38,10 +38,10 @@ As
 	       QS.plan_handle,
 	       QS.statement_start_offset,
 	       QS.statement_end_offset
-	FROM T_QueryStats QS Inner Join T_QueryText QT On QS.sql_handle = QT.sql_handle
+	FROM T_QueryStats QS
+	     INNER JOIN T_QueryText QT
+	       ON QS.sql_handle = QT.sql_handle
 
 )
-
-
 
 GO

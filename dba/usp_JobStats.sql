@@ -20,6 +20,7 @@ AS
 **	05/01/2013		Michael Rounds			1.2				Creating temp tables instead of inserting INTO
 **															Removed COALESCE's from previous change on 4/24. Causing dates to read 1/1/1900 when NULL. Would rather have NULL.
 **	05/17/2013		Michael Rounds			1.2.1			Added Job Owner to JobStatsHistory
+**	07/23/2013		Michael Rounds			1.3					Tweaked to support Case-sensitive
 ***************************************************************************************************************/
 
 BEGIN
@@ -102,7 +103,7 @@ JOIN msdb..sysjobactivity(nolock) ja
 	ON ja.session_id = ja2.session_id and ja.job_id = t.job_id
 LEFT OUTER 
 JOIN (SELECT job_id,
-			AVG	((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) + 	STDEV ((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) AS [AvgRuntime]
+			AVG	((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) + 	STDEV ((run_duration/10000 * 3600) + ((run_duration%10000)/100*60) + (run_duration%10000)%100) AS [AvgRunTime]
 		FROM msdb..sysjobhistory(nolock)
 		WHERE step_id = 0 AND run_status = 1 and run_duration >= 0
 		GROUP BY job_id) art 

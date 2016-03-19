@@ -6,7 +6,6 @@ GO
 
 CREATE PROC dbo.dd_ApplyDataDictionary
 AS
-
 /**************************************************************************************************************
 **  Purpose: RUN THIS WHEN YOU ARE READY TO APPLY DATA DICTIONARY TO THE EXTENDED PROPERTIES TABLES
 **
@@ -16,7 +15,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
     SET NOCOUNT ON
     DECLARE @SQLVersion VARCHAR(30),
         @SchemaOrUser sysname
@@ -38,8 +36,8 @@ AS
                     DT.TableDescription
             FROM    dbo.DataDictionary_Tables AS DT
                     INNER JOIN INFORMATION_SCHEMA.TABLES AS T
-                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
-                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
+                        ON DT.SchemaName COLLATE DATABASE_DEFAULT = T.TABLE_SCHEMA COLLATE DATABASE_DEFAULT
+                           AND DT.TableName COLLATE DATABASE_DEFAULT = T.TABLE_NAME COLLATE DATABASE_DEFAULT
             WHERE   DT.TableDescription <> ''
 	
     OPEN csr_dd
@@ -72,9 +70,9 @@ AS
                     DT.FieldDescription
             FROM    dbo.DataDictionary_Fields AS DT
                     INNER JOIN INFORMATION_SCHEMA.COLUMNS AS T
-                        ON DT.SchemaName COLLATE Latin1_General_CI_AS = T.TABLE_SCHEMA COLLATE Latin1_General_CI_AS
-                           AND DT.TableName COLLATE Latin1_General_CI_AS = T.TABLE_NAME COLLATE Latin1_General_CI_AS
-                           AND DT.FieldName COLLATE Latin1_General_CI_AS = T.COLUMN_NAME COLLATE Latin1_General_CI_AS
+                        ON DT.SchemaName COLLATE DATABASE_DEFAULT = T.TABLE_SCHEMA COLLATE DATABASE_DEFAULT
+                           AND DT.TableName COLLATE DATABASE_DEFAULT = T.TABLE_NAME COLLATE DATABASE_DEFAULT
+                           AND DT.FieldName COLLATE DATABASE_DEFAULT = T.COLUMN_NAME COLLATE DATABASE_DEFAULT
             WHERE   DT.FieldDescription <> ''
     OPEN csr_ddf
     FETCH NEXT FROM csr_ddf INTO @SchemaName, @TableName, @FieldName,

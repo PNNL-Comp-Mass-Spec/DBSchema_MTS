@@ -6,7 +6,6 @@ GO
 
 CREATE PROC dbo.dd_ScavengeDataDictionaryFields
 AS
-
 /**************************************************************************************************************
 **  Purpose:
 **
@@ -16,7 +15,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
 SET NOCOUNT ON
 IF OBJECT_ID('tempdb..#DataDictionaryFields') IS NOT NULL
      DROP TABLE #DataDictionaryFields
@@ -73,9 +71,9 @@ WHILE @@FETCH_STATUS = 0
         SET DT_DEST.FieldDescription = DT_SRC.FieldDescription
         FROM #DataDictionaryFields AS DT_SRC
             INNER JOIN dbo.DataDictionary_Fields AS DT_DEST
-            ON DT_SRC.FieldName COLLATE Latin1_General_CI_AS = DT_DEST.FieldName COLLATE Latin1_General_CI_AS
-        WHERE DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName	COLLATE Latin1_General_CI_AS
-        AND DT_DEST.TableName COLLATE Latin1_General_CI_AS = @TableName	COLLATE Latin1_General_CI_AS
+            ON DT_SRC.FieldName COLLATE DATABASE_DEFAULT = DT_DEST.FieldName COLLATE DATABASE_DEFAULT
+        WHERE DT_DEST.SchemaName COLLATE DATABASE_DEFAULT = @SchemaName	COLLATE DATABASE_DEFAULT
+        AND DT_DEST.TableName COLLATE DATABASE_DEFAULT = @TableName	COLLATE DATABASE_DEFAULT
         AND DT_SRC.FieldDescription IS NOT NULL AND DT_SRC.FieldDescription<>''
         FETCH NEXT FROM csr_dd INTO @SchemaName, @TableName
     END

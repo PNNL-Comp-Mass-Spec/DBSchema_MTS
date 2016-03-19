@@ -9,7 +9,6 @@ CREATE PROC dbo.dd_UpdateDataDictionaryTable
     @TableName sysname, 
     @TableDescription VARCHAR(7000) = '' 
 AS
-
 /**************************************************************************************************************
 **  Purpose: USE THIS TO MANUALLY UPDATE AN INDIVIDUAL TABLE/FIELD, THEN RUN POPULATE SCRIPT AGAIN
 **
@@ -19,7 +18,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
     SET NOCOUNT ON
     UPDATE  dbo.DataDictionary_Tables
     SET     TableDescription = ISNULL(@TableDescription, '')

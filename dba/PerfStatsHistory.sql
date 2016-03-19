@@ -23,3 +23,5 @@ CREATE TABLE [dbo].[PerfStatsHistory](
 ) ON [PRIMARY]
 
 GO
+ALTER TABLE [dbo].[PerfStatsHistory] ADD  CONSTRAINT [DF_PerfStatsHistory_StatDate]  DEFAULT (getdate()) FOR [StatDate]
+GO

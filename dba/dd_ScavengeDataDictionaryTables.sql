@@ -6,7 +6,6 @@ GO
 
 CREATE PROC dbo.dd_ScavengeDataDictionaryTables
 AS
-
 /**************************************************************************************************************
 **  Purpose:
 **
@@ -16,7 +15,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
     SET NOCOUNT ON
     IF OBJECT_ID('tempdb..#DataDictionaryTables') IS NOT NULL 
         DROP TABLE #DataDictionaryTables
@@ -81,8 +79,8 @@ AS
                     SET     DT_DEST.TableDescription = DT_SRC.TableDescription
                     FROM    #DataDictionaryTables AS DT_SRC
                             INNER JOIN dbo.DataDictionary_Tables AS DT_DEST
-                                ON DT_SRC.TableName COLLATE Latin1_General_CI_AS = DT_DEST.TableName COLLATE Latin1_General_CI_AS
-                    WHERE   DT_DEST.SchemaName COLLATE Latin1_General_CI_AS = @SchemaName COLLATE Latin1_General_CI_AS
+                                ON DT_SRC.TableName COLLATE DATABASE_DEFAULT = DT_DEST.TableName COLLATE DATABASE_DEFAULT
+                    WHERE   DT_DEST.SchemaName COLLATE DATABASE_DEFAULT = @SchemaName COLLATE DATABASE_DEFAULT
                             AND DT_SRC.TableDescription IS NOT NULL
                             AND DT_SRC.TableDescription <> ''
                 END

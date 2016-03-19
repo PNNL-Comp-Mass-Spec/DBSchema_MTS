@@ -42,8 +42,7 @@ GO
 
 CREATE TRIGGER [dbo].[ti_blockinghistory] ON [dbo].[BlockingHistory]
 AFTER INSERT
-AS 
-
+AS
 /**************************************************************************************************************
 **  Purpose: 
 **
@@ -56,122 +55,119 @@ AS
 **	05/03/2013		Michael Rounds			1.2					Changed how variables are gathered in AlertSettings and AlertContacts
 **					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
 **						from SSC
-**	05/28/2013		Michael Rounds			1.2.1				Adjusted HTML table column widths
 **	06/05/2013		Matthew Monroe			1.2.2				Now checking for empty @EmailList or @CellList
+**	06/13/2013		Michael Rounds			1.3					Added SET NOCOUNT ON
+**																Added AlertSettings Enabled column to determine if the alert is enabled.
 ***************************************************************************************************************/
-
 BEGIN
-DECLARE @HTML NVARCHAR(MAX), @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
+	SET NOCOUNT ON
 
-SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
+	DECLARE @HTML NVARCHAR(MAX), @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
 
-SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'BlockingAlert'
+	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
 
-SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'BlockingAlert'
-	
-SELECT @EmailList = EmailList,
-		@CellList = CellList	
-FROM [dba].dbo.AlertContacts WHERE AlertName = 'BlockingAlert'
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'BlockingAlert' AND [Enabled] = 1
 
-SELECT *
-INTO #TEMP
-FROM Inserted
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'BlockingAlert' AND [Enabled] = 1
+		
+	SELECT @EmailList = EmailList,
+			@CellList = CellList	
+	FROM [dba].dbo.AlertContacts WHERE AlertName = 'BlockingAlert'
 
-IF EXISTS (SELECT * FROM #TEMP WHERE CAST(Blocked_WaitTime_Seconds AS DECIMAL) > @QueryValue)
-   AND COALESCE(@EmailList, '') <> ''
-BEGIN
+	SELECT *
+	INTO #TEMP
+	FROM Inserted
 
-	SET	@HTML =
-		'<html><head><style type="text/css">
-		table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
-		th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
-		th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
-		td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
-		</style></head><body>
-		<table width="1250"> <tr><th class="header" width="1250">Most Recent Blocking</th></tr></table>
-		<table width="1250">
-		<tr> 
-		<th width="150">Date Stamp</th> 
-		<th width="150">Database</th> 	
-		<th width="60">Time(ss)</th> 
-		<th width="60">Victim SPID</th>
-		<th width="145">Victim Login</th>
-		<th width="240">Victim SQL Text</th> 
-		<th width="60">Blocking SPID</th> 	
-		<th width="145">Blocking Login</th>
-		<th width="240">Blocking SQL Text</th> 
-		</tr>'
-
-	SELECT @HTML =  @HTML +   
-		'<tr>
-		<td width="150" bgcolor="#E0E0E0">' + CAST(DateStamp AS NVARCHAR) +'</td>
-		<td width="150" bgcolor="#F0F0F0">' + [DBName] + '</td>
-		<td width="60" bgcolor="#E0E0E0">' + CAST(Blocked_WaitTime_Seconds AS NVARCHAR) +'</td>
-		<td width="60" bgcolor="#F0F0F0">' + CAST(Blocked_SPID AS NVARCHAR) +'</td>
-		<td width="145" bgcolor="#E0E0E0">' + Blocked_Login +'</td>		
-		<td width="240" bgcolor="#F0F0F0">' + REPLACE(REPLACE(REPLACE(LEFT(Blocked_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE','') +'</td>
-		<td width="60" bgcolor="#E0E0E0">' + CAST(Blocking_SPID AS NVARCHAR) +'</td>
-		<td width="145" bgcolor="#F0F0F0">' + Offending_Login +'</td>
-		<td width="240" bgcolor="#E0E0E0">' + REPLACE(REPLACE(REPLACE(LEFT(Offending_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE','') +'</td>	
-		</tr>'
-	FROM #TEMP
-	WHERE CAST(Blocked_WaitTime_Seconds AS DECIMAL) > @QueryValue
-
-	SELECT @HTML =  @HTML + '</table></body></html>'
-
-	SELECT @EmailSubject = '[dba]Blocking on ' + @ServerName + '!'
-
-	EXEC msdb..sp_send_dbmail
-	@recipients= @EmailList,
-	@subject = @EmailSubject,
-	@body = @HTML,
-	@body_format = 'HTML'
-
-END
-
-IF COALESCE(@CellList, '') <> ''
-BEGIN
-	SELECT @EmailSubject = '[dba]Blocking-' + @ServerName
-
-	IF @QueryValue2 IS NOT NULL
+	IF EXISTS (SELECT * FROM #TEMP WHERE CAST(Blocked_WaitTime_Seconds AS DECIMAL) > @QueryValue)
+	   AND COALESCE(@EmailList, '') <> ''
 	BEGIN
-	IF EXISTS (SELECT * FROM #TEMP WHERE CAST(BLOCKED_WAITTIME_SECONDS AS DECIMAL) > @QueryValue2)
-	BEGIN
-	SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
-	SELECT @HTML =  @HTML +   
-		'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
-	FROM #TEMP
-	WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue2
-	SELECT @HTML =  @HTML + '</table></body></html>'
+		SET	@HTML =
+			'<html><head><style type="text/css">
+			table { border: 0px; border-spacing: 0px; border-collapse: collapse;}
+			th {color:#FFFFFF; font-size:12px; font-family:arial; background-color:#7394B0; font-weight:bold;border: 0;}
+			th.header {color:#FFFFFF; font-size:13px; font-family:arial; background-color:#41627E; font-weight:bold;border: 0;}
+			td {font-size:11px; font-family:arial;border-right: 0;border-bottom: 1px solid #C1DAD7;padding: 5px 5px 5px 8px;}
+			</style></head><body>
+			<table width="1250"> <tr><th class="header" width="1250">Most Recent Blocking</th></tr></table>
+			<table width="1250">
+			<tr> 
+			<th width="150">Date Stamp</th> 
+			<th width="150">Database</th> 	
+			<th width="60">Time(ss)</th> 
+			<th width="60">Victim SPID</th>
+			<th width="145">Victim Login</th>
+			<th width="240">Victim SQL Text</th> 
+			<th width="60">Blocking SPID</th> 	
+			<th width="145">Blocking Login</th>
+			<th width="240">Blocking SQL Text</th> 
+			</tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr>
+			<td width="150" bgcolor="#E0E0E0">' + CAST(DateStamp AS NVARCHAR) +'</td>
+			<td width="150" bgcolor="#F0F0F0">' + [DBName] + '</td>
+			<td width="60" bgcolor="#E0E0E0">' + CAST(Blocked_WaitTime_Seconds AS NVARCHAR) +'</td>
+			<td width="60" bgcolor="#F0F0F0">' + CAST(Blocked_SPID AS NVARCHAR) +'</td>
+			<td width="145" bgcolor="#E0E0E0">' + Blocked_Login +'</td>		
+			<td width="240" bgcolor="#F0F0F0">' + REPLACE(REPLACE(REPLACE(LEFT(Blocked_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE','') +'</td>
+			<td width="60" bgcolor="#E0E0E0">' + CAST(Blocking_SPID AS NVARCHAR) +'</td>
+			<td width="145" bgcolor="#F0F0F0">' + Offending_Login +'</td>
+			<td width="240" bgcolor="#E0E0E0">' + REPLACE(REPLACE(REPLACE(LEFT(Offending_SQL_Text,100),'CREATE',''),'TRIGGER',''),'PROCEDURE','') +'</td>	
+			</tr>'
+		FROM #TEMP
+		WHERE CAST(Blocked_WaitTime_Seconds AS DECIMAL) > @QueryValue
 
-	EXEC msdb..sp_send_dbmail
-	@recipients= @CellList,
-	@subject = @EmailSubject,
-	@body = @HTML,
-	@body_format = 'HTML'
+		SELECT @HTML =  @HTML + '</table></body></html>'
+
+		SELECT @EmailSubject = '[dba]Blocking on ' + @ServerName + '!'
+
+		EXEC msdb..sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
 	END
+
+	IF COALESCE(@CellList, '') <> ''
+	BEGIN
+		SELECT @EmailSubject = '[dba]Blocking-' + @ServerName
+
+		IF @QueryValue2 IS NOT NULL
+		BEGIN
+			IF EXISTS (SELECT * FROM #TEMP WHERE CAST(BLOCKED_WAITTIME_SECONDS AS DECIMAL) > @QueryValue2)
+			BEGIN
+				SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
+				SELECT @HTML =  @HTML +   
+					'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
+				FROM #TEMP
+				WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue2
+				SELECT @HTML =  @HTML + '</table></body></html>'
+
+				EXEC msdb..sp_send_dbmail
+				@recipients= @CellList,
+				@subject = @EmailSubject,
+				@body = @HTML,
+				@body_format = 'HTML'
+			END
+		END
 	END
-END
 
 IF @QueryValue2 IS NULL AND COALESCE(@CellList, '') <> ''
-BEGIN
-	/*TEXT MESSAGE*/
-	SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
-	SELECT @HTML =  @HTML +   
-		'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
-	FROM #TEMP
-	WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue
-	SELECT @HTML =  @HTML + '</table></body></html>'
+	BEGIN
+		/*TEXT MESSAGE*/
+		SET	@HTML = '<html><head></head><body><table><tr><td>BlockingSPID,</td><td>Login,</td><td>Time</td></tr>'
+		SELECT @HTML =  @HTML +   
+			'<tr><td>' + CAST(OFFENDING_SPID AS NVARCHAR) +',</td><td>' + LEFT(OFFENDING_LOGIN,7) +',</td><td>' + CAST(BLOCKED_WAITTIME_SECONDS AS NVARCHAR) +'</td></tr>'
+		FROM #TEMP
+		WHERE BLOCKED_WAITTIME_SECONDS > @QueryValue
+		SELECT @HTML =  @HTML + '</table></body></html>'
 
-	EXEC msdb..sp_send_dbmail
-	@recipients= @CellList,
-	@subject = @EmailSubject,
-	@body = @HTML,
-	@body_format = 'HTML'
+		EXEC msdb..sp_send_dbmail
+		@recipients= @CellList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
+	END
+	DROP TABLE #TEMP
 END
-
-DROP TABLE #TEMP
-END
-
 
 GO

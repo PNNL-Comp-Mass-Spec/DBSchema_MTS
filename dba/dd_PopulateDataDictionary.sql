@@ -6,7 +6,6 @@ GO
 
 CREATE PROC dbo.dd_PopulateDataDictionary
 AS
-
 /**************************************************************************************************************
 **  Purpose: RUN THIS TO POPULATE DATA DICTIONARY PROCESS TABLES
 **
@@ -16,7 +15,6 @@ AS
 **  ----------		--------------------	-------------		-------------
 **  11/06/2012		Michael Rounds			1.0					Comments creation
 ***************************************************************************************************************/
-
     SET NOCOUNT ON
     DECLARE @TableCount INT,
         @FieldCount INT

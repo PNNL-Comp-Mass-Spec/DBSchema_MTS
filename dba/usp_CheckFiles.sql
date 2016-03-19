@@ -6,7 +6,6 @@ GO
 
 CREATE PROC [dbo].[usp_CheckFiles]
 AS
-
 /**************************************************************************************************************
 **  Purpose: 
 **
@@ -21,10 +20,10 @@ AS
 **	04/25/2013		Matthew Monroe			1.3					Factored out duplicate code into usp_CheckFilesWork
 **	05/03/2013		Michael Rounds			1.3.1				Removed param @MinimumFileSizeMB - value is collected from AlertSettings now
 **																Removed DECLARE and other SQL not being used anymore
+**	06/21/2013		Michael Rounds			1.3.2				Fixed parameter calls
+**	07/23/2013		Michael Rounds			1.4					Tweaked to support Case-sensitive
 ***************************************************************************************************************/
-
 BEGIN
-
 	SET NOCOUNT ON
 
 	/* GET STATS */
@@ -33,10 +32,10 @@ BEGIN
 	EXEC [dba].dbo.usp_FileStats @InsertFlag=1
 
 	/* LOG FILES */
-	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=0
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=0, @WarnGrowingLogFiles=1
 
 	/* TEMP DB */
-	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=1
+	EXEC [dba].dbo.usp_CheckFilesWork @CheckTempDB=1, @WarnGrowingLogFiles=0
 
 END
 

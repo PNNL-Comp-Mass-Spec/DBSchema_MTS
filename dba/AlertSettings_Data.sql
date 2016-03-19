@@ -1,5 +1,5 @@
 /****** Object:  Table [AlertSettings] ******/
-/****** RowCount: 31 ******/
+/****** RowCount: 32 ******/
 /****** Columns: AlertName, VariableName, Enabled, Value, Description ******/
 INSERT INTO [AlertSettings] VALUES ('BlockingAlert','QueryValue','True','10','Value is in seconds')
 INSERT INTO [AlertSettings] VALUES ('BlockingAlert','QueryValue2','True','20','Value is in seconds')
@@ -20,6 +20,7 @@ INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowFullFileInfo','False',''
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowFullJobInfo','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowLogBackups','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowModifiedServerConfig','False','','Variable for the HealthReport')
+INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowOrphanedUsers','True','0','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowPerfStats','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowSchemaChanges','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('LogFiles','MinFileSizeMB','True','100','Ignore LogFiles smaller than this threshold, in MB')

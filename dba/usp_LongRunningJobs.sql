@@ -3,9 +3,9 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROC [dbo].[usp_LongRunningJobs]
 AS
-
 /**************************************************************************************************************
 **  Purpose: 
 **
@@ -19,26 +19,29 @@ AS
 **	05/03/2013		Michael Rounds			1.3					Changed how variables are gathered in AlertSettings and AlertContacts
 **					Volker.Bachmann								Added "[dba]" to the start of all email subject lines
 **						from SSC
+**	06/13/2013		Michael Rounds			1.4					Added SET NOCOUNT ON
+**																Added AlertSettings Enabled column to determine if the alert is enabled.
+**	07/23/2013		Michael Rounds			1.5					Tweaked to support Case-sensitive
 ***************************************************************************************************************/
-
 BEGIN
-	
+	SET NOCOUNT ON
+
 	EXEC [dba].dbo.usp_JobStats @InsertFlag=1
-	
+
 	DECLARE @JobStatsID INT, @QueryValue INT, @QueryValue2 INT, @EmailList NVARCHAR(255), @CellList NVARCHAR(255), @HTML NVARCHAR(MAX), @ServerName NVARCHAR(50), @EmailSubject NVARCHAR(100)
-	
+
 	SELECT @ServerName = CONVERT(NVARCHAR(50), SERVERPROPERTY('servername'))
-	
+
 	SET @JobStatsID = (SELECT MAX(JobStatsID) FROM [dba].dbo.JobStatsHistory)
-	
-	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningJobs'
-	
-	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningJobs'
+
+	SELECT @QueryValue = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue' AND AlertName = 'LongRunningJobs' AND [Enabled] = 1
+
+	SELECT @QueryValue2 = CAST(Value AS INT) FROM [dba].dbo.AlertSettings WHERE VariableName = 'QueryValue2' AND AlertName = 'LongRunningJobs' AND [Enabled] = 1
 		
 	SELECT @EmailList = EmailList,
 			@CellList = CellList	
 	FROM [dba].dbo.AlertContacts WHERE AlertName = 'LongRunningJobs'
-	
+
 	CREATE TABLE #TEMP (
 		JobStatsHistoryID INT,
 		JobStatsID INT,
@@ -52,14 +55,14 @@ BEGIN
 		RunTimeStatus NVARCHAR(30),
 		LastRunOutcome NVARCHAR(20)
 		)
-	
+
 	INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
 	SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
 	FROM [dba].dbo.JobStatsHistory
 	WHERE RunTimeStatus = 'LongRunning-NOW'
 	AND JobName <> 'dba_LongRunningJobsAlert'
 	AND LastRunTime > @QueryValue AND JobStatsID = @JobStatsID
-	
+
 	IF EXISTS (SELECT * FROM #TEMP)
 	BEGIN
 		SET	@HTML =
@@ -87,26 +90,23 @@ BEGIN
 			<td bgcolor="#F0F0F0" width="125">' + LastRunOutcome +'</td>		
 			</tr>'
 		FROM #TEMP
-		
+
 		SELECT @HTML =  @HTML + '</table></body></html>'
-		
+
 		SELECT @EmailSubject = '[dba]ACTIVE Long Running JOBS on ' + @ServerName + '! - IMMEDIATE Action Required'
-		
-		IF COALESCE(@EmailList, '') <> ''
-		Begin
-			EXEC msdb..sp_send_dbmail
-			@recipients= @EmailList,
-			@subject = @EmailSubject,
-			@body = @HTML,
-			@body_format = 'HTML'
-		End
-		
+
+		EXEC msdb..sp_send_dbmail
+		@recipients= @EmailList,
+		@subject = @EmailSubject,
+		@body = @HTML,
+		@body_format = 'HTML'
+
 		IF COALESCE(@CellList, '') <> ''
 		BEGIN
-			
 			IF @QueryValue2 IS NOT NULL
 			BEGIN
-			TRUNCATE TABLE #TEMP
+				TRUNCATE TABLE #TEMP
+				
 				INSERT INTO #TEMP (JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome)
 				SELECT JobStatsHistoryId, JobStatsID, JobStatsDateStamp, JobName, [Enabled], StartTime, StopTime, AvgRunTime, LastRunTime, RunTimeStatus, LastRunOutcome
 				FROM [dba].dbo.JobStatsHistory
@@ -114,7 +114,6 @@ BEGIN
 				AND JobName <> 'dba_LongRunningJobsAlert'
 				AND LastRunTime > @QueryValue2 AND JobStatsID = @JobStatsID
 			END
-			
 			/*TEXT MESSAGE*/
 			IF EXISTS (SELECT * FROM #TEMP)
 			BEGIN
@@ -123,23 +122,20 @@ BEGIN
 				SELECT @HTML =  @HTML +   
 					'<tr><td>' + COALESCE(CAST(LOWER(LEFT(JobName,17)) AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(AvgRunTime AS NVARCHAR), '') +',</td><td>' + COALESCE(CAST(LastRunTime AS NVARCHAR), '') +'</td></tr>'
 				FROM #TEMP
-			
+
 				SELECT @HTML =  @HTML + '</table></body></html>'
-			
+
 				SELECT @EmailSubject = '[dba]JobsPastDue-' + @ServerName
-			
+
 				EXEC msdb..sp_send_dbmail
 				@recipients= @CellList,
 				@subject = @EmailSubject,
 				@body = @HTML,
 				@body_format = 'HTML'
-			
+			END
 		END
-	END
-
-	DROP TABLE #TEMP
+		DROP TABLE #TEMP
 	END
 END
-
 
 GO
