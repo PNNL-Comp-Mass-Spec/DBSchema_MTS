@@ -1,8 +1,8 @@
 /****** Object:  Database [MTS_Master] ******/
 CREATE DATABASE [MTS_Master] ON  PRIMARY 
-( NAME = N'MTS_Master', FILENAME = N'I:\SQLServerData\MTS_Master_data.mdf' , SIZE = 131456KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MTS_Master', FILENAME = N'I:\SQLServerData\MTS_Master_data.mdf' , SIZE = 131456KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
  LOG ON 
-( NAME = N'MTS_Master_log', FILENAME = N'H:\SQLServerData\MTS_Master_log.ldf' , SIZE = 337216KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MTS_Master_log', FILENAME = N'H:\SQLServerData\MTS_Master_log.ldf' , SIZE = 429888KB , MAXSIZE = UNLIMITED, FILEGROWTH = 16384KB )
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MTS_Master] SET COMPATIBILITY_LEVEL = 100
