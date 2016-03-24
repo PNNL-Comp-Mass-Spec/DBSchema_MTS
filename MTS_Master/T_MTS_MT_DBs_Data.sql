@@ -1,5 +1,5 @@
 /****** Object:  Table [T_MTS_MT_DBs] ******/
-/****** RowCount: 1086 ******/
+/****** RowCount: 1087 ******/
 /****** Columns: MT_DB_ID, MT_DB_Name, Server_ID, State_ID, Last_Affected, Description, Organism, Campaign, DB_Schema_Version, Comment, Created, Last_Online ******/
 INSERT INTO [T_MTS_MT_DBs] VALUES (1004,'MT_Deinococcus_P12',1,100,'8/2/2005 12:00:53 PM','','','',1,'Taken offline and detached from Pogo July 12, 2006','','')
 INSERT INTO [T_MTS_MT_DBs] VALUES (1005,'MT_Shewanella_P14',1,100,'8/2/2005 12:00:53 PM','','','',1,'Taken offline and detached from Pogo July 12, 2006','','')
@@ -1087,3 +1087,4 @@ INSERT INTO [T_MTS_MT_DBs] VALUES (2118,'MT_Human_Hybiske_ABPP_P1126',8,5,'2/25/
 INSERT INTO [T_MTS_MT_DBs] VALUES (2119,'MT_EMSL_48411_R_jostii_JGI_P1127',3,5,'3/4/2016 9:35:06 AM','for EMSL 48411 R. jostii sampoles searched against the JGI sequences','Rhodococcus_jostii_RHA1','EMSL_48411_Beckham_LigninDegredation',2,'','3/4/2016 9:34:49 AM','3/22/2016 12:00:00 AM')
 INSERT INTO [T_MTS_MT_DBs] VALUES (2120,'MT_EMSL_48459_Dsqualens_CBS464_vs_FBCC312_P1128',2,5,'3/14/2016 6:28:10 PM','for D squalens CBS464 and FBCC 312 samples against ONLY the CBS 464.89 genome','Dichomitus_squalens','EMSL_48459_deVries_Dsqualens',2,'','3/14/2016 6:28:08 PM','3/22/2016 12:00:00 AM')
 INSERT INTO [T_MTS_MT_DBs] VALUES (2121,'MT_Human_PVNipahHendra_P1129',8,5,'3/21/2016 11:10:00 AM','for mixed Nipah and Hendra virus analyses; NOTE: does not auto import MS/MS data','Homo_sapiens','Predictive_Virology',2,'','3/21/2016 10:13:31 AM','3/22/2016 12:00:00 AM')
+INSERT INTO [T_MTS_MT_DBs] VALUES (2122,'MT_Human_PVNipahHendra_30Datasets_P1130',8,5,'3/22/2016 3:34:53 PM','for only 30 datasets from the mixed viral study','Homo_sapiens','Predictive_Virology',2,'','3/22/2016 3:34:50 PM','3/22/2016 12:00:00 AM')
