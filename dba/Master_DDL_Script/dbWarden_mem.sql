@@ -3364,6 +3364,8 @@ AS
 **	06/24/2013		Michael Rounds								Fixed bug preventing report from running when a Single user DB was had an active connection
 **	07/09/2013		Michael Rounds								Added Orphaned Users section
 **	07/23/2013		Michael Rounds			2.5					Tweaked to support Case-sensitive
+**	04/15/2016		Matthew Monroe			2.5.1				Add check for @MaxDeadLockRows = 0
+**
 ***************************************************************************************************************/
 BEGIN
 	SET NOCOUNT ON 
@@ -5525,7 +5527,7 @@ BEGIN
 		END
 	END
 
-	IF EXISTS (SELECT * FROM #DEADLOCKINFO)
+	IF EXISTS (SELECT * FROM #DEADLOCKINFO) AND @MaxDeadLockRows > 0
 	BEGIN
 		SELECT @HTML = @HTML +
 			'&nbsp;<div><table width="1250"> <tr><th class="header" width="1250">Deadlocks - Prior Day</th></tr></table></div><div>
