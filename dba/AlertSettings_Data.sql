@@ -14,7 +14,7 @@ INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowCPUStats','False','','Va
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowDatabaseSettings','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowdbaSettings','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowEmptySections','False','','Variable for the HealthReport')
-INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowErrorLog','True','','Variable for the HealthReport')
+INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowErrorLog','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowFullDBList','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowFullFileInfo','False','','Variable for the HealthReport')
 INSERT INTO [AlertSettings] VALUES ('HealthReport','ShowFullJobInfo','False','','Variable for the HealthReport')
