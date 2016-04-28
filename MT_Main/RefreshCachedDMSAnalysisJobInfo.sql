@@ -27,6 +27,7 @@ CREATE PROCEDURE RefreshCachedDMSAnalysisJobInfo
 **			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
 **			10/10/2013 mem - Now updating MyEMSLState
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
+**			04/27/2016 mem - Now treating negative values for @JobMinimum or @JobMaximum as 0
 **
 *****************************************************/
 (
@@ -49,15 +50,11 @@ AS
 
 	set @message = ''
 
-	Declare @MaxInt int
-	Set @MaxInt = 2147483647
+	Declare @MaxInt int = 2147483647
 
-	Declare @DeleteCount int
-	Declare @UpdateCount int
-	Declare @InsertCount int
-	Set @DeleteCount = 0
-	Set @UpdateCount = 0
-	Set @InsertCount = 0
+	Declare @DeleteCount int = 0
+	Declare @UpdateCount int = 0
+	Declare @InsertCount int = 0
 
 	Declare @FullRefreshPerformed tinyint
 	
@@ -89,7 +86,7 @@ AS
 		Set @UpdateSourceMTSServer = IsNull(@UpdateSourceMTSServer, 0)
 		Set @previewSql = IsNull(@previewSql, 0)
 		
-		If @JobMinimum = 0 AND @JobMaximum = 0
+		If @JobMinimum <= 0 AND @JobMaximum <= 0
 		Begin
 			Set @FullRefreshPerformed = 1
 			Set @JobMinimum = -@MaxInt

@@ -23,6 +23,7 @@ CREATE PROCEDURE RefreshCachedDMSInfoIfRequired
 **			10/17/2011 mem - Now setting @SourceMTSServer to '' when calling 'RefreshCachedDMSAnalysisJobInfo' or 'RefreshCachedDMSDatasetInfo'
 **			08/01/2012 mem - Now calling RefreshCachedOrganisms
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
+**			04/27/2016 mem - Now calling RefreshCachedDMSDataPackageJobs
 **    
 *****************************************************/
 (
@@ -43,8 +44,7 @@ As
 
 	set @message = ''
 
-	Declare @CurrentTime datetime
-	Set @CurrentTime = GetDate()
+	Declare @CurrentTime datetime = GetDate()
 
 	Declare @EntryID int
 	Declare @Continue tinyint
@@ -66,7 +66,12 @@ As
 	Declare @HoursSinceLastRefresh decimal(9,3)
 	Declare @HoursSinceLastFullRefresh decimal(9,3)
 	
+	-- Setting this to 50 means the procedure will only update jobs for the 50 most recent data packages
+	-- However, every 24 hours all data packages will be updated
+	-- Alternatively, if @DynamicMinimumCountThreshold is 0, all data packages are updated	
+	Declare @DataPkgIDCountThreshold int = 50
 	
+	Declare @CurrentCountThreshold int
 	Declare @SPStart datetime
 	Declare @SPEnd datetime
 	Declare @SPTimeMsec real
@@ -76,10 +81,18 @@ As
 	Set @CurrentLocation = 'Start'
 	
 	Begin Try
+		---------------------------------------------------
+		-- Validate the inputs
+		---------------------------------------------------
+		
 		Set @CurrentLocation = 'Validate the inputs'
 		--
 		Set @UpdateInterval = IsNull(@UpdateInterval, 1)
 		Set @DynamicMinimumCountThreshold = IsNull(@DynamicMinimumCountThreshold, 10000)
+		
+		If @DynamicMinimumCountThreshold < 0
+			Set @DataPkgIDCountThreshold = 0
+			
 		Set @UpdateIntervalAllItems = IsNull(@UpdateIntervalAllItems, 24)
 		Set @InfoOnly = IsNull(@InfoOnly, 0)
 		Set @ShowDebugInfo = IsNull(@ShowDebugInfo, 0)
@@ -94,16 +107,17 @@ As
 			IDColumnName varchar(128),
 			SP varchar(128),
 			AlwaysFullRefresh tinyint Default 1,
-			AddnlParamsForSP varchar(256) Default ''
+			CountThreshold int Default 0,
+			AddnlParamsForSP varchar(256) Default ''			
 		)
 		
 		-- Jobs and Datasets 
 		--
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, AddnlParamsForSP)
-		VALUES ('T_DMS_Analysis_Job_Info_Cached', 'Job', 'RefreshCachedDMSAnalysisJobInfo', 0, '@SourceMTSServer=''''')
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, CountThreshold, AddnlParamsForSP)
+		VALUES ('T_DMS_Analysis_Job_Info_Cached', 'Job', 'RefreshCachedDMSAnalysisJobInfo', 0, @DynamicMinimumCountThreshold, '@SourceMTSServer=''''')
 
-		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, AddnlParamsForSP)
-		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0, '@SourceMTSServer=''''')
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, CountThreshold, AddnlParamsForSP)
+		VALUES ('T_DMS_Dataset_Info_Cached', 'ID', 'RefreshCachedDMSDatasetInfo', 0, @DynamicMinimumCountThreshold, '@SourceMTSServer=''''')
 		
 		-- Mass correction factors and filter sets (AlwaysFullRefresh=1)
 		--
@@ -131,6 +145,10 @@ As
 		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP)
 		VALUES ('T_DMS_Protein_Collection_Info', 'Protein_Collection_ID', 'RefreshCachedProteinCollectionInfo')
 
+		-- Data Package Metadata
+		INSERT INTO #Tmp_CachedDMSInfoToUpdate (CacheTable, IDColumnName, SP, AlwaysFullRefresh, CountThreshold)
+		VALUES ('T_DMS_Data_Package_Jobs_Cached', 'Data_Package_ID', 'RefreshCachedDMSDataPackageJobs', 0, @DataPkgIDCountThreshold)
+
 		-- Call each stored procedure to perform the update
 		--
 		Set @EntryID = 0
@@ -144,6 +162,7 @@ As
 			             @IDColumnName = IDColumnName,
 			             @SP = SP,
 			             @AlwaysFullRefresh = AlwaysFullRefresh,
+			             @CurrentCountThreshold = CountThreshold,
 			             @AddnlParamsForSP = AddnlParamsForSP
 			FROM #Tmp_CachedDMSInfoToUpdate
 			WHERE  EntryID > @EntryID
@@ -171,22 +190,24 @@ As
 					SELECT @myRowCount = @@RowCount, @myError = @@Error
 
 					Set @HoursSinceLastRefresh = DateDiff(minute, IsNull(@LastRefreshed, '1/1/2000'), @CurrentTime) / 60.0
-					If @infoOnly <> 0
-						Print 'Hours since last refresh: ' + Convert(varchar(12), @HoursSinceLastRefresh) + Case When @HoursSinceLastRefresh >= @UpdateInterval Then ' -> Partial refresh required' Else '' End
-
 					Set @HoursSinceLastFullRefresh = DateDiff(minute, IsNull(@LastFullRefresh, '1/1/2000'), @CurrentTime) / 60.0
+					
 					If @infoOnly <> 0
-						Print 'Hours since last full refresh: ' + Convert(varchar(12), @HoursSinceLastFullRefresh) + Case When @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems Then ' -> Full refresh required' Else '' End
+					Begin
+						Print @CacheTable + ':'
+						Print '  Hours since last refresh: ' + Convert(varchar(12), @HoursSinceLastRefresh) + Case When @HoursSinceLastRefresh >= @UpdateInterval Then ' -> Partial refresh required' Else '' End
+						Print '  Hours since last full refresh: ' + Convert(varchar(12), @HoursSinceLastFullRefresh) + Case When @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems Then ' -> Full refresh required' Else '' End
+					End
 				End
 				
 				If @AlwaysFullRefresh <> 0 OR @HoursSinceLastRefresh >= @UpdateInterval OR @HoursSinceLastFullRefresh >= @UpdateIntervalAllItems
 				Begin -- <c>
 				
 					Set @IDMinimum = 0
-					If @AlwaysFullRefresh = 0 AND @HoursSinceLastFullRefresh < @UpdateIntervalAllItems
+					If @AlwaysFullRefresh = 0 AND @HoursSinceLastFullRefresh < @UpdateIntervalAllItems AND @CurrentCountThreshold > 0
 					Begin
 						-- Less than @UpdateIntervalAllItems hours has elapsed since the last full update
-						-- Bump up @IDMinimum to @DynamicMinimumCountThreshold less than the max ID in the target table
+						-- Bump up @IDMinimum to @CurrentCountThreshold less than the max ID in the target table
 						
 						Set @S = 'SELECT @MaxID = MAX([' + @IDColumnName + ']) FROM ' + @CacheTable
 						
@@ -198,7 +219,7 @@ As
 						
 						If IsNull(@MaxID, 0) > 0
 						Begin
-							Set @IDMinimum = @MaxID - @DynamicMinimumCountThreshold
+							Set @IDMinimum = @MaxID - @CurrentCountThreshold
 							If @IDMinimum < 0
 								Set @IDMinimum = 0
 								
