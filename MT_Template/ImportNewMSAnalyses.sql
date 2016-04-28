@@ -53,6 +53,7 @@ CREATE Procedure ImportNewMSAnalyses
 **			03/28/2012 mem - Now using parameters MS_Job_Minimum and MS_Job_Maximum from T_Process_Config (if defined); ignored if @JobListOverride is used
 **			10/10/2013 mem - Now populating MyEMSLState
 **			11/08/2013 mem - Now passing @previewSql to ParseFilterList
+**			04/27/2016 mem - Added support for DataPkg_Import_MS
 **    
 *****************************************************/
 (
@@ -71,8 +72,7 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @result int
-	set @result = 0
+	declare @result int = 0
 
 	declare @startingSize int
 	declare @endingSize int
@@ -85,13 +85,12 @@ As
 	declare @JobInfoTable varchar(256)
 	declare @DatasetInfoTable varchar(256)
 
-	declare @filterValueLookupTableName varchar(256)
-	set @filterValueLookupTableName = ''
+	declare @filterValueLookupTableName varchar(256) = ''
 	
 	declare @filterMatchCount int
 
-	declare @UsingJobListOverride tinyint
-	set @UsingJobListOverride =0
+	declare @UsingJobListOverrideOrDataPkg tinyint = 0
+	declare @DataPkgFilterDefined tinyint = 0
 	
 	declare @JobsByDualKeyFilters int
 	
@@ -102,11 +101,9 @@ As
 	declare @datasetListCount int
 	declare @datasetListCountExcluded int
 
-	declare @Lf char(1)
-	Set @Lf = char(10)
+	declare @Lf char(1) = char(10)
 
-	declare @CrLf char(2)
-	Set @CrLf = char(10) + char(13)
+	declare @CrLf char(2) = char(10) + char(13)
 
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
@@ -136,6 +133,15 @@ As
 			Set @UseCachedDMSDataTables = 1
 	
 		---------------------------------------------------
+		-- Check whether we will be importing jobs using a data package filter
+		---------------------------------------------------
+		--
+		If Exists (SELECT Value FROM T_Process_Config WHERE [Name] = 'DataPkg_Import_MS' AND IsNull(Value, '') <> '')
+		Begin
+			Set @DataPkgFilterDefined = 1
+		End
+		
+		---------------------------------------------------
 		-- Make sure at least one campaign is defined for this mass tag database
 		---------------------------------------------------
 		--
@@ -148,7 +154,7 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
-		if @myRowCount < 1 OR @campaign = ''
+		if (@myRowCount < 1 OR @campaign = '') And @DataPkgFilterDefined = 0 And Len(@JobListOverride) = 0
 		begin
 			set @myError = 40001
 			goto Done
@@ -185,20 +191,23 @@ As
 		)
 
 		If @PreviewSql <> 0
+		Begin
 			CREATE TABLE #PreviewSqlData (
 				Filter_Type varchar(128), 
 				Value varchar(128) NULL
 			)
+		End
+		
+		---------------------------------------------------
+		-- Create a temporary table to hold jobs from @JobListOverride plus any DataPkg_Import_MSMS jobs
+		---------------------------------------------------
+		--
+		CREATE TABLE #T_Tmp_JobListOverride (
+			JobOverride int
+		)
 		
 		If Len(@JobListOverride) > 0
 		Begin -- <a1>
-			---------------------------------------------------
-			-- Populate a temporary table with the jobs in @JobListOverride
-			---------------------------------------------------
-			--
-			CREATE TABLE #T_Tmp_JobListOverride (
-				JobOverride int
-			)
 			
 			INSERT INTO #T_Tmp_JobListOverride (JobOverride)
 			SELECT Value
@@ -212,42 +221,85 @@ As
 				goto Done
 			end
 
-			Set @UsingJobListOverride = 1
+			Set @UsingJobListOverrideOrDataPkg = 1
+		End -- </a1>
+		
+		If Len(@JobListOverride) = 0 And @DataPkgFilterDefined > 0
+		Begin -- <a2>
+			---------------------------------------------------
+			-- Find jobs that are associated with the data package(s) defined in T_Process_Config
+			-- yet are not in T_FTICR_Analysis_Description
+			---------------------------------------------------					
 			
-			If @UseCachedDMSDataTables = 1
+			-- First lookup the Data Package IDs
+			--
+			DECLARE @DataPackageList TABLE (Data_Package_ID int NOT NULL)
+			
+			INSERT INTO @DataPackageList (Data_Package_ID)
+			SELECT Convert(int, Value)
+			FROM T_Process_Config
+			WHERE [Name] = 'DataPkg_Import_MS' And IsNumeric(Value) > 0
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+
+
+			If @infoOnly <> 0
+			Begin				
+				SELECT Data_Package_ID, 'DataPkg_Import_MS filter' AS Comment
+				FROM @DataPackageList
+			End
+
+			-- Now find jobs associated with those Data Packages
+			--
+			INSERT INTO #T_Tmp_JobListOverride (JobOverride)
+			SELECT SrcJobs.Job
+			FROM MT_Main.dbo.T_DMS_Data_Package_Jobs_Cached SrcJobs
+			     INNER JOIN @DataPackageList AS DataPackages
+			       ON SrcJobs.Data_Package_ID = DataPackages.Data_Package_ID
+			     LEFT OUTER JOIN T_FTICR_Analysis_Description TAD
+			       ON SrcJobs.Job = TAD.Job
+			WHERE TAD.Job IS NULL
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			
+			Set @UsingJobListOverrideOrDataPkg = 1
+			
+		End -- </a2>
+		
+		If @UsingJobListOverrideOrDataPkg > 0 AND @UseCachedDMSDataTables = 1
+		Begin -- <a3>
+			-- Make sure all of the jobs defined in #T_Tmp_JobListOverride are present in T_DMS_Analysis_Job_Info_Cached
+			-- If not, we'll change @UseCachedDMSDataTables to 0
+			Set @MatchCount = 0
+			SELECT @MatchCount = COUNT(*)
+			FROM #T_Tmp_JobListOverride JL LEFT OUTER JOIN 
+					MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON JL.JobOverride = DAJI.Job
+			WHERE DAJI.Job Is Null
+			
+			If @MatchCount > 0
 			Begin
-				-- Make sure all of the jobs defined in #T_Tmp_JobListOverride are present in T_DMS_Analysis_Job_Info_Cached
-				-- If not, then we'll change @UseCachedDMSDataTables to 0
-				Set @MatchCount = 0
-				SELECT @MatchCount = COUNT(*)
-				FROM #T_Tmp_JobListOverride JL LEFT OUTER JOIN 
-					 MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI ON JL.JobOverride = DAJI.Job
-				WHERE DAJI.Job Is Null
+				Set @UseCachedDMSDataTables = 0
 				
-				If @MatchCount > 0
+				If @InfoOnly <> 0
 				Begin
-					Set @UseCachedDMSDataTables = 0
+					Set @message = 'Warning: Found ' + Convert(varchar(19), @MatchCount)
+					If @MatchCount = 1
+						Set @message = @message + ' job in @JobListOverride that was not'
+					Else
+						Set @message = @message + ' jobs in @JobListOverride that were not'
 					
-					If @InfoOnly <> 0
-					Begin
-						Set @message = 'Warning: Found ' + Convert(varchar(19), @MatchCount)
-						If @MatchCount = 1
-							Set @message = @message + ' job in @JobListOverride that was not'
-						Else
-							Set @message = @message + ' jobs in @JobListOverride that were not'
-						
-						Set @message = @message + ' in MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached; @UseCachedDMSDataTables has been set to 0'
-						
-						SELECT @message AS WarningMessage
-						Set @message = ''
-					End
+					Set @message = @message + ' in MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached; @UseCachedDMSDataTables has been set to 0'
+					
+					SELECT @message AS WarningMessage
+					Set @message = ''
 				End
 			End
-		End -- </a1>
+		End -- </a3>
 
 		---------------------------------------------------
 		-- Define the job and dataset info table names
 		---------------------------------------------------
+		--
 		If @UseCachedDMSDataTables = 0
 		Begin
 			Set @JobInfoTable = 'MT_Main.dbo.V_DMS_Analysis_Job_Import_Ex'
@@ -259,10 +311,13 @@ As
 			Set @DatasetInfoTable= 'MT_Main.dbo.T_DMS_Dataset_Info_Cached'
 		End
 
-		If @UsingJobListOverride <> 0 And @InfoOnly <> 0
+		If @UsingJobListOverrideOrDataPkg <> 0 And @InfoOnly <> 0
 		Begin
 			set @S = ''
-			set @S = @S + ' SELECT JobListQ.JobOverride, DAJI.Dataset, DAJI.AnalysisTool, DAJI.ResultType, DAJI.Completed' + @Lf
+			set @S = @S + ' SELECT JobListQ.JobOverride, DAJI.Dataset, DAJI.AnalysisTool, DAJI.ResultType, DAJI.Completed,' + @Lf
+			set @S = @S + '  CASE WHEN ResultType Like ''%Peptide_Hit'' THEN ''Job will not import because Peptide_Hit'''  + @Lf
+			set @S = @S + '       WHEN ResultType    = ''SIC''          THEN ''Job will not import because SIC'''  + @Lf
+			set @S = @S + '       ELSE Cast('''' as Varchar(128)) END AS Comment'  + @Lf
 			set @S = @S + ' FROM #T_Tmp_JobListOverride JobListQ LEFT OUTER JOIN ' + @Lf
 			set @S = @S + '      ' + @JobInfoTable + ' DAJI ON DAJI.Job = JobListQ.JobOverride' + @Lf
 			set @S = @S + ' ORDER BY JobListQ.JobOverride' + @Lf
@@ -282,8 +337,8 @@ As
 		
 		Set @CurrentLocation = 'Determine import options'
 		
-		If @UsingJobListOverride = 0
-		Begin -- <a2>
+		If @UsingJobListOverrideOrDataPkg = 0
+		Begin -- <a4>
 		
 			---------------------------------------------------
 			-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
@@ -319,7 +374,7 @@ As
 			declare @JobMaximum int = 0
 			declare @ErrorOccurred tinyint = 0
 			
-			If @UsingJobListOverride = 0
+			If @UsingJobListOverrideOrDataPkg = 0
 			Begin
 				exec GetProcessConfigValueInt 'MS_Job_Minimum', @DefaultValue=0, @ConfigValue=@JobMinimum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
 			
@@ -424,7 +479,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <b1>
 				INSERT INTO #TmpJobsByDualKeyFilters (Job)
 				SELECT Convert(int, Value) 
 				FROM #TmpFilterList
@@ -445,7 +500,7 @@ As
 				If @JobMaximum > 0
 					DELETE FROM #TmpJobsByDualKeyFilters
 					WHERE Job > @JobMaximum
-			End
+			End -- </b1>
 			
 
 			---------------------------------------------------
@@ -467,7 +522,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <b2>
 				INSERT INTO #TmpExperiments (Experiment)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -487,7 +542,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Experiment Inclusion', Experiment 
 					FROM #TmpExperiments
-			End
+			End -- </b2>
 
 
 			---------------------------------------------------
@@ -505,7 +560,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <b3>
 				INSERT INTO #TmpExperimentsExcluded (Experiment)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -515,7 +570,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Experiment Exclusion', Experiment 
 					FROM #TmpExperimentsExcluded
-			End
+			End -- </b3>
 
 
 			---------------------------------------------------
@@ -534,7 +589,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <b4>
 				INSERT INTO #TmpDatasets (Dataset)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -554,7 +609,7 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Dataset Inclusion', Dataset 
 					FROM #TmpDatasets
-			End
+			End -- </b4>
 
 
 			---------------------------------------------------
@@ -572,7 +627,7 @@ As
 				goto Done
 			end
 			Else
-			begin
+			begin -- <b5>
 				INSERT INTO #TmpDatasetsExcluded (Dataset)
 				SELECT Value FROM #TmpFilterList
 				--
@@ -582,9 +637,9 @@ As
 					INSERT INTO #PreviewSqlData (Filter_Type, Value)
 					SELECT 'Dataset Exclusion', Dataset 
 					FROM #TmpDatasetsExcluded
-			End
+			End -- </b5>
 
-		End -- </a2>
+		End -- </a4>
 	
 		---------------------------------------------------
 		-- Import analyses for valid MS instrument classes
@@ -631,13 +686,13 @@ As
 		set @S = @S +   ' Labelling, GetDate() As Created, 1 As Auto_Addition, 1 As StateNew ' + @Lf
 		set @S = @S +   'FROM ' + @JobInfoTable + ' DAJI ' + @Lf
 
-		If @UsingJobListOverride = 1
+		If @UsingJobListOverrideOrDataPkg = 1
 		Begin
 			set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON DAJI.Job = JobListQ.JobOverride' + @Lf
 			set @S = @S + ' WHERE NOT (ResultType Like ''%Peptide_Hit'' OR ResultType = ''SIC'')'
 		End
 		Else			
-		Begin
+		Begin -- <a5>
 						
 			set @S = @S +   ' WHERE (' + @Lf
 			set @S = @S + @SCampaignAndAddnl
@@ -698,7 +753,7 @@ As
 			Begin
 				set @S = @S + ' OR (Job IN (SELECT Job FROM #TmpJobsByDualKeyFilters)) ' + @Lf
 			End
-		End
+		End -- </a5>
 		
 		set @S = @S + ') As LookupQ' + @Lf
 		set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_FTICR_Analysis_Description)' + @Lf
@@ -739,7 +794,7 @@ As
 		-- how many rows did we add?
 		--
 		if @infoOnly = 0
-		begin	
+		begin -- <a6>	
 			SELECT @endingSize = COUNT(*) FROM T_FTICR_Analysis_Description
 			set @entriesAdded = @endingSize - @startingSize
 			
@@ -782,7 +837,7 @@ As
 					execute PostLogEntry 'Error', @message, 'ImportNewMSAnalyses'
 				End
 			End		
-		end
+		end -- </a6>	
 		else
 		begin
 			SELECT @entriesAdded = @myRowCount
@@ -807,6 +862,7 @@ As
 	
 Done:
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSAnalyses] TO [DMS_SP_User] AS [dbo]

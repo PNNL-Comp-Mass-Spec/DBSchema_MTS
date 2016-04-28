@@ -66,6 +66,7 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			11/07/2013 mem - Now passing @previewSql to ParseFilterList
 **			03/25/2014 mem - Now assuring that Valid_Peptide_DB is accurate, even if cached information in MT_Main is not yet up-to-date
 **			11/17/2014 mem - Added option to filter by Instrument_Class using process config parameter MSMS_Instrument_Class
+**			04/27/2016 mem - Added support for DataPkg_Import_MSMS
 **
 *****************************************************/
 (
@@ -83,8 +84,7 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @result int
-	set @result = 0
+	declare @result int = 0
 		
 	declare @startingSize int
 	declare @endingSize int
@@ -111,8 +111,8 @@ As
 	declare @FilterOnEnzymeID tinyint
 	declare @FilterOnInstrumentClass tinyint
 	
-	declare @UsingJobListOverride tinyint
-	set @UsingJobListOverride = 0
+	declare @UsingJobListOverrideOrDataPkg tinyint = 0
+	declare @DataPkgFilterDefined tinyint = 0
 	
 	declare @JobsByDualKeyFilters int
 	
@@ -122,11 +122,9 @@ As
 	declare @datasetListCount int
 	declare @datasetListCountExcluded int
 
-	declare @Lf char(1)
-	Set @Lf = char(10)
+	declare @Lf char(1) = char(10)
 	
-	declare @CrLf char(2)
-	Set @CrLf = char(10) + char(13)
+	declare @CrLf char(2) = char(10) + char(13)
 
 	---------------------------------------------------
 	-- Validate the inputs
@@ -139,13 +137,22 @@ As
 	Set @PreviewSql = IsNull(@PreviewSql, 0)
 	If @PreviewSql <> 0
 		Set @infoOnly = 1
-
+	
 	---------------------------------------------------
-	-- Make sure at least one campaign is defined for this mass tag database
+	-- Check whether we will be importing jobs using a data package filter
 	---------------------------------------------------
 	--
-	declare @campaign varchar(128)
-	set @campaign = ''
+	If Exists (SELECT Value FROM T_Process_Config WHERE [Name] = 'DataPkg_Import_MSMS' AND IsNull(Value, '') <> '')
+	Begin
+		Set @DataPkgFilterDefined = 1
+	End
+	
+	---------------------------------------------------
+	-- Make sure at least one campaign is defined for this mass tag database
+	-- Alternatively, the database can have a data package defined
+	---------------------------------------------------
+	--
+	declare @campaign varchar(128) = ''
 	--
 	SELECT TOP 1 @campaign = Value
 	FROM T_Process_Config
@@ -153,8 +160,8 @@ As
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
-	if @myRowCount < 1 OR @campaign = ''
-	begin
+	if (@myRowCount < 1 OR @campaign = '') And @DataPkgFilterDefined = 0 And Len(@JobListOverride) = 0
+	begin		
 		set @myError = 40001
 		goto Done
 	end
@@ -196,11 +203,13 @@ As
 	)
 	
 	If @PreviewSql <> 0
+	Begin
 		CREATE TABLE #PreviewSqlData (
 			Filter_Type varchar(128), 
 			Value varchar(128) NULL
 		)
-
+	End
+	
 	---------------------------------------------------
 	-- Use the peptide database name(s) in T_Process_Config to populate #T_Peptide_Database_List
 	---------------------------------------------------
@@ -210,24 +219,28 @@ As
 	If @myError <> 0
 		Goto Done
 
+	---------------------------------------------------
+	-- Create a temporary table to hold jobs from @JobListOverride plus any DataPkg_Import_MSMS jobs
+	---------------------------------------------------
+	--
+	CREATE TABLE #T_Tmp_JobListOverride (
+		JobOverride int,
+		Dataset varchar(128),
+		AnalysisTool varchar(128),
+		ResultType varchar(128),
+		Completed DateTime,
+		Peptide_DB varchar(128),
+		Valid_Peptide_DB varchar(32),
+		Already_In_MTDB varchar(32)
+	)
+
 
 	If Len(@JobListOverride) > 0
 	Begin -- <a1>
 		---------------------------------------------------
 		-- Populate a temporary table with the jobs in @JobListOverride
 		---------------------------------------------------
-		--
-		CREATE TABLE #T_Tmp_JobListOverride (
-			JobOverride int,
-			Dataset varchar(128),
-			AnalysisTool varchar(128),
-			ResultType varchar(128),
-			Completed DateTime,
-			Peptide_DB varchar(128),
-			Valid_Peptide_DB varchar(32),
-			Already_In_MTDB varchar(32)
-		)
-					
+		--					
 		INSERT INTO #T_Tmp_JobListOverride (JobOverride, Dataset, AnalysisTool, ResultType, Completed, Peptide_DB, Valid_Peptide_DB, Already_In_MTDB)
 		SELECT JobListQ.Job,
 		       DAJI.Dataset,
@@ -254,8 +267,75 @@ As
 			goto Done
 		end
 
-		Set @UsingJobListOverride = 1
+		Set @UsingJobListOverrideOrDataPkg = 1
+	End -- </a1>
 
+	If Len(@JobListOverride) = 0 And @DataPkgFilterDefined > 0
+	Begin -- <a2>
+		---------------------------------------------------
+		-- Find jobs that are associated with the data package(s) defined in T_Process_Config
+		-- yet are not in T_Analysis_Description
+		---------------------------------------------------
+	
+		-- First lookup the Data Package IDs
+		--
+		DECLARE @DataPackageList TABLE (Data_Package_ID int NOT NULL)
+		
+		INSERT INTO @DataPackageList (Data_Package_ID)
+		SELECT Convert(int, Value)
+		FROM T_Process_Config
+		WHERE [Name] = 'DataPkg_Import_MSMS' And IsNumeric(Value) > 0
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+
+		If @infoOnly <> 0
+		Begin				
+			SELECT Data_Package_ID, 'DataPkg_Import_MSMS filter' AS Comment
+			FROM @DataPackageList
+		End
+
+
+		-- Now find Peptide_Hit jobs associated with those Data Packages
+		-- Skip jobs already in T_Analysis_Description
+		--
+		INSERT INTO #T_Tmp_JobListOverride (JobOverride, Dataset, AnalysisTool, ResultType, Completed, Peptide_DB, Valid_Peptide_DB, Already_In_MTDB)
+		SELECT JobListQ.Job,
+		       DAJI.Dataset,
+		       DAJI.AnalysisTool,
+		       DAJI.ResultType,
+		       DAJI.Completed,
+		       PDM.DB_Name,
+		       'No' AS Valid_Peptide_DB,
+		       'No' AS Already_In_MTDB
+		FROM ( SELECT DISTINCT SrcJobs.Job
+		       FROM MT_Main.dbo.T_DMS_Data_Package_Jobs_Cached SrcJobs
+		            INNER JOIN @DataPackageList AS DataPackages
+		              ON SrcJobs.Data_Package_ID = DataPackages.Data_Package_ID
+		            LEFT OUTER JOIN T_Analysis_Description TAD
+		              ON SrcJobs.Job = TAD.Job
+		       WHERE TAD.Job IS Null
+			 ) AS JobListQ
+		     LEFT OUTER JOIN MT_Main.dbo.T_DMS_Analysis_Job_Info_Cached DAJI
+		       ON JobListQ.Job = DAJI.Job
+		     LEFT OUTER JOIN MT_Main.dbo.V_Analysis_Job_to_Peptide_DB_Map_AllServers PDM
+		       ON DAJI.Job = PDM.Job
+		WHERE DAJI.ResultType Like '%Peptide_Hit'
+		ORDER BY DAJI.Job, PDM.DB_Name
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount
+				--
+		if @myError <> 0
+		begin
+			set @message = 'Error finding jobs associated with the data package(s) defined by DataPkg_Import_MSMS'
+			goto Done
+		end	
+
+		Set @UsingJobListOverrideOrDataPkg = 1
+	End -- </a2>
+
+	If @UsingJobListOverrideOrDataPkg > 0
+	Begin -- <a3>
+		
 		-- Look for jobs that are already in T_Analysis_Description
 		--
 		UPDATE #T_Tmp_JobListOverride
@@ -369,7 +449,7 @@ As
 			Exec (@S)
 		End -- </b2>
 		
-	End -- </a1>
+	End -- </a3>
 	
 	---------------------------------------------------
 	-- See if Dataset_DMS_Creation_Date_Minimum is defined in T_Process_Config
@@ -404,8 +484,8 @@ As
 	declare @JobMaximum int = 0
 	declare @ErrorOccurred tinyint = 0
 	
-	If @UsingJobListOverride = 0
-	Begin -- <a2>
+	If @UsingJobListOverrideOrDataPkg = 0
+	Begin -- <a4>
 		exec GetProcessConfigValueInt 'MSMS_Job_Minimum', @DefaultValue=0, @ConfigValue=@JobMinimum output, @LogErrors=0, @ErrorOccurred=@ErrorOccurred output
 	
 		If @ErrorOccurred > 0
@@ -423,7 +503,7 @@ As
 			Exec PostLogEntry 'Error', @message, 'ImportNewMSMSAnalyses'
 			Goto Done
 		End	
-	End -- </a2>
+	End -- </a4>
 	
 	---------------------------------------------------
 	-- Count the number of Enzyme_ID entries in T_Process_Config
@@ -655,7 +735,7 @@ As
 	--
 	Set @continue = 1
 	While @continue = 1
-	Begin -- <a3>
+	Begin -- <a5>
 		Set @peptideDBName = ''
 		Set @peptideDBServer = ''
 		Set @peptideDBID = 0
@@ -909,7 +989,7 @@ As
 			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Analysis_Description AS PT LEFT OUTER JOIN ' + @Lf
 			set @S = @S +   ' ' + @peptideDBPath + '.dbo.T_Datasets AS DS ON PT.Dataset_ID = DS.Dataset_ID ' + @Lf
 
-			If @UsingJobListOverride = 1
+			If @UsingJobListOverrideOrDataPkg = 1
 			Begin
 				set @S = @S + ' INNER JOIN #T_Tmp_JobListOverride JobListQ ON PT.Job = JobListQ.JobOverride ' + @Lf
 			End
@@ -979,8 +1059,10 @@ As
 			set @S = @S + ') As LookupQ' + @Lf
 			set @S = @S + ' WHERE Job NOT IN (SELECT Job FROM T_Analysis_Description)' + @Lf
 			
-			If @UsingJobListOverride = 0 And Len(@DateText) > 0
+			If @UsingJobListOverrideOrDataPkg = 0 And Len(@DateText) > 0
+			Begin
 				set @S = @S + ' AND Created_DMS >= ''' + @DateText + '''' + @Lf
+			End
 				
 			set @S = @S +  ' ORDER BY Job'
 
@@ -1001,7 +1083,7 @@ As
 				goto Done
 			end
 
-			If @UsingJobListOverride = 1
+			If @UsingJobListOverrideOrDataPkg = 1
 			Begin
 				---------------------------------------------------
 				-- Update Valid to 1 for all jobs in #TmpNewAnalysisJobs
@@ -1117,7 +1199,8 @@ As
 			End
 
 		End -- </b3>
-	End -- </a3>
+	End -- </a5>
+
 
 	-- how many rows did we add?
 	--
@@ -1140,6 +1223,7 @@ Done:
 
 
 	return @myError
+
 
 GO
 GRANT EXECUTE ON [dbo].[ImportNewMSMSAnalyses] TO [DMS_SP_User] AS [dbo]
