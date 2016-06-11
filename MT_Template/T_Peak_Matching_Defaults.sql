@@ -38,13 +38,13 @@ ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Mod_List]  DEFAULT ('') FOR [Mod_List]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Normalized_Score]  DEFAULT (1.0) FOR [Minimum_High_Normalized_Score]
+ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Normalized_Score]  DEFAULT ((0.0)) FOR [Minimum_High_Normalized_Score]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_High_Discriminant_Score]  DEFAULT (0) FOR [Minimum_High_Discriminant_Score]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_Peptide_Prophet_Probability]  DEFAULT (0) FOR [Minimum_Peptide_Prophet_Probability]
 GO
-ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_PMT_Quality_Score]  DEFAULT (1) FOR [Minimum_PMT_Quality_Score]
+ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Minimum_PMT_Quality_Score]  DEFAULT ((2)) FOR [Minimum_PMT_Quality_Score]
 GO
 ALTER TABLE [dbo].[T_Peak_Matching_Defaults] ADD  CONSTRAINT [DF_T_Peak_Matching_Defaults_Priority]  DEFAULT (5) FOR [Priority]
 GO
