@@ -54,6 +54,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 **			08/17/2011 mem - Changed required tool version to %3.48.44[8-9]% or %3.48.45[0-9]%
 **			11/10/2011 mem - Changed required tool version to %3.49.4[6-7][0-9]%
 **			10/22/2014 mem - Updated @duplicateEntryHoldoffHours to 2
+**			08/09/2016 mem - Changed required tool version to %3.49.4[8-9][0-9]%
 **
 *****************************************************/
 (
@@ -307,9 +308,9 @@ As
 		End
 		Else
 		Begin
-			If Not (@toolVersion LIKE '%3.49.4[6-7][0-9]%')
+			If Not (@toolVersion LIKE '%3.49.4[8-9][0-9]%')
 			Begin
-				Set @message = 'This version of Viper is not presently allowed to perform peak matching; tool version must be "3.49.460" or newer; @toolVersion = ' + @toolVersion
+				Set @message = 'This version of Viper is not presently allowed to perform peak matching; tool version must be "3.49.480" through "3.49.499"; @toolVersion = ' + @toolVersion
 				Set @toolVersion = @toolVersion + ' - Version not new enough'
 				print @message
 				set @Continue = 0
