@@ -10,10 +10,8 @@ SELECT PM.Dataset,
        PM.Instrument,
        PM.Task_ID,
        PM.Job,
-       PM.Minimum_High_Normalized_Score,
-       PM.Minimum_High_Discriminant_Score,
-       PM.Minimum_Peptide_Prophet_Probability,
        PM.Minimum_PMT_Quality_Score,
+	   PM.Experiment_Filter,
        PM.Ini_File_Name,
        PM.Output_Folder_Name,
        PM.Results_URL,
@@ -32,7 +30,10 @@ SELECT PM.Dataset,
        MMD.AMT_Count_5pct_FDR,
        MMD.AMT_Count_10pct_FDR,
        MMD.AMT_Count_25pct_FDR,
-       MMD.AMT_Count_50pct_FDR
+       MMD.AMT_Count_50pct_FDR,
+	   PM.Minimum_High_Normalized_Score,
+       PM.Minimum_High_Discriminant_Score,
+       PM.Minimum_Peptide_Prophet_Probability
 FROM V_Peak_Matching_Task PM
      LEFT OUTER JOIN T_Match_Making_Description MMD
        ON PM.MD_ID = MMD.MD_ID
