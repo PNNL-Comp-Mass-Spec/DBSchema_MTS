@@ -93,7 +93,7 @@ GO
 CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
 GO
 /****** Object:  User [pnl\MTSProc] ******/
-CREATE USER [pnl\MTSProc] FOR LOGIN [PNL\mtsproc] WITH DEFAULT_SCHEMA=[pnl\MTSProc]
+CREATE USER [pnl\MTSProc] FOR LOGIN [PNL\MTSProc] WITH DEFAULT_SCHEMA=[pnl\MTSProc]
 GO
 /****** Object:  User [pnl\svc-dms] ******/
 CREATE USER [pnl\svc-dms] FOR LOGIN [PNL\svc-dms] WITH DEFAULT_SCHEMA=[dbo]
