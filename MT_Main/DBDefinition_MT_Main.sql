@@ -1,8 +1,8 @@
 /****** Object:  Database [MT_Main] ******/
 CREATE DATABASE [MT_Main] ON  PRIMARY 
-( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2046720KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 2041472KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 36480KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 156160KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MT_Main] SET COMPATIBILITY_LEVEL = 100
