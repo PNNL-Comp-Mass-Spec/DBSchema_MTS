@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE RefreshCachedDMSAnalysisJobInfo
+CREATE PROCEDURE dbo.RefreshCachedDMSAnalysisJobInfo
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Analysis_Job_Info_Cached using DMS
@@ -28,6 +28,8 @@ CREATE PROCEDURE RefreshCachedDMSAnalysisJobInfo
 **			10/10/2013 mem - Now updating MyEMSLState
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **			04/27/2016 mem - Now treating negative values for @JobMinimum or @JobMaximum as 0
+**			11/23/2016 mem - Include error 1205 (deadlock victim) in @LogWarningErrorList for LocalErrorHandler
+**							 Error 1205; Transaction ... was deadlocked on lock resources with another process and has been chosen as the deadlock victim. Rerun the transaction
 **
 *****************************************************/
 (
@@ -166,7 +168,7 @@ AS
 		Set @S = @S +                     ' Target.AnalysisTool <> source.AnalysisTool OR'
 		Set @S = @S +                     ' IsNull(Target.Processor, '''') <> IsNull(source.Processor, '''') OR'
 		Set @S = @S +                     ' IsNull(Target.Completed, ''1/1/1980'') <> IsNull(source.Completed, ''1/1/1980'') OR'
-		Set @S = @S +                     ' Target.ParameterFileName <> source.ParameterFileName OR'
+		Set @S = @S +        ' Target.ParameterFileName <> source.ParameterFileName OR'
 		Set @S = @S +                     ' IsNull(Target.SettingsFileName, '''') <> IsNull(source.SettingsFileName, '''') OR'
 		Set @S = @S +         ' Target.OrganismDBName <> source.OrganismDBName OR'
 		Set @S = @S +    ' Target.ProteinCollectionList <> source.ProteinCollectionList OR'
@@ -211,7 +213,7 @@ AS
 		Set @S = @S +            ' MyEMSLState = source.MyEMSLState,'
 		Set @S = @S +            ' Owner = source.Owner,'
 		Set @S = @S +            ' Comment = source.Comment,'
-		Set @S = @S +            ' SeparationSysType = source.SeparationSysType,'
+		Set @S = @S +     ' SeparationSysType = source.SeparationSysType,'
 		Set @S = @S +            ' ResultType = source.ResultType,'
 		Set @S = @S +            ' [Dataset Int Std] = source.[Dataset Int Std],'
 		Set @S = @S +            ' DS_created = source.DS_created,'
@@ -276,13 +278,14 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSAnalysisJobInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList='53,1205',
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 			
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Dev] AS [dbo]
