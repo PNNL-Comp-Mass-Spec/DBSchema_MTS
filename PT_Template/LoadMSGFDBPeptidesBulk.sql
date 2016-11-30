@@ -4,11 +4,11 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
+CREATE Procedure [dbo].[LoadMSGFDBPeptidesBulk]
 /****************************************************
 **
 **	Desc: 
-**		Load peptides from MSGFDB synopsis file into peptides table
+**		Load peptides from MSGFPlus (aka MSGF+) synopsis file into peptides table
 **		for given analysis job using bulk loading techniques
 **
 **		Note: This routine will not load peptides with score values
@@ -40,16 +40,17 @@ CREATE Procedure dbo.LoadMSGFDBPeptidesBulk
 **							 Added support for filtering on MSGF+ PepQValue
 **			03/12/2014 mem - No longer checking for proteins with long protein names
 **			09/17/2014 mem - Now testing the MSGF SpecProb filter against TPI.SpecProb instead of #Tmp_MSGF_Results.SpecProb
+**			11/28/2016 mem - Update example file names to be _msgfplus
 **
 *****************************************************/
 (
-	@PeptideSynFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_msgfdb_syn.txt',
-	@PeptideResultToSeqMapFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_ResultToSeqMap.txt',
-	@PeptideSeqInfoFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_SeqInfo.txt',
-	@PeptideSeqModDetailsFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_ModDetails.txt',
-	@PeptideSeqToProteinMapFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_SeqToProteinMap.txt',
-	@MSGFResultsFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_msgfdb_syn_MSGF.txt',
-	@ScanGroupInfoFilePath varchar(512) = 'F:\Temp\QC_05_2_02Dec05_Pegasus_05-11-13_msgfdb_ScanGroupInfo.txt',
+	@PeptideSynFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn.txt',
+	@PeptideResultToSeqMapFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn_ResultToSeqMap.txt',
+	@PeptideSeqInfoFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn_SeqInfo.txt',
+	@PeptideSeqModDetailsFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn_ModDetails.txt',
+	@PeptideSeqToProteinMapFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn_SeqToProteinMap.txt',
+	@MSGFResultsFilePath varchar(512) = 'F:\Temp\QC_Shew_16_01_23Nov16_Pippin_16-09-11_msgfplus_syn_MSGF.txt',
+	@ScanGroupInfoFilePath varchar(512) = 'F:\Temp\Dataset_msgfplus_ScanGroupInfo.txt',		-- This is only created if MSGF+ writes multiple identifications for a given scan; we rarely use this
 	@Job int,
 	@FilterSetID int,
 	@LineCountToSkip int=1,
@@ -70,9 +71,8 @@ As
 	set @myRowCount = 0
 	set @myError = 0
 
-	declare @UsingPhysicalTempTables tinyint
-	-- Set the following to 1 when using actual tables to hold the temporary data while debugging
-	set @UsingPhysicalTempTables = 0
+	-- Set this to 1 if debugging and using actual tables instead of temporary tables
+	declare @UsingPhysicalTempTables tinyint = 0
 
 	set @numLoaded = 0
 	set @numSkipped = 0
@@ -99,8 +99,7 @@ As
 	declare @RowCountNullCharge5OrLess int
 	declare @MessageType varchar(32)
 
-	declare @LongProteinNameCount int
-	set @LongProteinNameCount = 0
+	declare @LongProteinNameCount int = 0
 	
 	declare @UseMSGFFilter tinyint
 	declare @UseMSGFDbSpecProbFilter tinyint
@@ -127,7 +126,7 @@ As
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
-	Set @LogMessage = 'Loading MSGFDB results for Job ' + @jobStr + '; create temporary tables'
+	Set @LogMessage = 'Loading MSGFPlus results for Job ' + @jobStr + '; create temporary tables'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadMSGFDBPeptidesBulk'
 
@@ -152,7 +151,7 @@ As
 			
 	-----------------------------------------------
 	-- Create temporary table to hold contents 
-	--  of MSGFDB synopsis file (_MSGFDB_syn.txt)
+	--  of MSGFPlus synopsis file (_msgfplus_syn.txt)
 	-- Additional columns may get added to this table
 	-----------------------------------------------
 	--	
@@ -205,7 +204,7 @@ As
 	CREATE TABLE #Tmp_Peptide_Import (
 		Result_ID int NOT NULL ,
 		Scan_Number int NOT NULL,
-		FragMethod varchar(24) NULL ,		-- Although this can be a list of fragmentation methods in the MSGFDB results file (e.g. CID/ETD/HCD), the Peptide Hit Results Processor should have processed the data to only list a single scan type here
+		FragMethod varchar(24) NULL ,		-- Although this can be a list of fragmentation methods in the MSGFPlus results file (e.g. CID/ETD/HCD), the Peptide Hit Results Processor should have processed the data to only list a single scan type here
 		SpecIndex int NULL ,				-- Although this can be a list of indices in the MSDGFDB results file (e.g. 6015/6016/6578/6579), the Peptide Hit Results Processor should have processed the data to only list a single integer here
 		Charge_State smallint NOT NULL ,
 		PrecursorMZ float NULL ,		
@@ -288,7 +287,7 @@ As
 	-- Bulk load contents of synopsis file into temporary table
 	-----------------------------------------------
 	--
-	Set @LogMessage = 'Bulk load contents of _MSGFDB_syn.txt file into temporary table; source path: ' + @PeptideSynFilePath
+	Set @LogMessage = 'Bulk load contents of _msgfplus_syn.txt file into temporary table; source path: ' + @PeptideSynFilePath
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadMSGFDBPeptidesBulk'
 
@@ -563,7 +562,7 @@ As
 	-----------------------------------------------
 	-- Call LoadScanGroupInfoFileOneJob to load
 	-- the ScanGroupInfo.txt file (if it exists)
-	-- This file is only created if MSGFDB merges 2 or more scans together when performing the search
+	-- This file is only created if MSGFPlus merges 2 or more scans together when performing the search
 	-----------------------------------------------
 	Declare @ScanGroupInfoCountLoaded int
 	Set @ScanGroupInfoCountLoaded = 0
@@ -617,7 +616,7 @@ As
 
 	If @ResultToSeqMapCountLoaded > 0 	
 	Begin
-		-- MSGFDB will output near-duplicate lines if the prefix or suffix residues differ, for example:
+		-- MSGFPlus will output near-duplicate lines if the prefix or suffix residues differ, for example:
 		--    K.SGYYDWHK.R  SO_0375
 		--    R.SGYYDWHK.R  SO_3453
 
@@ -635,7 +634,7 @@ As
 		
 		If @ResultToSeqMapCountLoaded < @ExpectedResultToSeqMapCount
 		Begin
-			Set @message = 'Row count in the _ResultToSeqMap.txt file is less than the expected unique row count determined for the MSGFDB _syn.txt file for job ' + @jobStr + ' (' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' vs. ' + Convert(varchar(12), @ExpectedResultToSeqMapCount) + ')'
+			Set @message = 'Row count in the _ResultToSeqMap.txt file is less than the expected unique row count determined for the MSGFPlus _syn.txt file for job ' + @jobStr + ' (' + Convert(varchar(12), @ResultToSeqMapCountLoaded) + ' vs. ' + Convert(varchar(12), @ExpectedResultToSeqMapCount) + ')'
 			
 			-- @ResultToSeqMapCountLoaded is non-zero; record this as a warning, but flag it as type 'Error' so it shows up in the daily e-mail
 			Set @message = 'Warning: ' + @message
@@ -654,7 +653,7 @@ As
 	If @ResultToSeqMapCountLoaded <= 0
 	Begin
 		Set @myError = 50002
-		Set @message = 'The _ResultToSeqMap.txt file was empty for MSGFDB job ' + @jobStr + '; cannot continue'
+		Set @message = 'The _ResultToSeqMap.txt file was empty for MSGFPlus job ' + @jobStr + '; cannot continue'
 		Goto Done
 	End	
 	Else
@@ -740,7 +739,7 @@ As
 			@RankScoreComparison varchar(2),
 			@RankScoreThreshold smallint,
 
-			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, Inspect, or MSGF+ results
+			@MSGFSpecProbComparison varchar(2),			-- Used for Sequest, X!Tandem, Inspect, or MSGF+ (MSGFPlus) results
 			@MSGFSpecProbThreshold real,
 			
 			@MSGFDbSpecProbComparison varchar(2),
@@ -1088,7 +1087,7 @@ As
 	-----------------------------------------------
 	-- Generate a temporary table listing the minimum Result_ID value 
 	--  for each unique combination of Scan_Number, Charge_State, MH, Peptide
-	-- For MSGFDB data there should not be any duplicate rows in #Tmp_Peptide_Import,
+	-- For MSGFPlus data there should not be any duplicate rows in #Tmp_Peptide_Import,
 	--  but we'll check to be sure and to stay symmetric with Sequest Synopsis files
 	-----------------------------------------------
 
@@ -1368,13 +1367,13 @@ As
 				(Peptide_ID, MScore, PassFilt, DiscriminantScore, DiscriminantScoreNorm, Peptide_Prophet_FScore, Peptide_Prophet_Probability, MSGF_SpecProb)
 			SELECT
 				UR.Peptide_ID_New, 
-				10.75,				-- MScore is set to 10.75 for all MSGFDB results
-				1,					-- PassFilt is set to 1 for all MSGFDB results
-				1,					-- DiscriminantScore is set to 1 for all MSGFDB results
-				0.5,				-- DiscriminantScoreNorm is set to 0.5 for all MSGFDB results
-				NULL,				-- FScore is set to Null for all MSGFDB results
-				1 - TPI.PValue,		-- 1 minus MSGFDB PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column (Note: the STAC algorithm used by VIPER weights peptides by Peptide_Prophet_Probability)
-				TPI.SpecProb		-- We store the MSGF_SpecProb value from MSGFDB in T_Score_Discriminant; if MSGF was run separately, then this value will get updated below via the call to StoreMSGFValues
+				10.75,				-- MScore is set to 10.75 for all MSGFPlus results
+				1,					-- PassFilt is set to 1 for all MSGFPlus results
+				1,					-- DiscriminantScore is set to 1 for all MSGFPlus results
+				0.5,				-- DiscriminantScoreNorm is set to 0.5 for all MSGFPlus results
+				NULL,				-- FScore is set to Null for all MSGFPlus results
+				1 - TPI.PValue,		-- 1 minus MSGFPlus PValue is Probability; storing this probability value in the Peptide_Prophet_Probability column (Note: the STAC algorithm used by VIPER weights peptides by Peptide_Prophet_Probability)
+				TPI.SpecProb		-- We store the MSGF_SpecProb value from MSGFPlus in T_Score_Discriminant; if MSGF was run separately, then this value will get updated below via the call to StoreMSGFValues
 			FROM #Tmp_Peptide_Import TPI INNER JOIN 
 				 #Tmp_Unique_Records UR ON TPI.Result_ID = UR.Result_ID
 			ORDER BY UR.Peptide_ID_New
@@ -1609,14 +1608,14 @@ As
 
 			-----------------------------------------------
 			-- Update T_Score_Discriminant
-			-- Note that all MSGFDB results have MScore = 10.75, PassFilt = 1, DiscriminantScore = 1, DiscriminantScoreNorm = 0.5, and FScore = Null
+			-- Note that all MSGFPlus results have MScore = 10.75, PassFilt = 1, DiscriminantScore = 1, DiscriminantScoreNorm = 0.5, and FScore = Null
 			-----------------------------------------------
 			--
 			Set @CurrentLocation = 'Update T_Score_Discriminant using #Tmp_Peptide_Import'
 
 			UPDATE T_Score_Discriminant
-			SET Peptide_Prophet_Probability = 1 - TPI.PValue,		-- 1 minus MSGFDB PValue is Probability
-				MSGF_SpecProb = TPI.SpecProb						-- We store the MSGF_SpecProb value from MSGFDB in T_Score_Discriminant; if MSGF was run separately, then this value will get updated below via the call to StoreMSGFValues
+			SET Peptide_Prophet_Probability = 1 - TPI.PValue,		-- 1 minus MSGFPlus PValue is Probability
+				MSGF_SpecProb = TPI.SpecProb						-- We store the MSGF_SpecProb value from MSGFPlus in T_Score_Discriminant; if MSGF was run separately, then this value will get updated below via the call to StoreMSGFValues
 			FROM #Tmp_Peptide_Import TPI
 			     INNER JOIN #Tmp_Unique_Records UR
 			       ON TPI.Result_ID = UR.Result_ID
@@ -1891,7 +1890,7 @@ As
 
 	-----------------------------------------------
 	-- If @ResultToSeqMapCountLoaded > 0, then call LoadSeqInfoAndModsPart2 
-	--  to populate the Candidate Sequence tables (this should always be true for MSGFDB)
+	--  to populate the Candidate Sequence tables (this should always be true for MSGFPlus)
 	-- Note that LoadSeqInfoAndModsPart2 uses tables:
 	--  #Tmp_Peptide_Import
 	--  #Tmp_Unique_Records
@@ -1985,8 +1984,6 @@ As
 	
 Done:
 	Return @myError
-
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadMSGFDBPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]

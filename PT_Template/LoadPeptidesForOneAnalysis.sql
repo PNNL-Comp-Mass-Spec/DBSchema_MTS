@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadPeptidesForOneAnalysis
+CREATE Procedure [dbo].[LoadPeptidesForOneAnalysis]
 /****************************************************
 **
 **	Desc: 
@@ -62,6 +62,7 @@ CREATE Procedure LoadPeptidesForOneAnalysis
 **			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
 **			12/12/2013 mem - If the synopsis file needs to be cached from MyEMSL, then now calling LookupCurrentResultsFolderPathsByJob a second time to assure that the additional required files are cached
 **						   - Added @ShowDebugInfo
+**			11/28/2016 mem - Change the default file suffix for MGSF+ results to be _msgfplus (but still support _msgfdb)
 **
 *****************************************************/
 (
@@ -100,16 +101,30 @@ AS
 	
 	declare @result int
 	declare @SynFileExtension varchar(32)
+	declare @SynFileExtensionAlt varchar(32)
 	
 	Declare @RequiredFileList varchar(max)
 	
 	declare @ResultToSeqMapFileExtension varchar(48)
+	declare @ResultToSeqMapFileExtensionAlt varchar(48)
+	
 	declare @SeqInfoFileExtension varchar(48)
+	declare @SeqInfoFileExtensionAlt varchar(48)
+	
 	declare @SeqModDetailsFileExtension varchar(48)
+	declare @SeqModDetailsFileExtensionAlt varchar(48)
+	
 	declare @SeqToProteinMapFileExtension varchar(48)
+	declare @SeqToProteinMapFileExtensionAlt varchar(48)
+	
 	declare @PeptideProphetFileExtension varchar(48)
+	
 	declare @MSGFFileExtension varchar(48)
+	declare @MSGFFileExtensionAlt varchar(48)
+	
 	declare @ScanGroupInfoFileExtension varchar(48) = ''
+	declare @ScanGroupInfoFileExtensionAlt varchar(48) = ''
+	
     declare @AnalysisToolName varchar(128)
     
 	declare @ColumnCountExpected int
@@ -184,7 +199,10 @@ AS
 		Declare @ResultType varchar(64)
 		Declare @Dataset  varchar(128) = ''
 		Declare @Campaign varchar(128) = ''
+		
 		Declare @ResultFileSuffix varchar(32) = ''
+		Declare @ResultFileSuffixAlt varchar(32) = ''
+		
 		declare @CurrentJobState int
 		declare @MyEMSLState tinyint
 
@@ -275,20 +293,37 @@ AS
 		If @ResultType = 'MSG_Peptide_Hit'
 		Begin
 			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
-				Set @ResultFileSuffix = '_msgfdb_syn'				
-				
-			set @SynFileExtension = @ResultFileSuffix + '.txt'
+			Begin
+				Set @ResultFileSuffix = '_msgfplus_syn'							
+				Set @ResultFileSuffixAlt = '_msgfdb_syn'
+			End
+
+			set @SynFileExtension    = @ResultFileSuffix    + '.txt'
+			set @SynFileExtensionAlt = @ResultFileSuffixAlt + '.txt'
 			set @ColumnCountExpected = 17
 
-			set @ResultToSeqMapFileExtension = @ResultFileSuffix + '_ResultToSeqMap.txt'
-			set @SeqInfoFileExtension = @ResultFileSuffix + '_SeqInfo.txt'
-			set @SeqModDetailsFileExtension = @ResultFileSuffix + '_ModDetails.txt'
-			set @SeqToProteinMapFileExtension = @ResultFileSuffix + '_SeqToProteinMap.txt'
+			set @ResultToSeqMapFileExtension    = @ResultFileSuffix    + '_ResultToSeqMap.txt'
+			set @ResultToSeqMapFileExtensionAlt = @ResultFileSuffixAlt + '_ResultToSeqMap.txt'
+
+			set @SeqInfoFileExtension    = @ResultFileSuffix    + '_SeqInfo.txt'
+			set @SeqInfoFileExtensionAlt = @ResultFileSuffixAlt + '_SeqInfo.txt'
+
+			set @SeqModDetailsFileExtension    = @ResultFileSuffix    + '_ModDetails.txt'
+			set @SeqModDetailsFileExtensionAlt = @ResultFileSuffixAlt + '_ModDetails.txt'
+
+			set @SeqToProteinMapFileExtension    = @ResultFileSuffix    + '_SeqToProteinMap.txt'
+			set @SeqToProteinMapFileExtensionAlt = @ResultFileSuffixAlt + '_SeqToProteinMap.txt'
+
 			set @PeptideProphetFileExtension = ''
-			set @MSGFFileExtension = @ResultFileSuffix + '_MSGF.txt'
-			set @ScanGroupInfoFileExtension = '_msgfdb_ScanGroupInfo.txt'
+
+			set @MSGFFileExtension    = @ResultFileSuffix    + '_MSGF.txt'
+			set @MSGFFileExtensionAlt = @ResultFileSuffixAlt + '_MSGF.txt'
+
+			set @ScanGroupInfoFileExtension    = '_msgfplus_ScanGroupInfo.txt'
+			set @ScanGroupInfoFileExtensionAlt = '_msgfdb_ScanGroupInfo.txt'
 			
-			set @AnalysisToolName = 'MSGFDB'
+			-- Changed from MSGFDB to MSGFPlus in November 2016
+			set @AnalysisToolName = 'MSGFPlus'
 		End
 		
 		If @ResultType = 'MSA_Peptide_Hit'
@@ -332,18 +367,16 @@ AS
 
 		declare @RootFileName varchar(128)
  		declare @PeptideSynFilePath varchar(512)
-
 		declare @PeptideResultToSeqMapFilePath varchar(512)
 		declare @PeptideSeqInfoFilePath varchar(512)
 		declare @PeptideSeqModDetailsFilePath varchar(512)
 		declare @PeptideSeqToProteinMapFilePath varchar(512)
 		declare @PeptideProphetResultsFilePath varchar(512)
 		declare @MSGFResultsFilePath varchar(512)		
-		declare @ScanGroupInfoFilePath varchar(512)			-- Only used by MSGFDB
+		declare @ScanGroupInfoFilePath varchar(512)			-- Only used by MSGF+
 
 		set @RootFileName = @Dataset
 		set @PeptideSynFilePath = @RootFileName + @SynFileExtension
-
 		set @PeptideResultToSeqMapFilePath = @RootFileName + @ResultToSeqMapFileExtension
 		set @PeptideSeqInfoFilePath = @RootFileName + @SeqInfoFileExtension
 		set @PeptideSeqModDetailsFilePath = @RootFileName + @SeqModDetailsFileExtension
@@ -383,6 +416,43 @@ AS
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
+
+		If Len(IsNull(@StoragePathResults, '')) = 0 And @ResultFileSuffixAlt <> ''
+		Begin
+			-- Expected file not found, but an alternate file suffix is defined
+			-- Search for the altnerate file now
+			
+			declare @PeptideSynFilePathAlt varchar(512) = @RootFileName + @SynFileExtensionAlt
+			
+			TRUNCATE TABLE #TmpResultsFolderPaths
+			
+			INSERT INTO #TmpResultsFolderPaths (Job, Required_File_List)
+			VALUES (@Job, @PeptideSynFilePathAlt)
+			
+			Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob (using alternate)'
+			Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
+
+			Set @CurrentLocation = 'Determine results folder path (using altnerate)'
+
+			SELECT	@StoragePathResults = Results_Folder_Path,
+					@SourceServer = Source_Share
+			FROM #TmpResultsFolderPaths
+			WHERE Job = @Job
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+			
+			If Len(IsNull(@StoragePathResults, '')) > 0
+			Begin
+				set @PeptideSynFilePath = @RootFileName + @SynFileExtensionAlt
+				set @PeptideResultToSeqMapFilePath = @RootFileName + @ResultToSeqMapFileExtensionAlt
+				set @PeptideSeqInfoFilePath = @RootFileName + @SeqInfoFileExtensionAlt
+				set @PeptideSeqModDetailsFilePath = @RootFileName + @SeqModDetailsFileExtensionAlt
+				set @PeptideSeqToProteinMapFilePath = @RootFileName + @SeqToProteinMapFileExtensionAlt
+				set @MSGFResultsFilePath = @RootFileName + @MSGFFileExtensionAlt
+			End
+						
+		End
+
 		If Len(IsNull(@StoragePathResults, '')) = 0
 		Begin
 			If @MyEMSLState > 0
@@ -412,7 +482,14 @@ AS
 				
 				
 				-- Add the tool version info files
-				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_' + @AnalysisToolName + '.txt'				
+				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_' + @AnalysisToolName + '.txt'
+				
+				If @AnalysisToolName = 'MSGFPlus'
+				Begin
+					-- Add this file for legacy job results
+					Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_MSGFDB.txt'
+				End
+				
 				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_DataExtractor.txt'
 				Set @RequiredFileList = @RequiredFileList + ',Optional:Tool_Version_Info_MSGF.txt'
 				
@@ -514,7 +591,7 @@ AS
 
 
 		-----------------------------------------------
-		-- Load peptides from the synopsis file, XTandem results file, Inspect results file, MSGFDB results file, or MSAlign results file
+		-- Load peptides from the synopsis file, XTandem results file, Inspect results file, MSGFPlus results file, or MSAlign results file
 		-- Also calls LoadSeqInfoAndModsPart1 and LoadSeqInfoAndModsPart2
 		--  to load the results to sequence mapping, sequence info, 
 		-- modification information, and sequence to protein mapping
@@ -685,7 +762,7 @@ AS
 
 		If @infoOnly = 0
 		Begin -- <a>
-			Set @CurrentLocation = 'Evalute return code'
+			Set @CurrentLocation = 'Evaluate return code from Load...PeptidesBulk'
 			
 			If @result = 52099
 				-- OpenTextFile was unable to open the file

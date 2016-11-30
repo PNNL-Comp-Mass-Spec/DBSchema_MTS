@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadToolVersionInfo
+CREATE Procedure [dbo].[LoadToolVersionInfo]
 /****************************************************
 **
 **	Desc:	Load Tool version info for specified tool in specified folder
@@ -15,6 +15,7 @@ CREATE Procedure dbo.LoadToolVersionInfo
 **
 **	Auth:	mem
 **	Date:	12/30/2011 mem - Initial Version
+**			11/28/2016 mem - Look for Tool_Version_Info_MSGFDB.txt if the tool is MSGFPlus and Tool_Version_Info_MSGFPlus.txt is not found
 **
 *****************************************************/
 (
@@ -72,6 +73,20 @@ AS
 	Set @ToolVersionInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @ToolVersionInfoFileName)
 
 	exec ValidateFilesExist @StoragePathResults, @ToolVersionInfoFileName, @FileCountFound = @FileCountFound output, @FileCountMissing = @FileCountMissing output
+	
+	If @FileCountMissing > 0 And @AnalysisToolName = 'MSGFPlus'
+	Begin
+		Declare @ToolVersionInfoFileNameAlt varchar(128) = 'Tool_Version_Info_MSGFDB.txt'
+	
+		exec ValidateFilesExist @StoragePathResults, @ToolVersionInfoFileNameAlt, @FileCountFound = @FileCountFound output, @FileCountMissing = @FileCountMissing output
+		
+		If @FileCountMissing = 0
+		Begin
+			-- Legacy MSGFDB tool version file found
+			Set @ToolVersionInfoFilePath = dbo.udfCombinePaths(@StoragePathResults, @ToolVersionInfoFileNameAlt)
+		End
+		
+	End
 	
 	If @FileCountMissing > 0
 	Begin
