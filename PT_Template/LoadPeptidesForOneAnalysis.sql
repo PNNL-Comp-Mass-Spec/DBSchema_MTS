@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure [dbo].[LoadPeptidesForOneAnalysis]
+CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 /****************************************************
 **
 **	Desc: 
@@ -63,6 +63,7 @@ CREATE Procedure [dbo].[LoadPeptidesForOneAnalysis]
 **			12/12/2013 mem - If the synopsis file needs to be cached from MyEMSL, then now calling LookupCurrentResultsFolderPathsByJob a second time to assure that the additional required files are cached
 **						   - Added @ShowDebugInfo
 **			11/28/2016 mem - Change the default file suffix for MGSF+ results to be _msgfplus (but still support _msgfdb)
+**						   - Only call SetProcessState if @infoOnly is 0
 **
 *****************************************************/
 (
@@ -84,8 +85,7 @@ AS
 	set @myRowCount = 0
 	set @myError = 0
 		
-	declare @completionCode int
-	set @completionCode = 3				-- Set to state 'Load Failed' for now
+	declare @completionCode int = 3				-- Set to state 'Load Failed' for now
 
 	-----------------------------------------------
 	-- Validate the inputs
@@ -352,11 +352,13 @@ AS
 		End
 
 		If @infoOnly <> 0
+		Begin
 			SELECT  @Campaign AS Campaign,
 					@Dataset AS Dataset,
 					@job AS Job, 
 					@FilterSetID AS Filter_Set_ID
-
+		End
+		
 		-----------------------------------------------
 		-- Set up input file names
 		-- For now we'll just have filenames
@@ -632,6 +634,7 @@ AS
 		Begin
 			Set @CurrentLocation = 'Call LoadSequestPeptidesBulk'
 			If @infoOnly = 0
+			Begin
 				exec @result = LoadSequestPeptidesBulk
 								@PeptideSynFilePath,
 								@PeptideResultToSeqMapFilePath,
@@ -652,12 +655,14 @@ AS
 								@PepProphetFileFound output,
 								@MSGFFileFound output,
 								@message output
+			End
 		End
 
 		If @ResultType = 'XT_Peptide_Hit'
 		Begin
 			Set @CurrentLocation = 'Call LoadXTandemPeptidesBulk'
 			If @infoOnly = 0
+			Begin
 				exec @result = LoadXTandemPeptidesBulk
 								@PeptideSynFilePath,
 								@PeptideResultToSeqMapFilePath,
@@ -678,6 +683,7 @@ AS
 								@PepProphetFileFound output,
 								@MSGFFileFound output,
 								@message output
+			End
 		End
 
 
@@ -685,6 +691,7 @@ AS
 		Begin
 			Set @CurrentLocation = 'Call LoadInspectPeptidesBulk'
 			If @infoOnly = 0
+			Begin
 				exec @result = LoadInspectPeptidesBulk
 								@PeptideSynFilePath,
 								@PeptideResultToSeqMapFilePath,
@@ -703,7 +710,8 @@ AS
 								@SeqCandidateFilesFound output,
 								@MSGFFileFound output,
 								@message output
-
+			End
+			
 			Set @PepProphetFileFound = 0
 		End
 
@@ -711,6 +719,7 @@ AS
 		Begin
 			Set @CurrentLocation = 'Call LoadMSGFDBPeptidesBulk'
 			If @infoOnly = 0
+			Begin
 				exec @result = LoadMSGFDBPeptidesBulk
 								@PeptideSynFilePath,
 								@PeptideResultToSeqMapFilePath,
@@ -730,7 +739,8 @@ AS
 								@SeqCandidateFilesFound output,
 								@MSGFFileFound output,
 								@message output
-
+			End
+			
 			Set @PepProphetFileFound = 0
 		End
 
@@ -872,7 +882,7 @@ AS
 	-----------------------------------------------
 Done:
 
-	If @completionCode <> @CurrentJobState
+	If @infoOnly = 0 And @completionCode <> @CurrentJobState
 	Begin
 		-- Update the process state for this job
 		--
@@ -881,6 +891,7 @@ Done:
 
 	
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadPeptidesForOneAnalysis] TO [MTS_DB_Dev] AS [dbo]
