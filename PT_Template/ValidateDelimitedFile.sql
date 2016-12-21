@@ -20,6 +20,7 @@ CREATE Procedure ValidateDelimitedFile
 **						   - Updated @LineCountToSkip to return the number of lines determined to skip
 **						   - Increased @filePath from varchar(255) to varchar(512)
 **			08/18/2011 mem - Added @HeaderLine output parameter
+**			12/19/2016 mem - Expand @message to varchar(1024)
 **    
 *****************************************************/
 (
@@ -27,7 +28,7 @@ CREATE Procedure ValidateDelimitedFile
 	@LineCountToSkip int=0 OUTPUT,			-- Set this to a negative number to auto-determine the number of lines to skip based on @ColumnToUseForNumericCheck; set to a positive value to skip the first @LineCountToSkip lines when determining column count
 	@FileExists tinyint=0 OUTPUT,
 	@ColumnCount int=0 OUTPUT,
-	@message varchar(255)='' OUTPUT,
+	@message varchar(1024)='' OUTPUT,
 	@ColumnToUseForNumericCheck smallint=1,		-- Only used when @LineCountToSkip is negative; set to 1 to check the first column
 	@HeaderLine varchar(2048)='' OUTPUT
 )
@@ -252,6 +253,7 @@ DestroyFSO:
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ValidateDelimitedFile] TO [MTS_DB_Dev] AS [dbo]
