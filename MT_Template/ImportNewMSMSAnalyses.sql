@@ -67,6 +67,7 @@ CREATE Procedure ImportNewMSMSAnalyses
 **			03/25/2014 mem - Now assuring that Valid_Peptide_DB is accurate, even if cached information in MT_Main is not yet up-to-date
 **			11/17/2014 mem - Added option to filter by Instrument_Class using process config parameter MSMS_Instrument_Class
 **			04/27/2016 mem - Added support for DataPkg_Import_MSMS
+**			01/10/2017 mem - Added option to filter by Instrument using process config parameter MSMS_Instrument_Name
 **
 *****************************************************/
 (
@@ -110,6 +111,7 @@ As
 
 	declare @FilterOnEnzymeID tinyint
 	declare @FilterOnInstrumentClass tinyint
+	declare @FilterOnInstrumentName tinyint
 	
 	declare @UsingJobListOverrideOrDataPkg tinyint = 0
 	declare @DataPkgFilterDefined tinyint = 0
@@ -506,32 +508,31 @@ As
 	End -- </a4>
 	
 	---------------------------------------------------
-	-- Count the number of Enzyme_ID entries in T_Process_Config
+	-- Determine whether we need to filter by Enzyme_ID
 	---------------------------------------------------
 	--
-	Set @filterMatchCount = 0
-	SELECT @filterMatchCount = COUNT(*)
-	FROM T_Process_Config
-	WHERE [Name] = 'Enzyme_ID'
-	--
-	If @filterMatchCount > 0
+	If Exists (SELECT *	FROM T_Process_Config WHERE [Name] = 'Enzyme_ID' And Len(Value) > 0)
 		Set	@FilterOnEnzymeID = 1
 	Else
 		Set @FilterOnEnzymeID = 0
 
 	---------------------------------------------------
-	-- Count the number of MSMS_Instrument_Class entries in T_Process_Config
+	-- Determine whether we need to filter by instrument class
 	---------------------------------------------------
 	--
-	Set @filterMatchCount = 0
-	SELECT @filterMatchCount = COUNT(*)
-	FROM T_Process_Config
-	WHERE [Name] = 'MSMS_Instrument_Class'
-	--
-	If @filterMatchCount > 0
+	If Exists (SELECT *	FROM T_Process_Config WHERE [Name] = 'MSMS_Instrument_Class' And Len(Value) > 0)
 		Set	@FilterOnInstrumentClass = 1
 	Else
 		Set @FilterOnInstrumentClass = 0
+
+	---------------------------------------------------
+	-- Determine whether we need to filter by instrument name
+	---------------------------------------------------
+	--
+	If Exists (SELECT *	FROM T_Process_Config WHERE [Name] = 'MSMS_Instrument_Name' And Len(Value) > 0)
+		Set	@FilterOnInstrumentName = 1
+	Else
+		Set @FilterOnInstrumentName = 0
 
 	---------------------------------------------------
 	-- Get minimum GANET Fit threshold for this database
@@ -540,8 +541,7 @@ As
 	--  entry may not be present in T_Process_Config
 	---------------------------------------------------
 	--
-	declare @minGANETFit float
-	set @minGANETFit = -1
+	declare @minGANETFit float = -1
 	--
 	SELECT @minGANETFit = Value
 	FROM T_Process_Config
@@ -649,6 +649,12 @@ As
 	Begin
 		Set @SAddnl = @SAddnl + ' AND Instrument_Class IN (SELECT Value FROM T_Process_Config'
 		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Instrument_Class'' AND Len(Value) > 0)' + @Lf
+	End
+	
+	If @FilterOnInstrumentName = 1
+	Begin
+		Set @SAddnl = @SAddnl + ' AND Instrument IN (SELECT Value FROM T_Process_Config'
+		Set @SAddnl = @SAddnl +     ' WHERE [Name] = ''MSMS_Instrument_Name'' AND Len(Value) > 0)' + @Lf
 	End
 	
 	-- Combine the Campaign filter with the additional filters

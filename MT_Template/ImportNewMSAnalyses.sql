@@ -54,6 +54,7 @@ CREATE Procedure ImportNewMSAnalyses
 **			10/10/2013 mem - Now populating MyEMSLState
 **			11/08/2013 mem - Now passing @previewSql to ParseFilterList
 **			04/27/2016 mem - Added support for DataPkg_Import_MS
+**			01/10/2017 mem - Added option to filter by InstrumentName using process config parameter MS_Instrument_Name
 **    
 *****************************************************/
 (
@@ -455,7 +456,16 @@ As
 
 			if Len(@DateText) > 0
 				set @SAddnl = @SAddnl + ' AND DS_Created >= ''' + @DateText + ''' ' + @Lf
-				
+			
+			If Exists (Select * FROM T_Process_Config Where [Name] = 'MS_Instrument_Name' And Len(Value) > 0)
+			Begin
+				set @SAddnl = @SAddnl + ' AND InstrumentName IN '
+				set @SAddnl = @SAddnl + '( '
+				set @SAddnl = @SAddnl + ' SELECT Value '
+				set @SAddnl = @SAddnl + ' FROM T_Process_Config '
+				set @SAddnl = @SAddnl + ' WHERE [Name] = ''MS_Instrument_Name'' AND Len(Value) > 0'
+				set @SAddnl = @SAddnl + ') ' + @Lf
+			End
 
 			-- Combine the Campaign filter with the additional filters
 			set @SCampaignAndAddnl = @SCampaign + ' AND' + @SAddnl
