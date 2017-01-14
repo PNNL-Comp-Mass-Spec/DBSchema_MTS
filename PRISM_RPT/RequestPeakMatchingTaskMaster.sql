@@ -60,7 +60,7 @@ CREATE PROCEDURE dbo.RequestPeakMatchingTaskMaster
 (
 	@processorName varchar(128),
 	@clientPerspective tinyint = 1,					-- 0 means running SP from local server; 1 means running SP from client
-	@priorityMin tinyint = 1,						-- only tasks with a priority >= to this value will get returned
+	@priorityMin tinyint = 1,						-- only tasks with a priority >= to this value will get returned  (priority 1 tasks are processed before priority 2 tasks)
 	@priorityMax tinyint = 10,						-- only tasks with a priority <= to this value will get returned
 	@restrictToMtdbName tinyint = 0,				-- If 1, will only check the DB named mtdbName on serverName (ignored if @mtdbName or @serverName is blank)
 	@taskID int = 0 output,
