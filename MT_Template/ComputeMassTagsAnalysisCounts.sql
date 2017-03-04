@@ -42,6 +42,7 @@ CREATE Procedure ComputeMassTagsAnalysisCounts
 **			12/05/2012 mem - Added support for MSAlign (type MSA_Peptide_Hit)
 **			05/07/2013 mem - Renamed @MSGFDbFDR variables to @MSGFPlusQValue
 **							 Added support for filtering on MSGF+ PepQValue
+**			03/01/2017 mem - Add column Min_PSM_FDR
 **    
 *****************************************************/
 (
@@ -162,7 +163,8 @@ AS
 		Set @S = @S +    ' High_Discriminant_Score = IsNull(StatsQ.Discriminant_Score_Max, 0),'
 		Set @S = @S +    ' High_Peptide_Prophet_Probability = IsNull(StatsQ.Peptide_Prophet_Probability_Max, 0),'
 		Set @S = @S +    ' Min_Log_EValue = IsNull(StatsQ.Log_Evalue_Min, 0),'
-		Set @S = @S +    ' Min_MSGF_SpecProb = IsNull(StatsQ.MSGF_SpecProb_Min, 1)'
+		Set @S = @S +    ' Min_MSGF_SpecProb = IsNull(StatsQ.MSGF_SpecProb_Min, 1),'
+		Set @S = @S +    ' Min_PSM_FDR = IsNull(StatsQ.PSM_FDR_Min, 1)'
 		Set @S = @S + ' FROM T_Mass_Tags LEFT OUTER JOIN'
 		Set @S = @S +    ' ('
 		Set @S = @S +       ' SELECT Mass_Tag_ID, '
@@ -171,19 +173,22 @@ AS
 		Set @S = @S +             ' MAX(Discriminant_Score_Max) AS Discriminant_Score_Max,'
 		Set @S = @S +             ' MAX(Peptide_Prophet_Probability_Max) AS Peptide_Prophet_Probability_Max,'
 		Set @S = @S +             ' MIN(Log_Evalue_Min) AS Log_Evalue_Min,'
-		Set @S = @S +             ' MIN(MSGF_SpecProb_Min) AS MSGF_SpecProb_Min'
+		Set @S = @S +             ' MIN(MSGF_SpecProb_Min) AS MSGF_SpecProb_Min,'
+		Set @S = @S +             ' MIN(PSM_FDR_Min) AS PSM_FDR_Min'
 		Set @S = @S +       ' FROM (	SELECT Dataset_ID, Mass_Tag_ID, Scan_Number,'
 		Set @S = @S +                '    MAX(Normalized_Score) AS Normalized_Score_Max, '
 		Set @S = @S +                '    MAX(Discriminant_Score) AS Discriminant_Score_Max,'
 		Set @S = @S +                '    MAX(Peptide_Prophet_Probability) AS Peptide_Prophet_Probability_Max,'
 		Set @S = @S +                '    MIN(Log_Evalue) AS Log_Evalue_Min,'
-		Set @S = @S +                '    MIN(MSGF_SpecProb) AS MSGF_SpecProb_Min'
+		Set @S = @S +                '    MIN(MSGF_SpecProb) AS MSGF_SpecProb_Min,'
+		Set @S = @S +                '    MIN(PSM_FDR) AS PSM_FDR_Min'
 		Set @S = @S +             ' FROM (	SELECT TAD.Dataset_ID, P.Mass_Tag_ID, P.Scan_Number, '
 		Set @S = @S +                         ' ISNULL(SS.XCorr, 0) AS Normalized_Score,'
 		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
 		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
-		Set @S = @S +                         ' 0 AS Log_Evalue,'
-		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                         ' 0.0 AS Log_Evalue,'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,'
+		Set @S = @S +                         ' 0.0 AS PSM_FDR'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
 		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Sequest AS SS ON P.Peptide_ID = SS.Peptide_ID LEFT OUTER JOIN '
@@ -198,7 +203,8 @@ AS
 		----------------------------------------------------------------------------------------------------
 		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0.5) AS Peptide_Prophet_Probability,'
 		Set @S = @S +                         ' ISNULL(X.Log_Evalue, 0) AS Log_Evalue,'
-		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,'
+		Set @S = @S +                         ' 0.0 AS PSM_FDR'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
 		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_XTandem AS X ON P.Peptide_ID = X.Peptide_ID LEFT OUTER JOIN '
@@ -209,8 +215,9 @@ AS
 		Set @S = @S +                         ' ISNULL(I.Normalized_Score, 0) AS Normalized_Score,'
 		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
 		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
-		Set @S = @S +                         ' 0 AS Log_Evalue,'
-		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                         ' 0.0 AS Log_Evalue,'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,'
+		Set @S = @S +                         ' 0.0 AS PSM_FDR'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
 		Set @S = @S +                       '  T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                       '  T_Score_Inspect AS I ON P.Peptide_ID = I.Peptide_ID LEFT OUTER JOIN '
@@ -221,8 +228,9 @@ AS
 		Set @S = @S +                         ' ISNULL(M.Normalized_Score, 0) AS Normalized_Score,'
 		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
 		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
-		Set @S = @S +                         ' 0 AS Log_Evalue,'
-		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                         ' 0.0 AS Log_Evalue,'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,'
+		Set @S = @S +                         ' M.FDR AS PSM_FDR'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
 		Set @S = @S +                        ' T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                        ' T_Score_MSGFDB AS M ON P.Peptide_ID = M.Peptide_ID LEFT OUTER JOIN '
@@ -233,8 +241,9 @@ AS
 		Set @S = @S +                         ' ISNULL(M.Normalized_Score, 0) AS Normalized_Score,'
 		Set @S = @S +                         ' ISNULL(SD.DiscriminantScoreNorm, 0) AS Discriminant_Score,'
 		Set @S = @S +                         ' ISNULL(SD.Peptide_Prophet_Probability, 0) AS Peptide_Prophet_Probability,'
-		Set @S = @S +                         ' 0 AS Log_Evalue,'
-		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb'
+		Set @S = @S +                         ' 0.0 AS Log_Evalue,'
+		Set @S = @S +                         ' ISNULL(SD.MSGF_SpecProb, 1) AS MSGF_SpecProb,'
+		Set @S = @S +                         ' M.FDR AS PSM_FDR'
 		Set @S = @S +                   ' FROM T_Peptides AS P INNER JOIN '
 		Set @S = @S +                        ' T_Analysis_Description AS TAD ON P.Job = TAD.Job LEFT OUTER JOIN '
 		Set @S = @S +                        ' T_Score_MSAlign AS M ON P.Peptide_ID = M.Peptide_ID LEFT OUTER JOIN '
@@ -925,6 +934,7 @@ AS
 	
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[ComputeMassTagsAnalysisCounts] TO [MTS_DB_Dev] AS [dbo]

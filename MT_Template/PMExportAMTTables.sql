@@ -22,6 +22,7 @@ CREATE Procedure dbo.PMExportAMTTables
 **			01/17/2012 mem - Added 'xxx.%' and 'rev[_]%' as potential prefixes for reversed proteins
 **			06/20/2013 mem - Added 'xxx[_]%' as an additional prefix for reversed proteins
 **			11/11/2014 mem - Added switches @ReturnMTModsTable and @ReturnMTChargesTable
+**			03/01/2017 mem - Now returning Min_PSM_FDR from T_Mass_Tags
 **
 ****************************************************/
 (
@@ -77,6 +78,7 @@ AS
 			       MT.High_Peptide_Prophet_Probability,
 			       MT.Min_Log_EValue,
 			       MT.Min_MSGF_SpecProb,
+			       MT.Min_PSM_FDR,
 			       MT.Mod_Count,
 			       MT.Mod_Description,
 			       ISNULL(MT.PMT_Quality_Score, 0) AS PMT_Quality_Score,

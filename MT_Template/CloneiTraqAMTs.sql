@@ -12,7 +12,8 @@ CREATE PROCEDURE CloneiTraqAMTs
 **	Return values: 0: success, otherwise, error code
 ** 
 **	Auth:	mem
-**	Date:	11/8/2013 mem - Initial version (modelled after CloneO18AMTs)
+**	Date:	11/08/2013 mem - Initial version (modelled after CloneO18AMTs)
+**			03/01/2017 mem - Add column Min_PSM_FDR
 **    
 *****************************************************/
 (
@@ -156,6 +157,7 @@ As
 			Cleavage_State_Max tinyint NOT NULL,
 			PeptideEx varchar(512) NULL,
 			Min_MSGF_SpecProb real NULL,
+			Min_PSM_FDR real NULL,
 			Mod_Count_New int NOT NULL, 
 			Mod_Description_New varchar(2048) NOT NULL,
 			PeptideEx_New varchar(512) NULL,
@@ -186,7 +188,7 @@ As
 		INSERT INTO #T_Tmp_MTs_to_Clone
 			(Mass_Tag_ID, Peptide, Monoisotopic_Mass, Multiple_Proteins, Created, Last_Affected, Number_Of_Peptides, 
 			Peptide_Obs_Count_Passing_Filter, High_Normalized_Score, High_Discriminant_Score, High_Peptide_Prophet_Probability, 
-			Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, 
+			Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, Min_PSM_FDR,
 			Mod_Count_New, Mod_Description_New, PeptideEx_New, Monoisotopic_Mass_New, Add_Sequence)
 		SELECT MT.Mass_Tag_ID,
 		       MT.Peptide,
@@ -205,6 +207,7 @@ As
 		       MT.Cleavage_State_Max,
 		       MT.PeptideEx,
 		       MT.Min_MSGF_SpecProb,
+		       MT.Min_PSM_FDR,
 		       -1 AS Mod_Count_New,
 		       '' AS Mod_Description_New,
 		       MT.PeptideEx,

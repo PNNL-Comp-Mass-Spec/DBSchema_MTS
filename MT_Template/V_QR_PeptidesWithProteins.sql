@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW V_QR_PeptidesWithProteins
+
+CREATE VIEW [dbo].[V_QR_PeptidesWithProteins]
 AS
 ----------------------------------------------------------------------------------------------
 -- This query was adapted from the query used by stored procedure QRRetrievePeptidesMultiQID
@@ -30,6 +31,7 @@ SELECT QD.Quantitation_ID AS QID,
        ROUND(QRD.MT_FDR_Threshold_Avg, 4) AS MT_FDR_Threshold,
        ROUND(MT.Monoisotopic_Mass, 5) AS Monoisotopic_Mass,
        MT.Min_MSGF_SpecProb AS Min_MSGF_SpecProb,
+	   MT.Min_PSM_FDR,
        MT.Mod_Description,
        ISNULL(CSN.Cleavage_State_Name, 'Unknown') AS Cleavage_State_Name,
        QRD.ORF_Count AS Protein_Count
@@ -47,6 +49,7 @@ FROM T_Quantitation_Description QD
        ON MTPM.Cleavage_State = CSN.Cleavage_State
      LEFT OUTER JOIN T_Proteins Prot
        ON QR.Ref_ID = Prot.Ref_ID
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[V_QR_PeptidesWithProteins] TO [MTS_DB_Dev] AS [dbo]

@@ -26,6 +26,7 @@ CREATE TABLE [dbo].[T_Mass_Tags](
 	[Cleavage_State_Max] [tinyint] NOT NULL,
 	[PeptideEx] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Min_MSGF_SpecProb] [real] NULL,
+	[Min_PSM_FDR] [real] NULL,
  CONSTRAINT [PK_T_Mass_Tags] PRIMARY KEY CLUSTERED 
 (
 	[Mass_Tag_ID] ASC

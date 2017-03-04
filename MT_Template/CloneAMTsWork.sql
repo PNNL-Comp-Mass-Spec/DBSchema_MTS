@@ -13,7 +13,8 @@ CREATE PROCEDURE CloneAMTsWork
 ** 
 **	Auth:	mem
 **	Date:	11/07/2013 mem - Initial version (refactored from CloneO18AMTs)
-**			01/02/2015 mem - Added column Rank_Hit
+**			01/02/2015 mem - Add column Rank_Hit
+**			03/01/2017 mem - Add column Min_PSM_FDR
 **    
 *****************************************************/
 (
@@ -256,10 +257,10 @@ As
 			INSERT INTO T_Mass_Tags
 				(Mass_Tag_ID, Peptide, Monoisotopic_Mass, Multiple_Proteins, Created, Last_Affected, Number_Of_Peptides, 
 				Peptide_Obs_Count_Passing_Filter, High_Normalized_Score, High_Discriminant_Score, High_Peptide_Prophet_Probability, 
-				Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb)
+				Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, Min_PSM_FDR)
 			SELECT Mass_Tag_ID_New, Peptide, Monoisotopic_Mass_New, Multiple_Proteins, GetDate() AS Created, GetDate() AS Last_Affected, Number_Of_Peptides, 
 				Peptide_Obs_Count_Passing_Filter, High_Normalized_Score, High_Discriminant_Score, High_Peptide_Prophet_Probability, 
-				Mod_Count_New, Mod_Description_New, PMT_Quality_Score, Cleavage_State_Max, PeptideEx_New, Min_MSGF_SpecProb
+				Mod_Count_New, Mod_Description_New, PMT_Quality_Score, Cleavage_State_Max, PeptideEx_New, Min_MSGF_SpecProb, Min_PSM_FDR
 			FROM #T_Tmp_MTs_to_Clone
 			WHERE Add_Sequence = 1
 			--

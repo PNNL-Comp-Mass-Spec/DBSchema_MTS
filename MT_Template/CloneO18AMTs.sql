@@ -15,6 +15,7 @@ CREATE PROCEDURE CloneO18AMTs
 **	Auth:	mem
 **	Date:	02/09/2012 mem - Initial version
 **			11/07/2013 mem - Now calling CloneAMTsWork after populating #T_Tmp_MTs_to_Clone
+**			03/01/2017 mem - Add column Min_PSM_FDR
 **    
 *****************************************************/
 (
@@ -158,6 +159,7 @@ As
 			Cleavage_State_Max tinyint NOT NULL,
 			PeptideEx varchar(512) NULL,
 			Min_MSGF_SpecProb real NULL,
+			Min_PSM_FDR real NULL,
 			Mod_Count_New int NOT NULL, 
 			Mod_Description_New varchar(2048) NOT NULL,
 			PeptideEx_New varchar(512) NULL,
@@ -188,7 +190,7 @@ As
 		INSERT INTO #T_Tmp_MTs_to_Clone
 			(Mass_Tag_ID, Peptide, Monoisotopic_Mass, Multiple_Proteins, Created, Last_Affected, Number_Of_Peptides, 
 			Peptide_Obs_Count_Passing_Filter, High_Normalized_Score, High_Discriminant_Score, High_Peptide_Prophet_Probability, 
-			Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, 
+			Mod_Count, Mod_Description, PMT_Quality_Score, Cleavage_State_Max, PeptideEx, Min_MSGF_SpecProb, Min_PSM_FDR,
 			Mod_Count_New, Mod_Description_New, PeptideEx_New, Monoisotopic_Mass_New, Add_Sequence)
 		SELECT Mass_Tag_ID,
 		       Peptide,
@@ -207,6 +209,7 @@ As
 		       Cleavage_State_Max,
 		       PeptideEx,
 		       Min_MSGF_SpecProb,
+		       Min_PSM_FDR,
 		       -1 AS Mod_Count_New,
 		       '' AS Mod_Description_New,
 		       CASE WHEN @O18DynamicModSymbol = '' 
@@ -303,6 +306,7 @@ Done:
 	
 	
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CloneO18AMTs] TO [MTS_DB_Dev] AS [dbo]
