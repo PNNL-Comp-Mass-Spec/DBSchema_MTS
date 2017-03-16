@@ -284,44 +284,117 @@ As
 		-- once on server A, but the DB was moved to server B
 		-- and now the database has been deleted
 		-----------------------------------------------------------
-		--	
-		DELETE T_Analysis_Job_to_MT_DB_Map
-		FROM T_Analysis_Job_to_MT_DB_Map Target
-			INNER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID
-						FROM T_MTS_MT_DBs
-							INNER JOIN ( SELECT MT_DB_ID,
-												COUNT(DISTINCT Server_ID) AS ServerCount
-											FROM T_Analysis_Job_to_MT_DB_Map
-											GROUP BY MT_DB_ID
-											HAVING (COUNT(DISTINCT Server_ID) > 1) 
-										) ProblemQ
-								ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
-						) DBsToFix
-			ON Target.MT_DB_ID = DBsToFix.MT_DB_ID
-			LEFT OUTER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID,
-									T_MTS_MT_DBs.Server_ID
-							FROM T_MTS_MT_DBs
-									INNER JOIN ( SELECT MT_DB_ID,
-														COUNT(DISTINCT Server_ID) AS ServerCount
-												FROM T_Analysis_Job_to_MT_DB_Map
-												GROUP BY MT_DB_ID
-												HAVING (COUNT(DISTINCT Server_ID) > 1) 
-										) ProblemQ
-									ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
-							) CorrectServerQ
-			ON Target.MT_DB_ID = CorrectServerQ.MT_DB_ID AND
-				Target.Server_ID = CorrectServerQ.Server_ID
-		WHERE (CorrectServerQ.Server_ID IS NULL)
+		
+		-- Start by creating a temporary table to track databases with multiple servers
+		--
+		CREATE TABLE #Tmp_DBsOnMultipleServers (
+		    MT_DB_ID  int,
+		    Server_ID int
+		)
+
+		-- Populate #Tmp_DBsOnMultipleServers
+		--
+		INSERT INTO #Tmp_DBsOnMultipleServers( MT_DB_ID,
+		                                       Server_ID )
+		SELECT DISTINCT MT_DB_ID,
+		                Server_ID
+		FROM T_Analysis_Job_to_MT_DB_Map
+		WHERE MT_DB_ID IN ( SELECT MT_DB_ID
+		                    FROM T_Analysis_Job_to_MT_DB_Map
+		                    GROUP BY MT_DB_ID
+		                    HAVING (COUNT(DISTINCT Server_ID) > 1) )
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-
 		If @myRowCount > 0
 		Begin
-			Set @message = 'Deleted extra, duplicate rows from T_Analysis_Job_to_MT_DB_Map; this indicates that multiple MTS DBs have the same information cached for jobs in a given MT DB; you should delete the extra rows from MT_Main on one of the servers'	
-			Exec PostLogEntry 'Error', @message, 'UpdateAnalysisJobToMTDBMap'
-			Set @message = ''
-		end
+			Declare @mtDbId int = 0
+			Declare @ServerId1 int
+			Declare @ServerId2 int
+			Declare @ServerName1 varchar(64)
+			Declare @ServerName2 varchar(64)
+			
+			While @mtDbId >= 0
+			Begin
+				SELECT TOP 1 @mtDbId = MT_DB_ID
+				FROM #Tmp_DBsOnMultipleServers
+				WHERE MT_DB_ID > @mtDbId
+				ORDER BY MT_DB_ID
+				--
+				SELECT @myError = @@error, @myRowCount = @@rowcount
+				
+				If @myRowCount = 0
+					Set @mtDbId = -10
+				Else
+				Begin
+					Set @ServerId1 = 0
+					Set @ServerId2 = 0
+					Set @ServerName1 = 'Unknown_Server'
+					Set @ServerName2 = 'Unknown_Server'
+					
+					SELECT @ServerId1 = Min(Server_ID), @ServerId2 = Max(Server_ID)
+					FROM #Tmp_DBsOnMultipleServers
+					WHERE MT_DB_ID = @mtDbId
+				
+					SELECT @ServerName1 = Server_Name
+					FROM T_MTS_Servers
+					WHERE Server_ID = @ServerId1
+					
+					SELECT @ServerName2 = Server_Name
+					FROM T_MTS_Servers
+					WHERE Server_ID = @ServerId2
+
+					Set @message = 'MTS DB ' + Cast(@mtDbId as varchar(9)) + ' has duplicate rows in T_Analysis_Job_to_MT_DB_Map, ' + 
+					               'meaning it is listed in MT_Main on multiple servers. Update MT_Main on either ' + 
+					               @ServerName1 + ' or ' + @ServerName2 + ' to change the state to 15 or 100'
+					              
+					Exec PostLogEntry 'Error', @message, 'UpdateAnalysisJobToMTDBMap'
+					Set @message = ''
+
+				End
+			End
+			                    
+			DELETE T_Analysis_Job_to_MT_DB_Map
+			FROM T_Analysis_Job_to_MT_DB_Map Target
+				INNER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID
+							FROM T_MTS_MT_DBs
+								INNER JOIN ( SELECT MT_DB_ID,
+													COUNT(DISTINCT Server_ID) AS ServerCount
+												FROM T_Analysis_Job_to_MT_DB_Map
+												GROUP BY MT_DB_ID
+												HAVING (COUNT(DISTINCT Server_ID) > 1) 
+											) ProblemQ
+									ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
+							) DBsToFix
+				ON Target.MT_DB_ID = DBsToFix.MT_DB_ID
+				LEFT OUTER JOIN ( SELECT T_MTS_MT_DBs.MT_DB_ID,
+										T_MTS_MT_DBs.Server_ID
+								FROM T_MTS_MT_DBs
+										INNER JOIN ( SELECT MT_DB_ID,
+															COUNT(DISTINCT Server_ID) AS ServerCount
+													FROM T_Analysis_Job_to_MT_DB_Map
+													GROUP BY MT_DB_ID
+													HAVING (COUNT(DISTINCT Server_ID) > 1) 
+											) ProblemQ
+										ON T_MTS_MT_DBs.MT_DB_ID = ProblemQ.MT_DB_ID 
+								) CorrectServerQ
+				ON Target.MT_DB_ID = CorrectServerQ.MT_DB_ID AND
+					Target.Server_ID = CorrectServerQ.Server_ID
+			WHERE (CorrectServerQ.Server_ID IS NULL)
+			--
+			SELECT @myError = @@error, @myRowCount = @@rowcount
+			
+			If @myRowCount > 0
+			Begin
+				Set @message = 'Deleted ' + Cast(@myRowCount as varchar(9)) + ' extra, duplicate rows from T_Analysis_Job_to_MT_DB_Map; ' + 
+				               'this indicates that multiple MTS DBs have the same information cached for jobs in a given MT DB; ' + 
+				               'you should update MT_Main on one of the servers to change the state to 15 or 100'
+					              
+				Exec PostLogEntry 'Warning', @message, 'UpdateAnalysisJobToMTDBMap'
+				Set @message = ''
+			End
+			
+		End
 	End
 	
 Done:
