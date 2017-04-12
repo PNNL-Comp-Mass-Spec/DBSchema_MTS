@@ -1,5 +1,5 @@
 /****** Object:  Table [T_MTS_MT_DBs] ******/
-/****** RowCount: 1199 ******/
+/****** RowCount: 1201 ******/
 /****** Columns: MT_DB_ID, MT_DB_Name, Server_ID, State_ID, Last_Affected, Description, Organism, Campaign, DB_Schema_Version, Comment, Created, Last_Online ******/
 INSERT INTO [T_MTS_MT_DBs] VALUES (1004,'MT_Deinococcus_P12',1,100,'8/2/2005 12:00:53 PM','','','',1,'Taken offline and detached from Pogo July 12, 2006','','')
 INSERT INTO [T_MTS_MT_DBs] VALUES (1005,'MT_Shewanella_P14',1,100,'8/2/2005 12:00:53 PM','','','',1,'Taken offline and detached from Pogo July 12, 2006','','')
@@ -1200,3 +1200,5 @@ INSERT INTO [T_MTS_MT_DBs] VALUES (2231,'MT_Human_OMICS_MFB003_P1239',8,5,'4/5/2
 INSERT INTO [T_MTS_MT_DBs] VALUES (2232,'MT_Human_OMICS_MMVE003_only_P1240',8,5,'4/5/2017 3:21:24 PM','Human_OMICS_MMVE003 samples','Homo_sapiens','OMICS',2,'','4/5/2017 3:21:21 PM','4/12/2017 12:00:00 AM')
 INSERT INTO [T_MTS_MT_DBs] VALUES (2233,'MT_S_oneidensis_DiChristina_P1241',3,5,'4/5/2017 4:10:55 PM','48487_DiChristina S. oneidensis samples','Shewanella_oneidensis_MR-1','48487_DiChristina',2,'','4/5/2017 4:10:38 PM','4/12/2017 12:00:00 AM')
 INSERT INTO [T_MTS_MT_DBs] VALUES (2234,'MT_Vibrio_cholerae_ABPP_P1242',2,5,'4/11/2017 1:28:13 PM','for Vibrio_cholerae ABPP samples','Vibrio_cholerae_ATCC39315','Cholerae_ABPP',2,'','4/11/2017 1:28:11 PM','4/12/2017 12:00:00 AM')
+INSERT INTO [T_MTS_MT_DBs] VALUES (2235,'MT_Human_OMICS_PVM_P1243',8,5,'4/12/2017 9:25:23 AM','human and measles searches','Homo_sapiens','Predictive_Virology',2,'','4/12/2017 9:25:19 AM','4/12/2017 12:00:00 AM')
+INSERT INTO [T_MTS_MT_DBs] VALUES (2236,'MT_M_tuberculosis_ABPP_B5ABP_P1244',6,5,'4/12/2017 10:20:39 AM','B5ABP samples','Mycobacterium_tuberculosis','TB_ABPP_ChemProt',2,'','4/12/2017 10:20:21 AM','4/12/2017 12:00:00 AM')
