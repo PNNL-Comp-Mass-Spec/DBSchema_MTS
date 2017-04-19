@@ -56,5 +56,3 @@ GRANT VIEW DEFINITION ON [dbo].[V_QR_PeptidesWithProteins] TO [MTS_DB_Dev] AS [d
 GO
 GRANT VIEW DEFINITION ON [dbo].[V_QR_PeptidesWithProteins] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT VIEW DEFINITION ON [dbo].[V_QR_PeptidesWithProteins] TO [MTS_DB_Reader] AS [dbo]
-GO

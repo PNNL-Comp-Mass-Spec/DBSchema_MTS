@@ -81,13 +81,13 @@ GO
 CREATE USER [MTAdmin] FOR LOGIN [mtadmin] WITH DEFAULT_SCHEMA=[dbo]
 GO
 /****** Object:  User [MTS_DB_Dev] ******/
-CREATE USER [MTS_DB_Dev] FOR LOGIN [Albert\MTS_DB_Dev]
+CREATE USER [MTS_DB_Dev] FOR LOGIN [Pogo\MTS_DB_Dev]
 GO
 /****** Object:  User [MTS_DB_Lite] ******/
-CREATE USER [MTS_DB_Lite] FOR LOGIN [Albert\MTS_DB_Lite]
+CREATE USER [MTS_DB_Lite] FOR LOGIN [Pogo\MTS_DB_Lite]
 GO
 /****** Object:  User [MTS_DB_Reader] ******/
-CREATE USER [MTS_DB_Reader] FOR LOGIN [Albert\MTS_DB_Reader]
+CREATE USER [MTS_DB_Reader] FOR LOGIN [Pogo\MTS_DB_Reader]
 GO
 /****** Object:  User [MTUser] ******/
 CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
