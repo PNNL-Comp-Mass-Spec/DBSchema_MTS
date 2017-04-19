@@ -4,23 +4,10 @@ GO
 SET QUOTED_IDENTIFIER OFF
 GO
 
-
 CREATE VIEW [dbo].[V_Current_Activity_Dashboard]
 AS
 SELECT *
 FROM (
-	SELECT TOP 4 'Albert' AS Server, CA.*, 1*100 + Row_Number() OVER (Order By Began Desc) AS Sort
-	FROM albert.mt_main.dbo.v_current_activity CA
-	ORDER BY Began Desc
-	UNION
-	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,200 AS Sort
-	UNION
-	SELECT TOP 4 'Elmer' AS Server, CA.*, 3*100 + Row_Number() OVER (Order By Began Desc) AS Sort
-	FROM elmer.mt_main.dbo.v_current_activity CA
-	ORDER BY Began Desc
-	UNION
-	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,400 AS Sort
-	UNION
 	SELECT TOP 4 'Pogo' AS Server, CA.*, 5*100 + Row_Number() OVER (Order By Began Desc) AS Sort
 	FROM pogo.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
@@ -33,8 +20,8 @@ FROM (
 	UNION
 	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,750 AS Sort
 	UNION
-	SELECT TOP 4 'Daffy' AS Server, CA.*, 8*100 + Row_Number() OVER (Order By Began Desc) AS Sort
-	FROM daffy.mt_main.dbo.v_current_activity CA
+	SELECT TOP 4 'Sylvester' AS Server, CA.*, 8*100 + Row_Number() OVER (Order By Began Desc) AS Sort
+	FROM Sylvester.mt_main.dbo.v_current_activity CA
 	ORDER BY Began Desc
 	UNION
 	SELECT '--','','','','','',NULL,NULL,'',0,0,0,0,850 AS Sort
