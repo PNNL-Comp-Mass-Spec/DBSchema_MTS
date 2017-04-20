@@ -5,6 +5,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_Database_Backups](
 	[Name] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Backup_Folder] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Full_Backup_Interval_Days] [float] NOT NULL,
 	[Last_Full_Backup] [datetime] NULL,
 	[Last_Trans_Backup] [datetime] NULL,
@@ -12,7 +13,8 @@ CREATE TABLE [dbo].[T_Database_Backups](
 	[Failed_Backup_Message] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
  CONSTRAINT [PK_T_Database_Backups] PRIMARY KEY CLUSTERED 
 (
-	[Name] ASC
+	[Name] ASC,
+	[Backup_Folder] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 

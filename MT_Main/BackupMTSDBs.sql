@@ -36,6 +36,8 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 **			               - Call VerifyDirectoryExists to create the output directory if missing
 **			               - Mention Powershell script DeleteOldBackups.ps1
 **			04/19/2017 mem - Add parameter @UpdateLastBackup
+**			04/20/2017 mem - Add column Backup_Folder to T_Database_Backups
+**			               - Remove parameter @UpdateLastBackup
 **    
 *****************************************************/
 (
@@ -50,7 +52,6 @@ CREATE PROCEDURE dbo.BackupMTSDBs
 	@InfoOnly tinyint = 1,							-- Set to 1 to display the backup SQL that would be run
 	@CompressionLevel tinyint = 1,					-- Set to 1 to compress backups, 0 to disable compression
 	@BackupTool tinyint = 0,						-- 0 to use native backup, 1 to use Ola Hallengren's Maintenance Solution
-	@UpdateLastBackup tinyint = 1,					-- When 1, update backup times in T_Database_Backup.  If @BackupMode is 2, @UpdateLastBackup is forced to 1
 	@message varchar(2048) = '' OUTPUT
 )
 As	
@@ -92,7 +93,6 @@ As
 		Set @CompressionLevel = 1
 
 	Set @BackupTool = IsNull(@BackupTool, 0)
-	Set @UpdateLastBackup = IsNull(@UpdateLastBackup, 1)
 	
 	Set @message = ''
 
@@ -284,6 +284,17 @@ As
 			SELECT @message AS Warning_Message
 	End
 	
+	---------------------------------------
+	-- Auto-update any rows in T_Database_Backups with an empty Backup_Folder to use @BackupFolderRoot
+	-- This is done in case the user has added a placeholder row to T_Database_Backups for a new database that has not yet been backed up
+	---------------------------------------
+	--
+	UPDATE T_Database_Backups
+	SET Backup_Folder = @BackupFolderRoot
+	WHERE [Name] IN (SELECT DatabaseName FROM #Tmp_DB_Backup_List) AND
+	      Backup_Folder = ''
+	--
+	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
 	---------------------------------------
 	-- Update column Recovery_Model in #Tmp_DB_Backup_List
@@ -341,8 +352,6 @@ As
 		-- Auto-switch databases to full backups if @FullBackupIntervalDays has elapsed
 		---------------------------------------
 		--
-		Set @UpdateLastBackup = 1
-		
 		-- Find databases that have had recent full backups
 		-- Note that field Full_Backup_Interval_Days in T_Database_Backups takes precedence over @FullBackupIntervalDays
 		--
@@ -357,7 +366,9 @@ As
 		       Last_Full_Backup,
 		       Full_Backup_Interval_Days
 		FROM T_Database_Backups
-		WHERE IsNull(Last_Full_Backup, DateAdd(day, -1000, GetDate())) >= 
+		WHERE [Name] IN (SELECT DatabaseName FROM #Tmp_DB_Backup_List) AND
+		      Backup_Folder = @BackupFolderRoot AND
+		      IsNull(Last_Full_Backup, DateAdd(day, -1000, GetDate())) >= 
 		        DateAdd(day, -IsNull(Full_Backup_Interval_Days, @FullBackupIntervalDays), GetDate())
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
@@ -391,10 +402,12 @@ As
 		-- Add missing databases to T_Database_Backups
 		---------------------------------------
 	
-		INSERT INTO T_Database_Backups ([Name])
-		SELECT DatabaseName
+		INSERT INTO T_Database_Backups ([Name], Backup_Folder)
+		SELECT DISTINCT DatabaseName, @BackupFolderRoot
 		FROM #Tmp_DB_Backup_List
-		WHERE Not DatabaseName IN (Select [Name] FROM T_Database_Backups)
+		WHERE Not DatabaseName IN (SELECT [Name] 
+		                           FROM T_Database_Backups 
+		                           WHERE Backup_Folder = @BackupFolderRoot)
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -589,7 +602,8 @@ As
 					UPDATE T_Database_Backups
 					SET Last_Failed_Backup = GetDate(),
 						Failed_Backup_Message = @message
-					WHERE [Name] = @DBName
+					WHERE [Name] = @DBName AND
+					      Backup_Folder = @BackupFolderRoot
 							
 					Set @FailedBackupCount = @FailedBackupCount + 1
 				End
@@ -619,7 +633,8 @@ As
 							UPDATE T_Database_Backups
 							SET Last_Failed_Backup = GetDate(),
 							    Failed_Backup_Message = @message
-							WHERE [Name] = @DBName
+							WHERE [Name] = @DBName AND
+							      Backup_Folder = @BackupFolderRoot
 
 							Set @FailedVerifyCount = @FailedVerifyCount + 1
 							
@@ -628,19 +643,21 @@ As
 						End
 					End
 					
-					If @BackupSuccess = 1 And @UpdateLastBackup > 0
+					If @BackupSuccess = 1
 					Begin
 						If @FullDBBackupMatchMode = 1
 						Begin
 							UPDATE T_Database_Backups
 							SET Last_Full_Backup = GetDate()
-							WHERE [Name] = @DBName
+							WHERE [Name] = @DBName AND
+							      Backup_Folder = @BackupFolderRoot
 						End
 						Else
 						Begin
 							UPDATE T_Database_Backups
 							SET Last_Trans_Backup = GetDate()
-							WHERE [Name] = @DBName
+							WHERE [Name] = @DBName AND
+							      Backup_Folder = @BackupFolderRoot
 						End
 					End
 
