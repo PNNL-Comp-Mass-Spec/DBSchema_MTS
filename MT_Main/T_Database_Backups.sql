@@ -19,5 +19,5 @@ CREATE TABLE [dbo].[T_Database_Backups](
 ) ON [PRIMARY]
 
 GO
-ALTER TABLE [dbo].[T_Database_Backups] ADD  CONSTRAINT [DF_T_Database_Backups_Full_Backup_Interval_Days]  DEFAULT ((14)) FOR [Full_Backup_Interval_Days]
+ALTER TABLE [dbo].[T_Database_Backups] ADD  CONSTRAINT [DF_T_Database_Backups_Full_Backup_Interval_Days]  DEFAULT ((9)) FOR [Full_Backup_Interval_Days]
 GO

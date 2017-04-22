@@ -36,6 +36,7 @@ CREATE PROCEDURE dbo.BackupMTSDBsRedgate
 **			               - Add parameters @FullBackupIntervalDays and @UpdateLastBackup
 **			04/20/2017 mem - Add column Backup_Folder to T_Database_Backups
 **			               - Remove parameter @UpdateLastBackup
+**			04/21/2017 mem - Change default for @BackupBatchSize from 32 to 4
 **    
 *****************************************************/
 (
@@ -50,7 +51,7 @@ CREATE PROCEDURE dbo.BackupMTSDBsRedgate
 	@DaysToKeepOldBackups smallint = 20,			-- Defines the number of days worth of backup files to retain; files older than @DaysToKeepOldBackups days prior to the present will be deleted; minimum value is 3
 	@Verify tinyint = 1,							-- Set to 1 to verify each backup
 	@InfoOnly tinyint = 1,							-- Set to 1 to display the Backup SQL that would be run
-	@BackupBatchSize tinyint = 32,					-- Sends SQL Backup a comma separated list of databases to backup (between 2 to 32 DBs at a time); this is much more efficient than calling Sql Backup with one database at a time, but has a downside of inability to explicitly define the log file names
+	@BackupBatchSize tinyint = 4,					-- Sends SQL Backup a comma separated list of databases to backup (between 2 to 32 DBs at a time); this is much more efficient than calling Sql Backup with one database at a time, but has a downside of inability to explicitly define the log file names
 	@UseLocalTransferFolder tinyint = 0,			-- Set to 1 to backup to the local "Redgate Backup Transfer Folder" then copy the file to @BackupFolderRoot; only used if @BackupFolderRoot starts with "\\"
 	@DiskRetryIntervalSec smallint = 30,			-- Set to non-zero value to specify that the backup should be re-tried if a network error occurs; this is the delay time before the retry occurs
 	@DiskRetryCount smallint = 10,					-- When @DiskRetryIntervalSec is non-zero, this specifies the maximum number of times to retry the backup
