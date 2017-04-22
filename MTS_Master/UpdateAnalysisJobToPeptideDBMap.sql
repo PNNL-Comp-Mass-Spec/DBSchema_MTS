@@ -15,6 +15,7 @@ CREATE PROCEDURE dbo.UpdateAnalysisJobToPeptideDBMap
 **	Auth:	mem
 **	Date:	08/30/2006
 **			09/07/2006 mem - Now populating column Process_State
+**			04/21/2017 mem - Check for jobs and databases that are present on multiple servers
 **    
 *****************************************************/
 (
@@ -41,8 +42,7 @@ As
 	Declare @Sql nvarchar(2048)
 	Declare @SrcSql nvarchar(2048)
 	
-	Declare @result int
-	Set @result = 0
+	Declare @result int = 0
 
 	Declare @ProcessSingleServer tinyint
 	Declare @UsingLocalServer tinyint
@@ -60,17 +60,12 @@ As
 	Declare @Continue int
 	Declare @processCount int			-- Count of servers processed
 
-	Declare @JobCountDeletedTotal int
-	Set @JobCountDeletedTotal = 0
+	Declare @JobCountDeletedTotal int = 0
 
 	-----------------------------------------------------------
 	-- Create a temporary table to cache the data from remote MTS servers
 	-----------------------------------------------------------
-	--
-	
-	if exists (select * from dbo.sysobjects where id = object_id(N'[#Tmp_Analysis_Job_to_Peptide_DB_Map]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
-	drop table [#Tmp_Analysis_Job_to_Peptide_DB_Map]
-
+	--	
 	CREATE TABLE #Tmp_Analysis_Job_to_Peptide_DB_Map (
 		Server_ID int NOT NULL ,
 		Job int NOT NULL ,
@@ -88,6 +83,18 @@ As
 	CREATE NONCLUSTERED INDEX #IX_Tmp_Analysis_Job_to_Peptide_DB_Map_Server_Job_PDB_ID ON #Tmp_Analysis_Job_to_Peptide_DB_Map (Server_ID, Job, PDB_ID)
 	INCLUDE (ResultType, Created, Last_Affected, Process_State)
 
+	-----------------------------------------------------------
+	-- Create a temporary table to track job/database mappings that are superseded and need to be deleted
+	-----------------------------------------------------------
+	--	
+	CREATE TABLE #Tmp_MappingToDelete (
+		Server_ID int NOT NULL ,
+		Job int NOT NULL ,
+		PDB_ID int NOT NULL		
+	)
+
+	CREATE CLUSTERED INDEX #IX_Tmp_MappingToDelete ON #Tmp_MappingToDelete(Server_ID, Job, PDB_ID)
+	
 	-----------------------------------------------------------
 	-- Process each server in V_Active_MTS_Servers
 	-----------------------------------------------------------
@@ -238,7 +245,6 @@ As
 				Set @myError = 50004
 				Goto Done
 			End
-	
 			
 			-- Insert new entries
 			Set @Sql = ''				
@@ -273,7 +279,105 @@ As
 		End -- </b>
 	End -- </a>
 
+	---------------------------------------------------
+	-- Look for job/database combos that are listed as being on multiple servers
+	-- Delete the duplicates by removing the entries mapped to servers with Active = 0
+	---------------------------------------------------
+	--
+	INSERT INTO #Tmp_MappingToDelete (Server_ID, Job, PDB_ID)
+	SELECT OldJobs.Server_ID,
+	       OldJobs.Job,
+	       OldJobs.Peptide_DB_ID
+	FROM T_Analysis_Job_to_Peptide_DB_Map OldJobs
+	     INNER JOIN ( SELECT JobToDBMap.Job,
+	                         JobToDBMap.Peptide_DB_ID
+	                  FROM T_Analysis_Job_to_Peptide_DB_Map JobToDBMap
+	                       INNER JOIN ( SELECT Job,
+	                                           Peptide_DB_ID
+	                                    FROM T_Analysis_Job_to_Peptide_DB_Map JobToDBMap
+	                                    WHERE Server_ID IN ( SELECT Server_ID
+	                                                         FROM T_MTS_Servers
+	                                                         WHERE Active = 0 ) 
+	                                  ) OldServerJobs
+	                         ON JobToDBMap.Job = OldServerJobs.Job AND
+	                            JobToDBMap.Peptide_DB_ID = OldServerJobs.Peptide_DB_ID
+	                  WHERE JobToDBMap.Server_ID IN ( SELECT Server_ID
+	                                                  FROM T_MTS_Servers
+	                                                  WHERE Active = 1 ) 
+	                ) CurrentJobs
+	       ON OldJobs.Job = CurrentJobs.Job AND
+	          OldJobs.Peptide_DB_ID = CurrentJobs.Peptide_DB_ID
+	WHERE OldJobs.Server_ID IN ( SELECT Server_ID
+	                             FROM T_MTS_Servers
+	                             WHERE Active = 0 )
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+	---------------------------------------------------
+	-- Look for job/database combos that are listed as being on multiple active servers
+	-- Delete the duplicates if possible (based on database states in T_MTS_Peptide_DBs)
+	---------------------------------------------------
+	--
+	INSERT INTO #Tmp_MappingToDelete (Server_ID, Job, PDB_ID)
+	SELECT OldJobs.Server_ID,
+	       OldJobs.Job,
+	       OldJobs.Peptide_DB_ID
+	FROM ( SELECT JobToDBMap.Server_ID,
+	              JobToDBMap.Job,
+	              JobToDBMap.Peptide_DB_ID
+	       FROM T_Analysis_Job_to_Peptide_DB_Map JobToDBMap
+	            INNER JOIN ( SELECT Job,
+	                                Peptide_DB_ID
+	                         FROM T_Analysis_Job_to_Peptide_DB_Map
+	                         GROUP BY Job, Peptide_DB_ID
+	                         HAVING (COUNT(*) > 1) 
+	                       ) DuplicatesQ
+	              ON JobToDBMap.Job = DuplicatesQ.Job AND
+	                 JobToDBMap.Peptide_DB_ID = DuplicatesQ.Peptide_DB_ID
+	            LEFT OUTER JOIN T_MTS_Peptide_DBs PeptideDBs
+	              ON JobToDBMap.Server_ID = PeptideDBs.Server_ID AND
+	                 JobToDBMap.Peptide_DB_ID = PeptideDBs.Peptide_DB_ID
+	       WHERE (ISNULL(PeptideDBs.State_ID, 15) >= 15) 
+	     ) OldJobs
+	     LEFT OUTER JOIN #Tmp_MappingToDelete Mapping
+	       ON OldJobs.Server_ID = Mapping.Server_ID AND
+	          OldJobs.Job = Mapping.Job AND
+	          OldJobs.Peptide_DB_ID = Mapping.PDB_ID
+	WHERE Mapping.Job IS NULL
+	--
+	SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+	---------------------------------------------------
+	-- Preview or delete jobs in #Tmp_MappingToDelete
+	---------------------------------------------------
+	--
+	If @previewSql <> 0
+	Begin
+		SELECT *, 'To be deleted' AS Comment
+		FROM #Tmp_MappingToDelete
+		ORDER BY Server_ID, PDB_ID, Job
+	End
+	Else
+	Begin
+		DELETE Target
+		FROM T_Analysis_Job_to_Peptide_DB_Map Target
+		     INNER JOIN #Tmp_MappingToDelete Mapping
+		       ON Target.Job = Mapping.Job AND
+		          Target.Peptide_DB_ID = Mapping.PDB_ID AND
+		          Target.Server_ID = Mapping.Server_ID
+		--
+		SELECT @myError = @@error, @myRowCount = @@rowcount	
+
+		If @myRowCount > 0
+		Begin
+			Set @message = 'Deleted ' + Cast(@myRowCount as varchar(9)) + ' old entries from T_Analysis_Job_to_Peptide_DB_Map since the jobs and DBs are now on a new server'
 		
+			Exec PostLogEntry 'Warning', @message, 'UpdateAnalysisJobToPeptideDBMap'
+			Set @message = ''
+		End
+		
+	End
+
 Done:
 	-----------------------------------------------------------
 	-- Exit
