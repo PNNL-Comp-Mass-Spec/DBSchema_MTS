@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Procedure UpdatePeptideSICStats
 /****************************************************
 **
@@ -28,6 +27,7 @@ CREATE Procedure UpdatePeptideSICStats
 **			10/29/2008 mem - Formatting changes
 **			05/21/2009 mem - Reworked the T_Peptides Update Query to use @SICJob and not join in T_Analysis_Description or T_Datasets
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			04/25/2017 mem - Add support for PRM datasets, which only have MS2 results and thus T_Dataset_Stats_SIC is empty
 **    
 *****************************************************/
 (
@@ -298,7 +298,7 @@ As
 				SELECT @myError = @@error, @myRowCount = @@rowcount
 				
 				-- Make a log entry if the number of updated rows doesn't match @RowCountDefined
-				If @RowCountUpdated < @RowCountDefined
+				If @RowCountUpdated > 0 And @RowCountUpdated < @RowCountDefined
 				Begin
 					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
 					execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
@@ -308,11 +308,21 @@ As
 				Begin
 					If @RowCountUpdated = 0
 					Begin
-						-- Make a log entry if @RowCountUpdated = 0
-						Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; 0 rows were updated'
+						Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; 0 rows were updated. Will populate the Scan_Time_Peak_Apex column using T_Dataset_Stats_Scans'
 						execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
 						Set @message = ''
-						Set @AdvanceStateForJob = 0
+						
+						UPDATE T_Peptides
+						SET Scan_Time_Peak_Apex = DSS.Scan_Time
+						FROM T_Peptides Pep
+						     INNER JOIN T_Dataset_Stats_Scans DSS
+						       ON Pep.Scan_Number = DSS.Scan_Number
+						WHERE Pep.Job = @Job AND
+						      DSS.Job = @SICJob AND
+						      Pep.Scan_Time_Peak_Apex IS NULL
+						--
+						SELECT @myError = @@error, @myRowCount = @@rowcount
+
 					End
 				End
 				
@@ -348,6 +358,7 @@ As
 
 Done:
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdatePeptideSICStats] TO [MTS_DB_Dev] AS [dbo]
