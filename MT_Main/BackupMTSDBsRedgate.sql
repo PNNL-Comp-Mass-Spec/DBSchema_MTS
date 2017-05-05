@@ -3,6 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 CREATE PROCEDURE dbo.BackupMTSDBsRedgate
 /****************************************************
 **
@@ -37,12 +38,14 @@ CREATE PROCEDURE dbo.BackupMTSDBsRedgate
 **			04/20/2017 mem - Add column Backup_Folder to T_Database_Backups
 **			               - Remove parameter @UpdateLastBackup
 **			04/21/2017 mem - Change default for @BackupBatchSize from 32 to 4
+**			05/04/2017 mem - Look for existing settings to clone when targeting a new backup location not tracked by T_Database_Backups
+**			               - Require that @BackupFolderRoot start with \\ if non-empty
 **    
 *****************************************************/
 (
 	@BackupFolderRoot varchar(128) = '',			-- If blank, then looks up the value in T_Folder_Paths
 	@DBNameMatchList varchar(2048) = 'MT[_]%',		-- Comma-separated list of databases on this server to include; can include wildcard symbols since used with a LIKE clause.  Leave blank to ignore this parameter
-	@BackupMode tinyint = 0,						-- Set to 0 for a full backup, 1 for a transaction log backup, 2 to auto-choose full or transaction log based on @FullBackupIntervalDays and entries in T_Database_Backups
+	@BackupMode tinyint = 2,						-- Set to 0 for a full backup, 1 for a transaction log backup, 2 to auto-choose full or transaction log based on @FullBackupIntervalDays and entries in T_Database_Backups
 	@FullBackupIntervalDays float = 7,				-- Default days between full backups.  Backup intervals in T_Database_Backups will override this value
 	@IncludeMTSInterfaceAndControlDBs tinyint = 0,	-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
 	@IncludeSystemDBs tinyint = 0,					-- Set to 1 to include master, model and MSDB databases; these always get full DB backups since transaction log backups are not allowed
@@ -76,7 +79,7 @@ As
 	Set @BackupFolderRoot = IsNull(@BackupFolderRoot, '')
 	Set @DBNameMatchList = LTrim(RTrim(IsNull(@DBNameMatchList, '')))
 
-	Set @BackupMode = IsNull(@BackupMode, 0)
+	Set @BackupMode = IsNull(@BackupMode, 2)
 	Set @FullBackupIntervalDays = IsNull(@FullBackupIntervalDays, 7)
 
 	Set @IncludeMTSInterfaceAndControlDBs = IsNull(@IncludeMTSInterfaceAndControlDBs, 0)
@@ -177,11 +180,21 @@ As
 		FROM T_Folder_Paths
 		WHERE ([Function] = 'Database Backup Path')
 	End
-	
+	Else
+	Begin
+		If Not @BackupFolderRoot Like '\\%'
+		Begin
+			Set @myError = 50001
+			Set @message = '@BackupFolderRoot must be a network share path starting with two back slashes, not ' + @BackupFolderRoot
+			exec PostLogEntry 'Error', @message, @procedureName
+			Goto Done
+		End
+	End
+
 	Set @BackupFolderRoot = LTrim(RTrim(@BackupFolderRoot))
 	If Len(@BackupFolderRoot) = 0
 	Begin
-		Set @myError = 50000
+		Set @myError = 50002
 		Set @message = 'Backup path not defined via @BackupFolderRoot parameter, and could not be found in table T_Folder_Paths'
 		exec PostLogEntry 'Error', @message, @procedureName
 		Goto Done
@@ -373,8 +386,12 @@ As
 	--
 	UPDATE T_Database_Backups
 	SET Backup_Folder = @BackupFolderRoot
-	WHERE [Name] IN (SELECT DatabaseName FROM #Tmp_DB_Backup_List) AND
-	      Backup_Folder = ''
+	WHERE Backup_Folder = '' AND
+	      [Name] IN ( SELECT DatabaseName
+	                  FROM #Tmp_DB_Backup_List ) AND
+	      NOT [Name] IN ( SELECT [Name]
+	                      FROM T_Database_Backups
+	                      WHERE Backup_Folder = @BackupFolderRoot )
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	
@@ -433,7 +450,72 @@ As
 		-- @BackupMode = 2
 		-- Auto-switch databases to full backups if @FullBackupIntervalDays has elapsed
 		---------------------------------------
+		--		
+		-- Find databases in #Tmp_DB_Backup_List that do not have an entry in T_DatabaseBackups for @BackupFolderRoot
+		-- but do have an entry for another backup folder
 		--
+		CREATE TABLE #Tmp_DBs_to_Migrate (
+			DatabaseName varchar(255) NOT NULL,
+			Backup_Interval_Days float NULL,
+			Last_Full_Backup DateTime NULL
+		)
+		
+		INSERT INTO #Tmp_DBs_to_Migrate( DatabaseName,
+		                                 Backup_Interval_Days,
+		                                 Last_Full_Backup )
+		SELECT [Name],
+		       Min(Full_Backup_Interval_Days),
+		       Max(Last_Full_Backup)
+		FROM T_Database_Backups
+		WHERE [Name] IN ( SELECT DBL.DatabaseName
+		                  FROM #Tmp_DB_Backup_List DBL
+		                       LEFT OUTER JOIN T_Database_Backups Backups
+		                         ON DBL.DatabaseName = Backups.[Name] AND
+		                            Backups.Backup_Folder = @BackupFolderRoot
+		                  WHERE Backups.[Name] IS NULL )
+		GROUP BY [Name]
+		--
+		SELECT @myRowCount = @@rowcount, @myError = @@error
+
+		If @myRowCount > 0
+		Begin
+			-- Migrate settings from the old backup location to the new backup location
+			
+			-- Update existing rows
+			--
+			UPDATE T_Database_Backups
+			SET Full_Backup_Interval_Days = Source.Backup_Interval_Days,
+			    Last_Full_Backup = Source.Last_Full_Backup
+			FROM T_Database_Backups Target
+			     INNER JOIN #Tmp_DBs_to_Migrate Source
+			       ON Target.[Name] = Source.DatabaseName
+			WHERE Target.Backup_Folder = @BackupFolderRoot
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+
+			-- Add missing rows
+			--
+			INSERT INTO T_Database_Backups ([Name], Backup_Folder, Full_Backup_Interval_Days, Last_Full_Backup)
+			SELECT DatabaseName, @BackupFolderRoot, Backup_Interval_Days, Last_Full_Backup
+			FROM #Tmp_DBs_to_Migrate
+			WHERE Not DatabaseName In (SELECT [Name] FROM T_Database_Backups WHERE Backup_Folder = @BackupFolderRoot)
+			--
+			SELECT @myRowCount = @@rowcount, @myError = @@error
+
+			-- Post a log message
+			--
+			Set @message = 'Migrated backup settings for the following DBs from an old backup location to ' + @BackupFolderRoot + ': '
+			
+			SELECT @message = @message + DatabaseName + ', '
+			FROM #Tmp_DBs_to_Migrate
+			ORDER BY DatabaseName
+
+			If @message Like '%,'
+				Set @message = Left(@message, Len(@message)-1)
+				
+			exec PostLogEntry 'Normal', @message, @procedureName
+		End
+		      
 		-- Find databases that have had recent full backups
 		-- Note that field Full_Backup_Interval_Days in T_Database_Backups takes precedence over @FullBackupIntervalDays
 		--
@@ -461,6 +543,7 @@ As
 			FROM #Tmp_DBs_with_Recent_Full_Backups
 		End
 
+		                            
 		-- Find databases in #Tmp_DB_Backup_List that are not in #Tmp_DBs_with_Recent_Full_Backups
 		--
 		UPDATE #Tmp_DB_Backup_List
@@ -483,13 +566,20 @@ As
 		---------------------------------------
 		-- Add missing databases to T_Database_Backups
 		---------------------------------------
-	
-		INSERT INTO T_Database_Backups ([Name], Backup_Folder)
-		SELECT DISTINCT DatabaseName, @BackupFolderRoot
-		FROM #Tmp_DB_Backup_List
-		WHERE Not DatabaseName IN (SELECT [Name] 
-		                           FROM T_Database_Backups 
-		                           WHERE Backup_Folder = @BackupFolderRoot)
+		--
+		INSERT INTO T_Database_Backups ([Name], Backup_Folder, Full_Backup_Interval_Days)
+		SELECT DISTINCT Target.DatabaseName,
+		                @BackupFolderRoot,
+		                IsNull(LookupQ.Full_Backup_Interval_Days, @FullBackupIntervalDays)
+		FROM #Tmp_DB_Backup_List Target
+		     LEFT OUTER JOIN ( SELECT [Name],
+		                              Min(Full_Backup_Interval_Days) AS Full_Backup_Interval_Days
+		                       FROM T_Database_Backups
+		                       GROUP BY [Name] ) LookupQ
+		       ON Target.DatabaseName = LookupQ.[Name]
+		WHERE NOT Target.DatabaseName IN ( SELECT [Name]
+		                                   FROM T_Database_Backups
+		                                   WHERE Backup_Folder = @BackupFolderRoot )
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -518,6 +608,7 @@ As
 	--
 	Set @FullDBBackupMatchMode = 1
 	Set @continue = 1
+	
 	While @continue <> 0
 	Begin -- <a>
 		-- Clear #Tmp_Current_Batch
@@ -767,36 +858,65 @@ As
 		End -- </b>
 	End -- </a>
 
+	If @FailedBackupCount = 0
+	Begin
+		---------------------------------------
+		-- Could use xp_delete_file to delete old full and/or transaction log files
+		-- However, online posts point out that this is an undocumented system procedure 
+		-- and that we should instead use Powershell
+		--
+		-- See https://github.com/PNNL-Comp-Mass-Spec/DBSchema_DMS/blob/master/Powershell/DeleteOldBackups.ps1
+		-- That script is run via a SQL Server agent job
+		--
+		---------------------------------------
+		
+		Print 'Run Powershell script DeleteOldBackups.ps1 via a SQL Server Agent job to delete old backups'
+	End
+
 	If @DBBackupFullCount + @DBBackupTransCount = 0
 		Set @Message = 'Warning: no databases were found matching the given specifications'
 	Else
 	Begin
 		Set @Message = 'DB Backup Complete ('
 		if @DBBackupFullCount > 0
-			Set @Message = @Message + 'FullBU=' + Convert(varchar(9), @DBBackupFullCount) 
+			Set @Message = @Message + 'FullBU=' + Cast(@DBBackupFullCount as varchar(9))
+			
 		if @DBBackupTransCount > 0
 		Begin
 			If Right(@Message,1) <> '('
 				Set @Message = @Message + '; '
-			Set @Message = @Message + 'LogBU=' + Convert(varchar(9), @DBBackupTransCount) 
+			Set @Message = @Message + 'LogBU=' + Cast(@DBBackupTransCount as varchar(9))
 		End
 
 		Set @Message = @Message + '): ' + @DBsProcessed
+		
+		If @FailedBackupCount > 0
+		Begin
+			Set @Message = @Message + '; FailureCount=' + Cast(@FailedBackupCount as varchar(9))
+		End
 	End
 	
 	---------------------------------------
 	-- Post a Log entry if @DBBackupFullCount + @DBBackupTransCount > 0 and @InfoOnly = 0
 	---------------------------------------
+	--
 	If @InfoOnly = 0
 	Begin
 		If @DBBackupFullCount + @DBBackupTransCount > 0
-			exec PostLogEntry 'Normal', @message, @procedureName
+		Begin
+			If @FailedBackupCount > 0
+				exec PostLogEntry 'Error',  @message, @procedureName
+			Else
+				exec PostLogEntry 'Normal', @message, @procedureName
+		End
 	End
 	Else
+	Begin
 		SELECT @Message As TheMessage
+	End
 
 Done:
-	
+
 	Return @myError
 
 
