@@ -24,6 +24,7 @@ CREATE Procedure dbo.LoadMASICSICStatsBulk
 **			06/04/2006 mem - Added parameter @SICStatsLineCountToSkip, which is used to skip the header line, if present in the input file
 **						   - Increased size of the @c variable (used for Bulk Insert)
 **			03/25/2013 mem - No longer storing the last 9 columns from MASIC SICResults files
+**			05/04/2017 mem - Add support for SICStats having 26 columns (InterferenceScore)
 **    
 *****************************************************/
 (
@@ -114,9 +115,9 @@ As
 		End
 		Else
 		Begin
-			If @SICStatsColumnCount <> 15 and @SICStatsColumnCount <> 25
+			If Not @SICStatsColumnCount In (15, 25, 26)
 			Begin
-				Set @message = 'SIC Stats file contains ' + convert(varchar(11), @SICStatsColumnCount) + ' columns (Expecting 15 or 25 columns)'
+				Set @message = 'SIC Stats file contains ' + convert(varchar(11), @SICStatsColumnCount) + ' columns (Expecting 15, 25, or 26 columns)'
 				set @myError = 50003
 			End
 		End
@@ -126,7 +127,7 @@ As
 	--
 	if @myError <> 0 goto done
 
-	If @SICStatsColumnCount = 25
+	If @SICStatsColumnCount >= 25
 	Begin
 		-- Add the additional columns now so they 
 		--  will be populated during the Bulk Insert operation
@@ -143,6 +144,13 @@ As
 			Peak_Skew real NULL,
 			Peak_KSStat real NULL,
 			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
+	End
+
+	If @SICStatsColumnCount = 26
+	Begin
+		-- Add the interference column
+		ALTER TABLE #T_SICStats_Import ADD
+			Interference_Score real NULL
 	End
 		
 	-----------------------------------------------
@@ -161,7 +169,7 @@ As
 		goto Done
 	end
 
-	If @SICStatsColumnCount <> 25
+	If @SICStatsColumnCount < 25
 	Begin
 		-- Need to add the additional columns to #T_SICStats_Import now
 		--  prior to appending the data to T_Dataset_Stats_SIC
@@ -180,6 +188,12 @@ As
 			StatMoments_DataCount_Used int NULL			-- Stored in T_Dataset_Stats_SIC as a SmallInt; max value is 32767
 	End
 
+	If @SICStatsColumnCount < 26
+	Begin
+		-- Add the interference column
+		ALTER TABLE #T_SICStats_Import ADD
+			Interference_Score real NULL
+	End
 
 	-----------------------------------------------
 	-- Delete any existing results for @Job in T_Dataset_Stats_SIC
@@ -209,12 +223,12 @@ As
 	Set @Sql = @Sql +   ' (Job,Parent_Ion_Index,MZ,Survey_Scan_Number,Frag_Scan_Number,'
 	Set @Sql = @Sql +   ' Optimal_Peak_Apex_Scan_Number,Peak_Apex_Override_Parent_Ion_Index,Custom_SIC_Peak,'
 	Set @Sql = @Sql +   ' Peak_Scan_Start,Peak_Scan_End,Peak_Scan_Max_Intensity,Peak_Intensity,Peak_SN_Ratio,'
-	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity)'
+	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity, Interference_Score)'
 	Set @Sql = @Sql + ' SELECT '
 	Set @Sql = @Sql +   Convert(varchar(19), @Job) + ',Parent_Ion_Index,MZ,Survey_Scan_Number,Frag_Scan_Number,'
 	Set @Sql = @Sql +   ' Optimal_Peak_Apex_Scan_Number,Peak_Apex_Override_Parent_Ion_Index,Custom_SIC_Peak,'
 	Set @Sql = @Sql +   ' Peak_Scan_Start,Peak_Scan_End,Peak_Scan_Max_Intensity,Peak_Intensity,Peak_SN_Ratio,'
-	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity'
+	Set @Sql = @Sql +   ' FWHM_In_Scans,Peak_Area,Parent_Ion_Intensity, Interference_Score'
 	Set @Sql = @Sql + ' FROM #T_SICStats_Import'
 	Set @Sql = @Sql + ' ORDER BY Parent_Ion_Index'
 	--

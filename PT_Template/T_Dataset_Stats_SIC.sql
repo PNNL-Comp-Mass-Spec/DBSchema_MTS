@@ -20,6 +20,7 @@ CREATE TABLE [dbo].[T_Dataset_Stats_SIC](
 	[FWHM_In_Scans] [int] NULL,
 	[Peak_Area] [float] NULL,
 	[Parent_Ion_Intensity] [real] NULL,
+	[Interference_Score] [real] NULL,
  CONSTRAINT [PK_T_Dataset_Stats_SIC] PRIMARY KEY CLUSTERED 
 (
 	[Job] ASC,
