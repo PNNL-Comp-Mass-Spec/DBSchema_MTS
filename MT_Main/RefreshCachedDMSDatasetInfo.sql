@@ -23,6 +23,7 @@ CREATE PROCEDURE RefreshCachedDMSDatasetInfo
 **			06/21/2013 mem - Changed default value of @SourceMTSServer to be blank
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
 **			07/13/2015 mem - Remove [Compressed State] and [Compressed Date]
+**			05/10/2017 mem - Treat error 1205 as a warning (Transaction was deadlocked ... and has been chosen as the deadlock victim)
 **
 *****************************************************/
 (
@@ -165,7 +166,7 @@ AS
 		Set @S = @S +                     ' Target.Rating <> source.Rating OR '
 		Set @S = @S +                     ' IsNull(Target.Rating, '''') <> IsNull(source.Rating, '''') OR '
 		Set @S = @S +                     ' IsNull(Target.Request, -1) <> IsNull(source.Request, -1) OR '
-		Set @S = @S +                     ' Target.State <> source.State OR '
+		Set @S = @S +                ' Target.State <> source.State OR '
 		Set @S = @S +                     ' Target.Created <> source.Created OR '
 		Set @S = @S +                     ' IsNull(Target.[Folder Name], '''') <> IsNull(source.[Folder Name], '''') OR '
 		Set @S = @S +                     ' IsNull(Target.[Dataset Folder Path], '''') <> IsNull(source.[Dataset Folder Path], '''') OR '
@@ -217,7 +218,7 @@ AS
 		Set @S = @S +         ' [Acquisition Start], [Acquisition End], [Scan Count], [File Size MB],'
 		Set @S = @S +         ' [PreDigest Int Std], [PostDigest Int Std], Instrument_Data_Purged, Last_Affected)'
 		Set @S = @S + '	VALUES ( source.Dataset, source.Experiment, source.Organism, source.Instrument,'
-		Set @S = @S +       ' source.[Separation Type], source.[LC Column], source.[Wellplate Number],'
+		Set @S = @S +    ' source.[Separation Type], source.[LC Column], source.[Wellplate Number],'
 		Set @S = @S +          ' source.[Well Number], source.[Dataset Int Std], source.Type, source.Operator, source.Comment,'
 		Set @S = @S +          ' source.Rating, source.Request, source.State, source.Created, source.[Folder Name],'
 		Set @S = @S +          ' source.[Dataset Folder Path], source.[Storage Folder], source.Storage,'
@@ -256,13 +257,14 @@ AS
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'RefreshCachedDMSDatasetInfo')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList=53,
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, @LogWarningErrorList='53,1205',
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done		
 	End Catch
 			
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSDatasetInfo] TO [MTS_DB_Dev] AS [dbo]
