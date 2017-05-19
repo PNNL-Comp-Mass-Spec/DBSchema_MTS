@@ -28,6 +28,7 @@ CREATE Procedure UpdatePeptideSICStats
 **			05/21/2009 mem - Reworked the T_Peptides Update Query to use @SICJob and not join in T_Analysis_Description or T_Datasets
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			04/25/2017 mem - Add support for PRM datasets, which only have MS2 results and thus T_Dataset_Stats_SIC is empty
+**			05/10/2017 mem - If just one scan in T_Peptides does not have a match in T_Dataset_Stats_SIC, and it is scan 1, log a warning instead of an error
 **    
 *****************************************************/
 (
@@ -175,7 +176,7 @@ As
 		If @jobAvailable = 1
 		Begin -- <b2>
 			
-			Set @JobStr = convert(varchar(18), @job)
+			Set @JobStr = Cast(@job as varchar(18))
 			
 			If @numJobsProcessed = 0
 			Begin
@@ -300,9 +301,18 @@ As
 				-- Make a log entry if the number of updated rows doesn't match @RowCountDefined
 				If @RowCountUpdated > 0 And @RowCountUpdated < @RowCountDefined
 				Begin
-					Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; only ' + Convert(varchar(11), @RowCountUpdated) + ' rows were updated while ' + Convert(varchar(11), @RowCountDefined) + ' rows exist'
-					execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
-					Set @message = ''
+					If @RowCountDefined - @RowCountUpdated = 1 And Exists (SELECT * FROM T_Peptides WHERE Job = @job AND Scan_Number = 1 AND Peak_Area IS NULL)
+					Begin
+						Set @message = 'Update SIC stats for job ' + @JobStr + ' succeeded for all scans except the first scan (' + Cast(@RowCountUpdated as varchar(11)) + ' rows updated); likely all scans are MS2'
+						execute PostLogEntry 'Warning', @message, 'UpdatePeptideSICStats'
+						Set @message = ''
+					End
+					Else
+					Begin
+						Set @message = 'Update SIC stats in T_Peptides failed for job ' + @JobStr + '; only ' + Cast(@RowCountUpdated as varchar(11)) + ' rows were updated while ' + Cast(@RowCountDefined as varchar(11)) + ' rows exist'
+						execute PostLogEntry 'Error', @message, 'UpdatePeptideSICStats'
+						Set @message = ''
+					End					
 				End
 				Else
 				Begin
