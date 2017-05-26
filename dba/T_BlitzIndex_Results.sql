@@ -1,0 +1,73 @@
+/****** Object:  Table [dbo].[T_BlitzIndex_Results] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[T_BlitzIndex_Results](
+	[id] [int] IDENTITY(1,1) NOT NULL,
+	[run_id] [uniqueidentifier] NULL,
+	[run_datetime] [datetime] NULL,
+	[server_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[database_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[schema_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[table_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[index_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[index_id] [int] NULL,
+	[db_schema_object_indexid] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[object_type] [nvarchar](15) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[index_definition] [nvarchar](4000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[key_column_names_with_sort_order] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[count_key_columns] [int] NULL,
+	[include_column_names] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[count_included_columns] [int] NULL,
+	[secret_columns] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[count_secret_columns] [int] NULL,
+	[partition_key_column_name] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[filter_definition] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[is_indexed_view] [bit] NULL,
+	[is_primary_key] [bit] NULL,
+	[is_XML] [bit] NULL,
+	[is_spatial] [bit] NULL,
+	[is_NC_columnstore] [bit] NULL,
+	[is_CX_columnstore] [bit] NULL,
+	[is_disabled] [bit] NULL,
+	[is_hypothetical] [bit] NULL,
+	[is_padded] [bit] NULL,
+	[fill_factor] [int] NULL,
+	[is_referenced_by_foreign_key] [bit] NULL,
+	[last_user_seek] [datetime] NULL,
+	[last_user_scan] [datetime] NULL,
+	[last_user_lookup] [datetime] NULL,
+	[last_user_update] [datetime] NULL,
+	[total_reads] [bigint] NULL,
+	[user_updates] [bigint] NULL,
+	[reads_per_write] [money] NULL,
+	[index_usage_summary] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[partition_count] [int] NULL,
+	[total_rows] [bigint] NULL,
+	[total_reserved_MB] [numeric](29, 2) NULL,
+	[total_reserved_LOB_MB] [numeric](29, 2) NULL,
+	[total_reserved_row_overflow_MB] [numeric](29, 2) NULL,
+	[index_size_summary] [nvarchar](300) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[total_row_lock_count] [bigint] NULL,
+	[total_row_lock_wait_count] [bigint] NULL,
+	[total_row_lock_wait_in_ms] [bigint] NULL,
+	[avg_row_lock_wait_in_ms] [bigint] NULL,
+	[total_page_lock_count] [bigint] NULL,
+	[total_page_lock_wait_count] [bigint] NULL,
+	[total_page_lock_wait_in_ms] [bigint] NULL,
+	[avg_page_lock_wait_in_ms] [bigint] NULL,
+	[total_index_lock_promotion_attempt_count] [bigint] NULL,
+	[total_index_lock_promotion_count] [bigint] NULL,
+	[data_compression_desc] [varchar](8000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[create_date] [datetime] NULL,
+	[modify_date] [datetime] NULL,
+	[more_info] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[display_order] [int] NULL,
+ CONSTRAINT [PK_ID_6B79E91E-9032-4383-9412-5E19D7C795EC] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
