@@ -96,6 +96,7 @@ AS
 **	06/24/2013		Michael Rounds								Fixed bug preventing report from running when a Single user DB was had an active connection
 **	07/09/2013		Michael Rounds								Added Orphaned Users section
 **	07/23/2013		Michael Rounds			2.5					Tweaked to support Case-sensitive
+**	05/30/2017      Matthew Monroe          2.5.2               Delete LongRunning-History jobs from #JOBSTATUS if they started over 30 days ago
 ***************************************************************************************************************/
 BEGIN
 	SET NOCOUNT ON 
@@ -989,6 +990,12 @@ BEGIN
 	ORDER BY t.name
 
 	DROP TABLE #TEMPJOB
+
+	/* Delete LongRunning-History jobs from #JOBSTATUS if they started over 30 days ago */
+	
+	DELETE FROM #JOBSTATUS
+	WHERE RunTimeStatus = 'LongRunning-History' AND 
+	      StartTime < DateAdd(Day, -30, GetDate())
 
 	/* Replication Distributor */
 	CREATE TABLE #REPLINFO (
