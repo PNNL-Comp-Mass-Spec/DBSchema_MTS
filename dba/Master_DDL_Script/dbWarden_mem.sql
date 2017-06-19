@@ -3393,6 +3393,8 @@ AS
 **	07/09/2013		Michael Rounds								Added Orphaned Users section
 **	07/23/2013		Michael Rounds			2.5					Tweaked to support Case-sensitive
 **	04/15/2016		Matthew Monroe			2.5.1				Add check for @MaxDeadLockRows = 0
+**	05/30/2017      Matthew Monroe          2.5.2               Delete LongRunning-History jobs from #JOBSTATUS if they started over 30 days ago
+**	                                                            Use the values for @MaxDeadLockRows, @MaxErrorLogRows, and @MinLogFileSizeMB only if Enabled is 1
 **
 ***************************************************************************************************************/
 BEGIN
@@ -3468,9 +3470,9 @@ BEGIN
 	SELECT @ShowPerfStats =            COALESCE([Enabled],1) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowPerfStats'
 	SELECT @ShowEmptySections =        COALESCE([Enabled],1) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowEmptySections'
 	SELECT @ShowLogBackups =           COALESCE([Enabled],1) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowLogBackups'
-	SELECT @MaxDeadLockRows =            Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxDeadlockRows'
-	SELECT @MaxErrorLogRows =            Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxErrorLogRows'
-	SELECT @MinLogFileSizeMB =            Cast(Value as int) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MinLogFileSizeMB'
+	SELECT @MaxDeadLockRows =          Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxDeadlockRows' AND IsNull(Enabled, 0) > 0
+	SELECT @MaxErrorLogRows =          Cast(Value as int)  FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MaxErrorLogRows' AND IsNull(Enabled, 0) > 0
+	SELECT @MinLogFileSizeMB =         Cast(Value as int) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'MinLogFileSizeMB' AND IsNull(Enabled, 0) > 0
 	SELECT @ShowErrorLog =             COALESCE([Enabled],1) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowErrorLog'
 	SELECT @ShowOrphanedUsers =        COALESCE([Enabled],1) FROM [dba].dbo.AlertSettings WHERE AlertName = 'HealthReport' AND VariableName = 'ShowOrphanedUsers'	
 	SELECT @ReportTitle = '[dba]Database Health Report ('+ CONVERT(NVARCHAR(128), SERVERPROPERTY('ServerName')) + ')'
@@ -4287,6 +4289,12 @@ BEGIN
 	ORDER BY t.name
 
 	DROP TABLE #TEMPJOB
+
+	/* Delete LongRunning-History jobs from #JOBSTATUS if they started over 30 days ago */
+	
+	DELETE FROM #JOBSTATUS
+	WHERE RunTimeStatus = 'LongRunning-History' AND 
+	      StartTime < DateAdd(Day, -30, GetDate())
 
 	/* Replication Distributor */
 	CREATE TABLE #REPLINFO (
@@ -5555,7 +5563,7 @@ BEGIN
 		END
 	END
 
-	IF EXISTS (SELECT * FROM #DEADLOCKINFO) AND @MaxDeadLockRows > 0
+	IF EXISTS (SELECT * FROM #DEADLOCKINFO) AND IsNull(@MaxDeadLockRows, 0) > 0
 	BEGIN
 		SELECT @HTML = @HTML +
 			'&nbsp;<div><table width="1250"> <tr><th class="header" width="1250">Deadlocks - Prior Day</th></tr></table></div><div>
