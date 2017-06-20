@@ -22,10 +22,11 @@ CREATE PROCEDURE ConfigureMassTagDB
 **			05/15/2007 mem - Expanded several input parameters to varchar(max)
 **			10/28/2011 mem - Added parameter @PeptideImportMSGFSpecProbFilter
 **			07/21/2015 mem - Switched to using ScrubWhitespace to remove whitespace (including space, tab, and carriage return)
+**			06/20/2017 mem - Expand @MTDBName to varchar(128)
 **    
 *****************************************************/
 (
-	@MTDBName varchar(64) = '',
+	@MTDBName varchar(128) = '',
 	@campaign varchar(1024) = '',					-- e.g. Deinococcus  (can be a comma separated list)
 	@peptideDBName varchar(1024) = '',				-- e.g. PT_Deinococcus_A55  (can be a comma separated list)
 	@proteinDBName varchar(1024) = '',				-- e.g. ORF_Deinococcus_V23 (can be a comma separated list)

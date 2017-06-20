@@ -46,6 +46,7 @@ CREATE Procedure UpdateAllActivePeptideDatabases
 **			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
 **			01/25/2011 mem - Decreased @JobMapUpdateHoldoff to 0.9 hours
 **			10/11/2013 mem - Switch to SCOPE_IDENTITY()
+**			06/20/2017 mem - Expand @PDB_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -61,7 +62,7 @@ As
 
 	declare @result int
 	
-	declare @PDB_Name varchar(64)
+	declare @PDB_Name varchar(128)
 	declare @PDB_State int
 	declare @PDB_ID int
 	

@@ -17,6 +17,7 @@ CREATE Procedure PreviewCurrentActivityForMTDBs
 **	Date:	03/10/2006
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
 **			10/21/2008 mem - Updated to check for and correct database ID conflicts
+**			06/20/2017 mem - Expand @MTL_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -30,7 +31,7 @@ As
 	set @myError = 0
 	set @myRowCount = 0
 
-	declare @MTL_Name varchar(64)
+	declare @MTL_Name varchar(128)
 	declare @MTL_State int
 	declare @MTL_ID int
 

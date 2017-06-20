@@ -7,18 +7,19 @@ GO
 CREATE Procedure QueryAllMassTagDatabasesForNTerminalPeptides
 /****************************************************
 ** 
-**		Desc: Runs a query against all mass tag databases with MTL_State <= 10,
+**	Desc: Runs a query against all mass tag databases with MTL_State <= 10,
 **		      storing the results in a table in this DB
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
-**		Parameters:
+**	Parameters:
 **
-**		Auth:	mem
-**		Date:	08/25/2005
-**			    11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
-**				03/20/2006 mem - Added parameters @DBFilterList and @PopulateLocalTable
-**				04/02/2009 mem - Updated query to obtain the peptide closest to the N-terminus of each protein
+**	Auth:	mem
+**	Date:	08/25/2005
+**			11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
+**			03/20/2006 mem - Added parameters @DBFilterList and @PopulateLocalTable
+**			04/02/2009 mem - Updated query to obtain the peptide closest to the N-terminus of each protein
+**			06/20/2017 mem - Expand @MTL_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -39,7 +40,7 @@ As
 
 	declare @result int
 
-	declare @MTL_Name varchar(64)
+	declare @MTL_Name varchar(128)
 	declare @MTL_ID int
 	set @MTL_ID = 0
 
@@ -225,7 +226,7 @@ As
 				Set @Sql = @Sql +       ' MTPM.Residue_Start,'
 				Set @Sql = @Sql +       ' MT.Mass_Tag_ID,'
 				Set @Sql = @Sql +       ' MT.Peptide,'
-				Set @Sql = @Sql +     ' MT.Monoisotopic_Mass,'
+				Set @Sql = @Sql +    ' MT.Monoisotopic_Mass,'
 				Set @Sql = @Sql +      ' MT.Peptide_Obs_Count_Passing_Filter,'
 				Set @Sql = @Sql +       ' MT.High_Normalized_Score,'
 				Set @Sql = @Sql +       ' MT.High_Peptide_Prophet_Probability,'

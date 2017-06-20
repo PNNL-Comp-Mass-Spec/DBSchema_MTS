@@ -17,10 +17,11 @@ CREATE PROCEDURE ConfigureOrganismDBFileFilters
 **	Auth:	mem
 **	Date:	07/27/2006
 **			12/01/2006 mem - Now using udfParseDelimitedIntegerList to parse @OrganismDBFileList
+**			06/20/2017 mem - Expand @DatabaseName to varchar(128)
 **    
 *****************************************************/
 (
-	@DatabaseName varchar(64) = '',
+	@DatabaseName varchar(128) = '',
 	@OrganismDBFileList varchar(1024) = '',				-- Optional, comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
 	@message varchar(512) = '' output
 )

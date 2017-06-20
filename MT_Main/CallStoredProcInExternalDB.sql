@@ -11,16 +11,19 @@ CREATE PROCEDURE dbo.CallStoredProcInExternalDB
 **      @StoredProcNameToCall in the database
 **      specified by 
 **
-**		Auth: grk
-**		Date: 7/16/2004
-**			  11/23/2005 mem - Added brackets around @ExternalDBName as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	07/16/2004 grk - Initial version
+**			11/23/2005 mem - Added brackets around @ExternalDBName as needed to allow for DBs with dashes in the name
+**			06/20/2017 mem - Expand @ExternalDBName to varchar(128)
 **
 *****************************************************/
-	@ExternalDBName varchar(64),	
+(
+	@ExternalDBName varchar(128),	
 	@StoredProcNameToCall varchar(128),
 	@CheckForExistenceOnly tinyint = 0, -- If 1, then only checks if SP exists; does not Execute it
 	@StoredProcFound int Output,
 	@message varchar(512)='' Output
+)
 AS
 	set nocount on
 
@@ -81,6 +84,7 @@ AS
 	--
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[CallStoredProcInExternalDB] TO [MTS_DB_Dev] AS [dbo]

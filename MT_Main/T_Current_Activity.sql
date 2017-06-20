@@ -32,9 +32,9 @@ CREATE CLUSTERED INDEX [IX_T_Current_Activity] ON [dbo].[T_Current_Activity]
 	[Database_Name] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
-ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Pause_Length_Minutes]  DEFAULT (0) FOR [Pause_Length_Minutes]
+ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Pause_Length_Minutes]  DEFAULT ((0)) FOR [Pause_Length_Minutes]
 GO
-ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Update_State]  DEFAULT (0) FOR [Update_State]
+ALTER TABLE [dbo].[T_Current_Activity] ADD  CONSTRAINT [DF_T_Current_Activity_Update_State]  DEFAULT ((0)) FOR [Update_State]
 GO
 ALTER TABLE [dbo].[T_Current_Activity]  WITH CHECK ADD  CONSTRAINT [FK_T_Current_Activity_T_Update_State_Name] FOREIGN KEY([Update_State])
 REFERENCES [dbo].[T_Update_State_Name] ([ID])

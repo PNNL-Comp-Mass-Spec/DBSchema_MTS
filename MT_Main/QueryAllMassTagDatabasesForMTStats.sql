@@ -13,10 +13,11 @@ CREATE Procedure dbo.QueryAllMassTagDatabasesForMTStats
 ** 
 **		Parameters:
 **
-**		Auth:	mem
-**		Date:	08/25/2005
-**			    11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
-**				03/20/2006 mem - Added parameters @DBFilterList and @PopulateLocalTable
+**	Auth:	mem
+**	Date:	08/25/2005
+**		    11/23/2005 mem - Added brackets around @MTL_Name as needed to allow for DBs with dashes in the name
+**			03/20/2006 mem - Added parameters @DBFilterList and @PopulateLocalTable
+**			06/20/2017 mem - Expand @MTL_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -37,7 +38,7 @@ As
 
 	declare @result int
 
-	declare @MTL_Name varchar(64)
+	declare @MTL_Name varchar(128)
 	declare @MTL_ID int
 	set @MTL_ID = 0
 

@@ -17,6 +17,7 @@ CREATE Procedure dbo.QueryAllPeptideDatabasesForDatasetStats
 **	Auth:	mem
 **	Date:	03/20/2006
 **			01/06/2012 mem - Updated to use T_Peptides.Job
+**			06/20/2017 mem - Expand @PDB_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -38,7 +39,7 @@ As
 
 	declare @result int
 
-	declare @PDB_Name varchar(64)
+	declare @PDB_Name varchar(128)
 	declare @PDB_ID int
 	set @PDB_ID = 0
 

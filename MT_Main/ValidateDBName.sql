@@ -14,10 +14,12 @@ CREATE Procedure dbo.ValidateDBName
 **
 **	Auth:	mem
 **	Date:	04/14/2014 mem - Initial verion
+**			06/20/2017 mem - Raise an error if @newDBNameRoot is 64 characters long
+**							 It's likely the name was over 64 characters long and got truncated prior to the call to this procedure
 **
 *****************************************************/
 (
-	@newDBName varchar(64),
+	@newDBNameRoot varchar(64),
 	@message varchar(255) = '' OUTPUT
 )
 AS
@@ -30,27 +32,34 @@ AS
 
 
 	---------------------------------------------------
-	-- Check for invalid characters in @newDBName
+	-- Check for invalid characters in @newDBNameRoot
 	---------------------------------------------------
 	
-	If Len(@newDBName) = 0
+	If Len(@newDBNameRoot) = 0
 	Begin
 		Set @message = 'Database name is blank'
 		Set @myError = 120
 		goto done
 	End
 
-	If @newDBName Like '% %'
+	If @newDBNameRoot Like '% %'
 	Begin
 		Set @message = 'Database name contains a space'
 		Set @myError = 121
 		goto done
 	End
 		
-	If CharIndex(Char(10), @newDBName) > 0 Or CharIndex(Char(13), @newDBName) > 0
+	If CharIndex(Char(10), @newDBNameRoot) > 0 Or CharIndex(Char(13), @newDBNameRoot) > 0
 	Begin
 		Set @message = 'Database name contains a carriage return'
 		Set @myError = 123
+		goto done
+	End
+	
+	If Len(@newDBNameRoot) > 63
+	Begin
+		Set @message = 'Base database name must be less than 64 characters (and ideally should be 40 characters or less)'
+		Set @myError = 125
 		goto done
 	End
 	

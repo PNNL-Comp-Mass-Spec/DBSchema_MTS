@@ -18,6 +18,7 @@ CREATE Procedure PreviewCurrentActivityForPeptideDBs
 **			03/14/2006 mem - Now using column Pause_Length_Minutes
 **			07/15/2006 mem - Updated list of database states to process to include state 7
 **			10/21/2008 mem - Updated to check for and correct database ID conflicts
+**			06/20/2017 mem - Expand @PDB_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -31,7 +32,7 @@ As
 	set @myError = 0
 	set @myRowCount = 0
 
-	declare @PDB_Name varchar(64)
+	declare @PDB_Name varchar(128)
 	declare @PDB_State int
 	declare @PDB_ID int
 

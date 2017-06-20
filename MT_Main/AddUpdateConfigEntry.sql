@@ -31,10 +31,11 @@ CREATE PROCEDURE AddUpdateConfigEntry
 **			12/15/2005 mem - Now preventing zero-length values from being added to #TmpValues
 **			05/15/2007 mem - Expanded @entryValueList to varchar(max)
 **			05/22/2007 mem - Now checking for (and collapsing) duplicate entries in @entryValueList; also added parameter @infoOnly
+**			06/20/2017 mem - Expand @dbName to varchar(128)
 **    
 *****************************************************/
 (
-	@dbName varchar(64),
+	@dbName varchar(128),
 	@entryName varchar(256),
 	@entryValueList varchar(max),
 	@valueDelimiter char(1) = ',',

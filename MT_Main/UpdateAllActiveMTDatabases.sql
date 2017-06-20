@@ -44,6 +44,7 @@ CREATE Procedure UpdateAllActiveMTDatabases
 **			11/14/2007 mem - Decreased @JobMapUpdateHoldoff to 4 hours since the execution speed of UpdateAnalysisJobToMTDBMap has been improved
 **			01/25/2011 mem - Decreased @JobMapUpdateHoldoff to 0.9 hours
 **			10/11/2013 mem - Switch to SCOPE_IDENTITY()
+**			06/20/2017 mem - Expand @MTL_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -61,7 +62,7 @@ As
 	declare @UpdateEnabled tinyint
 	declare @SkipUpdate tinyint
 	
-	declare @MTL_Name varchar(64)
+	declare @MTL_Name varchar(128)
 	declare @MTL_State int
 	declare @MTL_ID int
 	set @MTL_ID = 0
@@ -266,15 +267,19 @@ As
 						SELECT @myError = @@error, @myRowCount = @@rowcount
 		
 						If @MatchCount = 0
+						Begin
 							INSERT INTO T_Current_Activity (Database_ID, Database_Name, Type, Update_Began, Update_Completed, 
 															Pause_Length_Minutes, State, Update_State)
 							VALUES (@MTL_ID, @MTL_Name, 'MT', GetDate(), Null,
 									0, @MTL_State, 2)
+						End
 						Else
+						Begin
 							UPDATE T_Current_Activity
 							SET	Database_Name = @MTL_Name, Update_Began = GetDate(), Update_Completed = Null, 
 								Pause_Length_Minutes = 0, State = @MTL_State, Comment = '', Update_State = 2
 							WHERE Database_ID = @MTL_ID AND Database_Name = @MTL_Name
+						End
 						--
 						SELECT @myError = @@error, @myRowCount = @@rowcount
 						--
@@ -674,6 +679,7 @@ Done:
 	end
 
 	return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateAllActiveMTDatabases] TO [MTS_DB_Dev] AS [dbo]

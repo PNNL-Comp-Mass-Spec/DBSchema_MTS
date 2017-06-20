@@ -21,6 +21,7 @@ CREATE PROCEDURE dbo.GetErrorsFromActiveDBLogs
 **			11/23/2005 mem - Added brackets around @CurrentDB as needed to allow for DBs with dashes in the name
 **						   - Removed call to PrismDev.Master_Sequences
 **			03/20/2006 mem - Updated to use all databases with state < 10, plus any extra ones that might be in T_Current_Activity
+**			06/20/2017 mem - Expand posted_by to varchar(128)
 **    
 *****************************************************/
 (
@@ -61,7 +62,7 @@ As
 	---------------------------------------------------
 	CREATE TABLE #LE (
 		Entry_ID int,
-		posted_by varchar(64),
+		posted_by varchar(128),
 		posting_time datetime,
 		type varchar(32),
 		message varchar (512),

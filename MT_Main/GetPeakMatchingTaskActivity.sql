@@ -6,15 +6,15 @@ GO
 CREATE PROCEDURE dbo.GetPeakMatchingTaskActivity
 /****************************************************
 ** 
-**		Desc: 
-**		gets count of peak matching tasks in each state for each MTDB in list
+**	Desc: Gets count of peak matching tasks in each state for each MTDB in list
 **
-**		Return values: 0: success, otherwise, error code
+**	Return values: 0: success, otherwise, error code
 ** 
 ** 
-**		Auth: grk
-**		Date: 10/02/2003
-**			  11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**	Auth:	grk
+**	Date:	10/02/2003
+**			11/23/2005 mem - Added brackets around @CurrentMTDB as needed to allow for DBs with dashes in the name
+**			06/20/2017 mem - Expand [Mass Tag DB] to varchar(128)
 **    
 *****************************************************/
 AS
@@ -47,7 +47,7 @@ AS
 	-- temporary table to hold results
 	---------------------------------------------------
 	CREATE TABLE #XMTDBRel (
-		[Mass Tag DB] varchar(64),
+		[Mass Tag DB] varchar(128),
 		New int,                                    
 		Processing int,                                    
 		Success int,                                            

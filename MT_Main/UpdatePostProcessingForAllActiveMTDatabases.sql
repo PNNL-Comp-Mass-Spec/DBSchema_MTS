@@ -26,6 +26,7 @@ CREATE PROCEDURE UpdatePostProcessingForAllActiveMTDatabases
 **			03/13/2006 mem - Now calling VerifyUpdateEnabled
 **			08/03/2006 mem - Fixed bug when verifying that each database exists on the server
 **			11/03/2009 mem - Added parameter @DebugMode
+**			06/20/2017 mem - Expand @MTL_Name to varchar(128)
 **    
 *****************************************************/
 (
@@ -43,7 +44,7 @@ As
 	declare @result int
 	declare @UpdateEnabled tinyint
 
-	declare @MTL_Name varchar(64)
+	declare @MTL_Name varchar(128)
 	declare @MTL_State int
 	declare @MTL_tag varchar(24)
 	
