@@ -5,11 +5,11 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[T_Historic_Log_Entries](
 	[Entry_ID] [int] NOT NULL,
-	[posted_by] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[posted_by] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[posting_time] [smalldatetime] NOT NULL,
-	[type] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[type] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[message] [varchar](4096) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[DBName] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DBName] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Entered_By] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 ) ON [PRIMARY]
 
