@@ -40,6 +40,7 @@ CREATE PROCEDURE dbo.BackupMTSDBsRedgate
 **			04/21/2017 mem - Change default for @BackupBatchSize from 32 to 4
 **			05/04/2017 mem - Look for existing settings to clone when targeting a new backup location not tracked by T_Database_Backups
 **			               - Require that @BackupFolderRoot start with \\ if non-empty
+**			07/13/2017 mem - Prevent @periods from being appended to @DBsProcessed repeatedly
 **    
 *****************************************************/
 (
@@ -848,10 +849,15 @@ As
 					Set @DBsProcessed = @DBsProcessed + ', ' + @DBList
 				Else
 				Begin
-					If Len(@DBsProcessed) < @DBsProcessedMaxLength
+					If Len(@DBsProcessed) < @DBsProcessedMaxLength AND (@DBsProcessedMaxLength-3-Len(@DBsProcessed) > 2)
 						Set @DBsProcessed = @DBsProcessed + ', ' + Left(@DBList, @DBsProcessedMaxLength-3-Len(@DBsProcessed)) + @Periods
 					Else
-						Set @DBsProcessed = @DBsProcessed + ' ' + @Periods
+					Begin 
+						If @DBsProcessed LIKE '%..'
+							Set @DBsProcessed = @DBsProcessed + '.'
+						Else
+							Set @DBsProcessed = @DBsProcessed + ' ' + @Periods
+					End
 				End
 			End
 
