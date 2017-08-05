@@ -16,6 +16,10 @@ CREATE PROCEDURE dbo.CheckMTSDBs
 **
 **	Auth:	mem
 **	Date:	08/26/2006
+**			08/04/2017 mem - @ShrinkDB now supports 3 modes
+**							 @ShrinkDB=0 means do not shrink; this is the default
+**							 @ShrinkDB=1 will use DBCC SHRINKDATABASE ('DBName', TargetPercent, TRUNATEONLY); relatively fast operation, not moving any data
+**							 @ShrinkDB=2 will use DBCC SHRINKDATABASE ('DBName', TargetPercent);              slower operation since it consolidates data on disk
 **    
 *****************************************************/
 (
@@ -23,9 +27,9 @@ CREATE PROCEDURE dbo.CheckMTSDBs
 	@IncludeMTSInterfaceAndControlDBs tinyint = 0,	-- Set to 1 to include MTS_Master, MT_Main, MT_HistoricLog, and Prism_IFC, & Prism_RPT
 	@IncludeSystemDBs tinyint = 0,
 	@CheckDB tinyint = 1,							-- Set to 1 to call DBCC CHECKDB against each DB
-	@ShrinkDB tinyint = 1,							-- Set to 1 to call DBCC SHRINKDATABASE against each DB
+	@ShrinkDB tinyint = 0,							-- Set to 1 to call DBCC SHRINKDATABASE using TRUNCATEONLY (fast); Set to 2 to call DBCC SHRINKDATABASE without TRUNATEONLY (slower)
 	@CheckPhysicalOnly tinyint = 0,					-- Set to 1 to use the PHYSICAL_ONLY switch with DBCC, which performs a quick, less thorough check of each DB
-	@ShrinkTargetPercent tinyint = 10,				-- Target percentage for shrinking each database
+	@ShrinkTargetPercent tinyint = 20,				-- Target percentage for shrinking each database
 	@InfoOnly tinyint = 0,							-- Set to 1 to display the SQL that would be run
 	@message varchar(255) = '' OUTPUT
 )
@@ -226,8 +230,10 @@ As
 				Set @SqlCheck = ''
 
 			
-			If @ShrinkDB <> 0
+			If @ShrinkDB = 1
 				Set @SqlShrink = N'DBCC SHRINKDATABASE (''' + @DBName + ''', ' + Convert(nvarchar(9), @ShrinkTargetPercent) + ', TRUNCATEONLY)'
+			Else If @ShrinkDB = 2
+				Set @SqlShrink = N'DBCC SHRINKDATABASE (''' + @DBName + ''', ' + Convert(nvarchar(9), @ShrinkTargetPercent) + ')'
 			Else
 				Set @SqlShrink = ''
 			
