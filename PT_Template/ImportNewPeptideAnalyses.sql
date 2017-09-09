@@ -3,7 +3,6 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 CREATE Procedure dbo.ImportNewPeptideAnalyses
 /****************************************************
 **
@@ -64,6 +63,7 @@ CREATE Procedure dbo.ImportNewPeptideAnalyses
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **			04/18/2013 mem - Expanded [Organism_DB_Name] in #TmpNewAnalysisJobs to varchar(128)
 **			11/30/2016 mem - Store '_msgfdb_syn' in Result_File_Suffix when importing MSGF+ jobs created before job 1383444
+**			09/08/2017 mem - Change the job threshold for storing _msgfdb_syn to be 1383426
 **    
 *****************************************************/
 (
@@ -849,7 +849,7 @@ As
 		Set @S = @S + '  Vol_Client, Vol_Server, Storage_Path,' + @Lf
 		Set @S = @S + '  Dataset_Folder, Results_Folder, Settings_File_Name,' + @Lf
 		Set @S = @S + '  Completed, ResultType, ' + @lf
-		Set @S = @S + '  Case When ResultType = ''MSG_Peptide_Hit'' And Job < 1383444 Then ''_msgfdb_syn'' Else Null End, ' + @Lf
+		Set @S = @S + '  Case When ResultType = ''MSG_Peptide_Hit'' And Job < 1383426 Then ''_msgfdb_syn'' Else Null End, ' + @Lf
 		Set @S = @S + '  Enzyme_ID, Labelling, Separation_Sys_Type,' + @Lf
 		Set @S = @S + '  PreDigest_Internal_Std, PostDigest_Internal_Std, Dataset_Internal_Std,' + @Lf
 		Set @S = @S + '  GetDate() AS Created, Process_State, GetDate() AS Last_Affected' + @Lf
