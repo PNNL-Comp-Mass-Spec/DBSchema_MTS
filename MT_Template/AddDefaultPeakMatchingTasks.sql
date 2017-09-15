@@ -45,6 +45,7 @@ CREATE PROCEDURE dbo.AddDefaultPeakMatchingTasks
 **			03/21/2011 mem - Changed default score filters to Discriminant >= 0, Peptide Prophet >= 0, and PMT Quality Score >= 2
 **			07/13/2011 mem - Now stepping through T_Peak_Matching_Defaults twice; first to process entries where Instrument_Name does not have a percent sign, then processing those that do
 **			11/26/2013 mem - Now setting @MinimumPMTQualityScore to the most commonly used value in T_Peak_Matching_Defaults if the job does not match an entry in T_Peak_Matching_Defaults
+**			09/14/2017 mem - If a default ini file is not found, look for an entry with a Labelling_Filter of "none", ignoring the label associated with the analysis job
 **     
 *****************************************************/
 (
@@ -109,7 +110,7 @@ AS
 	Set @InfoOnly = IsNull(@InfoOnly, 0)
 		
 	---------------------------------------------------
-	-- temporary table to hold list of jobs to process
+	-- Temporary table to hold list of jobs to process
 	---------------------------------------------------
 	
 	CREATE TABLE #TmpJobsToProcess (
@@ -137,21 +138,6 @@ AS
 	
 	CREATE UNIQUE INDEX #IX_TmpJobToPMDefaultMap_EntryID ON #TmpJobToPMDefaultMap (EntryID)
 	
-	CREATE TABLE #XPMD (
-		EntryID int Identity(1,1),
-		Default_ID int,		
-		Dataset_Name_Filter varchar(255) NULL,
-		Labelling_Filter varchar(64) NULL
-	) 
-	--
-	SELECT @myError = @@error, @myRowCount = @@rowcount
-	--
-	If @myError <> 0
-	Begin
-		Set @message = 'Could not Create temporary table #XPMD'
-		goto Done
-	End
-	
 	If Len(@JobListFilter) > 0
 	Begin
 		---------------------------------------------------
@@ -178,7 +164,7 @@ AS
 	End
 
 	---------------------------------------------------
-	-- populate temporary table with list of FTICR
+	-- Populate temporary table with list of FTICR
 	-- analysis jobs that are not represented in task table
 	---------------------------------------------------
 
@@ -226,21 +212,31 @@ AS
 	---------------------------------------------------
 	-- Step through the entries in T_Peak_Matching_Defaults
 	-- For each, find the jobs in #TmpJobsToProcess that match the instrument name filter, 
-	--  dataset name filter, and labelling filter
-	-- If a filter contains a % sign, then a LIKE comparison is used; otherwise, an exact match is used
+	--  dataset name filter, and possibly the labelling filter
 	--
-	-- Note that we step through T_Peak_Matching_Defaults twice; the first time,
-	--  processing entries that do not have a % sign for Instrument_Name, then the second time
-	--  processing entries that do have a % sign
+	-- If a filter contains a % sign, a LIKE comparison will be used used
+	-- Otherwise, an exact match is used
+	--
+	-- Note that we step through T_Peak_Matching_Defaults four times
+	--  1. Process entries that do not have a % sign for Instrument_Name; use the labelling filter
+	--  2. Process entries that do have a % sign for Instrument Name;     use the labelling filter
+	--  3. Process entries that do not have a % sign for Instrument_Name; ignore the labelling filter
+	--  4. Process entries that do have a % sign for Instrument Name;     ignore the labelling filter
 	---------------------------------------------------
 	
+	Declare @jobCountTotal int
+	Declare @jobCountUpdated int = 0
+	
+	SELECT @jobCountTotal = COUNT(*)
+	FROM #TmpJobsToProcess
+	
 	set @Iteration = 1
-	While @Iteration <= 2
+	While @Iteration <= 4 And @jobCountUpdated < @jobCountTotal
 	Begin -- <a>
 		
 		Set @DefaultID = -1
 		Set @Continue = 1
-		While @Continue = 1
+		While @Continue = 1 And @jobCountUpdated < @jobCountTotal
 		Begin -- <b>
 			
 			SELECT TOP 1 @DefaultID = Default_ID,
@@ -249,8 +245,8 @@ AS
 						 @LabellingFilter = Labelling_Filter
 			FROM T_Peak_Matching_Defaults
 			WHERE Default_ID > @DefaultID AND 
-			      (@Iteration = 1 AND Instrument_Name NOT LIKE '%[%]%' OR
-			       @Iteration = 2 AND Instrument_Name     LIKE '%[%]%')
+			      (@Iteration IN (1,3) AND Instrument_Name NOT LIKE '%[%]%' OR
+			       @Iteration IN (2,4) AND Instrument_Name     LIKE '%[%]%')
 			ORDER BY Default_ID
 			--
 			SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -271,8 +267,7 @@ AS
 					Set @Comparison = '='
 					
 				Set @S = @S + ' InstrumentName ' + @Comparison + ' ''' + @InstrumentFilter + ''''
-				
-				
+								
 				If IsNull(@DatasetFilter, '') <> ''
 				Begin
 					If @DatasetFilter LIKE '%[%]%'
@@ -284,7 +279,7 @@ AS
 
 				End
 
-				If IsNull(@LabellingFilter, '') <> ''
+				If @Iteration IN (1,2) AND IsNull(@LabellingFilter, '') <> ''
 				Begin
 					If @LabellingFilter LIKE '%[%]%'
 						Set @Comparison = 'LIKE'
@@ -295,11 +290,30 @@ AS
 
 				End
 				
-				If @InfoOnly <> 0
-					Print @S
-				
-				Exec (@S)
+				If @Iteration IN (3,4) AND Not IsNull(@LabellingFilter, '') IN ('', 'none')
+				Begin
+					-- For iterations 3 and 4, skip peak matching defaults that do not have '' or 'none' for the labelling filter
+					If @InfoOnly <> 0
+						Print 'Skip Default_ID ' + Cast(@DefaultID as varchar(9)) + 
+						      ' with Labelling_Filter ' + @LabellingFilter + 
+						      ' since iteration ' + Cast(@iteration as varchar(4))
+				End
+				Else
+				Begin -- <d>
+					If @InfoOnly <> 0
+						Print @S
 
+					Exec (@S)
+					--
+					SELECT @myError = @@error, @myRowCount = @@rowcount
+					
+					If @myRowCount > 0
+					Begin
+						SELECT @jobCountUpdated = COUNT(Distinct Job)
+						FROM #TmpJobToPMDefaultMap
+					End
+				End -- </d>
+				
 			End -- </c>
 			
 		End -- </b>
@@ -323,11 +337,11 @@ AS
 	Set @EntryID = 0
 	Set @Continue = 1
 	While @continue = 1
-	Begin -- <c>
+	Begin -- <a2>
 		-- Get next entry from #TmpJobToPMDefaultMap
 		--
 		SELECT TOP 1 @EntryID = JobMap.EntryID,
-		             @DefaultID = JobMap.Default_ID,
+		 @DefaultID = JobMap.Default_ID,
 		             @job = JobMap.Job,
 		             @iniFileName = PMD.IniFile_Name,
 		             @confirmedOnly = PMD.Confirmed_Only,
@@ -352,7 +366,7 @@ AS
 			Set @continue = 0
 		End
 		Else
-		Begin -- <d>
+		Begin -- <b2>
 			
 			If Len(IsNull(@IniFileOverride, '')) > 0
 				Set @iniFileName = @IniFileOverride
@@ -372,14 +386,17 @@ AS
 				exec PostLogEntry 'Error', @message, 'AddDefaultPeakMatchingTasks'				
 			Else
 			Begin
-				If @JobListFilter <> '' OR @InfoOnly <> 0
+				If @JobListFilter <> '' And @InfoOnly = 0
 					Print 'Added job ' + Convert(varchar(19), @job) + ' using default ID ' + Convert(varchar(12), @DefaultID)
+
+				If @InfoOnly <> 0
+					Print 'Preview: add job ' + Convert(varchar(19), @job) + ' using default ID ' + Convert(varchar(12), @DefaultID)
 				--
 				Set @jobCountAdded = @jobCountAdded + 1
 			End
 			
-		End -- </d>
-	End -- </c>
+		End -- </b2>
+	End -- </a2>
    
 	---------------------------------------------------
 	-- Now process any jobs that didn't have any matching entries in T_Peak_Matching_Defaults
@@ -408,7 +425,7 @@ AS
 		Set @Continue = 0
 		
 	While @Continue = 1
-	Begin -- <e>
+	Begin -- <a3>
 		SELECT TOP 1 @job = J.Job,
 		             @Labelling = IsNull(FAD.Labelling, '')
 		FROM #TmpJobsToProcess J
@@ -426,7 +443,7 @@ AS
 			Set @continue = 0
 		End
 		Else
-		Begin -- <f>
+		Begin -- <b3>
 		
 			-- This did not match an entry in T_Peak_Matching_Defaults
 			-- Set @iniFileName to be @IniFileOverride or blank, and the other values to defaults
@@ -479,8 +496,8 @@ AS
 				--
 				Set @jobCountAdded = @jobCountAdded + 1
 			End
-		End -- </f>
-	End -- </e>
+		End -- </b3>
+	End -- </a3>
 			
 	---------------------------------------------------
 	-- Exit
