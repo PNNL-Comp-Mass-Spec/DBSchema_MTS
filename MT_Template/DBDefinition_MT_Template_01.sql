@@ -68,9 +68,6 @@ ALTER DATABASE [MT_Template_01] SET DB_CHAINING OFF
 GO
 USE [MT_Template_01]
 GO
-/****** Object:  User [D3J410] ******/
-CREATE USER [D3J410] FOR LOGIN [PNL\D3J410] WITH DEFAULT_SCHEMA=[D3J410]
-GO
 /****** Object:  User [msdadmin] ******/
 CREATE USER [msdadmin] FOR LOGIN [PNL\MSDADMIN] WITH DEFAULT_SCHEMA=[msdadmin]
 GO
