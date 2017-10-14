@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadPeptidesForOneAnalysis
+CREATE Procedure [dbo].[LoadPeptidesForOneAnalysis]
 /****************************************************
 **
 **	Desc: 
@@ -61,9 +61,10 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 **			03/25/2013 mem - Now setting @completionCode to 5 if just one peptide is loaded
 **			12/09/2013 mem - Now leaving the job state unchanged if the results folder path is empty but the job is present in MyEMSL
 **			12/12/2013 mem - If the synopsis file needs to be cached from MyEMSL, then now calling LookupCurrentResultsFolderPathsByJob a second time to assure that the additional required files are cached
-**						   - Added @ShowDebugInfo
+**						   - Added @showDebugInfo
 **			11/28/2016 mem - Change the default file suffix for MGSF+ results to be _msgfplus (but still support _msgfdb)
 **						   - Only call SetProcessState if @infoOnly is 0
+**			10/11/2017 mem - Add "Auto-defined @ResultFileSuffix" debug statements
 **
 *****************************************************/
 (
@@ -74,7 +75,7 @@ CREATE Procedure dbo.LoadPeptidesForOneAnalysis
 	@numLoaded int=0 out,
 	@clientStoragePerspective tinyint = 1,
 	@infoOnly tinyint = 0,
-	@ShowDebugInfo tinyint = 0
+	@showDebugInfo tinyint = 0
 	
 )
 AS
@@ -239,8 +240,12 @@ AS
 		If @ResultType = 'Peptide_Hit'
 		Begin
 			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+			Begin
 				Set @ResultFileSuffix = '_syn'
-				
+				If @showDebugInfo > 0
+					Print 'Auto-defined @ResultFileSuffix as ' + @ResultFileSuffix
+			End
+			
 			set @SynFileExtension = @ResultFileSuffix + '.txt'
 			set @ColumnCountExpected = 19			-- Sequest Synopsis files created after August 2011 will have 20 columns
 
@@ -257,7 +262,11 @@ AS
 		If @ResultType = 'XT_Peptide_Hit'
 		Begin
 			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+			Begin
 				Set @ResultFileSuffix = '_xt'
+				If @showDebugInfo > 0
+					Print 'Auto-defined @ResultFileSuffix as ' + @ResultFileSuffix
+			End
 				
 			set @SynFileExtension = @ResultFileSuffix + '.txt'
 			set @ColumnCountExpected = 16			-- X!Tandem _xt.txt files created after August 2011 will have 17 columns
@@ -275,7 +284,11 @@ AS
 		If @ResultType = 'IN_Peptide_Hit'
 		Begin
 			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
+			Begin
 				Set @ResultFileSuffix = '_inspect_syn'
+				If @showDebugInfo > 0
+					Print 'Auto-defined @ResultFileSuffix as ' + @ResultFileSuffix
+			End
 				
 			set @SynFileExtension = @ResultFileSuffix + '.txt'
 			set @ColumnCountExpected = 25			-- Inspect synopsis files created after August 2011 will have 28 columns
@@ -296,6 +309,8 @@ AS
 			Begin
 				Set @ResultFileSuffix = '_msgfplus_syn'							
 				Set @ResultFileSuffixAlt = '_msgfdb_syn'
+				If @showDebugInfo > 0
+					Print 'Auto-defined @ResultFileSuffix as ' + @ResultFileSuffix + ' (with an alternate of ' + @ResultFileSuffixAlt + ')'
 			End
 
 			set @SynFileExtension    = @ResultFileSuffix    + '.txt'
@@ -329,7 +344,11 @@ AS
 		If @ResultType = 'MSA_Peptide_Hit'
 		Begin
 			If LTRIM(RTRIM(@ResultFileSuffix)) = ''
-				Set @ResultFileSuffix = '_msalign_syn'				
+			Begin
+				Set @ResultFileSuffix = '_msalign_syn'							
+				If @showDebugInfo > 0
+					Print 'Auto-defined @ResultFileSuffix as ' + @ResultFileSuffix
+			End
 				
 			set @SynFileExtension = @ResultFileSuffix + '.txt'
 			set @ColumnCountExpected = 20
@@ -407,7 +426,7 @@ AS
 		VALUES (@Job, @PeptideSynFilePath)
 		
 		Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob'
-		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
+		Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @showDebugInfo=@showDebugInfo
 
 		Set @CurrentLocation = 'Determine results folder path'
 
@@ -432,7 +451,7 @@ AS
 			VALUES (@Job, @PeptideSynFilePathAlt)
 			
 			Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob (using alternate)'
-			Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
+			Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @showDebugInfo=@showDebugInfo
 
 			Set @CurrentLocation = 'Determine results folder path (using altnerate)'
 
@@ -457,6 +476,11 @@ AS
 
 		If Len(IsNull(@StoragePathResults, '')) = 0
 		Begin
+			If @showDebugInfo > 0
+			Begin
+				Print '@StoragePathResults is empty, meaning the one or more key files could not be found in the results folder'
+			End
+			
 			If @MyEMSLState > 0
 			Begin
 				-- Files reside in MyEMSL
@@ -466,7 +490,7 @@ AS
 				-- Note that this error code is used by LoadResultsForAvailableAnalyses
 				Set @myError = 60030
 				
-				If @ShowDebugInfo <> 0
+				If @showDebugInfo <> 0
 					Print '@StoragePathResults is empty, but @MyEMSLState is > 0: ' + @message
 
 
@@ -501,7 +525,7 @@ AS
 				VALUES (@Job, @RequiredFileList)
 				
 				Set @CurrentLocation = 'Call LookupCurrentResultsFolderPathsByJob for additional files'
-				Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @ShowDebugInfo=@ShowDebugInfo
+				Exec LookupCurrentResultsFolderPathsByJob @clientStoragePerspective, @showDebugInfo=@showDebugInfo
 
 			End
 			Else
@@ -510,7 +534,7 @@ AS
 				Set @message = 'Unable to determine results folder path for job ' + @jobStr
 				Set @myError = 60009
 				
-				If @ShowDebugInfo <> 0
+				If @showDebugInfo <> 0
 					Print '@StoragePathResults is empty (and @MyEMSLState is 0): ' + @message
 
 			End
@@ -550,7 +574,7 @@ AS
 		
 		Set @CurrentLocation = 'Call ValidateDelimitedFile'
 		
-		If @ShowDebugInfo <> 0
+		If @showDebugInfo <> 0
 			Print 'Calling ValidateDelimitedFile for ' + @PeptideSynFilePath
 			
 		-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present

@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LookupCurrentResultsFolderPathsByJob
+CREATE Procedure [dbo].[LookupCurrentResultsFolderPathsByJob]
 /****************************************************
 ** 
 **	Desc:	Determines the best results folder path for the 
@@ -28,6 +28,7 @@ CREATE Procedure LookupCurrentResultsFolderPathsByJob
 **						   - Added @ShowDebugInfo
 **			12/09/2013 mem - Updated to support new states in CacheMyEMSLFiles
 **			12/11/2013 mem - Now showing more debug statements
+**			10/11/2017 mem - Add "Folder not found" debug statement
 **    
 *****************************************************/
 (
@@ -232,14 +233,18 @@ set nocount on
 										Print 'Looking for ' + @StoragePathServer
 									exec ValidateFolderExists @StoragePathServer, @CreateIfMissing = 0, @FolderExists = @FolderExists output
 								End
-								
-								
+																
 								If @FolderExists <> 0
 								Begin
 									If @ShowDebugInfo > 0
 										Print 'Folder exists: ' + @StoragePathServer
 									Set @StoragePathResults = @StoragePathServer
 									Set @SourceServerShare = @VolServer
+								End
+								Else
+								Begin
+									If @ShowDebugInfo > 0
+										Print 'Folder not found: ' + @StoragePathServer
 								End
 							End
 							
