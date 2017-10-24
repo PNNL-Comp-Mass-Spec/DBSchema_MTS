@@ -6,17 +6,17 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Mass_Correction_Factors_Import]
 AS
-SELECT t1.Mass_Correction_ID,
-       t1.Mass_Correction_Tag,
-       t1.Description,
-       t1.Monoisotopic_Mass_Correction,
-       t1.Average_Mass_Correction,
-       t1.Affected_Atom,
-       t1.Original_Source,
-       t1.Original_Source_Name,
-       t1.Alternative_Name,
-       t1.Empirical_Formula
-FROM GIGASAX.DMS5.dbo.T_Mass_Correction_Factors t1
+SELECT Mass_Correction_ID,
+       Mass_Correction_Tag,
+       Description,
+       Monoisotopic_Mass AS Monoisotopic_Mass_Correction,
+       Average_Mass AS Average_Mass_Correction,
+       Affected_Atom,
+       Original_Source,
+       Original_Source_Name,
+       Alternative_Name,
+       Empirical_Formula
+FROM S_V_Mass_Correction_Factors
 
 
 GO

@@ -4,7 +4,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 CREATE VIEW [dbo].[V_DMS_Dataset_Detail_Report]
 AS
 SELECT Dataset, Experiment, Organism, Instrument, 
@@ -15,7 +14,8 @@ SELECT Dataset, Experiment, Organism, Instrument,
     [Archive Folder Path], 
     Jobs, ID, [Acquisition Start], [Acquisition End], [Scan Count], 
     [File Size (MB)], [File Info Updated]
-FROM GIGASAX.DMS5.dbo.V_Dataset_Detail_Report_Ex AS t1
+FROM S_V_Dataset_Detail_Report_Ex
+
 
 
 GO

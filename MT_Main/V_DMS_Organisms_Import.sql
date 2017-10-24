@@ -4,6 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 CREATE VIEW [dbo].[V_DMS_Organisms_Import]
 AS
 SELECT Organism_ID,
@@ -25,7 +26,7 @@ SELECT Organism_ID,
        Active,
        OrganismDBPath,
        OG_RowVersion
-FROM GIGASAX.DMS5.dbo.V_Organism_Export AS t1
+FROM S_V_Organisms
 
 
 GO

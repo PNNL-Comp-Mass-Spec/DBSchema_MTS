@@ -6,18 +6,18 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Residues_Import]
 AS
-SELECT t1.Residue_ID,
-       t1.Residue_Symbol,
-       t1.Description,
-       t1.Average_Mass,
-       t1.Monoisotopic_Mass,
-       t1.Num_C,
-       t1.Num_H,
-       t1.Num_N,
-       t1.Num_O,
-       t1.Num_S,
-       t1.Empirical_Formula
-FROM GIGASAX.DMS5.dbo.T_Residues t1
+SELECT Residue_ID,
+       Residue_Symbol,
+       Description,
+       Average_Mass,
+       Monoisotopic_Mass,
+       Num_C,
+       Num_H,
+       Num_N,
+       Num_O,
+       Num_S,
+       Empirical_Formula
+FROM S_V_Residues
 
 
 GO

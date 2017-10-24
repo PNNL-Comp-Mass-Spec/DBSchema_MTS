@@ -6,7 +6,20 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Protein_Collection_Members_Import]
 AS
-SELECT PCME.*
-FROM ProteinSeqs.Protein_Sequences.dbo.V_Protein_Collection_Members_Export PCME
+SELECT Protein_Collection_ID,
+       Protein_Name,
+       Description,
+       Protein_Sequence,
+       Monoisotopic_Mass,
+       Average_Mass,
+       Residue_Count,
+       Molecular_Formula,
+       Protein_ID,
+       Reference_ID,
+       SHA1_Hash,
+       Member_ID,
+       Sorting_Index
+FROM S_V_Protein_Collection_Members
+
 
 GO
