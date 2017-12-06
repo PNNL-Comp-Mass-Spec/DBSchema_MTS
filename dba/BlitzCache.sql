@@ -1,0 +1,70 @@
+/****** Object:  Table [dbo].[BlitzCache] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BlitzCache](
+	[ID] [bigint] IDENTITY(1,1) NOT NULL,
+	[ServerName] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[CheckDate] [datetimeoffset](7) NULL,
+	[Version] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[QueryType] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Warnings] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[DatabaseName] [sysname] COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[SerialDesiredMemory] [float] NULL,
+	[SerialRequiredMemory] [float] NULL,
+	[AverageCPU] [bigint] NULL,
+	[TotalCPU] [bigint] NULL,
+	[PercentCPUByType] [money] NULL,
+	[CPUWeight] [money] NULL,
+	[AverageDuration] [bigint] NULL,
+	[TotalDuration] [bigint] NULL,
+	[DurationWeight] [money] NULL,
+	[PercentDurationByType] [money] NULL,
+	[AverageReads] [bigint] NULL,
+	[TotalReads] [bigint] NULL,
+	[ReadWeight] [money] NULL,
+	[PercentReadsByType] [money] NULL,
+	[AverageWrites] [bigint] NULL,
+	[TotalWrites] [bigint] NULL,
+	[WriteWeight] [money] NULL,
+	[PercentWritesByType] [money] NULL,
+	[ExecutionCount] [bigint] NULL,
+	[ExecutionWeight] [money] NULL,
+	[PercentExecutionsByType] [money] NULL,
+	[ExecutionsPerMinute] [money] NULL,
+	[PlanCreationTime] [datetime] NULL,
+	[PlanCreationTimeHours]  AS (datediff(hour,[PlanCreationTime],sysdatetime())),
+	[LastExecutionTime] [datetime] NULL,
+	[PlanHandle] [varbinary](64) NULL,
+	[Remove Plan Handle From Cache]  AS (case when [PlanHandle] IS NOT NULL then ('DBCC FREEPROCCACHE ('+CONVERT([varchar](128),[PlanHandle],(1)))+');' else 'N/A' end),
+	[SqlHandle] [varbinary](64) NULL,
+	[Remove SQL Handle From Cache]  AS (case when [SqlHandle] IS NOT NULL then ('DBCC FREEPROCCACHE ('+CONVERT([varchar](128),[SqlHandle],(1)))+');' else 'N/A' end),
+	[SQL Handle More Info]  AS (case when [SqlHandle] IS NOT NULL then ('EXEC sp_BlitzCache @OnlySqlHandles = '''+CONVERT([varchar](128),[SqlHandle],(1)))+'''; ' else 'N/A' end),
+	[QueryHash] [binary](8) NULL,
+	[Query Hash More Info]  AS (case when [QueryHash] IS NOT NULL then ('EXEC sp_BlitzCache @OnlyQueryHashes = '''+CONVERT([varchar](32),[QueryHash],(1)))+'''; ' else 'N/A' end),
+	[QueryPlanHash] [binary](8) NULL,
+	[StatementStartOffset] [int] NULL,
+	[StatementEndOffset] [int] NULL,
+	[MinReturnedRows] [bigint] NULL,
+	[MaxReturnedRows] [bigint] NULL,
+	[AverageReturnedRows] [money] NULL,
+	[TotalReturnedRows] [bigint] NULL,
+	[QueryText] [nvarchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[QueryPlan] [xml] NULL,
+	[NumberOfPlans] [int] NULL,
+	[NumberOfDistinctPlans] [int] NULL,
+	[MinGrantKB] [bigint] NULL,
+	[MaxGrantKB] [bigint] NULL,
+	[MinUsedGrantKB] [bigint] NULL,
+	[MaxUsedGrantKB] [bigint] NULL,
+	[PercentMemoryGrantUsed] [money] NULL,
+	[AvgMaxMemoryGrant] [money] NULL,
+	[QueryPlanCost] [float] NULL,
+ CONSTRAINT [PK_84C60CA7-7CB8-49F8-AD52-AF7DE09A8E39] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
