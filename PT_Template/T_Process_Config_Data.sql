@@ -1,5 +1,5 @@
 /****** Object:  Table [T_Process_Config] ******/
-/****** RowCount: 21 ******/
+/****** RowCount: 22 ******/
 SET IDENTITY_INSERT [T_Process_Config] ON
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (104,'DB_Schema_Version','2.0','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (110,'Enzyme_ID','10','9/1/2006 12:00:00 AM','PNL\mtsadmin')
@@ -14,6 +14,7 @@ INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, E
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (121,'NET_Regression_Param_File_Name_by_Sample_Label','iTRAQ, LCMSWarp_30Sections_Min20pct_Min20Peptides_KeepUnknownModPeptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml','10/12/2010 12:00:00 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (123,'NET_Regression_Param_File_Name_by_Sample_Label','iTRAQ8, LCMSWarp_30Sections_Min20pct_Min20Peptides_KeepUnknownModPeptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml','7/20/2012 11:55:09 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (125,'NET_Regression_Param_File_Name_by_Sample_Label','TMT10, LCMSWarp_30Sections_Min20pct_Min20Peptides_KeepUnknownModPeptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml','11/15/2016 11:54:29 AM','PNL\D3L243')
+INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (126,'NET_Regression_Param_File_Name_by_Sample_Label','TMT11, LCMSWarp_30Sections_Min20pct_Min20Peptides_KeepUnknownModPeptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml','2/16/2018 2:27:23 PM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (124,'NET_Regression_Param_File_Name_by_Sample_Label','TMT6, LCMSWarp_30Sections_Min20pct_Min20Peptides_KeepUnknownModPeptides_SaveGlobalPlots_SaveFilteredJobPlots_2010-04-20.xml','6/20/2013 11:16:57 AM','PNL\D3L243')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (106,'NET_Update_Batch_Size','75','9/1/2006 12:00:00 AM','PNL\mtsadmin')
 INSERT INTO [T_Process_Config] (Process_Config_ID, Name, Value, Last_Affected, Entered_By) VALUES (107,'NET_Update_Max_Peptide_Count','300000','9/1/2006 12:00:00 AM','PNL\mtsadmin')
