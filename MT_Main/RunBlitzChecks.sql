@@ -7,16 +7,16 @@ GO
 CREATE Procedure [dbo].[RunBlitzChecks]
 /****************************************************
 **
-**    Run various Blitz First Responder server health checks
-**    Optionally save the results to physical tables
+**  Run various Blitz First Responder server health checks
+**  Optionally save the results to physical tables
 **
-**    Return values: 0: success, otherwise, error code
+**  Return values: 0: success, otherwise, error code
 **
-**    Parameters:
+**  Parameters:
 **
-**    Auth:    mem
-**    Date:    05/25/2017 mem - Initial version
-**            04/02/2018 mem - Add @BringThePain = 1
+**  Auth:   mem
+**  Date:   05/25/2017 mem - Initial version
+**          04/04/2018 mem - Add argument @BringThePain
 **    
 *****************************************************/
 (
@@ -24,13 +24,14 @@ CREATE Procedure [dbo].[RunBlitzChecks]
     @runBlitz tinyint = 1,
     @runBlitzCache tinyint = 1,
     @runBlitzIndex tinyint = 1,
-    @blitzIndexDatabaseList varchar(4000) = '',        -- Comma separated list of database names to run BlitzIndex on; useful when the server has over 50 databases or to limit the results
+    @blitzIndexDatabaseList varchar(4000) = '',     -- Comma separated list of database names to run BlitzIndex on; useful when the server has over 50 databases or to limit the results
     @outputToTables tinyint = 0,
     @outputDatabaseName nvarchar(255) = 'dba',
     @outputSchemaName nvarchar(255) = 'dbo',
     @outputTableBlitz nvarchar(255) = 'T_Blitz_Results',
     @outputTableBlitzCache nvarchar(255) = 'T_BlitzCache_Results',
-    @outputTableBlitzIndex nvarchar(255) = 'T_BlitzIndex_Results'
+    @outputTableBlitzIndex nvarchar(255) = 'T_BlitzIndex_Results',
+    @BringThePain tinyint = 1                       -- When 1, use @BringThePain to 1 when calling sp_blitz (but not with the other SPs); when 2, use @BringThePain = 1 for all SPs
 )
 As
     Set XACT_ABORT, nocount on
@@ -55,6 +56,9 @@ As
     Set @outputTableBlitz = IsNull(@outputTableBlitz, '')
     Set @outputTableBlitzCache = IsNull(@outputTableBlitzCache, '')
     Set @outputTableBlitzIndex = IsNull(@outputTableBlitzIndex, '')
+    Set @BringThePain = Isnull(@BringThePain, 1)
+
+    Declare @BringThePainActual tinyint = 0
 
     ---------------------------------------------------
     -- Check for overview mode
@@ -75,13 +79,18 @@ As
     --
     If @runBlitz > 0
     Begin
+        If @BringThePain > 0
+            Set @BringThePainActual = 1
+        Else
+            Set @BringThePainActual = 0
+
         If @outputToTables > 0
             exec master.dbo.sp_Blitz @OutputDatabaseName = @OutputDatabaseName, 
                                      @OutputSchemaName = @OutputSchemaName,
                                      @OutputTableName = @outputTableBlitz,
-                                     @BringThePain = 1
+                                     @BringThePain = @BringThePainActual
         Else
-            exec master.dbo.sp_Blitz @BringThePain = 1
+            exec master.dbo.sp_Blitz @BringThePain = @BringThePainActual
     End
 
     ---------------------------------------------------
@@ -90,13 +99,18 @@ As
     --
     If @runBlitzCache > 0
     Begin
+        If @BringThePain > 1
+            Set @BringThePainActual = 1
+        Else
+            Set @BringThePainActual = 0
+
         If @outputToTables > 0
             exec master.dbo.sp_BlitzCache @OutputDatabaseName = @OutputDatabaseName, 
                                           @OutputSchemaName = @OutputSchemaName,
                                           @OutputTableName = @outputTableBlitzCache,
-                                          @BringThePain = 1
+                                          @BringThePain = @BringThePainActual
         Else
-            exec master.dbo.sp_BlitzCache @BringThePain = 1
+            exec master.dbo.sp_BlitzCache @BringThePain = @BringThePainActual
     End
     
     ---------------------------------------------------
@@ -105,6 +119,11 @@ As
     --
     If @runBlitzIndex > 0
     Begin -- <a>
+        If @BringThePain > 1
+            Set @BringThePainActual = 1
+        Else
+            Set @BringThePainActual = 0
+
         If @blitzIndexDatabaseList = ''
         Begin
             If @outputToTables > 0
@@ -112,9 +131,9 @@ As
                                             @OutputDatabaseName = @OutputDatabaseName, 
                                             @OutputSchemaName = @OutputSchemaName,
                                             @OutputTableName = @outputTableBlitzIndex,
-                                            @BringThePain = 1
+                                            @BringThePain = @BringThePainActual
             Else
-                exec master.dbo.sp_BlitzIndex @GetAllDatabases = 1, @Mode=2, @BringThePain = 1
+                exec master.dbo.sp_BlitzIndex @GetAllDatabases = 1, @Mode=2, @BringThePain = @BringThePainActual
         End
         Else
         Begin -- <b>
@@ -148,12 +167,11 @@ As
                                                       @OutputDatabaseName = @OutputDatabaseName, 
                                                       @OutputSchemaName = @OutputSchemaName,
                                                       @OutputTableName = @outputTableBlitzIndex,
-                                                      @BringThePain = 1
+                                                      @BringThePain = @BringThePainActual
                     Else
                         exec master.dbo.sp_BlitzIndex @GetAllDatabases = 0, @Mode=2,
                                                       @DatabaseName = @dbName,
-                                                      @OutputDatabaseName = @OutputDatabaseName,
-                                                      @BringThePain = 1
+                                                      @BringThePain = @BringThePainActual
                 End -- </d>
                 
             End -- </c>
