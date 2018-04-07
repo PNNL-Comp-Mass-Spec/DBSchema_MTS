@@ -61,6 +61,10 @@ CREATE TABLE [dbo].[T_BlitzCache_Results](
 	[PercentMemoryGrantUsed] [money] NULL,
 	[AvgMaxMemoryGrant] [money] NULL,
 	[QueryPlanCost] [float] NULL,
+	[MinSpills] [bigint] NULL,
+	[MaxSpills] [bigint] NULL,
+	[TotalSpills] [bigint] NULL,
+	[AvgSpills] [money] NULL,
  CONSTRAINT [PK_68011AC1-1F0B-4F9F-84C5-78D3E8CEF9A8] PRIMARY KEY CLUSTERED 
 (
 	[ID] ASC
