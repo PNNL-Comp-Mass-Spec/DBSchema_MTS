@@ -1,8 +1,8 @@
 /****** Object:  Database [Master_Seq_Scratch] ******/
 CREATE DATABASE [Master_Seq_Scratch] ON  PRIMARY 
-( NAME = N'Master_Seq_Scratch_Data', FILENAME = N'I:\SQLServerData\Master_Seq_Scratch.mdf' , SIZE = 3712KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Seq_Scratch_Data', FILENAME = N'I:\SQLServerData\Master_Seq_Scratch.mdf' , SIZE = 389312KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 8384KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Seq_Scratch_Log', FILENAME = N'H:\SQLServerData\Master_Seq_Scratch_log.ldf' , SIZE = 504KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET COMPATIBILITY_LEVEL = 100
@@ -23,8 +23,6 @@ GO
 ALTER DATABASE [Master_Seq_Scratch] SET ARITHABORT OFF 
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET AUTO_CLOSE OFF 
-GO
-ALTER DATABASE [Master_Seq_Scratch] SET AUTO_CREATE_STATISTICS ON 
 GO
 ALTER DATABASE [Master_Seq_Scratch] SET AUTO_SHRINK ON 
 GO
