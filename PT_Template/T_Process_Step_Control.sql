@@ -60,3 +60,5 @@ AS
 
 
 GO
+ALTER TABLE [dbo].[T_Process_Step_Control] ENABLE TRIGGER [trig_u_T_Process_Step_Control]
+GO

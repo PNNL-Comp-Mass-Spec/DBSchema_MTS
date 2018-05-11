@@ -87,6 +87,8 @@ AS
 	order by deleted.Job
 
 GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ENABLE TRIGGER [trig_d_FTICRAnalysisDescription]
+GO
 /****** Object:  Trigger [dbo].[trig_i_FTICRAnalysisDescription] ******/
 SET ANSI_NULLS ON
 GO
@@ -103,6 +105,8 @@ AS
 	FROM inserted
 	ORDER BY inserted.Job
 
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ENABLE TRIGGER [trig_i_FTICRAnalysisDescription]
 GO
 /****** Object:  Trigger [dbo].[trig_u_FTICRAnalysisDescription] ******/
 SET ANSI_NULLS ON
@@ -121,4 +125,6 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
 		ORDER BY inserted.Job
 
+GO
+ALTER TABLE [dbo].[T_FTICR_Analysis_Description] ENABLE TRIGGER [trig_u_FTICRAnalysisDescription]
 GO

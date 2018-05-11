@@ -94,3 +94,5 @@ AS
 	End
 
 GO
+ALTER TABLE [dbo].[T_DMS_Dataset_Info_Cached] ENABLE TRIGGER [trig_u_DMS_Dataset_Info_Cached]
+GO

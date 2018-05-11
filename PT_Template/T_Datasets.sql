@@ -53,6 +53,8 @@ AS
 	order by deleted.Dataset_ID
 
 GO
+ALTER TABLE [dbo].[T_Datasets] ENABLE TRIGGER [trig_d_Datasets]
+GO
 /****** Object:  Trigger [dbo].[trig_i_Datasets] ******/
 SET ANSI_NULLS ON
 GO
@@ -69,6 +71,8 @@ AS
 	FROM inserted
 	ORDER BY inserted.Dataset_ID
 
+GO
+ALTER TABLE [dbo].[T_Datasets] ENABLE TRIGGER [trig_i_Datasets]
 GO
 /****** Object:  Trigger [dbo].[trig_iu_T_Datasets] ******/
 SET ANSI_NULLS ON
@@ -122,6 +126,8 @@ AS
 	End
 
 GO
+ALTER TABLE [dbo].[T_Datasets] ENABLE TRIGGER [trig_iu_T_Datasets]
+GO
 /****** Object:  Trigger [dbo].[trig_u_Datasets] ******/
 SET ANSI_NULLS ON
 GO
@@ -139,4 +145,6 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Dataset_ID = inserted.Dataset_ID
 		ORDER BY inserted.Dataset_ID
 
+GO
+ALTER TABLE [dbo].[T_Datasets] ENABLE TRIGGER [trig_u_Datasets]
 GO

@@ -64,3 +64,5 @@ AS
 	End
 
 GO
+ALTER TABLE [dbo].[T_Peptide_Prophet_DB_Parameters] ENABLE TRIGGER [trig_u_T_Peptide_Prophet_DB_Parameters]
+GO

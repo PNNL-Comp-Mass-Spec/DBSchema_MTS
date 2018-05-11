@@ -86,6 +86,8 @@ AS
 
 
 GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ENABLE TRIGGER [trig_d_Peptide_Database_List]
+GO
 /****** Object:  Trigger [dbo].[trig_i_Peptide_Database_List] ******/
 SET ANSI_NULLS ON
 GO
@@ -112,6 +114,8 @@ AS
 	FROM inserted
 
 
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ENABLE TRIGGER [trig_i_Peptide_Database_List]
 GO
 /****** Object:  Trigger [dbo].[trig_u_Peptide_Database_List] ******/
 SET ANSI_NULLS ON
@@ -140,4 +144,6 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.PDB_ID = inserted.PDB_ID
 
 
+GO
+ALTER TABLE [dbo].[T_Peptide_Database_List] ENABLE TRIGGER [trig_u_Peptide_Database_List]
 GO

@@ -55,3 +55,5 @@ AS
 				 inserted ON MCF.Mass_Correction_ID = inserted.Mass_Correction_ID
 
 GO
+ALTER TABLE [dbo].[T_DMS_Mass_Correction_Factors_Cached] ENABLE TRIGGER [trig_u_DMS_Mass_Correction_Factors_Cached]
+GO

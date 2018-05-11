@@ -171,3 +171,5 @@ IF @QueryValue2 IS NULL AND COALESCE(@CellList, '') <> ''
 END
 
 GO
+ALTER TABLE [dbo].[BlockingHistory] ENABLE TRIGGER [ti_blockinghistory]
+GO

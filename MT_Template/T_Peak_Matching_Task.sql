@@ -123,6 +123,8 @@ AS
 	FROM inserted
 
 GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ENABLE TRIGGER [trig_i_T_PeakMatchingTask]
+GO
 /****** Object:  Trigger [dbo].[trig_u_T_Peak_Matching_Task] ******/
 SET ANSI_NULLS ON
 GO
@@ -213,4 +215,6 @@ AS
 
 	End
 
+GO
+ALTER TABLE [dbo].[T_Peak_Matching_Task] ENABLE TRIGGER [trig_u_T_Peak_Matching_Task]
 GO

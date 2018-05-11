@@ -65,6 +65,8 @@ AS
 
 
 GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] ENABLE TRIGGER [trig_d_T_MultiAlign_Task_Jobs]
+GO
 /****** Object:  Trigger [dbo].[trig_i_T_MultiAlign_Task_Jobs] ******/
 SET ANSI_NULLS ON
 GO
@@ -98,6 +100,8 @@ AS
 
 
 
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] ENABLE TRIGGER [trig_i_T_MultiAlign_Task_Jobs]
 GO
 /****** Object:  Trigger [dbo].[trig_u_T_MultiAlign_Task_Jobs] ******/
 SET ANSI_NULLS ON
@@ -141,4 +145,6 @@ AS
 		 ) JobQ ON MaT.Task_ID = JobQ.Task_ID
 
 
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task_Jobs] ENABLE TRIGGER [trig_u_T_MultiAlign_Task_Jobs]
 GO

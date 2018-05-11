@@ -132,3 +132,5 @@ AS
 	End
 
 GO
+ALTER TABLE [dbo].[T_DMS_Analysis_Job_Info_Cached] ENABLE TRIGGER [trig_u_DMS_Analysis_Job_Info_Cached]
+GO

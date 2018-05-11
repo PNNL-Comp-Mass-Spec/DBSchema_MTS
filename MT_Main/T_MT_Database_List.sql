@@ -83,6 +83,8 @@ AS
 
 
 GO
+ALTER TABLE [dbo].[T_MT_Database_List] ENABLE TRIGGER [trig_d_MT_Database_List]
+GO
 /****** Object:  Trigger [dbo].[trig_i_MT_Database_List] ******/
 SET ANSI_NULLS ON
 GO
@@ -110,6 +112,8 @@ AS
 	FROM inserted
 
 
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ENABLE TRIGGER [trig_i_MT_Database_List]
 GO
 /****** Object:  Trigger [dbo].[trig_u_MT_Database_List] ******/
 SET ANSI_NULLS ON
@@ -139,4 +143,6 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.MTL_ID = inserted.MTL_ID
 
 
+GO
+ALTER TABLE [dbo].[T_MT_Database_List] ENABLE TRIGGER [trig_u_MT_Database_List]
 GO

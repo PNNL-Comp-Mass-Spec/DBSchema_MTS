@@ -75,3 +75,5 @@ AS
 	End
 
 GO
+ALTER TABLE [dbo].[T_Log_Entries] ENABLE TRIGGER [trig_u_T_Log_Entries]
+GO

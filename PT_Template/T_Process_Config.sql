@@ -156,6 +156,8 @@ End
 
 
 GO
+ALTER TABLE [dbo].[T_Process_Config] ENABLE TRIGGER [trig_iu_T_Process_Config]
+GO
 /****** Object:  Trigger [dbo].[trig_u_T_Process_Config] ******/
 SET ANSI_NULLS ON
 GO
@@ -195,4 +197,6 @@ AS
 	End
 
 
+GO
+ALTER TABLE [dbo].[T_Process_Config] ENABLE TRIGGER [trig_u_T_Process_Config]
 GO

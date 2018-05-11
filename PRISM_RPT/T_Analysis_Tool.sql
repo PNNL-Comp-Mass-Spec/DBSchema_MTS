@@ -66,3 +66,5 @@ AS
 
 
 GO
+ALTER TABLE [dbo].[T_Analysis_Tool] ENABLE TRIGGER [trig_u_T_Analysis_Tool]
+GO

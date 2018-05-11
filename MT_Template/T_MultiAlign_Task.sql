@@ -101,6 +101,8 @@ AS
 	FROM inserted
 
 GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ENABLE TRIGGER [trig_i_T_MultiAlign_Task]
+GO
 /****** Object:  Trigger [dbo].[trig_u_T_MultiAlign_Task] ******/
 SET ANSI_NULLS ON
 GO
@@ -188,4 +190,6 @@ AS
 
 	End
 
+GO
+ALTER TABLE [dbo].[T_MultiAlign_Task] ENABLE TRIGGER [trig_u_T_MultiAlign_Task]
 GO

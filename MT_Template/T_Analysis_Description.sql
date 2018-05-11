@@ -115,6 +115,8 @@ AS
 	order by deleted.Job
 
 GO
+ALTER TABLE [dbo].[T_Analysis_Description] ENABLE TRIGGER [trig_d_AnalysisDescription]
+GO
 /****** Object:  Trigger [dbo].[trig_i_AnalysisDescription] ******/
 SET ANSI_NULLS ON
 GO
@@ -131,6 +133,8 @@ AS
 	FROM inserted
 	ORDER BY inserted.job
 
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ENABLE TRIGGER [trig_i_AnalysisDescription]
 GO
 /****** Object:  Trigger [dbo].[trig_u_AnalysisDescription] ******/
 SET ANSI_NULLS ON
@@ -149,4 +153,6 @@ AS
 		FROM deleted INNER JOIN inserted ON deleted.Job = inserted.Job
 		ORDER BY inserted.job
 
+GO
+ALTER TABLE [dbo].[T_Analysis_Description] ENABLE TRIGGER [trig_u_AnalysisDescription]
 GO

@@ -78,6 +78,8 @@ BEGIN
 END
 
 GO
+ALTER TABLE [dbo].[DatabaseSettings] ENABLE TRIGGER [tr_d_DatabaseSettings]
+GO
 /****** Object:  Trigger [dbo].[tr_iu_DatabaseSettings] ******/
 SET ANSI_NULLS ON
 GO
@@ -234,4 +236,6 @@ BEGIN
 	END
 END
 
+GO
+ALTER TABLE [dbo].[DatabaseSettings] ENABLE TRIGGER [tr_iu_DatabaseSettings]
 GO
