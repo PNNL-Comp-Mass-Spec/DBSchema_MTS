@@ -5,10 +5,10 @@ SET QUOTED_IDENTIFIER ON
 GO
 CREATE TABLE [dbo].[BlitzCache](
 	[ID] [bigint] IDENTITY(1,1) NOT NULL,
-	[ServerName] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[ServerName] [nvarchar](258) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[CheckDate] [datetimeoffset](7) NULL,
-	[Version] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
-	[QueryType] [nvarchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Version] [nvarchar](258) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[QueryType] [nvarchar](258) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Warnings] [varchar](max) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[DatabaseName] [sysname] COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[SerialDesiredMemory] [float] NULL,
@@ -61,6 +61,10 @@ CREATE TABLE [dbo].[BlitzCache](
 	[PercentMemoryGrantUsed] [money] NULL,
 	[AvgMaxMemoryGrant] [money] NULL,
 	[QueryPlanCost] [float] NULL,
+	[MinSpills] [bigint] NULL,
+	[MaxSpills] [bigint] NULL,
+	[TotalSpills] [bigint] NULL,
+	[AvgSpills] [money] NULL,
  CONSTRAINT [PK_84C60CA7-7CB8-49F8-AD52-AF7DE09A8E39] PRIMARY KEY CLUSTERED 
 (
 	[ID] ASC
