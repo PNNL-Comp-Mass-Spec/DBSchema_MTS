@@ -425,3 +425,5 @@ GRANT VIEW DEFINITION ON [dbo].[GetErrorsFromActiveDBLogs] TO [MTS_DB_Dev] AS [d
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetErrorsFromActiveDBLogs] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[GetErrorsFromActiveDBLogs] TO [pnl\svc-dms] AS [dbo]
+GO

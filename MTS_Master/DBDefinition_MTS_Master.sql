@@ -1,8 +1,8 @@
 /****** Object:  Database [MTS_Master] ******/
 CREATE DATABASE [MTS_Master] ON  PRIMARY 
-( NAME = N'MTS_Master', FILENAME = N'I:\SQLServerData\MTS_Master_data.mdf' , SIZE = 188800KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
+( NAME = N'MTS_Master', FILENAME = N'I:\SQLServerData\MTS_Master_data.mdf' , SIZE = 189120KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
  LOG ON 
-( NAME = N'MTS_Master_log', FILENAME = N'H:\SQLServerData\MTS_Master_log.ldf' , SIZE = 4088320KB , MAXSIZE = UNLIMITED, FILEGROWTH = 16384KB )
+( NAME = N'MTS_Master_log', FILENAME = N'H:\SQLServerData\MTS_Master_log.ldf' , SIZE = 3916288KB , MAXSIZE = UNLIMITED, FILEGROWTH = 16384KB )
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 ALTER DATABASE [MTS_Master] SET COMPATIBILITY_LEVEL = 100
@@ -93,6 +93,9 @@ GO
 /****** Object:  User [PNL\D3M580] ******/
 CREATE USER [PNL\D3M580] FOR LOGIN [PNL\D3M580] WITH DEFAULT_SCHEMA=[PNL\D3M580]
 GO
+/****** Object:  User [pnl\svc-dms] ******/
+CREATE USER [pnl\svc-dms] FOR LOGIN [PNL\svc-dms] WITH DEFAULT_SCHEMA=[dbo]
+GO
 GRANT CONNECT TO [d3j409] AS [dbo]
 GO
 GRANT CONNECT TO [D3J410] AS [dbo]
@@ -116,6 +119,8 @@ GO
 GRANT CONNECT TO [MTUser] AS [dbo]
 GO
 GRANT SHOWPLAN TO [MTUser] AS [dbo]
+GO
+GRANT CONNECT TO [pnl\svc-dms] AS [dbo]
 GO
 GRANT CONNECT TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

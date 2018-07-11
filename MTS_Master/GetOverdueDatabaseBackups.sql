@@ -154,3 +154,5 @@ GRANT EXECUTE ON [dbo].[GetOverdueDatabaseBackups] TO [MTS_DB_Lite] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetOverdueDatabaseBackups] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[GetOverdueDatabaseBackups] TO [pnl\svc-dms] AS [dbo]
+GO
