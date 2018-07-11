@@ -64,6 +64,10 @@ CREATE TABLE [dbo].[T_BlitzIndex_Results](
 	[modify_date] [datetime] NULL,
 	[more_info] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[display_order] [int] NULL,
+	[page_latch_wait_count] [int] NULL,
+	[page_latch_wait_in_ms] [int] NULL,
+	[page_io_latch_wait_count] [int] NULL,
+	[page_io_latch_wait_in_ms] [int] NULL,
  CONSTRAINT [PK_ID_AEF2E71E-F5DC-41B6-A1EB-33D05E9B58DB] PRIMARY KEY CLUSTERED 
 (
 	[id] ASC
