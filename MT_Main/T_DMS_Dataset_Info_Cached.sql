@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[T_DMS_Dataset_Info_Cached](
 	[Dataset Int Std] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Type] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Operator] [varchar](255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Comment] [varchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Comment] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Rating] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Request] [int] NULL,
 	[State] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
