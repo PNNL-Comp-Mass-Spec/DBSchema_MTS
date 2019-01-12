@@ -43,6 +43,11 @@ CREATE TABLE [dbo].[T_BlitzIndex_Results](
 	[user_updates] [bigint] NULL,
 	[reads_per_write] [money] NULL,
 	[index_usage_summary] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[total_singleton_lookup_count] [bigint] NULL,
+	[total_range_scan_count] [bigint] NULL,
+	[total_leaf_delete_count] [bigint] NULL,
+	[total_leaf_update_count] [bigint] NULL,
+	[index_op_stats] [nvarchar](200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[partition_count] [int] NULL,
 	[total_rows] [bigint] NULL,
 	[total_reserved_MB] [numeric](29, 2) NULL,
@@ -59,16 +64,16 @@ CREATE TABLE [dbo].[T_BlitzIndex_Results](
 	[avg_page_lock_wait_in_ms] [bigint] NULL,
 	[total_index_lock_promotion_attempt_count] [bigint] NULL,
 	[total_index_lock_promotion_count] [bigint] NULL,
-	[data_compression_desc] [varchar](8000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[data_compression_desc] [nvarchar](4000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[page_latch_wait_count] [bigint] NULL,
+	[page_latch_wait_in_ms] [bigint] NULL,
+	[page_io_latch_wait_count] [bigint] NULL,
+	[page_io_latch_wait_in_ms] [bigint] NULL,
 	[create_date] [datetime] NULL,
 	[modify_date] [datetime] NULL,
 	[more_info] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[display_order] [int] NULL,
-	[page_latch_wait_count] [int] NULL,
-	[page_latch_wait_in_ms] [int] NULL,
-	[page_io_latch_wait_count] [int] NULL,
-	[page_io_latch_wait_in_ms] [int] NULL,
- CONSTRAINT [PK_ID_AEF2E71E-F5DC-41B6-A1EB-33D05E9B58DB] PRIMARY KEY CLUSTERED 
+ CONSTRAINT [PK_ID_15D1B7A3-97EE-4D35-83FB-77AE372DF975] PRIMARY KEY CLUSTERED 
 (
 	[id] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
