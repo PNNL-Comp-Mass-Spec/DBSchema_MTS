@@ -12,6 +12,8 @@ CREATE TABLE [dbo].[T_BlitzIndex_Results](
 	[schema_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[table_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[index_name] [nvarchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Drop_Tsql] [nvarchar](4000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Create_Tsql] [nvarchar](4000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[index_id] [int] NULL,
 	[db_schema_object_indexid] [nvarchar](500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[object_type] [nvarchar](15) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
