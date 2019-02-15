@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE RefreshCachedDMSResidues
+CREATE PROCEDURE [dbo].[RefreshCachedDMSResidues]
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Residues_Cached using DMS
@@ -14,6 +14,7 @@ CREATE PROCEDURE RefreshCachedDMSResidues
 **	Auth:	mem
 **	Date:	08/02/2010 mem - Initial Version
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
+**          02/12/2019 mem - Add column Amino_Acid_Name
 **
 *****************************************************/
 (
@@ -63,13 +64,13 @@ AS
 					   Description,
 					   Average_Mass, Monoisotopic_Mass,
 					   Num_C, Num_H, Num_N, Num_O, Num_S,
-					   Empirical_Formula
+					   Empirical_Formula, Amino_Acid_Name
 				FROM V_DMS_Residues_Import
 			) AS Source ( Residue_ID, Residue_Symbol,
 						  Description,
 						  Average_Mass, Monoisotopic_Mass,
 						  Num_C, Num_H, Num_N, Num_O, Num_S,
-						  Empirical_Formula)
+						  Empirical_Formula, Amino_Acid_Name)
 		ON (target.Residue_ID = source.Residue_ID)
 		WHEN Matched AND (target.Residue_Symbol <> source.Residue_Symbol OR
 					      target.Description <> source.Description OR
@@ -80,7 +81,8 @@ AS
 					      target.Num_N <> source.Num_N OR 
 					      target.Num_O <> source.Num_O OR 
 					      target.Num_S <> source.Num_S OR
-					      IsNull(target.Empirical_Formula, '') <> IsNull(source.Empirical_Formula, '')
+					      IsNull(target.Empirical_Formula, '') <> IsNull(source.Empirical_Formula, '') OR
+                          IsNull(target.Amino_Acid_Name, '') <> IsNull(source.Amino_Acid_Name, '')
 						) THEN 
 			UPDATE set Residue_Symbol = source.Residue_Symbol,
 					   Description = source.Description,
@@ -92,13 +94,14 @@ AS
 					   Num_O = source.Num_O, 
 					   Num_S = source.Num_S,
 					   Empirical_Formula = source.Empirical_Formula,
+                       Amino_Acid_Name = source.Amino_Acid_Name,
 					   Last_Affected = GetDate()
 		WHEN Not Matched THEN
 			INSERT (Residue_ID, Residue_Symbol,
 					   Description,
 					   Average_Mass, Monoisotopic_Mass,
 					   Num_C, Num_H, Num_N, Num_O, Num_S,
-					   Empirical_Formula, Last_Affected)
+					   Empirical_Formula, Amino_Acid_Name, Last_Affected)
 			VALUES (source.Residue_ID, 
 					source.Residue_Symbol,
 					source.Description,
@@ -107,6 +110,7 @@ AS
 					source.Num_C, source.Num_H, 
 					source.Num_N, source.Num_O, source.Num_S,
 					source.Empirical_Formula,
+                    source.Amino_Acid_Name,
 					GetDate())
 		WHEN NOT MATCHED BY SOURCE THEN 
 			DELETE

@@ -16,7 +16,8 @@ SELECT Residue_ID,
        Num_N,
        Num_O,
        Num_S,
-       Empirical_Formula
+       Empirical_Formula,
+       Amino_Acid_Name
 FROM S_V_Residues
 
 

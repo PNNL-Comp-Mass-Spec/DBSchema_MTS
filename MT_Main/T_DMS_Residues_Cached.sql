@@ -15,6 +15,7 @@ CREATE TABLE [dbo].[T_DMS_Residues_Cached](
 	[Num_O] [smallint] NOT NULL,
 	[Num_S] [smallint] NOT NULL,
 	[Empirical_Formula] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Amino_Acid_Name] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Last_Affected] [datetime] NULL,
  CONSTRAINT [PK_T_DMS_Residues_Cached] PRIMARY KEY NONCLUSTERED 
 (
