@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE VIEW dbo.V_Last_Active_DB_Backup_Overdue
+
+CREATE VIEW [dbo].[V_Last_Active_DB_Backup_Overdue]
 AS
 SELECT LookupQ.Name, LookupQ.Backup_Date, 
     T_MT_Database_State_Name.Name AS State
