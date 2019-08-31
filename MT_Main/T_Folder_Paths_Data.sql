@@ -2,7 +2,7 @@
 /****** RowCount: 13 ******/
 /****** Columns: Function, Client_Path, Server_Path ******/
 INSERT INTO [T_Folder_Paths] VALUES ('Database Backup Log Path','I:\SqlServerBackup\','I:\SqlServerBackup\')
-INSERT INTO [T_Folder_Paths] VALUES ('Database Backup Path','\\proto-1\DB_Backups\Pogo_Backup\','\\proto-1\DB_Backups\Pogo_Backup\')
+INSERT INTO [T_Folder_Paths] VALUES ('Database Backup Path','\\proto-8\DB_Backups\Pogo_Backup\','\\proto-8\DB_Backups\Pogo_Backup\')
 INSERT INTO [T_Folder_Paths] VALUES ('Default Database Folder','','I:\SqlServerData\')
 INSERT INTO [T_Folder_Paths] VALUES ('Default Database Transaction Log Folder','','H:\SqlServerData\')
 INSERT INTO [T_Folder_Paths] VALUES ('GANET Transfer Root Folder','\\pogo\GA_Net_Xfer\','F:\GA_Net_Xfer')
