@@ -4,11 +4,10 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE PROCEDURE dbo.RequestGANETUpdateTask
+CREATE PROCEDURE [dbo].[RequestGANETUpdateTask]
 /****************************************************
 **
-**	Desc: 
+**	Desc:
 **		Looks for jobs in T_Analysis_Description with a
 **      Process_State = @ProcessStateMatch (default 40)
 **
@@ -16,7 +15,7 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **		batch of available jobs; set @TaskAvailable to 1
 **		and return the relevant information in the output arguments
 **
-**      If no jobs are available or an error occurs, then @message 
+**      If no jobs are available or an error occurs, then @message
 **		will contain explanatory text.
 **
 **	Auth:	grk
@@ -42,6 +41,8 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 **			12/04/2012 mem - Added support for MSAlign results (type MSA_Peptide_Hit)
 **			12/05/2012 mem - Now using tblPeptideHitResultTypes to determine the valid Peptide_Hit result types
 **			03/25/2013 mem - Now creating #Tmp_NET_Update_Jobs
+**          08/14/2019 mem - Now passing @skipXpCmdShell to ExportGANETData
+**          08/16/2019 mem - Set @skipXpCmdShell to 1 since the GANETManager now exports the data itself
 **
 *****************************************************/
 (
@@ -58,11 +59,11 @@ CREATE PROCEDURE dbo.RequestGANETUpdateTask
 	@ObsNETsFileName varchar(256) = '' output,		-- Observed NETs results file name
 
 	@ParamFileName varchar(256) = '' output,		-- If this is defined, then settings in the parameter file will superseded the following 5 parameters
-	
+
 	@unmodifiedPeptidesOnly tinyint = 0 output,		-- 1 if we should only consider unmodified peptides
 	@noCleavageRuleFilters tinyint = 0 output,		-- 1 if we should use the looser filters that do not consider cleavage rules
 	@RegressionOrder tinyint = 3 output,			-- 1 for linear regression, >=2 for non-linear regression
-	
+
 	@message varchar(512) output,
 	@ProcessStateMatch int = 40,
 	@NextProcessState int = 45,
@@ -80,9 +81,9 @@ As
 
 	declare @MatchCount int
 	declare @ParamFileMatch varchar(256)
-	
-	set @message = ''		
-	
+
+	set @message = ''
+
 	---------------------------------------------------
 	-- Create temporary table required by SetGANETUpdateTaskState
 	-- (this procedure does not utilize this temp table)
@@ -93,7 +94,7 @@ As
 		RegressionInfoLoaded tinyint not null,
 		ObservedNETsLoaded tinyint not null
 	)
-	
+
 	---------------------------------------------------
 	-- clear the output arguments
 	---------------------------------------------------
@@ -104,20 +105,20 @@ As
 
 	set @SourceFolderPath = ''
 	set @SourceFileName = ''
-	
+
 	set @ResultsFolderPath = ''
 	set @ResultsFileName = ''
-	set @PredNETsFileName = ''	
+	set @PredNETsFileName = ''
 	set @ObsNETsFileName = ''
-	
+
 	Set @ParamFileName = ''
-	
+
 	set @UnmodifiedPeptidesOnly = 0		-- 1 if we should only consider unmodified peptides and peptides with alkylated cysteine
 	set @NoCleavageRuleFilters = 0		-- 1 if we should use the looser filters that do not consider cleavage rules
 	Set @RegressionOrder = 3			-- 1 for first order, 3 for non-linear
 
 	set @taskAvailable = 0
-	
+
 	---------------------------------------------------
 	-- Look for jobs that are timed out (State 44)
 	-- See if their parameter file name contains one of the label names defined in T_Process_Config
@@ -125,8 +126,8 @@ As
 	--  name contains _iTRAQ_ but the experiment Labelling field is set to None instead if iTRAQ
 	---------------------------------------------------
 	exec UpdateNETRegressionParamFileName @GANETProcessingTimeoutState, @GANETProcessingTimeoutState, @infoonly=0, @MatchLabellingToParamFileName=1
-	
-	
+
+
 	---------------------------------------------------
 	-- Look for jobs that are timed out (State 44) and for which Last_Affected
 	-- is more than 60 minutes ago; reset to state @ProcessStateMatch
@@ -155,7 +156,7 @@ As
 	Set @maxHoursUnchangedState = 12
 
 	Exec ResetStaleNETUpdateTasks @maxHoursUnchangedState, @ProcessStateMatch
-	
+
 	---------------------------------------------------
 	-- Look for any jobs in state @ProcessStateMatch that
 	-- do not have associated scan time information;
@@ -168,7 +169,7 @@ As
         (	SELECT TAD.Job
 			FROM T_Dataset_Stats_Scans DSS INNER JOIN
 				 V_SIC_Job_to_PeptideHit_Map JobMap ON DSS.Job = JobMap.SIC_Job
-					RIGHT OUTER JOIN T_Analysis_Description TAD ON 
+					RIGHT OUTER JOIN T_Analysis_Description TAD ON
 				 JobMap.Job = TAD.Job
 			WHERE (TAD.Process_State = @ProcessStateMatch)
 			GROUP BY TAD.Job
@@ -203,7 +204,7 @@ As
 		(	SELECT TAD.Job
 			FROM T_Dataset_Stats_Scans DSS INNER JOIN
 				V_SIC_Job_to_PeptideHit_Map JobMap ON DSS.Job = JobMap.SIC_Job
-					INNER JOIN T_Analysis_Description TAD ON 
+					INNER JOIN T_Analysis_Description TAD ON
 				JobMap.Job = TAD.Job
 			WHERE (TAD.Process_State = 43)
 			GROUP BY TAD.Job
@@ -217,12 +218,12 @@ As
 		Set @message = 'Jobs that were in state 43 were reset to state ' + Convert(varchar(11), @ProcessStateMatch) + ' since a SIC job now exists; ' + Convert(varchar(11), @myRowCount) + ' updated'
 		Exec PostLogEntry 'Normal', @message, 'RequestGANETUpdateTask'
 	end
-	
-	
+
+
 	---------------------------------------------------
 	-- Lookup the value for @BatchSize
 	---------------------------------------------------
-	
+
 	If IsNull(@BatchSize, 0) <= 0
 	Begin
 		Set @BatchSize = 0
@@ -231,7 +232,7 @@ As
 		WHERE [Name] = 'NET_Update_Batch_Size'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
+
 		-- Default to a batch size of 100 if an error occurs
 		If @MyRowCount = 0 Or @myError <> 0
 			Set @Batchsize = 100
@@ -239,11 +240,11 @@ As
 			If IsNull(@BatchSize, 0) <= 0
 				Set @BatchSize = 100
 	End
-	
+
 	---------------------------------------------------
 	-- Lookup the value for @MaxPeptideCount
 	---------------------------------------------------
-	
+
 	If IsNull(@MaxPeptideCount, 0) <= 0
 	Begin
 		Set @MaxPeptideCount = 0
@@ -252,7 +253,7 @@ As
 		WHERE [Name] = 'NET_Update_Max_Peptide_Count'
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-		
+
 		-- Default to a max peptide count of 200000 if an error occurs
 		If @MyRowCount = 0 Or @myError <> 0
 			Set @MaxPeptideCount = 200000
@@ -260,13 +261,13 @@ As
 			If IsNull(@MaxPeptideCount, 0) <= 0
 				Set @MaxPeptideCount = 200000
 	End
-	
+
 	If @BatchSize < 1
 		Set @BatchSize = 1
 	If @MaxPeptideCount < 1
 		Set @MaxPeptideCount = 1
 
-	
+
 	---------------------------------------------------
 	-- Start transaction
 	---------------------------------------------------
@@ -307,7 +308,7 @@ As
 	---------------------------------------------------
 	-- Create a new NET Update task
 	---------------------------------------------------
-	
+
 	INSERT INTO T_NET_Update_Task (Processing_State, Task_Created, Task_AssignedProcessorName)
 	VALUES (1, GetDate(), @processorName)
 	--
@@ -319,8 +320,8 @@ As
 		set @message = 'Error adding new task to T_NET_Update_Task'
 		goto done
 	end
-	
-	
+
+
 	---------------------------------------------------
 	-- Find up to @BatchSize jobs in state @ProcessStateMatch
 	-- Limit the number of entries to @MaxPeptideCount peptides (though, require a minimum of one job)
@@ -331,9 +332,9 @@ As
 	---------------------------------------------------
 
 	Set @ParamFileMatch = ''
-	
+
 	-- See if any of the available jobs have a customized Regression Parameter File defined
-	--			
+	--
 	SELECT TOP 1 @ParamFileMatch = Regression_Param_File
 	FROM T_Analysis_Description TAD
 	     INNER JOIN dbo.tblPeptideHitResultTypes() RTL
@@ -354,7 +355,7 @@ As
 	              ON TAD.ResultType = RTL.ResultType
 	       WHERE TAD.Process_State = @ProcessStateMatch AND
 	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
-	       ORDER BY TAD.Job 
+	       ORDER BY TAD.Job
 	     ) A
 	     INNER JOIN
 	     ( SELECT TOP ( @BatchSize ) TAD.Job,
@@ -364,7 +365,7 @@ As
 	              ON TAD.ResultType = RTL.ResultType
 	       WHERE TAD.Process_State = @ProcessStateMatch AND
 	             IsNull(TAD.Regression_Param_File, '') = @ParamFileMatch
-	       ORDER BY TAD.Job 
+	       ORDER BY TAD.Job
 	     ) B ON B.Job <= A.Job
 	GROUP BY A.Job
 	HAVING SUM(B.PeptideCount) < @MaxPeptideCount
@@ -377,14 +378,14 @@ As
 		rollback transaction @transName
 		set @message = 'Error trying to find viable record(s)'
 		goto done
-	end		
+	end
 
 
 	If @myRowCount = 0
 	Begin
 		-- The @MaxPeptideCount filter filtered out all of the jobs
 		-- Repeat the insert but only grab the first available job
-		
+
 		INSERT INTO T_NET_Update_Task_Job_Map ( Task_ID, Job )
 		SELECT TOP 1 @TaskID AS Task_ID, Job
 		FROM T_Analysis_Description TAD WITH ( HoldLock )
@@ -408,7 +409,7 @@ As
 			set @message = 'There are no longer any jobs with state ' + Convert(varchar(12), @ProcessStateMatch) + '; unable to continue'
 			goto done
 		end
-		
+
 		-- Update ParamFileMatch if this job has a Regression parameter file defined
 		--
 		SELECT @ParamFileMatch = IsNull(TAD.Regression_Param_File, '')
@@ -416,16 +417,16 @@ As
 		     INNER JOIN T_Analysis_Description TAD
 		       ON TJM.Job = TAD.Job
 		WHERE Task_ID = @TaskID
-		
+
 	End
-	
+
 	---------------------------------------------------
 	-- set state and last_affected for the selected jobs
 	---------------------------------------------------
 	--
 	UPDATE T_Analysis_Description
 	SET Process_State = @NextProcessState, Last_Affected = GETDATE()
-	FROM T_Analysis_Description TAD INNER JOIN 
+	FROM T_Analysis_Description TAD INNER JOIN
 		 T_NET_Update_Task_Job_Map TJM ON TAD.Job = TJM.Job
 	WHERE TJM.Task_ID = @TaskID
 	--
@@ -446,7 +447,7 @@ As
 
 	---------------------------------------------------
 	-- Set the default values for these parameters
-	-- If a parameter file is defined via @ParamFileMatch or 
+	-- If a parameter file is defined via @ParamFileMatch or
 	--  is defined in in T_Process_Config, then these defaults will get superseded
 	---------------------------------------------------
 	--
@@ -458,24 +459,27 @@ As
 	Begin
 		Set @ParamFileName = ''
 		SELECT @ParamFileName = Value
-		FROM T_Process_Config 
+		FROM T_Process_Config
 		WHERE [Name] = 'NET_Regression_Param_File_Name'
 	End
 	Else
 		Set @ParamFileName = @ParamFileMatch
 
 	---------------------------------------------------
-	-- Write the output files
+	-- Populate the file / directory paths
 	---------------------------------------------------
 
-	Exec @myError = ExportGANETData @TaskID,
-									@SourceFolderPath = @SourceFolderPath, 
+    Exec @myError = ExportGANETData @TaskID,
+									@SourceFolderPath = @SourceFolderPath,
 									@ResultsFolderPath = @ResultsFolderPath,
-									@SourceFileName = @SourceFileName output, 
-									@ResultsFileName = @ResultsFileName output, 
-									@PredNETsFileName = @PredNETsFileName output, 
+									@SourceFileName = @SourceFileName output,
+									@ResultsFileName = @ResultsFileName output,
+									@PredNETsFileName = @PredNETsFileName output,
 									@ObsNETsFileName = @ObsNETsFileName output,
+                                    @skipXpCmdShell = 1,
 									@message = @message output
+    Set @myError = 0
+
 	--
 	if @myError = 0
 	begin
@@ -486,7 +490,7 @@ As
 	begin
 		If Len(IsNull(@message, '')) = 0
 			Set @message = 'Error calling ExportGANETData for TaskID ' + Convert(varchar(9), @TaskID)
-		
+
 		-- Error calling ExportGANETData
 		-- Post an error log entry
 		Exec PostLogEntry 'Error', @message, 'RequestGANETUpdateTask'
@@ -495,7 +499,7 @@ As
 		Exec SetGANETUpdateTaskState @TaskID, 6, @GANETProcessingTimeoutState, @message output
 		goto done
 	end
-	
+
 	---------------------------------------------------
 	-- If we get to this point, then all went fine
 	-- Update TaskAvailable

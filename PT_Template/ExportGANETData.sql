@@ -4,12 +4,12 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ExportGANETData
+CREATE Procedure [dbo].[ExportGANETData]
 /****************************************************
 **
-**	Desc: 
+**	Desc:
 **		Optionally calls MT_Main..GetGANETFolderPaths, then calls
-**      ExportGANETPeptideFile to create the Peptide file, 
+**      ExportGANETPeptideFile to create the Peptide file,
 **		then creates the Job Stats file(s)
 **
 **	Return values: 0: success, otherwise, error code
@@ -24,7 +24,8 @@ CREATE Procedure ExportGANETData
 **			07/03/2006 mem - Now using dbo.udfCombinePaths() to combine paths
 **			07/05/2006 mem - Now calling ValidateFolderExists to validate that the output and results folders exist
 **			03/13/2010 mem - Added parameter @ObsNETsFileName and made @SourceFolderPath and @ResultsFolderPath output parameters
-**    
+**          08/14/2019 mem - Added parameter @skipXpCmdShell
+**
 *****************************************************/
 (
 	@TaskID int,											-- Corresponds to task in T_NET_Update_Task
@@ -36,11 +37,12 @@ CREATE Procedure ExportGANETData
 	@ObsNETsFileName varchar(256) = '' output,				-- Observed NETs results file name
 	@jobStatsFileName varchar(256) = 'jobStats.txt',
 	@exportJobStatsFileOnly tinyint = 0,					-- When 1, then only creates the Job Stats file(s) and does not call ExportGANETPeptideFile
+    @skipXpCmdShell Tinyint = 0,
 	@message varchar(256)='' OUTPUT
 )
 As
 	Set nocount on
-	
+
 	Declare @myRowCount int
 	Declare @myError int
 	Set @myRowCount = 0
@@ -64,6 +66,10 @@ As
 
 	Set @DBName = DB_Name()
 
+    Set @exportJobStatsFileOnly = IsNull(@exportJobStatsFileOnly, 0)
+    Set @skipXpCmdShell = IsNull(@skipXpCmdShell, 0)
+
+
 	If Len(IsNull(@SourceFolderPath, '')) = 0 OR Len(IsNull(@ResultsFolderPath, '')) = 0
 	Begin
 		--------------------------------------------------------------
@@ -72,7 +78,7 @@ As
 		--
 		set @SourceFolderPathBase = ''
 		set @ResultsFolderPathBase = ''
-		
+
 		exec @myError = MT_Main..GetGANETFolderPaths
 											0,	-- @clientPerspective = false
 											'', -- @SourceFileName
@@ -98,11 +104,11 @@ As
 	SELECT @LastJob = Max(Job)
 	FROM T_NET_Update_Task_Job_Map
 	WHERE Task_ID = @TaskID
-	
+
 	If @FirstJob Is Null OR @LastJob Is Null
 	Begin
 		Set @myError = 60000
-		Set @message = 'No jobs were found in T_NET_Update_Task_Job_Map for Task_ID ' + Convert(varchar(9), @TaskID) 
+		Set @message = 'No jobs were found in T_NET_Update_Task_Job_Map for Task_ID ' + Convert(varchar(9), @TaskID)
 		Goto Done
 	End
 
@@ -111,14 +117,14 @@ As
 	-- Try to create it if it does not exist
 	---------------------------------------------------
 	exec @myError = ValidateFolderExists @SourceFolderPath, @CreateIfMissing = 1, @message = @message output
-	
+
 	If @myError <> 0
 	Begin
 		if Len(IsNull(@message, '')) = 0
 			Set @message = 'Error verifying that the NET Processing output folder exists: ' + IsNull(@SourceFolderPath, '??')
 		else
 			Set @message = @message + ' (NET Processing folder)'
-			
+
 		Set @myError = 60001
 		Goto Done
 	End
@@ -128,18 +134,18 @@ As
 	-- Try to create it if it does not exist
 	---------------------------------------------------
 	exec @myError = ValidateFolderExists @ResultsFolderPath, @CreateIfMissing = 1, @message = @message output
-	
+
 	If @myError <> 0
 	Begin
 		if Len(IsNull(@message, '')) = 0
 			Set @message = 'Error verifying that the NET Processing results folder exists: ' + IsNull(@ResultsFolderPath, '??')
 		else
 			Set @message = @message + ' (NET Processing folder)'
-			
+
 		Set @myError = 60002
 		Goto Done
 	End
-		
+
 	---------------------------------------------------
 	-- Write the output files
 	-- Define @SourceFileName, @ResultsFileName, @PredNETsFileName, and @ObsNETsFileName based on @FirstJob and @Last Job
@@ -149,7 +155,7 @@ As
 		Set @JobFileSuffix = '_Job' + Convert(varchar(12), @FirstJob) + '.txt'
 	Else
 		Set @JobFileSuffix = '_Jobs' + Convert(varchar(12), @FirstJob) + '-' + Convert(varchar(12), @LastJob) + '.txt'
-		
+
 	Set @SourceFileName = 'peptideGANET' + @JobFileSuffix
 	Set @ResultsFileName = 'JobGANETs' + @JobFileSuffix
 	Set @PredNETsFileName = 'PredictGANETs' + @JobFileSuffix
@@ -162,7 +168,7 @@ As
 	UPDATE T_NET_Update_Task
 	SET Output_Folder_Path = @SourceFolderPath,
 		Out_File_Name = @SourceFileName,
-		Results_Folder_Path = @ResultsFolderPath, 
+		Results_Folder_Path = @ResultsFolderPath,
 		Results_File_Name = @ResultsFileName,
 		PredictNETs_File_Name = @PredNETsFileName,
 		ObservedNETs_File_Name = @ObsNETsFileName
@@ -181,20 +187,20 @@ As
 	-- Possibly write out the peptides file
 	--------------------------------------------------------------
 	--
-	If IsNull(@exportJobStatsFileOnly, 0) = 0
+	If @exportJobStatsFileOnly= 0 And @skipXpCmdShell = 0
 	Begin
 		Exec @myError = ExportGANETPeptideFile @SourceFolderPath, @SourceFileName, @TaskID, @UsePeakApex, @message Output
 		--
 		if @myError <> 0
 			Goto Done
 	End
-	
+
 	--------------------------------------------------------------
 	-- Write out the job stats file
 	--------------------------------------------------------------
 
 	/**************************************************************************
-	** xp_cmdshell note 
+	** xp_cmdshell note
 	**
 	** When user MTSProc calls this SP, xp_cmdshell will run under the
 	** xp_cmdshell Proxy Account.  This account must be created
@@ -204,7 +210,7 @@ As
 	**
 	** Additionally, when the password for MTSProc changes, this
 	** command must be run to update the password
-	** 
+	**
 	**************************************************************************/
 
 	--
@@ -217,8 +223,11 @@ As
 	Set @BcpSql = @BcpSql + ' WHERE TJM.Task_ID = ' + Convert(varchar(9), @TaskID)
 	Set @cmd = 'bcp "' + @BcpSql + '" queryout ' + @JobStatsFilePath + ' -c -T'
 	--
-	EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT 
-	Set @myError = @result
+    If @skipXpCmdShell = 0
+    Begin
+	    EXEC @result = master..xp_cmdshell @cmd, NO_OUTPUT
+	    Set @myError = @result
+    End
 	--
 	if @myError <> 0
 	begin
@@ -226,9 +235,9 @@ As
 		Set @message = 'Error exporting data from V_MSMS_Analysis_Jobs to ' + @SourceFolderPath
 		goto done
 	end
-	
+
 	SET @message = 'Complete ExportGANET'
-	
+
 Done:
 	return @myError
 
