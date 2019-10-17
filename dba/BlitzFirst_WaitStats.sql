@@ -28,7 +28,5 @@ CREATE NONCLUSTERED INDEX [IX_ServerName_wait_type_CheckDate_Includes] ON [dbo].
 	[wait_type] ASC,
 	[CheckDate] ASC
 )
-INCLUDE ( 	[wait_time_ms],
-	[signal_wait_time_ms],
-	[waiting_tasks_count]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
+INCLUDE([wait_time_ms],[signal_wait_time_ms],[waiting_tasks_count]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 90) ON [PRIMARY]
 GO
