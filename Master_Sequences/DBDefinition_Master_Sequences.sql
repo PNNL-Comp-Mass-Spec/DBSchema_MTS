@@ -2,10 +2,8 @@
 CREATE DATABASE [Master_Sequences] ON  PRIMARY 
 ( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 161523648KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 95104KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 82368KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
-GO
-ALTER DATABASE [Master_Sequences] SET COMPATIBILITY_LEVEL = 100
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin

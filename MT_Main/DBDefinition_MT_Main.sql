@@ -1,11 +1,9 @@
 /****** Object:  Database [MT_Main] ******/
 CREATE DATABASE [MT_Main] ON  PRIMARY 
-( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 1598464KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Data', FILENAME = N'I:\SQLServerData\MT_Main_data.mdf' , SIZE = 1758336KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 282944KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_Main_Log', FILENAME = N'H:\SQLServerData\MT_Main_log.ldf' , SIZE = 1751488KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
-GO
-ALTER DATABASE [MT_Main] SET COMPATIBILITY_LEVEL = 100
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin

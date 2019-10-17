@@ -5,8 +5,6 @@ CREATE DATABASE [MT_Template_01] ON  PRIMARY
 ( NAME = N'MT_Template_01_log', FILENAME = N'I:\SQLServerData\MT_Template_01_log.ldf' , SIZE = 101376KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
-ALTER DATABASE [MT_Template_01] SET COMPATIBILITY_LEVEL = 100
-GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin
 EXEC [MT_Template_01].[dbo].[sp_fulltext_database] @action = 'disable'

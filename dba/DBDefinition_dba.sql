@@ -1,11 +1,9 @@
 /****** Object:  Database [dba] ******/
 CREATE DATABASE [dba] ON  PRIMARY 
-( NAME = N'dba', FILENAME = N'I:\SQLServerData\dba.mdf' , SIZE = 2432576KB , MAXSIZE = UNLIMITED, FILEGROWTH = 1024KB )
+( NAME = N'dba', FILENAME = N'I:\SQLServerData\dba.mdf' , SIZE = 1810048KB , MAXSIZE = UNLIMITED, FILEGROWTH = 1024KB )
  LOG ON 
-( NAME = N'dba_log', FILENAME = N'H:\SQLServerData\dba_log.LDF' , SIZE = 625792KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
+( NAME = N'dba_log', FILENAME = N'H:\SQLServerData\dba_log.LDF' , SIZE = 353216KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
-GO
-ALTER DATABASE [dba] SET COMPATIBILITY_LEVEL = 100
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
 begin
