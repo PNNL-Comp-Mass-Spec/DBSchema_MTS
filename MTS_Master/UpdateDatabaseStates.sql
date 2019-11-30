@@ -215,5 +215,3 @@ GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStates] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStates] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[UpdateDatabaseStates] TO [MTUser] AS [dbo]
-GO

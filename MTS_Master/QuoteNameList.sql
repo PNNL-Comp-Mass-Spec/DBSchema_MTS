@@ -84,5 +84,3 @@ GRANT VIEW DEFINITION ON [dbo].[QuoteNameList] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[QuoteNameList] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[QuoteNameList] TO [MTUser] AS [dbo]
-GO

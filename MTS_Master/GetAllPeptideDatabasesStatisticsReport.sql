@@ -360,7 +360,5 @@ GRANT VIEW DEFINITION ON [dbo].[GetAllPeptideDatabasesStatisticsReport] TO [MTS_
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetAllPeptideDatabasesStatisticsReport] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetAllPeptideDatabasesStatisticsReport] TO [MTUser] AS [dbo]
-GO
 GRANT EXECUTE ON [dbo].[GetAllPeptideDatabasesStatisticsReport] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

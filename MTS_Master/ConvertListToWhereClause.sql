@@ -113,5 +113,3 @@ GRANT VIEW DEFINITION ON [dbo].[ConvertListToWhereClause] TO [MTS_DB_Dev] AS [db
 GO
 GRANT VIEW DEFINITION ON [dbo].[ConvertListToWhereClause] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[ConvertListToWhereClause] TO [MTUser] AS [dbo]
-GO

@@ -65,7 +65,5 @@ GRANT VIEW DEFINITION ON [dbo].[CleanupTrueFalseParameter] TO [MTS_DB_Dev] AS [d
 GO
 GRANT VIEW DEFINITION ON [dbo].[CleanupTrueFalseParameter] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [MTUser] AS [dbo]
-GO
 GRANT EXECUTE ON [dbo].[CleanupTrueFalseParameter] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

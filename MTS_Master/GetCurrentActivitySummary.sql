@@ -154,5 +154,3 @@ GRANT VIEW DEFINITION ON [dbo].[GetCurrentActivitySummary] TO [MTS_DB_Dev] AS [d
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetCurrentActivitySummary] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[GetCurrentActivitySummary] TO [MTUser] AS [dbo]
-GO

@@ -153,5 +153,3 @@ GRANT VIEW DEFINITION ON [dbo].[MakeProvisionalPeptideDB] TO [MTS_DB_Dev] AS [db
 GO
 GRANT VIEW DEFINITION ON [dbo].[MakeProvisionalPeptideDB] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[MakeProvisionalPeptideDB] TO [MTUser] AS [dbo]
-GO
