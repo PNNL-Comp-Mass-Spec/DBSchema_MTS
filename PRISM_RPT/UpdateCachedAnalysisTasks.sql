@@ -259,5 +259,3 @@ GRANT VIEW DEFINITION ON [dbo].[UpdateCachedAnalysisTasks] TO [MTS_DB_Dev] AS [d
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateCachedAnalysisTasks] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[UpdateCachedAnalysisTasks] TO [MTUser] AS [dbo]
-GO
