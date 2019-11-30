@@ -292,5 +292,3 @@ GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Dev]
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT EXECUTE ON [dbo].[RefreshCachedDMSAnalysisJobInfo] TO [MTUser] AS [dbo]
-GO

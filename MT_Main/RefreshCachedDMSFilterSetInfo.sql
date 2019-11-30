@@ -242,8 +242,6 @@ Done:
 	Return @myError
 
 GO
-GRANT EXECUTE ON [dbo].[RefreshCachedDMSFilterSetInfo] TO [MTS_DB_Dev] AS [dbo]
-GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSFilterSetInfo] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[RefreshCachedDMSFilterSetInfo] TO [MTS_DB_Lite] AS [dbo]
