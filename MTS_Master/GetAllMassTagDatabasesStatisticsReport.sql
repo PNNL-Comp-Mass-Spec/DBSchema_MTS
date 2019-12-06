@@ -428,5 +428,7 @@ GRANT VIEW DEFINITION ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [MTS_
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [MTUser] AS [dbo]
+GO
 GRANT EXECUTE ON [dbo].[GetAllMassTagDatabasesStatisticsReport] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

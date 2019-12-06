@@ -62,3 +62,5 @@ GRANT VIEW DEFINITION ON [dbo].[ConstructGeneralStatisticsValueList] TO [MTS_DB_
 GO
 GRANT VIEW DEFINITION ON [dbo].[ConstructGeneralStatisticsValueList] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[ConstructGeneralStatisticsValueList] TO [MTUser] AS [dbo]
+GO

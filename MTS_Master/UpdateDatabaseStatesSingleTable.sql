@@ -277,3 +277,5 @@ GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTS_DB_Dev]
 GO
 GRANT VIEW DEFINITION ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[UpdateDatabaseStatesSingleTable] TO [MTUser] AS [dbo]
+GO

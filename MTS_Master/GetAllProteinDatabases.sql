@@ -193,5 +193,7 @@ GRANT VIEW DEFINITION ON [dbo].[GetAllProteinDatabases] TO [MTS_DB_Dev] AS [dbo]
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetAllProteinDatabases] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[GetAllProteinDatabases] TO [MTUser] AS [dbo]
+GO
 GRANT EXECUTE ON [dbo].[GetAllProteinDatabases] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO

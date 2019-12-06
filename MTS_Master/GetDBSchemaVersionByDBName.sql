@@ -79,5 +79,7 @@ GRANT VIEW DEFINITION ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Dev] AS [
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetDBSchemaVersionByDBName] TO [MTS_DB_Lite] AS [dbo]
 GO
+GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [MTUser] AS [dbo]
+GO
 GRANT EXECUTE ON [dbo].[GetDBSchemaVersionByDBName] TO [pogo\MTS_DB_Dev] AS [dbo]
 GO
