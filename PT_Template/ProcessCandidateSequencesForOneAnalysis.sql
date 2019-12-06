@@ -4,14 +4,14 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure ProcessCandidateSequencesForOneAnalysis
+CREATE Procedure [dbo].[ProcessCandidateSequencesForOneAnalysis]
 /****************************************************
-** 
-**	Desc:	Uses T_Seq_Candidates and T_Seq_Candidate_ModDetails to 
+**
+**	Desc:	Uses T_Seq_Candidates and T_Seq_Candidate_ModDetails to
 **			lookup the Seq_ID value for each sequence, populating
 **			T_Sequence as needed
 **
-**			Next, uses T_Seq_Candidate_to_Peptide_Map to update the 
+**			Next, uses T_Seq_Candidate_to_Peptide_Map to update the
 **			Seq_ID values in T_Peptides for the given analysis job
 **
 **	Return values: 0: success, otherwise, error code
@@ -36,7 +36,8 @@ CREATE Procedure ProcessCandidateSequencesForOneAnalysis
 **			12/06/2012 mem - No longer populating T_Sequence_Mod_Info
 **			               - Now examining DeleteCandidateSequences in T_Process_Step_Control
 **			08/31/2015 mem - Now checking for entries in T_Seq_Candidates with duplicate Seq_ID values
-**    
+**			12/04/2019 mem - Switched Master_Sequences location to Pogo
+**
 *****************************************************/
 (
 	@NextProcessState int = 30,
@@ -47,10 +48,10 @@ CREATE Procedure ProcessCandidateSequencesForOneAnalysis
 )
 As
 	Set NoCount On
-	
+
 	-- This statement is needed because the Master_Sequences database may be located on another server
 	Set XACT_ABORT On
-	
+
 	declare @myRowCount int
 	declare @myError int
 	set @myRowCount = 0
@@ -59,20 +60,20 @@ As
 	declare @CallingProcName varchar(128)
 	declare @CurrentLocation varchar(128)
 	Set @CurrentLocation = 'Start'
-	
-	set @count = 0	
+
+	set @count = 0
 	set @message = ''
 	Set @infoOnly = IsNull(@infoOnly, 0)
-	
+
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'ProteinSeqs2'
-	
+	set @MasterSequencesServerName = 'Pogo'
+
 	declare @jobStr varchar(12)
 	set @jobStr = cast(@job as varchar(12))
 
 	declare @OrganismDBFileID int
 	declare @ProteinCollectionFileID int
-	
+
 	declare @DeleteTempTables tinyint
 	declare @processCount int
 	declare @sequencesAdded int
@@ -86,7 +87,7 @@ As
 
 	declare @CreateTempCandidateSequenceTables tinyint
 	declare @CandidateTablesContainJobColumn tinyint
-	
+
 	declare @CandidateSequencesTableName varchar(256)
 	declare @CandidateModDetailsTableName varchar(256)
 
@@ -97,15 +98,15 @@ As
 
 	declare @SourceDatabase varchar(256)
 	Set @SourceDatabase = @@ServerName + '.' + DB_Name()
-	
+
 	declare @logLevel int
 	set @logLevel = 1		-- Default to normal logging
 
 	Begin Try
 		Set @CurrentLocation = 'Lookup settings in T_Process_Step_Control'
-		
+
 		--------------------------------------------------------------
-		-- Lookup the LogLevel state 
+		-- Lookup the LogLevel state
 		-- 0=Off, 1=Normal, 2=Verbose, 3=Debug
 		--------------------------------------------------------------
 		--
@@ -121,23 +122,23 @@ As
 		WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
 		--
 		SELECT @myRowcount = @@rowcount, @myError = @@error
-		
+
 		Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
-		
+
 		If @SkipPeptidesFromReversedProteins <> 0 And @infoOnly = 0
 		Begin
 			-- Need to delete entries from the T_Seq_Candidate tables that
 			-- map only to peptides with State_ID = 2 in T_Peptides
 
 			Set @CurrentLocation = 'Delete entries from the T_Seq_Candidate tables that map only to peptides with State_ID = 2'
-			
+
 			CREATE TABLE #Tmp_LocalSeqsToDelete (
 				Seq_ID_Local int NOT NULL
 			)
-			
+
 			INSERT INTO #Tmp_LocalSeqsToDelete (Seq_ID_Local)
 			SELECT Seq_ID_Local
-			FROM (	SELECT SC.Seq_ID_Local, COUNT(*) AS Peptide_Count, 
+			FROM (	SELECT SC.Seq_ID_Local, COUNT(*) AS Peptide_Count,
 						SUM(CASE WHEN State_ID = 2 THEN 1 ELSE 0 END) AS Rev_Peptide_Count
 					FROM T_Peptides Pep INNER JOIN
 						T_Seq_Candidate_to_Peptide_Map SCPM ON Pep.Peptide_ID = SCPM.Peptide_ID INNER JOIN
@@ -155,7 +156,7 @@ As
 				Set @message = 'Error Populating #Tmp_LocalSeqsToDelete for job ' + @jobStr + '; error ' + Convert(varchar(12), @myError)
 				Goto Done
 			End
-			
+
 			If @myRowcount > 0
 			Begin
 				-- Found sequences to delete
@@ -181,16 +182,16 @@ As
 				WHERE SC.Job = @Job
 				--
 				SELECT @myRowcount = @@rowcount, @myError = @@error
-				
+
 				-- Post a log entry
 				set @message = 'Skipping ' + Convert(varchar(12), @myRowcount) + ' unique peptides for job ' + @jobStr + ' since they map only to reversed or scrambled proteins'
 
 				execute PostLogEntry 'Warning', @message, 'ProcessCandidateSequencesForOneAnalysis'
 				set @message = ''
-				
+
 			End
 		End
-		
+
 		------------------------------------------------------------------
 		-- Lookup the number of proteins and residues in Organism DB file (aka the FASTA file)
 		--  or Protein Collection used for this analysis job
@@ -199,21 +200,21 @@ As
 		------------------------------------------------------------------
 		--
 		Set @CurrentLocation = 'Call GetOrganismDBFileInfo for job ' + @jobStr
-		
-		Exec @myError = GetOrganismDBFileInfo @job, 
+
+		Exec @myError = GetOrganismDBFileInfo @job,
 								@OrganismDBFileID  = @OrganismDBFileID OUTPUT,
 								@ProteinCollectionFileID = @ProteinCollectionFileID OUTPUT
-		
+
 		If @myError <> 0
 		Begin
-			-- GetOrganismDBFileInfo returned an error: abort processing 
+			-- GetOrganismDBFileInfo returned an error: abort processing
 			-- Note that UpdateSequenceModsForAvailableAnalyses looks for the text "Error calling GetOrganismDBFileInfo"
 			-- If found, it will not re-post an error to the log
 			Set @myError = 51112
 			Set @message = 'Error calling GetOrganismDBFileInfo (Code ' + Convert(varchar(12), @myError) + ')'
 			Goto Done
 		End
-		
+
 		Set @OrganismDBFileID = IsNull(@OrganismDBFileID, 0)
 		Set @ProteinCollectionFileID = IsNull(@ProteinCollectionFileID, 0)
 
@@ -222,7 +223,7 @@ As
 
 		-- Effective 2006-06-07, we are now creating the temp candidate sequence tables on the remote server
 		Set @CreateTempCandidateSequenceTables = 1
-		
+
 		If @CreateTempCandidateSequenceTables = 0
 		Begin
 			-- Do not create temporary candidate sequence tables; simply use the T_Seq_Candidate tables in this database
@@ -240,9 +241,9 @@ As
 			Set @CurrentLocation = @message
 
 			Set @CandidateTablesContainJobColumn = 0
-			
-			-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs2 to another computer
-			exec ProteinSeqs2.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidateSequencesTableName output, @CandidateModDetailsTableName output
+
+			-- Warning: Update @MasterSequencesServerName above if changing from Pogo to another computer
+			exec Pogo.Master_Sequences.dbo.CreateTempCandidateSequenceTables @CandidateSequencesTableName output, @CandidateModDetailsTableName output
 			--
 			SELECT @myRowCount = @@rowcount, @myError = @@error
 			--
@@ -259,7 +260,7 @@ As
 			-----------------------------------------------------------
 			--
 			Set @CurrentLocation = 'Populate ' + @MasterSequencesServerName + '.' + @CandidateSequencesTableName + ' with candidate sequences for job ' + @jobStr
-			
+
 			Set @Sql = ''
 			Set @Sql = @Sql + ' INSERT INTO ' + @MasterSequencesServerName + '.' + @CandidateSequencesTableName
 			set @Sql = @Sql +       ' (Seq_ID_Local, Clean_Sequence, Mod_Count, Mod_Description, Monoisotopic_Mass)'
@@ -284,7 +285,7 @@ As
 			--
 			Set @CurrentLocation = 'Check for invalid residue modification'
 			Set @MatchCount = 0
-			SELECT @MatchCount = COUNT(*) 
+			SELECT @MatchCount = COUNT(*)
 			FROM (	SELECT Seq_ID_Local, Mass_Correction_Tag, [Position]
 					FROM T_Seq_Candidate_ModDetails
 					WHERE (Job = @job)
@@ -303,7 +304,7 @@ As
 						'First entry is ' + Clean_Sequence + ' with mod ' + RTRIM(Mass_Correction_Tag) +
 						' on residue #' + CONVERT(varchar(9), [Position]) +
 						', occurring ' +  CONVERT(varchar(9), OccurrenceCount) + ' times'
-				FROM (	SELECT TOP 1 SCMD.Position, SC.Clean_Sequence, 
+				FROM (	SELECT TOP 1 SCMD.Position, SC.Clean_Sequence,
 									SCMD.Mass_Correction_Tag, COUNT(*) AS OccurrenceCount
 						FROM T_Seq_Candidate_ModDetails SCMD INNER JOIN
 							T_Seq_Candidates SC ON SCMD.Job = SC.Job AND SCMD.Seq_ID_Local = SC.Seq_ID_Local
@@ -314,13 +315,13 @@ As
 				--
 				SELECT @myRowCount = @@rowcount, @myError = @@error
 
-				If Len(IsNull(@messageAddnl, '')) > 0 
+				If Len(IsNull(@messageAddnl, '')) > 0
 					Set @message = @message + '; ' + @messageAddnl
-					
+
 				execute PostLogEntry 'Warning', @message, 'ProcessCandidateSequencesForOneAnalysis'
 				set @message = ''
 			End
-			
+
 			-----------------------------------------------------------
 			-- Populate @CandidateModDetailsTableName with the data to parse
 			-----------------------------------------------------------
@@ -353,12 +354,12 @@ As
 		If @logLevel >= 1
 			execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
 		--
-		exec @myError = ProteinSeqs2.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
-																@CandidateSequencesTableName, @CandidateModDetailsTableName, 
+		exec @myError = Pogo.Master_Sequences.dbo.ProcessCandidateSequences @OrganismDBFileID, @ProteinCollectionFileID,
+																@CandidateSequencesTableName, @CandidateModDetailsTableName,
 																@CandidateTablesContainJobColumn = @CandidateTablesContainJobColumn,
-																@Job = @Job, 
+																@Job = @Job,
 																@SourceDatabase = @SourceDatabase,
-																@count = @processCount output, 
+																@count = @processCount output,
 																@message = @message output
 		--
 		if @myError <> 0
@@ -367,10 +368,10 @@ As
 				set @message = 'Error with ' + @CurrentLocation + ': ' + convert(varchar(12), @myError)
 			else
 				set @message = 'Error with ' + @CurrentLocation + ': ' + @message
-				
+
 			goto Done
 		end
-		
+
 		If @CreateTempCandidateSequenceTables <> 0
 		Begin
 			-----------------------------------------------------------
@@ -378,7 +379,7 @@ As
 			-- tables on the remote server
 			-----------------------------------------------------------
 			Set @CurrentLocation = 'UPDATE T_Seq_Candidates using Seq_ID values in ' + @MasterSequencesServerName + '.' + @CandidateSequencesTableName
-			
+
 			Set @Sql = ''
 			Set @Sql = @Sql + ' UPDATE T_Seq_Candidates'
 			Set @Sql = @Sql + ' SET Seq_ID = MSeqData.Seq_ID'
@@ -396,13 +397,13 @@ As
 				goto Done
 			end
 		End
-	
+
 		-----------------------------------------------------------
 		-- Validate that all of the sequences have Seq_ID values for this job
 		-----------------------------------------------------------
 		Set @CurrentLocation = 'Validate that all of the sequences have Seq_ID values for job ' + @jobStr
 		Set @UndefinedSeqIDCount = 0
-		
+
 		SELECT @UndefinedSeqIDCount = Count(*)
 		FROM T_Seq_Candidates
 		WHERE Job = @Job AND Seq_ID IS NULL
@@ -428,7 +429,7 @@ As
 		If @logLevel >= 2
 			execute PostLogEntry 'Progress', @message, 'ProcessCandidateSequencesForOneAnalysis'
 		--
-		UPDATE T_Seq_Candidates 
+		UPDATE T_Seq_Candidates
 		SET Add_Sequence = 0
 		FROM T_Seq_Candidates
 		WHERE Job = @Job
@@ -436,9 +437,9 @@ As
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
 		-- ToDo: Possibly start a transaction here and end it after inserting new sequences into T_Sequence
-		
+
 		Set @CurrentLocation = @message
-		UPDATE T_Seq_Candidates 
+		UPDATE T_Seq_Candidates
 		SET Add_Sequence = 1
 		FROM T_Seq_Candidates TSC LEFT OUTER JOIN
 			T_Sequence S ON TSC.Seq_ID = S.Seq_ID
@@ -454,7 +455,7 @@ As
 		-- Seq_ID_Local   Mod_Description         Monoisotopic_Mass   Seq_id
 		-- 2015	          Acetyl:1,-108227.:976	  2950.4839017	      500695394
 		-- 2693	          Acetyl:1,-108227.:976	  2837.3998437	      500695394
-		
+
 		-- Use an Update query to change Add_Sequence back to 0 for the 2nd and subsequent entries
 
 		UPDATE T_Seq_Candidates
@@ -465,7 +466,7 @@ As
 		                  FROM T_Seq_Candidates
 		                  WHERE Job = @Job
 		                  GROUP BY Seq_ID
-		                  HAVING (COUNT(*) > 1) 
+		                  HAVING (COUNT(*) > 1)
 		                ) DuplicatesQ
 		       ON Target.Seq_ID = DuplicatesQ.Seq_ID AND
 		          Target.Seq_ID_Local <> DuplicatesQ.Seq_ID_Local_First
@@ -473,15 +474,15 @@ As
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 
-		
+
 		If @infoOnly <> 0
 		Begin
 			SELECT Seq_ID, Clean_Sequence, Mod_Count, Mod_Description, Monoisotopic_Mass, Add_Sequence
 			FROM T_Seq_Candidates
 			WHERE Job = @Job
 			ORDER BY Add_Sequence Desc, Seq_ID
-			
-			
+
+
 			SELECT SC.Seq_ID,
 			       SCMD.Mass_Correction_Tag,
 			       SCMD.Position,
@@ -495,10 +496,10 @@ As
 			          SCMD.Seq_ID_Local = SC.Seq_ID_Local
 			WHERE SCMS.Job = @Job
 			ORDER BY Add_Sequence Desc, Seq_ID, Position
-			
+
 			Goto Done
 		End
-			
+
 		-----------------------------------------------------------
 		-- Add the new sequences to T_Sequence
 		-----------------------------------------------------------
@@ -552,7 +553,7 @@ As
 		UPDATE T_Peptides
 		SET Seq_ID = TSC.Seq_ID
 		FROM T_Seq_Candidates TSC INNER JOIN
-			T_Seq_Candidate_to_Peptide_Map TSCPM ON 
+			T_Seq_Candidate_to_Peptide_Map TSCPM ON
 			TSC.Job = TSCPM.Job AND TSC.Seq_ID_Local = TSCPM.Seq_ID_Local INNER JOIN
 			T_Peptides P ON TSCPM.Peptide_ID = P.Peptide_ID
 		WHERE TSC.Job = @Job
@@ -565,7 +566,7 @@ As
 		-----------------------------------------------------------
 		-- Update Cleavage_State_Max in T_Sequence for the peptides present in this job
 		-----------------------------------------------------------
-		--	
+		--
 		set @message = 'Update Cleavage_State_Max in T_Sequence for job ' + @jobStr
 		Set @CurrentLocation = @message
 		If @logLevel >= 2
@@ -576,7 +577,7 @@ As
 		FROM T_Sequence S INNER JOIN (
 			SELECT P.Seq_ID, MAX(ISNULL(PPM.Cleavage_State, 0)) AS Cleavage_State_Max
 			FROM T_Peptides P INNER JOIN
-				T_Peptide_to_Protein_Map PPM ON 
+				T_Peptide_to_Protein_Map PPM ON
 				P.Peptide_ID = PPM.Peptide_ID INNER JOIN
 				T_Sequence ON P.Seq_ID = T_Sequence.Seq_ID
 			WHERE P.Job = @job
@@ -592,12 +593,12 @@ As
 		-- Delete entries from the T_Seq_Candidate tables for this job
 		-- Skip this step if 'DeleteCandidateSequences' is disabled in T_Process_Step_Control
 		-----------------------------------------------------------
-		--	
+		--
 		Declare @Enabled tinyint = 1
 		SELECT @Enabled = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'DeleteCandidateSequences')
 		If @Enabled <> 0
 		Begin
-		
+
 			set @message = 'Delete entries from the T_Seq_Candidate tables for job ' + @jobStr
 			Set @CurrentLocation = @message
 			If @logLevel >= 2
@@ -642,9 +643,9 @@ As
 				set @message = 'Error deleting entries from T_Seq_Candidate_ModSummary for job ' + @jobStr
 				Goto Done
 			End
-			
+
 		End
-		
+
 		-----------------------------------------------------------
 		-- Update state of analysis job
 		-----------------------------------------------------------
@@ -658,11 +659,11 @@ As
 	Begin Catch
 		-- Error caught; log the error then abort processing
 		Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'ProcessCandidateSequencesForOneAnalysis')
-		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+		exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1,
 								@ErrorNum = @myError output, @message = @message output
 		Goto Done
-	End Catch		
-	
+	End Catch
+
 Done:
 
 	-----------------------------------------------------------
@@ -673,12 +674,12 @@ Done:
 	Begin
 		Begin Try
 			Set @CurrentLocation = 'Delete temporary tables ' + @CandidateSequencesTableName + ' and ' + @CandidateModDetailsTableName
-			exec ProteinSeqs2.Master_Sequences.dbo.DropTempSequenceTables @CandidateSequencesTableName, @CandidateModDetailsTableName
+			exec Pogo.Master_Sequences.dbo.DropTempSequenceTables @CandidateSequencesTableName, @CandidateModDetailsTableName
 		End Try
 		Begin Catch
 			-- Error caught
 			Set @CallingProcName = IsNull(ERROR_PROCEDURE(), 'ProcessCandidateSequencesForOneAnalysis')
-			exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1, 
+			exec LocalErrorHandler  @CallingProcName, @CurrentLocation, @LogError = 1,
 									@ErrorNum = @myError output, @message = @message output
 		End Catch
 	End

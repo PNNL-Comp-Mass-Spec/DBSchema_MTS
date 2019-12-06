@@ -4,11 +4,10 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-CREATE Procedure LoadGANETPredictionFile
+CREATE Procedure [dbo].[LoadGANETPredictionFile]
 /****************************************************
 **
-**	Desc: 
+**	Desc:
 **		Loads GANET elution time prediction for peptide sequences
 **
 **	Parameters:
@@ -33,7 +32,8 @@ CREATE Procedure LoadGANETPredictionFile
 **			11/21/2006 mem - Switched Master_Sequences location from Daffy to ProteinSeqs
 **			07/23/2008 mem - Switched Master_Sequences location to Porky
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
-**    
+**			12/04/2019 mem - Switched Master_Sequences location to Pogo
+**
 *****************************************************/
 (
 	@file varchar(255) = 'PredictGANETs.txt',
@@ -48,20 +48,20 @@ AS
 	declare @myRowCount int
 	set @myError = 0
 	set @myRowCount = 0
-	
+
 	declare @completionCode tinyint
 	set @completionCode = 3
 
 	declare @MasterSequencesServerName varchar(64)
-	set @MasterSequencesServerName = 'ProteinSeqs2'
+	set @MasterSequencesServerName = 'Pogo'
 
 	set @message = ''
 	set @numLoaded = 0
-	
+
 	declare @result int
-	
+
 	declare @filePath varchar(512)
-	
+
 	declare @PNetTableName varchar(256)
 	declare @DeleteTempTables tinyint
 	declare @processCount int
@@ -80,7 +80,7 @@ AS
 	--------------------------------------------------------------
 	--
 	SELECT @logLevel = enabled FROM T_Process_Step_Control WHERE (Processing_Step_Name = 'LogLevel')
-	
+
 	-----------------------------------------------
 	-- Set up file names and paths
 	-----------------------------------------------
@@ -89,20 +89,20 @@ AS
 	declare @fileExists tinyint
 	declare @LineCountToSkip int	-- This will be set to a positive number if the file contains a header line
 	declare @columnCount int
-	
+
 	-----------------------------------------------
 	-- Verify that input file exists and count the number of columns
 	-----------------------------------------------
 	-- Set @LineCountToSkip to a negative value to instruct ValidateDelimitedFile to auto-determine whether or not a header row is present
 	Set @LineCountToSkip = -1
 	Exec @result = ValidateDelimitedFile @filePath, @LineCountToSkip OUTPUT, @fileExists OUTPUT, @columnCount OUTPUT, @message OUTPUT, @ColumnToUseForNumericCheck = 3
-	
+
 	if @result <> 0
 	Begin
 		If Len(@message) = 0
 			Set @message = 'Error calling ValidateDelimitedFile for ' + @filePath + ' (Code ' + Convert(varchar(11), @result) + ')'
-		
-		Set @myError = 50000		
+
+		Set @myError = 50000
 	End
 	else
 	Begin
@@ -124,11 +124,11 @@ AS
 	-----------------------------------------------
 	-- Load GANET predicted elution times from file
 	-----------------------------------------------
-	
+
 	-- don't do any more if errors at this point
 	--
 	if @myError <> 0 goto done
-	
+
 	-----------------------------------------------
 	-- create temporary table to hold contents of file
 	-----------------------------------------------
@@ -149,13 +149,13 @@ AS
 	end
 
 	-----------------------------------------------
-	-- Add index to temporary table to improve the 
+	-- Add index to temporary table to improve the
 	-- speed of the Update query
 	-----------------------------------------------
 	--
 	CREATE NONCLUSTERED INDEX #IX_TempTable_TGA_Seq_ID ON #Tmp_TGA (Seq_ID)
 
-	
+
 	-----------------------------------------------
 	-- bulk load contents of results file into temporary table
 	-- using bulk insert function
@@ -163,7 +163,7 @@ AS
 	--
 	declare @c nvarchar(2048)
 
-	Set @c = 'BULK INSERT #Tmp_TGA FROM ' + '''' + @filePath + ''' WITH (FIRSTROW = ' + Convert(varchar(9), @LineCountToSkip+1) + ')' 
+	Set @c = 'BULK INSERT #Tmp_TGA FROM ' + '''' + @filePath + ''' WITH (FIRSTROW = ' + Convert(varchar(9), @LineCountToSkip+1) + ')'
 	exec @result = sp_executesql @c
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -176,7 +176,7 @@ AS
 		goto Done
 	end
 
-	
+
 	-----------------------------------------------
 	-- Populate GANET predicted NET values from imported values
 	-----------------------------------------------
@@ -186,7 +186,7 @@ AS
 	--
 	UPDATE T_Sequence
 	SET T_Sequence.GANET_Predicted = #Tmp_TGA.PNET
-	FROM T_Sequence AS T INNER JOIN #Tmp_TGA ON 
+	FROM T_Sequence AS T INNER JOIN #Tmp_TGA ON
 		 #Tmp_TGA.Seq_ID = T.Seq_ID
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -196,7 +196,7 @@ AS
 		set @message = 'Problem copying data from temp table'
 		goto Done
 	end
-	
+
 	set @numLoaded = @myRowCount
 
 
@@ -207,10 +207,10 @@ AS
 	-- If the Master Sequences DB is on the same server as this DB, then we can use this query
 	--  UPDATE MST
 	--  SET GANET_Predicted = #Tmp_TGA.PNET, Last_Affected = GetDate()
-	--  FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
+	--  FROM Pogo.Master_Sequences.dbo.T_Sequence AS MST INNER JOIN
 	--  	 #Tmp_TGA ON #Tmp_TGA.Seq_ID = MST.Seq_ID
 	--  WHERE MST.GANET_Predicted <> #Tmp_TGA.PNET OR MST.GANET_Predicted Is Null
-	
+
 	-- However, since the Master Sequences DB could be on a different server, we need to use Master_Seq_Scratch
 
 	-----------------------------------------------------------
@@ -221,8 +221,8 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	-- Warning: Update @MasterSequencesServerName above if changing from ProteinSeqs2 to another computer
-	exec ProteinSeqs2.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
+	-- Warning: Update @MasterSequencesServerName above if changing from Pogo to another computer
+	exec Pogo.Master_Sequences.dbo.CreateTempPNETTables @PNetTableName output
 	--
 	SELECT @myRowcount = @@rowcount, @myError = @@error
 	--
@@ -266,7 +266,7 @@ AS
 	If @logLevel >= 2
 		execute PostLogEntry 'Progress', @message, 'LoadGANETPredictionFile'
 	--
-	exec @myError = ProteinSeqs2.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
+	exec @myError = Pogo.Master_Sequences.dbo.UpdatePNETDataForSequences @PNetTableName, @processCount output, @message output
 	--
 	if @myError <> 0
 	begin
@@ -274,7 +274,7 @@ AS
 			set @message = 'Error calling Master_Sequences.dbo.UpdatePNETDataForSequences for file ' + @file + ': ' + convert(varchar(12), @myError)
 		else
 			set @message = 'Error calling Master_Sequences.dbo.UpdatePNETDataForSequences for file ' + @file + ': ' + @message
-			
+
 		goto Done
 	end
 
@@ -284,19 +284,19 @@ AS
 
 	set @message = 'Updated predicted NETs for ' + cast(@numLoaded as varchar(12)) + ' sequences'
 
-	
+
 	-----------------------------------------------------------
 	-- Delete the temporary PNET data table, since no longer needed
 	-----------------------------------------------------------
 	--
 	If @DeleteTempTables = 1
-		exec ProteinSeqs2.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
+		exec Pogo.Master_Sequences.dbo.DropTempSequenceTables @PNetTableName
 
 
 	-----------------------------------------------
 	-- Exit
 	-----------------------------------------------
-Done:	
+Done:
 	return @myError
 
 

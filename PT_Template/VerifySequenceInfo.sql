@@ -4,16 +4,16 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure VerifySequenceInfo
+CREATE Procedure [dbo].[VerifySequenceInfo]
 /****************************************************
 **
-**	Desc: 
+**	Desc:
 **		Refreshes local copy of sequences table
 **      from the master sequence database and
 **      verifies that all the necessary information
 **      is available (for now, just monoisotopic mass)
 **
-**		Works on all the peptides 
+**		Works on all the peptides
 **      for the all the analyses with
 **		Process_State = @ProcessStateMatch
 **
@@ -39,7 +39,8 @@ CREATE Procedure VerifySequenceInfo
 **			02/25/2010 mem - Switched Master_Sequences location to ProteinSeqs2
 **			11/11/2010 mem - Now calling CalculateMonoisotopicMass when SkipPeptidesFromReversedProteins is 0 in T_Process_Step_Control
 **			01/06/2012 mem - Updated to use T_Peptides.Job
-**    
+**			12/04/2019 mem - Switched Master_Sequences location to Pogo
+**
 *****************************************************/
 (
 	@ProcessStateMatch int = 30,
@@ -50,7 +51,7 @@ CREATE Procedure VerifySequenceInfo
 )
 AS
 	Set NoCount On
-	
+
 	declare @myRowCount int
 	declare @myError int
 	set @myRowCount = 0
@@ -58,19 +59,19 @@ AS
 
 	set @numJobsProcessed = 0
 	set @numJobsAdvancedToNextState = 0
-	
+
 	declare @JobMatchCount int
 	declare @numAgedJobs int
 	declare @maxAgeHours int
 	set @numAgedJobs = 0
 	set @maxAgeHours = 96
-	
-	declare @UpdateEnabled tinyint	
+
+	declare @UpdateEnabled tinyint
 	declare @message varchar(255)
 	set @message = ''
-	
+
 	declare @SkipPeptidesFromReversedProteins tinyint
-	
+
 	----------------------------------------------
 	-- Determine the number of jobs in state @ProcessStateMatch
 	----------------------------------------------
@@ -78,7 +79,7 @@ AS
 	SELECT @JobMatchCount = Count(*)
 	FROM T_Analysis_Description
 	WHERE Process_State = @ProcessStateMatch
-	
+
 	----------------------------------------------
 	-- Try to update monoisotopic mass of any entries
 	-- in local sequence table with a null value
@@ -90,21 +91,21 @@ AS
 
 		set @message = 'Updating mass information for sequences; ' + convert(varchar(11), @JobMatchCount) + ' jobs in state ' + Convert(varchar(9), @ProcessStateMatch)
 		exec PostLogEntry 'Normal', @message, 'VerifySequenceInfo'
-		
+
 		UPDATE T_Sequence
 		SET Monoisotopic_Mass = M.Monoisotopic_Mass
 		FROM T_Sequence S INNER JOIN
 				(	SELECT DISTINCT P.Seq_ID
 					FROM T_Peptides P INNER JOIN
-						 T_Analysis_Description TAD ON 
+						 T_Analysis_Description TAD ON
 						 P.Job = TAD.Job
 					WHERE TAD.Process_State = @ProcessStateMatch
-				) AS SequenceQ ON 
+				) AS SequenceQ ON
 				SequenceQ.Seq_ID = S.Seq_ID INNER JOIN
 				(	SELECT Monoisotopic_Mass, Seq_ID
-					FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence
+					FROM Pogo.Master_Sequences.dbo.T_Sequence
 				) M ON S.Seq_ID = M.Seq_ID
-		WHERE S.Monoisotopic_Mass IS NULL AND 
+		WHERE S.Monoisotopic_Mass IS NULL AND
 			  NOT (M.Monoisotopic_Mass IS NULL)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -117,15 +118,15 @@ AS
 		FROM T_Sequence INNER JOIN
 		(
 			SELECT Monoisotopic_Mass, Seq_ID
-			FROM ProteinSeqs2.Master_Sequences.dbo.T_Sequence
+			FROM Pogo.Master_Sequences.dbo.T_Sequence
 		) AS M ON T_Sequence.Seq_ID = M.Seq_ID
 		WHERE T_Sequence.Monoisotopic_Mass IS NULL AND
 			NOT M.Monoisotopic_Mass IS NULL
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
-	End 
+	End
 	--
-	if @myError <> 0 
+	if @myError <> 0
 	begin
 		set @message = 'Error while updating monoisotopic masses in T_Sequences'
 		set @myError = 102
@@ -144,8 +145,8 @@ AS
 	exec VerifyUpdateEnabled @CallingFunctionDescription = 'VerifySequenceInfo', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 	If @UpdateEnabled = 0
 		Goto Done
-	
-	
+
+
 	--------------------------------------------------------------
 	-- Lookup the value of SkipPeptidesFromReversedProteins in T_Process_Step_Control
 	-- Assume skipping is enabled if the value is not present
@@ -156,9 +157,9 @@ AS
 	WHERE Processing_Step_Name = 'SkipPeptidesFromReversedProteins'
 	--
 	SELECT @myRowcount = @@rowcount, @myError = @@error
-	
+
 	Set @SkipPeptidesFromReversedProteins = IsNull(@SkipPeptidesFromReversedProteins, 1)
-	
+
 	If @SkipPeptidesFromReversedProteins = 0
 	Begin
 		-- Calculate monoisotopic mass values for any entries in T_Sequence with null mass values
@@ -178,14 +179,14 @@ AS
 		Job int,
 		NullMassCount int
 	)
-	
+
 	INSERT INTO #MassStatsByJob (Job, NullMassCount)
-	SELECT	P.Job, 
-			SUM(CASE WHEN S.Monoisotopic_Mass IS NULL 
-				THEN 1 
-				ELSE 0 
+	SELECT	P.Job,
+			SUM(CASE WHEN S.Monoisotopic_Mass IS NULL
+				THEN 1
+				ELSE 0
 				END) AS NullMassCount
-	FROM T_Peptides P INNER JOIN 
+	FROM T_Peptides P INNER JOIN
 		 T_Sequence S ON P.Seq_ID = S.Seq_ID INNER JOIN
 	  T_Analysis_Description TAD ON P.Job = TAD.Job
 	WHERE TAD.Process_State = @ProcessStateMatch
@@ -193,25 +194,25 @@ AS
 	--
 	SELECT @myError = @@error, @numJobsProcessed = @@rowcount
 	--
-	if @myError <> 0 
+	if @myError <> 0
 	begin
 		set @message = 'Error while examining completeness of jobs in state ' + convert(varchar(9), @ProcessStateMatch)
 		set @myError = 103
 		goto done
 	end
-	
+
 	----------------------------------------------
 	-- Advance jobs with a NullMassCount of 0 to the next state
 	----------------------------------------------
 	UPDATE T_Analysis_Description
 	SET Process_State = @NextProcessState, Last_Affected = GetDate()
-	FROM T_Analysis_Description TAD INNER JOIN 
+	FROM T_Analysis_Description TAD INNER JOIN
 		 #MassStatsByJob ON TAD.Job = #MassStatsByJob.Job
 	WHERE #MassStatsByJob.NullMassCount = 0
 	--
 	SELECT @myError = @@error, @numJobsAdvancedToNextState = @@rowcount
 	--
-	if @myError <> 0 
+	if @myError <> 0
 	begin
 		set @message = 'Error while updating Process_State for appropriate jobs'
 		set @myError = 104
@@ -221,11 +222,11 @@ AS
 
 	if @numJobsAdvancedToNextState < @numJobsProcessed
 	Begin
-		SELECT @numAgedJobs = COUNT(*) 
+		SELECT @numAgedJobs = COUNT(*)
 		FROM T_Analysis_Description
 		WHERE Process_State = @ProcessStateMatch AND
 			  DateDiff(hour, Last_Affected, GetDate()) >= @maxAgeHours
-		
+
 		If @numAgedJobs > 0
 		Begin
 			Set @message = 'Warning: Found ' + convert(varchar(9), @numAgedJobs) + ' jobs that have been in state ' + convert(varchar(9), @ProcessStateMatch) + ' for over ' + convert(varchar(9), @maxAgeHours) + ' hours'
@@ -233,14 +234,14 @@ AS
 			Set @message = ''
 		End
 	End
-				
+
 	if @numJobsProcessed = 0
 		set @message = 'no analyses were available'
 
 	-----------------------------------------------
 	-- exit the stored procedure
 	-----------------------------------------------
-	-- 
+	--
 Done:
 
 	-- Post a log entry if an error exists
