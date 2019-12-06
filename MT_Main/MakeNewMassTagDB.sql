@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure MakeNewMassTagDB
+CREATE Procedure [dbo].[MakeNewMassTagDB]
 /****************************************************
 **
 **	Desc: Creates a new mass tag database
@@ -58,7 +58,7 @@ CREATE Procedure MakeNewMassTagDB
 	@dbState int = 1,
 	@dataStoragePath varchar(256) = '',			-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
 	@logStoragePath varchar(256) = '',			-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
-	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\MT_Template_01\MT_Template_01.bak',
+	@templateFilePath varchar(256) = '\\proto-3\DB_Backups\MTS_Templates\MT_Template_01\MT_Template_01.bak',
 	@InfoOnly tinyint = 0						-- Set to 1 to validate the inputs and preview the values that will be used to create the new database
 )
 AS

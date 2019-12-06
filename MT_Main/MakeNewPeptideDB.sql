@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure MakeNewPeptideDB
+CREATE Procedure [dbo].[MakeNewPeptideDB]
 /****************************************************
 **
 **	Desc: Creates a new peptide database
@@ -51,7 +51,7 @@ CREATE Procedure MakeNewPeptideDB
 	@organism varchar(64) = 'Borrelia',
 	@OrganismDBFileList varchar(1024) = '',		-- Optional, comma separated list of fasta files or comma separated list of protein collection names; e.g. 'PCQ_ETJ_2004-01-21.fasta,PCQ_ETJ_2004-01-21'
 	@message varchar(512) = '' output,
-	@templateFilePath varchar(256) = '\\proto-1\DB_Backups\MTS_Templates\PT_Template_01\PT_Template_01.bak',
+	@templateFilePath varchar(256) = '\\proto-3\DB_Backups\MTS_Templates\PT_Template_01\PT_Template_01.bak',
 	@dataStoragePath varchar(256) = '',			-- If blank (or If @logStoragePath is blank), then will lookup in T_Folder_Paths
 	@logStoragePath varchar(256) = '',			-- If blank (or If @dataStoragePath is blank), then will lookup in T_Folder_Paths
 	@dbState int = 5,

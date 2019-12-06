@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create PROCEDURE BackupPTTemplateDatabase
+
+CREATE PROCEDURE [dbo].[BackupPTTemplateDatabase]
 /****************************************************
 **
 **	Desc: Backs up the PT Template DB to PT_Template_01
@@ -14,10 +15,11 @@ create PROCEDURE BackupPTTemplateDatabase
 **
 **	Auth:	mem
 **	Date:	05/19/2006
+**          12/04/2019 mem - Change backup server to Proto-3
 **    
 *****************************************************/
 (
-	@BackupPath varchar(255) = '\\proto-1\DB_Backups\MTS_Templates\PT_Template_01',
+	@BackupPath varchar(255) = '\\proto-3\DB_Backups\MTS_Templates\PT_Template_01',
 	@message varchar(512) = '' Output
 )
 AS
