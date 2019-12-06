@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.rpt_HealthReport (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @EmailFlag BIT = 1)
+
+CREATE PROCEDURE [dbo].[rpt_HealthReport] (@Recepients NVARCHAR(200) = NULL, @CC NVARCHAR(200) = NULL, @InsertFlag BIT = 0, @EmailFlag BIT = 1)
 AS
 /**************************************************************************************************************
 **  Purpose: This procedure generates and emails (using DBMail) an HMTL formatted health report of the server
@@ -100,6 +101,7 @@ AS
 **	                                                            Use the values for @MaxDeadLockRows, @MaxErrorLogRows, and @MinLogFileSizeMB only if Enabled is 1
 **  12/05/2017      Matthew Monroe          2.5.3               Round Used Memory to the nearest MB
 **	                                                            Display Bytes Read and Written as MB and GB
+**  12/05/2019      Matthew Monroe          2.5.4               Add columns delete_batch_size_xact and delete_batch_size_cmd to #REPLINFO
 **
 ***************************************************************************************************************/
 BEGIN
@@ -1014,8 +1016,10 @@ BEGIN
 		[distribution cleanup agent] NVARCHAR(500),
 		[rpc server name] NVARCHAR(200),
 		[rpc login name] NVARCHAR(200),
-		publisher_type NVARCHAR(200)
-		)
+		publisher_type NVARCHAR(200),
+        delete_batch_size_xact NVARCHAR(200) NULL,
+        delete_batch_size_cmd NVARCHAR(200) NULL
+	)
 
 	INSERT INTO #REPLINFO
 	EXEC sp_helpdistributor
