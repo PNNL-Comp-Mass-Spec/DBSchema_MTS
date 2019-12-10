@@ -3,7 +3,8 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE Procedure dbo.GetErrorsFromActiveDBLogs
+
+CREATE Procedure [dbo].[GetErrorsFromActiveDBLogs]
 /****************************************************
 ** 
 **	Desc: Returns a combined report of errors (or all log entries) from 
@@ -26,6 +27,7 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 **			02/19/2008 mem - Now populating T_MTS_DB_Errors with the errors found; use AckErrors to view these errors and optionally change them to ErrorIgnore
 **			07/23/2008 mem - Moved Master_Sequences to Porky
 **			02/27/2010 mem - Moved Master_Sequences to ProteinSeqs2
+**          12/10/2019 mem - Moved Master_Sequences to Pogo
 **    
 *****************************************************/
 (
@@ -38,10 +40,8 @@ CREATE Procedure dbo.GetErrorsFromActiveDBLogs
 As	
 	set nocount on
 	
-	declare @myError int
-	declare @myRowCount int
-	set @myError = 0
-	set @myRowCount = 0
+	Declare @myError int = 0
+	Declare @myRowCount int = 0
 
 	---------------------------------------------------
 	-- Validate the inputs
@@ -58,11 +58,10 @@ As
 		Set @errorsOnly = 1
 	End
 	
-	declare @SQL nvarchar(2048)
-	declare @result int
-	set @result = 0
+	Declare @SQL nvarchar(2048)
+	Declare @result int = 0
 
-	declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
+	Declare @logVerbosity int -- 0 silent, 1 minimal, 2 verbose, 3 debug
 	set @logVerbosity = 1
 
 	if @logVerbosity > 1
@@ -71,28 +70,28 @@ As
 		execute PostLogEntry 'Normal', @message, 'GetErrorsFromActiveDBLogs'
 	end
 	
-	declare @ProcessSingleServer tinyint
+	Declare @ProcessSingleServer tinyint
 	
 	If Len(@ServerFilter) > 0
 		Set @ProcessSingleServer = 1
 	Else
 		Set @ProcessSingleServer = 0
 	
-	declare @Server varchar(128)
-	declare @CurrentServerPrefix varchar(128)
-	declare @ServerID int
+	Declare @Server varchar(128)
+	Declare @CurrentServerPrefix varchar(128)
+	Declare @ServerID int
 
-	declare @CurrentDB varchar(255)
-	declare @DBNameMatch varchar(128)
+	Declare @CurrentDB varchar(255)
+	Declare @DBNameMatch varchar(128)
 	
-	declare @Continue int
-	declare @DBExists tinyint
+	Declare @Continue int
+	Declare @DBExists tinyint
 	
-	declare @ServerDBsDone int
-	declare @processCount int			-- Count of servers processed
+	Declare @ServerDBsDone int
+	Declare @processCount int			-- Count of servers processed
 
 	---------------------------------------------------
-	-- temporary table to hold extracted log error entries
+	-- Temporary table to hold extracted log error entries
 	---------------------------------------------------
 	CREATE TABLE #LE (
 		Server_Name varchar(128) NOT NULL,
@@ -114,7 +113,7 @@ As
 	)
 		
 	---------------------------------------------------
-	-- temporary table to hold list of databases to process
+	-- Temporary table to hold list of databases to process
 	---------------------------------------------------
 	CREATE TABLE #XMTDBNames (
 		DBName varchar(128),
@@ -173,7 +172,7 @@ As
 			INSERT INTO #XMTDBNames (DBName, Processed) VALUES ('Prism_RPT', 0)
 
 			---------------------------------------------------
-			-- populate temporary table with MT databases
+			-- Populate temporary table with MT databases
 			-- in current activity table
 			---------------------------------------------------
 
@@ -197,7 +196,7 @@ As
 			end
 
 			---------------------------------------------------
-			-- populate temporary table with Peptide databases
+			-- Populate temporary table with Peptide databases
 			-- in current activity table
 			---------------------------------------------------
 
@@ -222,7 +221,7 @@ As
 
 
 			-----------------------------------------------------------
-			-- process each entry in #XMTDBNames
+			-- Process each entry in #XMTDBNames
 			-----------------------------------------------------------
 			
 			set @ServerDBsDone = 0
@@ -230,7 +229,7 @@ As
 			WHILE @ServerDBsDone = 0 and @myError = 0  
 			BEGIN -- <c>
 			
-				-- get next available entry from #XMTDBNames
+				-- Get next available entry from #XMTDBNames
 				--
 				SELECT	TOP 1 @CurrentDB = DBName
 				FROM	#XMTDBNames 
@@ -245,7 +244,7 @@ As
 					goto Done
 				end
 								
-				-- terminate loop if no more unprocessed entries in temporary table
+				-- Terminate loop if no more unprocessed entries in temporary table
 				--
 				if @myRowCount = 0
 				begin
@@ -254,7 +253,7 @@ As
 				else
 				begin -- <d>
 				
-					-- mark entry in temporary table as processed
+					-- Mark entry in temporary table as processed
 					--
 					UPDATE	#XMTDBNames
 					SET		Processed = 1
@@ -288,8 +287,8 @@ As
 						set @myError = 53
 						goto Done
 					end
-					--
-					-- skip further processing if database does not exist
+
+					-- Skip further processing if database does not exist
 					--
 					if (@myRowCount = 0 or Len(IsNull(@DBNameMatch, '')) = 0)
 					begin
@@ -319,10 +318,10 @@ As
 	End -- </a>
 	
 	-----------------------------------------------------------
-	-- Get errors from ProteinSeqs2.Master_Sequences
+	-- Get errors from Pogo.Master_Sequences
 	-----------------------------------------------------------
 
-	Exec GetErrorsFromSingleDB 'ProteinSeqs2', 'Master_Sequences', @errorsOnly, @MaxLogEntriesPerDB, @message output
+	Exec GetErrorsFromSingleDB 'Pogo', 'Master_Sequences', @errorsOnly, @MaxLogEntriesPerDB, @message output
 
 	-----------------------------------------------------------
 	-- Get errors from this DB (MTS_Master)
@@ -397,7 +396,7 @@ Done:
 	--
 
 	-----------------------------------------------------------
-	-- if there were errors, make log entry
+	-- If there were errors, make log entry
 	-----------------------------------------------------------
 	--
 	if @myError <> 0 and @logVerbosity > 0
