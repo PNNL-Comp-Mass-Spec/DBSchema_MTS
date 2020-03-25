@@ -7,7 +7,7 @@ proteins identified in proteomics and related samples.
 ------------------------------------------------------------------------------------
 Written by Matthew Monroe and Gary Kiebel for the Department of Energy (PNNL, Richland, WA)
 
-E-mail: matthew.monroe@pnnl.gov or matt@alchemistmatt.com
+E-mail: matthew.monroe@pnnl.gov or proteomics@pnnl.gov
 Website: http://panomics.pnnl.gov/ or http://omics.pnl.gov
 ------------------------------------------------------------------------------------
 
