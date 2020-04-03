@@ -6,10 +6,10 @@ GO
 CREATE TABLE [dbo].[T_Seq_Candidate_ModDetails](
 	[Job] [int] NOT NULL,
 	[Seq_ID_Local] [int] NOT NULL,
-	[Mass_Correction_Tag] [char](8) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Mass_Correction_Tag] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Position] [smallint] NOT NULL,
 	[Seq_Candidate_ModDetail_ID] [int] IDENTITY(1,1) NOT NULL,
- CONSTRAINT [PK_T_Seq_Candidate_ModDetails] PRIMARY KEY CLUSTERED 
+ CONSTRAINT [PK_T_Seq_Candidate_ModDetails] PRIMARY KEY CLUSTERED
 (
 	[Seq_Candidate_ModDetail_ID] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]

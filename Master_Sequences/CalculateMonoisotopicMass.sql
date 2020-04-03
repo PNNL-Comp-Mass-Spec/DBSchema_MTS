@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE dbo.CalculateMonoisotopicMass
+CREATE PROCEDURE [dbo].[CalculateMonoisotopicMass]
 /****************************************************
 **
 **	Desc: Calculates the monoisotopic mass for the
@@ -13,7 +13,7 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 **	Returns the number of rows for which the mass was successfully calculated
 **
 **	Parameters:
-**	
+**
 **  Output:
 **		@message - '' if successful, otherwise a message about what went wrong
 **
@@ -26,7 +26,8 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 **			08/26/2004 mem - Updated to use consolidated mod descriptions and mass info views from DMS
 **			07/01/2005 mem - Now updating column Last_Affected in T_Sequence
 **			03/11/2006 mem - Now calling VerifyUpdateEnabled
-**    
+**          04/11/2020 mem - Expand Mass_Correction_Tag to varchar(32)
+**
 *****************************************************/
 (
 	@message varchar(255) = '' output,
@@ -36,7 +37,7 @@ CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 )
 AS
 	set nocount on
-	
+
 	declare @myError int
 	declare @myRowCount int
 	set @myError = 0
@@ -49,7 +50,7 @@ AS
 
 	Declare @Progress varchar(255)
 	Declare @UpdateEnabled tinyint
-	
+
 	--used for storing information from each table row
 	Declare @Seq_ID int
 	Set @Seq_ID = -100000000
@@ -85,7 +86,7 @@ AS
 	-- tells whether main loop has been completed
 	Declare @continue int
 	Set @continue = 1
-	
+
 	--------------------------------------------
 	--Create temporary amino acid table
 	--------------------------------------------
@@ -132,10 +133,10 @@ AS
 	'X','unknown',5,8,2,2,0,128.13152991695,128.058570861816
 	'H2O','Water(Peptide Ends)',0,2,0,1,0,18.01528,18.010563
 	*/
-	
-	INSERT INTO #TMP_AA (Symbol, Description, Num_C, Num_H, Num_N, 
+
+	INSERT INTO #TMP_AA (Symbol, Description, Num_C, Num_H, Num_N,
 		Num_O, Num_S, Average_Mass, Monoisotopic_Mass)
-	SELECT Residue_Symbol, Description, Num_C, Num_H, Num_N, 
+	SELECT Residue_Symbol, Description, Num_C, Num_H, Num_N,
 		Num_O, Num_S, Average_Mass, Monoisotopic_Mass
 	FROM V_DMS_Residues
 	--
@@ -157,7 +158,7 @@ AS
 	-- Variables for processing Modifications
 	Declare @RowCountRemaining int
 
-	Declare @MassCorrectionTag char(8)
+	Declare @MassCorrectionTag varchar(32)
 	Declare @MassCorrectionMass float		--mass to add for the current modification
 	Declare @ModAffectedAtom char(1)		--for isotopic-based mods, the atom that is affected (e.g. N)
 
@@ -165,18 +166,16 @@ AS
 
 	CREATE TABLE #MassCorrectionFactors (
 		[Mass_Correction_ID] [int] NOT NULL ,
-		[Mass_Correction_Tag] [char] (8) NOT NULL ,
+		[Mass_Correction_Tag] [varchar] (32) NOT NULL ,
 		[Monoisotopic_Mass] [float] NOT NULL ,
 		[Affected_Atom] [char] (1) NOT NULL ,
 	)
-	
-	Declare @ModTableInitialized tinyint
-	Set @ModTableInitialized = 0
 
+	Declare @ModTableInitialized tinyint = 0
 
 	-- The following table holds the list of modifications that apply to the given peptide
 	CREATE TABLE #PeptideModList (
-		[Mass_Correction_Tag] [char] (8) NOT NULL ,
+		[Mass_Correction_Tag] [varchar] (32) NOT NULL ,
 		[Position] int NOT NULL,
 		[Monoisotopic_Mass] [float] NOT NULL ,
 		[Affected_Atom] [char] (1) NOT NULL ,
@@ -187,7 +186,7 @@ AS
 
 	Declare @UniqueModID int
 	Set @UniqueModID = -1
-	
+
 	-----------------------------------------------
 	--Loop through each entry in T_Sequence table, computing monoisotopic mass if possible
 	-----------------------------------------------
@@ -197,21 +196,21 @@ AS
 			--read data for one peptide into local variables
 			SELECT TOP 1
 					@Seq_ID = Seq_ID,
-					@peptide = dbo.T_Sequence.Clean_Sequence, 
+					@peptide = dbo.T_Sequence.Clean_Sequence,
 					@orig_peptide = dbo.T_Sequence.Clean_Sequence
-			FROM dbo.T_Sequence 
+			FROM dbo.T_Sequence
 			WHERE Seq_ID > @Seq_ID
 			ORDER BY Seq_ID ASC
 		Else
 			--read data for one peptide into local variables
 			SELECT TOP 1
 					@Seq_ID = Seq_ID,
-					@peptide = dbo.T_Sequence.Clean_Sequence, 
+					@peptide = dbo.T_Sequence.Clean_Sequence,
 					@orig_peptide = dbo.T_Sequence.Clean_Sequence
-			FROM dbo.T_Sequence 
+			FROM dbo.T_Sequence
 			WHERE Seq_ID > @Seq_ID AND Monoisotopic_Mass IS Null
 			ORDER BY Seq_ID ASC
-		
+
 		--check for errors in loading
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		If @myError <> 0
@@ -226,13 +225,13 @@ AS
 			Goto done
 		End
 		Set @continue = @myRowCount
-		
+
 		If @ModTableInitialized = 0
 		Begin
 			-- Create a temporary table version of V_DMS_Monoisotopic_Masss
 			-- Doing this here, rather than above, since we only need to cache this
 			-- information if one or more sequences needs to have its mass calculated
-			INSERT INTO #MassCorrectionFactors
+			INSERT INTO #MassCorrectionFactors ( Mass_Correction_ID, Mass_Correction_Tag, Monoisotopic_Mass, Affected_Atom)
 			SELECT Mass_Correction_ID, Mass_Correction_Tag,
 					IsNull(Monoisotopic_Mass_Correction, 0),
 					IsNull(Affected_Atom, '-')
@@ -245,10 +244,10 @@ AS
 				Set @message = 'Error populating #MassCorrectionFactors temporary table'
 				Goto done
 			End
-			
+
 			Set @ModTableInitialized = 1
 		End
-		
+
 		---------------------------------------
 		--compute monoisotopic mass
 		---------------------------------------
@@ -258,7 +257,7 @@ AS
 		Set @totalCountN = 0
 		Set @totalCountO = 0
 		Set @totalCountS = 0
-			
+
 		--------------------------------------------
 		--loop through characters in peptide,
 		--adding mass to total for each one
@@ -269,7 +268,7 @@ AS
 			--to the remainder
 			Set @currentAA = SubString(@peptide, 1, 1)
 			Set @peptide = SubString(@peptide, 2, Len(@peptide) - 1)
-			
+
 			--lookup mass for this amino acid
 			SELECT  @currentAAMass = Monoisotopic_Mass,
 					@countC = Num_C,
@@ -279,16 +278,16 @@ AS
 					@countS = Num_S
 			FROM #TMP_AA
 			WHERE Symbol = @currentAA
-			
+
 			--check for errors
 			SELECT @myError = @@error, @myRowCount = @@rowcount
-			
+
 			If @myError <> 0
 			Begin
 				Set @message = 'Error in looking up mass in temp table for symbol ' + @currentAA
 				Goto done
 			End
-			
+
 			If @myRowCount = 0
 			Begin
 				Set @message = 'Unknown symbol ' + @currentAA + ' for Seq_ID ' + Convert(varchar(11), @Seq_ID) + ', ' + @orig_peptide
@@ -298,7 +297,7 @@ AS
 					Set @mono_mass = 0
 					Goto UpdateMass
 				End
-				
+
 				If (@AbortOnUnknownSymbolError <> 0)
 				Begin
 					Set @myError = 75005
@@ -315,9 +314,9 @@ AS
 				Set @totalCountO = @totalCountO + @countO
 				Set @totalCountS = @totalCountS + @countS
 			End
-			
+
 		End --End of looping through peptide sequence
-		
+
 		--add in cap
 		SELECT  @currentAAMass = Monoisotopic_Mass,
 					@countC = Num_C,
@@ -327,7 +326,7 @@ AS
 					@countS = Num_S
 		FROM #TMP_AA
 		WHERE Symbol = 'H2O'
-		
+
 		Set @mono_mass = @mono_mass + @currentAAMass
 		Set @totalCountC = @totalCountC + @countC
 		Set @totalCountH = @totalCountH + @countH
@@ -335,11 +334,11 @@ AS
 		Set @totalCountO = @totalCountO + @countO
 		Set @totalCountS = @totalCountS + @countS
 
-		
+
 		---------------------------------------
 		-- Now deal with positional modifications
 		---------------------------------------
-		
+
 		-- We can use a simple Select query to add all of the modification masses
 		-- to @mono_Mass
 		--
@@ -358,7 +357,7 @@ AS
 			Goto done
 		End
 
-		
+
 		---------------------------------------
 		--now deal with isotopic modifications
 		---------------------------------------
@@ -374,13 +373,13 @@ AS
 			Set @UniqueModID = -1
 		End
 
-		-- Populate #PeptideModList with the mass correction values for 
+		-- Populate #PeptideModList with the mass correction values for
 		-- the isotopic modifications that apply to this sequence
 		-- If the modification is an isotopic modification, then Affected_Atom will not be '-'
-		-- 
+		--
 		INSERT INTO #PeptideModList
-		SELECT	T_Mod_Descriptors.Mass_Correction_Tag, 
-				T_Mod_Descriptors.Position, 
+		SELECT	T_Mod_Descriptors.Mass_Correction_Tag,
+				T_Mod_Descriptors.Position,
 				#MassCorrectionFactors.Monoisotopic_Mass,
 				#MassCorrectionFactors.Affected_Atom
 		FROM	T_Sequence INNER JOIN
@@ -399,7 +398,7 @@ AS
 
 		While @RowCountRemaining > 0
 		Begin
-			
+
 			-- Obtain next modification from #PeptideModList
 			SELECT	TOP 1
 					@UniqueModID = UniqueModID,
@@ -411,19 +410,19 @@ AS
 			ORDER BY UniqueModID
 			--
 			SELECT @RowCountRemaining = @@RowCount
-			
+
 			If Not (@MassCorrectionMass = 0 Or @RowCountRemaining = 0)
 			Begin
 
 				Set @modFound = 0
-				
+
 				-- Examine @ModAffectedAtom
 				If @ModAffectedAtom = 'C'
 				Begin
 					Set @mono_mass = @mono_mass + (@totalCountC * @MassCorrectionMass)
 					Set @modFound = 1
 				End
-				
+
 				If @ModAffectedAtom = 'H'
 				Begin
 					Set @mono_mass = @mono_mass + (@totalCountH * @MassCorrectionMass)
@@ -454,9 +453,9 @@ AS
 
 					Set @message = 'Unknown Affected Atom "' + @ModAffectedAtom + '" for Mass_Correction_Tag ' + @MassCorrectionTag
 					Execute PostLogEntry 'Error', @message, 'CalculateMonoisotopicMass'
-					
+
 					Set @mono_mass = 0
-					
+
 					If (@AbortOnUnknownSymbolError <> 0)
 					Begin
 						Set @myError = 75005
@@ -464,33 +463,33 @@ AS
 					End
 					Else
 						Goto UpdateMass
-						
+
 				End
 			End
 		End
 
-		
+
 
 UpdateMass:
-					
-		---------------------------------------------------------	
+
+		---------------------------------------------------------
 		--update mass tags table with the newly calculated mass
 		---------------------------------------------------------
 		UPDATE T_Sequence
 		Set Monoisotopic_Mass = @mono_mass, Last_Affected = GetDate()
 		WHERE Seq_ID = @Seq_ID
-		
+
 		--check for errors
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 		--
-		If @myError <> 0 
+		If @myError <> 0
 		Begin
 			Set @message = 'Error in updating mass'
 			Goto done
 		End
 		--success, so increment @PeptidesProcessedCount
 		Set @PeptidesProcessedCount = @PeptidesProcessedCount + 1
-		
+
 		-- Since mass computation can take awhile, post an entry to T_Log_Entries every 25,000 peptides
 		If @PeptidesProcessedCount % 2500 = 0
 		Begin
@@ -499,28 +498,28 @@ UpdateMass:
 				Set @Progress = '...Processing: ' + convert(varchar(9), @PeptidesProcessedCount)
 				Execute PostLogEntry 'Progress', @Progress, 'CalculateMonoisotopicMass'
 			End
-			
+
 			-- Validate that updating is enabled, abort if not enabled
 			exec VerifyUpdateEnabled @CallingFunctionDescription = 'CalculateMonoisotopicMass', @AllowPausing = 1, @UpdateEnabled = @UpdateEnabled output, @message = @message output
 			If @UpdateEnabled = 0
 				Goto Done
 		End
-		
+
 		If @SequencesToProcess > 0
 		Begin
 			If @PeptidesProcessedCount >= @SequencesToProcess
 				Set @continue = 0
 		End
-		
+
 	End		--End of main While loop
 
 Done:
 	DROP INDEX #PeptideModList.#IX_PeptideModList_UniqueModID
 	DROP TABLE #PeptideModList
-	
+
 	DROP INDEX #TMP_AA.#IX_TMP_AA_Symbol
 	DROP TABLE #TMP_AA
-	
+
 	RETURN @PeptidesProcessedCount
 
 

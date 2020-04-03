@@ -9,10 +9,10 @@ CREATE TABLE [dbo].[T_Seq_Candidate_ModSummary](
 	[Modification_Mass] [real] NOT NULL,
 	[Target_Residues] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Modification_Type] [varchar](4) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Mass_Correction_Tag] [varchar](8) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+	[Mass_Correction_Tag] [varchar](32) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
 	[Occurrence_Count] [int] NULL,
 	[Seq_Candidate_ModSummary_ID] [int] IDENTITY(1,1) NOT NULL,
- CONSTRAINT [PK_T_Seq_Candidate_ModSummary] PRIMARY KEY CLUSTERED 
+ CONSTRAINT [PK_T_Seq_Candidate_ModSummary] PRIMARY KEY CLUSTERED
 (
 	[Seq_Candidate_ModSummary_ID] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]

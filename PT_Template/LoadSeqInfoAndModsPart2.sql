@@ -7,11 +7,11 @@ GO
 CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 /****************************************************
 **
-**	Desc: 
+**	Desc:
 **		Load sequence info and mod details into sequence
 **		 candidate tables for given analysis job
 **
-**		This SP also requires that the calling procedure create and populate these 
+**		This SP also requires that the calling procedure create and populate these
 **		 temporary tables (see LoadSeqInfoAndModsPart1 and LoadSequestPeptidesBulk/LoadXTandemPeptidesBulk):
 **			#Tmp_Peptide_Import
 **			#Tmp_Unique_Records
@@ -26,7 +26,7 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 **	Return values: 0: success, otherwise, error code
 **
 **	Parameters:
-**	
+**
 **	Auth:	mem
 **	Date:	01/25/2006
 **			02/14/2006 mem - Updated to use tables #Tmp_Peptide_ResultToSeqMap in addition to tables #Tmp_Peptide_SeqInfo and #Tmp_Peptide_ModDetails
@@ -34,6 +34,7 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 **			08/26/2008 mem - Added additional logging when LogLevel >= 2
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			12/05/2012 mem - Now populating T_Seq_Candidate_ModSummary using #Tmp_Peptide_ModSummary
+**          04/09/2020 mem - Expand Mass_Correction_Tag to varchar(32)
 **
 *****************************************************/
 (
@@ -42,7 +43,7 @@ CREATE Procedure dbo.LoadSeqInfoAndModsPart2
 )
 As
 	Set NoCount On
-	
+
 	declare @myRowCount int
 	declare @myError int
 	set @myRowCount = 0
@@ -50,7 +51,7 @@ As
 
 	-- Clear the output parameters
 	Set @message = ''
-	
+
 	Declare @jobStr varchar(12)
 	Set @jobStr = cast(@Job as varchar(12))
 
@@ -60,7 +61,7 @@ As
 	-----------------------------------------------
 	-- Lookup the logging level from T_Process_Step_Control
 	-----------------------------------------------
-	
+
 	Set @LogLevel = 1
 	SELECT @LogLevel = enabled
 	FROM T_Process_Step_Control
@@ -71,7 +72,7 @@ As
 	Set @LogMessage = 'Populating T_Seq_Candidates using #Tmp_Peptide_Import, #Tmp_Unique_Records, and the SeqInfo tables'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
-	
+
 	-----------------------------------------------
 	-- Make sure the Seq_Candidate tables do not have any data for this job
 	-----------------------------------------------
@@ -80,7 +81,7 @@ As
 	DELETE FROM T_Seq_Candidate_ModDetails	 Where Job = @Job
 	DELETE FROM T_Seq_Candidates Where Job = @Job
 	DELETE FROM T_Seq_Candidate_ModSummary Where Job = @Job
-	
+
 
 	-----------------------------------------------
 	-- Insert new data into T_Seq_Candidates
@@ -92,9 +93,9 @@ As
 	--
 	INSERT INTO T_Seq_Candidates
 		(Job, Seq_ID_Local, Clean_Sequence, Mod_Count, Mod_Description, Monoisotopic_Mass)
-	SELECT	@Job AS Job, TPS.Seq_ID_Local, 
-			MAX(dbo.udfCleanSequence(TPI.Peptide)) AS Peptide, 
-			TPS.Mod_Count, TPS.Mod_Description, 
+	SELECT	@Job AS Job, TPS.Seq_ID_Local,
+			MAX(dbo.udfCleanSequence(TPI.Peptide)) AS Peptide,
+			TPS.Mod_Count, TPS.Mod_Description,
 			MAX(TPS.Monoisotopic_Mass) AS Monoisotopic_Mass
 	FROM #Tmp_Unique_Records UR INNER JOIN
 		 #Tmp_Peptide_Import TPI ON UR.Result_ID = TPI.Result_ID INNER JOIN
@@ -164,18 +165,18 @@ As
 		set @message = 'Found negative Mod Position values for job ' + @jobStr + ' (' + Convert(varchar(12), @MatchCount) + ' negative values); aborting load'
 		goto Done
 	End
-	
-	
+
+
 	-----------------------------------------------
 	-- See if any entries in #Tmp_Peptide_ModDetails have
-	--  Mass_Correction_Tag entries over 8 characters in length
-	-- If any are found, truncate to 8 characters and post an entry to the log
+	--  Mass_Correction_Tag entries over 32 characters in length
+	-- If any are found, truncate to 32 characters and post an entry to the log
 	-----------------------------------------------
-	
+
 	Set @MatchCount = 0
 	SELECT @MatchCount = COUNT(*)
 	FROM #Tmp_Peptide_ModDetails
-	WHERE (LEN(LTrim(RTrim(Mass_Correction_Tag))) > 8)
+	WHERE (LEN(LTrim(RTrim(Mass_Correction_Tag))) > 32)
 	--
 	SELECT @myRowCount = @@rowcount, @myError = @@error
 	--
@@ -184,17 +185,17 @@ As
 		set @message = 'Error looking for long Mass_Correction_Tags in #Tmp_Peptide_ModDetails for job ' + @jobStr
 		goto Done
 	end
-	
+
 	If @MatchCount > 0
 	Begin
-		set @message = 'Found ' + Convert(varchar(12), @MatchCount) + ' Mass_Correction_Tags with a length over 8 characters in #Tmp_Peptide_ModDetails for job ' + @jobStr + '; truncating to a maximum length of 8 characters'
+		set @message = 'Found ' + Convert(varchar(12), @MatchCount) + ' Mass_Correction_Tags with a length over 32 characters in #Tmp_Peptide_ModDetails for job ' + @jobStr + '; truncating to a maximum length of 32 characters'
 		execute PostLogEntry 'Error', @message, 'LoadSeqInfoAndModsPart2'
 		set @message = ''
 
 		UPDATE #Tmp_Peptide_ModDetails
-		SET Mass_Correction_Tag = Left(LTrim(RTrim(Mass_Correction_Tag)), 8)
+		SET Mass_Correction_Tag = Left(LTrim(RTrim(Mass_Correction_Tag)), 32)
 		FROM #Tmp_Peptide_ModDetails
-		WHERE (LEN(LTrim(RTrim(Mass_Correction_Tag))) > 8)
+		WHERE (LEN(LTrim(RTrim(Mass_Correction_Tag))) > 32)
 		--
 		SELECT @myRowCount = @@rowcount, @myError = @@error
 	End
@@ -202,7 +203,7 @@ As
 	Set @LogMessage = 'Verified the data in #Tmp_Peptide_ModDetails'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
-	
+
 	-----------------------------------------------
 	-- Insert new data into T_Seq_Candidate_ModDetails
 	-- We're linking into T_Seq_Candidates here to
@@ -212,7 +213,7 @@ As
 	--
 	INSERT INTO T_Seq_Candidate_ModDetails
 		(Job, Seq_ID_Local, Mass_Correction_Tag, [Position])
-	SELECT @Job AS Job, SCMD.Seq_ID_Local, 
+	SELECT @Job AS Job, SCMD.Seq_ID_Local,
 		   SCMD.Mass_Correction_Tag, SCMD.[Position]
 	FROM #Tmp_Peptide_ModDetails SCMD
 	     INNER JOIN T_Seq_Candidates SC
@@ -226,7 +227,7 @@ As
 		set @message = 'Error inserting into T_Seq_Candidate_ModDetails for job ' + @jobStr
 		goto Done
 	end
-		
+
 	Set @LogMessage = 'Populated T_Seq_Candidate_ModDetails with ' + Convert(varchar(12), @myRowCount) + ' rows'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
@@ -239,7 +240,7 @@ As
 	-----------------------------------------------
 	--
 	INSERT INTO T_Seq_Candidate_ModSummary
-		(Job, Modification_Symbol, Modification_Mass, Target_Residues, Modification_Type, Mass_Correction_Tag, Occurrence_Count)	
+		(Job, Modification_Symbol, Modification_Mass, Target_Residues, Modification_Type, Mass_Correction_Tag, Occurrence_Count)
 	SELECT Job,
 	       Modification_Symbol,
 	       Modification_Mass,
@@ -260,7 +261,7 @@ As
 	              ON SCMD.Seq_ID_Local = SC.Seq_ID_Local AND
 	                 SC.Job = @Job
 	            INNER JOIN #Tmp_Peptide_ModSummary SCMS
-	              ON SCMD.Mass_Correction_Tag = SCMS.Mass_Correction_Tag 
+	              ON SCMD.Mass_Correction_Tag = SCMS.Mass_Correction_Tag
 	     ) RankQ
 	WHERE TagRank = 1
 	--
@@ -271,7 +272,7 @@ As
 		set @message = 'Error inserting into T_Seq_Candidate_ModSummary for job ' + @jobStr
 		goto Done
 	end
-		
+
 	Set @LogMessage = 'Populated T_Seq_Candidate_ModSummary with ' + Convert(varchar(12), @myRowCount) + ' rows'
 	if @LogLevel >= 2
 		execute PostLogEntry 'Progress', @LogMessage, 'LoadSeqInfoAndModsPart2'
@@ -281,7 +282,7 @@ As
 	-----------------------------------------------
 	Declare @numPeptidesExpected int
 	Set @numPeptidesExpected = 0
-	
+
 	SELECT @numPeptidesExpected = COUNT(*)
 	FROM T_Peptides
 	WHERE Job = @Job

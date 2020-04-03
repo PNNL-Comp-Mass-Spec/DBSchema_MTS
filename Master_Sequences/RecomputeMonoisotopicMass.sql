@@ -3,9 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.RecomputeMonoisotopicMass
+
+CREATE PROCEDURE [dbo].[RecomputeMonoisotopicMass]
 /****************************************************
-** 
+**
 **	Desc:	Recomputes the monoisotopic mass values in T_Sequence for sequences
 **			matching the given Seq_ID range and/or containing the given Mass_Correction_Tag in T_Mod_Descriptors
 **
@@ -15,7 +16,8 @@ CREATE PROCEDURE dbo.RecomputeMonoisotopicMass
 **
 **	Auth:	mem
 **	Date:	07/28/2006
-**    
+**          04/11/2020 mem - Expand Mass_Correction_Tag to varchar(32)
+**
 *****************************************************/
 (
 	@SeqIDMin int = 0,
@@ -32,7 +34,7 @@ As
 	set @myRowCount = 0
 
 	Declare @MatchSpec varchar(128)
-	
+
 	-------------------------------------------------
 	-- Validate the inputs
 	-------------------------------------------------
@@ -70,9 +72,9 @@ As
 	If Len(@MassCorrectionTagList) > 0
 	Begin
 		CREATE TABLE #T_Tmp_MassCorrectionTags (
-			Mass_Correction_Tag char(8)
+			Mass_Correction_Tag varchar(32)
 		)
-		
+
 		INSERT INTO #T_Tmp_MassCorrectionTags (Mass_Correction_Tag)
 		SELECT Value
 		FROM dbo.udfParseDelimitedList(@MassCorrectionTagList, ',')
@@ -82,7 +84,7 @@ As
 		INSERT INTO T_Seq_Mass_Update_History (Batch_ID, Seq_ID, Monoisotopic_Mass_Old, Update_Date)
 		SELECT DISTINCT @BatchID, T_Sequence.Seq_ID, T_Sequence.Monoisotopic_Mass, GetDate()
 		FROM T_Sequence INNER JOIN T_Mod_Descriptors ON
-			 T_Sequence.Seq_ID = T_Mod_Descriptors.Seq_ID 
+			 T_Sequence.Seq_ID = T_Mod_Descriptors.Seq_ID
 			 INNER JOIN #T_Tmp_MassCorrectionTags ON
 			 T_Mod_Descriptors.Mass_Correction_Tag = #T_Tmp_MassCorrectionTags.Mass_Correction_Tag
 		WHERE T_Sequence.Seq_ID >= @SeqIDMin AND T_Sequence.Seq_ID <= @SeqIDMax
@@ -100,7 +102,7 @@ As
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
 
-		Set @MatchSpec = '@SeqID between ' + Convert(varchar(12), @SeqIDMin) + ' and ' + Convert(varchar(12), @SeqIDMax) 
+		Set @MatchSpec = '@SeqID between ' + Convert(varchar(12), @SeqIDMin) + ' and ' + Convert(varchar(12), @SeqIDMax)
 	End
 
 	If @myError <> 0
@@ -108,7 +110,7 @@ As
 		Set @message = 'Error populating T_Seq_Mass_Update_History with sequences matching ' + @MatchSpec
 		Set @myError = 20001
 	End
-	
+
 	If @myRowCount = 0
 	Begin
 		Set @message = 'Match not found for ' + @MatchSpec
@@ -128,7 +130,7 @@ As
 	-------------------------------------------------
 	UPDATE T_Sequence
 	SET Monoisotopic_Mass = NULL, last_affected = GetDate()
-	FROM T_Seq_Mass_Update_History INNER JOIN T_Sequence ON 
+	FROM T_Seq_Mass_Update_History INNER JOIN T_Sequence ON
 		 T_Seq_Mass_Update_History.Seq_ID = T_Sequence.Seq_ID
 	WHERE T_Seq_Mass_Update_History.Batch_ID = @BatchID
 	--
@@ -143,13 +145,13 @@ As
 	Set @message = 'Mass values set to Null for the ' + Convert(varchar(12), @myRowCount)  + ' sequences associated with T_Seq_Mass_Update_History.Batch_ID ' + Convert(varchar(9), @BatchID)
 	exec PostLogEntry 'Progress', @message, 'RecomputeMonoisotopicMass'
 	Set @message = ''
-	
-	
+
+
 	-------------------------------------------------
 	-- Compute the masses
 	-------------------------------------------------
 	Declare @PeptidesProcessedCount int
-	
+
 	Set @message = ''
 	Set @PeptidesProcessedCount = 0
 	Exec @PeptidesProcessedCount = CalculateMonoisotopicMass @message OUTPUT
@@ -160,7 +162,7 @@ As
 	Begin
 		Set @message = 'Done recomputing mass values for the sequences associated with T_Seq_Mass_Update_History.Batch_ID ' + Convert(varchar(9), @BatchID)
 		exec PostLogEntry 'Progress', @message, 'RecomputeMonoisotopicMass'
-	End		
+	End
 
 
 	-------------------------------------------------
@@ -183,7 +185,7 @@ Done:
 
 	If @myError <> 0
 		Select @Message as TheMessage, @myError as TheError
-		
+
 	Return @myError
 
 GO

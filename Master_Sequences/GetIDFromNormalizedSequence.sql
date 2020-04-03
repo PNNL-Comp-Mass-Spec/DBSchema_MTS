@@ -3,9 +3,10 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
+
+CREATE PROCEDURE [dbo].[GetIDFromNormalizedSequence]
 /****************************************************
-** 
+**
 **      ==========================================================================
 **         NOTE: This is a legacy procedure that processes a single peptide
 **               It is preferable to process sequences in bulk using ProcessCandidateSequences
@@ -16,13 +17,13 @@ CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
 **		Returns the unique sequence ID for the
 **      given clean sequence and static and dynamic
 **      mod descriptions.
-** 
+**
 **      New entries are made as needed in the main sequence
 **      table, the mod sets tables, and the mod set
 **      members table.
-** 
+**
 **	Return values: 0: success, otherwise, error code
-** 
+**
 **	Parameters:
 **
 **	Auth:	grk
@@ -33,7 +34,8 @@ CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
 **			02/26/2005 mem - Now only updating T_Seq_Map if @mapID is > 0
 **			07/01/2005 mem - Now updating column Last_Affected in T_Sequence
 **			06/07/2006 mem - Added support for Protein Collection File IDs and removed input parameter @mapID
-**    
+**          04/11/2020 mem - Expand Mass_Correction_Tag to varchar(32)
+**
 *****************************************************/
 (
 	@cleanSequence varchar(1024),
@@ -46,15 +48,15 @@ CREATE PROCEDURE dbo.GetIDFromNormalizedSequence
 )
 As
 	Set NoCount On
-	
+
 	declare @myRowCount int
 	declare @myError int
 	set @myRowCount = 0
 	set @myError = 0
-	
+
 	set @message = ''
 	set @seqID = 0
-	
+
 	declare @result int
 	declare @matchCount int
 
@@ -65,9 +67,9 @@ As
 	SELECT @seqID = T_Sequence.Seq_ID
 	FROM T_Sequence
 	WHERE
-	(Clean_Sequence = @cleanSequence) AND 
+	(Clean_Sequence = @cleanSequence) AND
 	(Mod_Count = @modCount) AND
-	(Mod_Description = @modDescription) 
+	(Mod_Description = @modDescription)
 	--
 	SELECT @myError = @@error, @myRowCount = @@rowcount
 	--
@@ -76,7 +78,7 @@ As
 		set @message = 'Error trying to look up existing sequence'
 		goto Done
 	end
-	
+
 	-- found it, we're done
 	--
 	if @seqID <> 0
@@ -99,8 +101,8 @@ As
 
 	INSERT INTO T_Sequence
 	(
-		Clean_Sequence, 
-		Mod_Count, 
+		Clean_Sequence,
+		Mod_Count,
 		Mod_Description,
 		Last_Affected
 	)
@@ -130,8 +132,8 @@ As
 
 		CREATE TABLE #TModDescriptors (
 			[Seq_ID] [int] NULL,
-			[Mass_Correction_Tag] [char] (8) NULL,
-			[Position] [int] NULL 
+			[Mass_Correction_Tag] [varchar] (32) NULL,
+			[Position] [int] NULL
 		)
 		--
 		SELECT @myError = @@error, @myRowCount = @@rowcount
@@ -161,10 +163,10 @@ As
 		-----------------------------------------------------------
 		-- Insert mod descriptors into mod descriptor table
 		-----------------------------------------------------------
-		
+
 		INSERT INTO T_Mod_Descriptors
 			(Seq_ID, Mass_Correction_Tag, [Position])
-		SELECT 
+		SELECT
 			Seq_ID, Mass_Correction_Tag, [Position]
 		FROM #TModDescriptors
 		--
@@ -199,7 +201,7 @@ As
 Done:
 
 	-----------------------------------------------------------
-	-- Add entries to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map 
+	-- Add entries to T_Seq_Map or T_Seq_to_Archived_Protein_Collection_File_Map
 	-- for the updated sequences
 	-----------------------------------------------------------
 	--
@@ -210,8 +212,8 @@ Done:
 			Set @matchCount = 0
 			SELECT @matchCount = COUNT(*)
 			FROM T_Seq_Map
-			WHERE Seq_ID = @seqID AND Map_ID = @OrganismDBFileID 
-			
+			WHERE Seq_ID = @seqID AND Map_ID = @OrganismDBFileID
+
 			If @matchCount = 0
 			Begin
 				INSERT INTO T_Seq_Map (Seq_ID, Map_ID)
@@ -226,8 +228,8 @@ Done:
 			Set @matchCount = 0
 			SELECT @matchCount = COUNT(*)
 			FROM T_Seq_to_Archived_Protein_Collection_File_Map
-			WHERE Seq_ID = @seqID AND [File_ID] = @ProteinCollectionFileID 
-			
+			WHERE Seq_ID = @seqID AND [File_ID] = @ProteinCollectionFileID
+
 			If @matchCount = 0
 			Begin
 				INSERT INTO T_Seq_to_Archived_Protein_Collection_File_Map (Seq_ID, [File_ID])
@@ -237,7 +239,7 @@ Done:
 			End
 		End
 	End
-	
+
 	Return @myError
 
 GO
