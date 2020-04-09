@@ -10,7 +10,7 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 **		  that pass the given filters.  The calling procedure
 **		  must create #TmpMassTags before calling this procedure
 **
-**  Return values: 0 if success, otherwise, error code 
+**  Return values: 0 if success, otherwise, error code
 **
 **  Parameters: See comments below
 **
@@ -20,7 +20,8 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 **			03/24/2011 mem - Added parameter @MaximumMSGFSpecProb
 **			01/06/2012 mem - Updated to use T_Peptides.Job
 **			02/28/2012 mem - No longer using @ConfirmedOnly
-**  
+**          04/09/2020 mem - Use .dbo. instead of ..
+**
 ****************************************************************/
 (
 	@MassCorrectionIDFilterList varchar(255) = '',
@@ -50,7 +51,7 @@ CREATE PROCEDURE dbo.GetMassTagsPassingFiltersWork
 As
 	Set NoCount On
 
-	declare @myRowCount int	
+	declare @myRowCount int
 	declare @myError int
 	set @myRowCount = 0
 	set @myError = 0
@@ -59,7 +60,7 @@ As
 			@FullSql nvarchar(2048),
 			@ScoreFilteringSQL varchar(256),
 			@ExperimentFilteringSQL varchar(256)
-			
+
 
 	Declare @IncList varchar(1024),
 			@CurrIncItem varchar(512),
@@ -75,33 +76,33 @@ As
 			@ModWhereString varchar(128)
 
 	Set @DatasetToFilterOn = ''
-	
-	---------------------------------------------------	
+
+	---------------------------------------------------
 	-- Validate the input parameters
-	---------------------------------------------------	
+	---------------------------------------------------
 	-- @MassCorrectionIDFilterList is validated below
-	
+
 	/* Deprecated in February 2012
 	--Set @ConfirmedOnly = IsNull(@ConfirmedOnly, 0)
 	*/
-	
+
 	Set @MinimumHighNormalizedScore = IsNull(@MinimumHighNormalizedScore, 0)
 	Set @MinimumPMTQualityScore = IsNull(@MinimumPMTQualityScore, 0)
 	Set @MinimumHighDiscriminantScore = IsNull(@MinimumHighDiscriminantScore, 0)
 	Set @MinimumPeptideProphetProbability = IsNull(@MinimumPeptideProphetProbability, 0)
 	Set @MaximumMSGFSpecProb = IsNull(@MaximumMSGFSpecProb, 0)
-	
+
 	Set @ExperimentFilter = IsNull(@ExperimentFilter, '')
 	Set @ExperimentExclusionFilter = IsNull(@ExperimentExclusionFilter, '')
 	Set @JobToFilterOnByDataset = IsNull(@JobToFilterOnByDataset, 0)
 	Set @infoOnly = IsNull(@infoOnly, 0)
 
-	---------------------------------------------------	
+	---------------------------------------------------
 	-- Define the score filtering SQL
-	---------------------------------------------------	
+	---------------------------------------------------
 
 	Set @ScoreFilteringSQL = ''
-	
+
 	If @MinimumPMTQualityScore <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.PMT_Quality_Score, 0) >= ' +  Convert(varchar(11), @MinimumPMTQualityScore) + ') '
 
@@ -116,7 +117,7 @@ As
 
 	If @MaximumMSGFSpecProb <> 0
 		Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (IsNull(MT.Min_MSGF_SpecProb, 1) <= ' + Convert(varchar(11), @MaximumMSGFSpecProb) + ') '
-	
+
 	/* Deprecated in February 2012
 	-- If @ConfirmedOnly <> 0
 	--	Set @ScoreFilteringSQL = @ScoreFilteringSQL + ' AND (Is_Confirmed=1) '
@@ -127,9 +128,9 @@ As
 		Set @ScoreFilteringSQL = Substring(@ScoreFilteringSQL, 5, LEN(@ScoreFilteringSQL))
 
 
-	---------------------------------------------------	
+	---------------------------------------------------
 	-- Possibly add an experiment filter
-	---------------------------------------------------	
+	---------------------------------------------------
 	Set @ExperimentFilteringSQL = ''
 
 	If Len(@ExperimentFilter) > 0
@@ -153,9 +154,9 @@ As
 		Set @ExperimentFilteringSQL = Substring(@ExperimentFilteringSQL, 5, LEN(@ExperimentFilteringSQL))
 
 
-	---------------------------------------------------	
+	---------------------------------------------------
 	-- If @JobToFilterOnByDataset is non-zero, then lookup the details in T_FTICR_Analysis_Description
-	---------------------------------------------------	
+	---------------------------------------------------
 	If @JobToFilterOnByDataset <> 0
 	Begin
 		-- Lookup the dataset for @JobToFilterOnByDataset
@@ -173,11 +174,11 @@ As
 			Goto Done
 		End
 	End
-	
 
-	---------------------------------------------------	
+
+	---------------------------------------------------
 	-- Construct the Base Sql
-	---------------------------------------------------	
+	---------------------------------------------------
 	Set @BaseSql = ''
 	Set @BaseSql = @BaseSql + 'INSERT INTO #TmpMassTags (Mass_Tag_ID)'
 
@@ -212,24 +213,24 @@ As
 		End
 	End
 
-	---------------------------------------------------	
+	---------------------------------------------------
 	-- Clean up @MassCorrectionIDFilterList
-	---------------------------------------------------	
+	---------------------------------------------------
 	Set @MassCorrectionIDFilterList = LTrim(RTrim(IsNull(@MassCorrectionIDFilterList, '')))
-	
+
 	-- Replace any semicolons in @MassCorrectionIDFilterList with commas
 	Set @MassCorrectionIDFilterList = Replace(@MassCorrectionIDFilterList, ';', ',')
-	
+
 	-- Copy data from @MassCorrectionIDFilterList into @IncList
 	Set @IncList = @MassCorrectionIDFilterList
-	
+
 	If Len(@IncList) > 0 And @IncList <> '-1'
 	While Len(@IncList) > 0
 	Begin -- <a>
-			---------------------------------------------------	
+			---------------------------------------------------
 			-- Extract next inclusion item and build criteria
-			---------------------------------------------------	
-			Set @DelimiterLoc = CharIndex(',', @IncList)		
+			---------------------------------------------------
+			Set @DelimiterLoc = CharIndex(',', @IncList)
 			If @DelimiterLoc > 0	--cleave inclusion list on first delimiter
 			  Begin
 				Set @CurrIncItem = RTrim(LTrim(SubString(@IncList, 1, @DelimiterLoc-1)))
@@ -241,10 +242,10 @@ As
 				Set @IncList=''
 			  End
 
-			---------------------------------------------------	
+			---------------------------------------------------
 			-- Populate temporary table with all Mass Tags containing the given Modification ID
 			-- (or not containing the given ID)
-			---------------------------------------------------	
+			---------------------------------------------------
 			--
 			-- @CurrIncItem should be of the form '1014'  or  'Not 1014'
 
@@ -253,7 +254,7 @@ As
 
 			Set @IsNot = 0
 			Set @IsAny = 0
-						
+
 			Set @DelimiterLoc = CharIndex(' ', @CurrIncItem)
 			If @DelimiterLoc > 0
 			Begin
@@ -265,7 +266,7 @@ As
 			End
 			Else
 				Set @MassCorrectionIDString = @CurrIncItem
-			
+
 
 			If IsNumeric(@MassCorrectionIDString) <> 1
 			Begin
@@ -281,16 +282,16 @@ As
 
 			If @IsAny = 0
 			Begin
-				---------------------------------------------------	
+				---------------------------------------------------
 				-- Look up the Mass correction tag for this Mass Correction ID
-				---------------------------------------------------	
+				---------------------------------------------------
 				Set @MassCorrectionID = Convert(int, @MassCorrectionIDString)
-				
+
 				If @MassCorrectionID = 1
 				Begin
 					-- MassCorrectionID of 1 indicates no modification
 					-- Not 1 indicates any modification (but, must be modified)
-					
+
 					If @IsNot = 0
 						-- Construct list of Mass Tags that contain no modifications
 						Set @ModWhereString = '(Mod_Count = 0)'
@@ -301,11 +302,11 @@ As
 				Else
 				Begin
 					SELECT @MassCorrectionTag = Mass_Correction_Tag
-					FROM MT_Main..V_DMS_Mass_Correction_Factors
+					FROM MT_Main.dbo.V_DMS_Mass_Correction_Factors
 					WHERE Mass_Correction_ID = @MassCorrectionID
 					--
 					SELECT @myError = @@error, @myRowCount = @@rowcount
-					
+
 					If @myRowCount = 0
 					Begin
 						-- Invalid @MassCorrectionID; do not return any mass tags
@@ -315,7 +316,7 @@ As
 
 
 					Set @LikeString = '''%' + @MassCorrectionTag + ':%'''
-				
+
 					If @IsNot = 0
 						-- Construct list of Mass Tags that contain @MassCorrectionTag
 						Set @ModWhereString = '(Mod_Count > 0 AND Mod_Description LIKE ' + @LikeString + ')'
@@ -326,18 +327,18 @@ As
 			End
 			Else
 			Begin
-				---------------------------------------------------	
+				---------------------------------------------------
 				-- @IsAny is 1
-				---------------------------------------------------	
+				---------------------------------------------------
 				If @IsNot = 0
 					-- Match any and all Mass Tags
 					Set @ModWhereString = '(Mod_Count >= 0)'
 				Else
 					-- Construct list of Mass Tags that are not modified
 					Set @ModWhereString = '(Mod_Count = 0)'
-				
-			End			
-			
+
+			End
+
 			-- Create Sql to obtain the list of mass tags that contain the given modification
 			Set @FullSql = Convert(nvarchar(2048), @BaseSql + ' AND ' + @ModWhereString)
 
@@ -351,13 +352,13 @@ As
 	End -- </a>
 	Else
 	Begin -- <b>
-		---------------------------------------------------	
+		---------------------------------------------------
 		-- Do not filter on Modifications
-		---------------------------------------------------	
+		---------------------------------------------------
 
 		Set @FullSql = Convert(nvarchar(2048), @BaseSql)
-		
-	
+
+
 		-- Execute the Sql to add mass tags to #TmpMassTags
 		EXECUTE sp_executesql @FullSql
 		--
@@ -366,7 +367,7 @@ As
 		If @MyError <> 0
 			Goto Done
 	End -- </b>
-    
+
 	If @infoOnly <> 0
 		Print @FullSql
 
