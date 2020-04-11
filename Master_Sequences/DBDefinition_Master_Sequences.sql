@@ -1,8 +1,10 @@
 /****** Object:  Database [Master_Sequences] ******/
-CREATE DATABASE [Master_Sequences] ON  PRIMARY 
-( NAME = N'Master_Sequences_Data', FILENAME = N'I:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 161523648KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+CREATE DATABASE [Master_Sequences]
+ CONTAINMENT = NONE
+ ON  PRIMARY 
+( NAME = N'Master_Sequences_Data', FILENAME = N'J:\SQLServerData\Master_Sequences_Data.mdf' , SIZE = 177676032KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'Master_Sequences_Log', FILENAME = N'H:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 82368KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'Master_Sequences_Log', FILENAME = N'L:\SQLServerData\Master_Sequences_Log.ldf' , SIZE = 127117504KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
@@ -62,19 +64,25 @@ ALTER DATABASE [Master_Sequences] SET PAGE_VERIFY CHECKSUM
 GO
 ALTER DATABASE [Master_Sequences] SET DB_CHAINING OFF 
 GO
+ALTER DATABASE [Master_Sequences] SET FILESTREAM( NON_TRANSACTED_ACCESS = OFF ) 
+GO
+ALTER DATABASE [Master_Sequences] SET TARGET_RECOVERY_TIME = 0 SECONDS 
+GO
+ALTER DATABASE [Master_Sequences] SET DELAYED_DURABILITY = DISABLED 
+GO
 USE [Master_Sequences]
 GO
 /****** Object:  User [MTAdmin] ******/
 CREATE USER [MTAdmin] FOR LOGIN [mtadmin] WITH DEFAULT_SCHEMA=[dbo]
 GO
 /****** Object:  User [MTS_DB_Dev] ******/
-CREATE USER [MTS_DB_Dev] FOR LOGIN [ProteinSeqs2\MTS_DB_Dev]
+CREATE USER [MTS_DB_Dev] FOR LOGIN [Pogo\MTS_DB_Dev]
 GO
 /****** Object:  User [MTS_DB_Lite] ******/
-CREATE USER [MTS_DB_Lite] FOR LOGIN [ProteinSeqs2\MTS_DB_Lite]
+CREATE USER [MTS_DB_Lite] FOR LOGIN [Pogo\MTS_DB_Lite]
 GO
 /****** Object:  User [MTS_DB_Reader] ******/
-CREATE USER [MTS_DB_Reader] FOR LOGIN [ProteinSeqs2\MTS_DB_Reader]
+CREATE USER [MTS_DB_Reader] FOR LOGIN [Pogo\MTS_DB_Reader]
 GO
 /****** Object:  User [MTUser] ******/
 CREATE USER [MTUser] FOR LOGIN [mtuser] WITH DEFAULT_SCHEMA=[dbo]
@@ -89,15 +97,9 @@ GRANT CONNECT TO [MTAdmin] AS [dbo]
 GO
 GRANT CONNECT TO [MTS_DB_Dev] AS [dbo]
 GO
-GRANT SHOWPLAN TO [MTS_DB_Dev] AS [dbo]
-GO
 GRANT CONNECT TO [MTS_DB_Lite] AS [dbo]
 GO
-GRANT SHOWPLAN TO [MTS_DB_Lite] AS [dbo]
-GO
 GRANT CONNECT TO [MTS_DB_Reader] AS [dbo]
-GO
-GRANT SHOWPLAN TO [MTS_DB_Reader] AS [dbo]
 GO
 GRANT CONNECT TO [MTUser] AS [dbo]
 GO
