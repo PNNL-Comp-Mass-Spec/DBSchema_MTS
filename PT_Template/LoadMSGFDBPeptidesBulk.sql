@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure [dbo].[LoadMSGFDBPeptidesBulk]
+CREATE PROCEDURE [dbo].[LoadMSGFDBPeptidesBulk]
 /****************************************************
 **
 **	Desc:
@@ -1985,6 +1985,7 @@ As
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadMSGFDBPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]

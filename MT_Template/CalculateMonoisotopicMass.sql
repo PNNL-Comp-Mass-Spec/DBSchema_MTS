@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.CalculateMonoisotopicMass
+CREATE PROCEDURE dbo.CalculateMonoisotopicMass
 /****************************************************
 **
 **	Desc: Calculates the monoisotopic mass for the peptides in T_Mass_Tags
@@ -516,6 +516,7 @@ Done:
 	DROP TABLE #TMP_AA
 
 	return @myError
+
 
 
 GO

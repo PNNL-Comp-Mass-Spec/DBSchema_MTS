@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadMSAlignPeptidesBulk
+CREATE PROCEDURE dbo.LoadMSAlignPeptidesBulk
 /****************************************************
 **
 **	Desc:
@@ -1857,6 +1857,7 @@ As
 
 Done:
 	Return @myError
+
 
 
 GO

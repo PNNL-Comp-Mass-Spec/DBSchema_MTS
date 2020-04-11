@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure dbo.LoadSeqInfoAndModsPart2
+CREATE PROCEDURE dbo.LoadSeqInfoAndModsPart2
 /****************************************************
 **
 **	Desc:
@@ -306,6 +306,7 @@ As
 
 Done:
 	Return @myError
+
 
 
 GO

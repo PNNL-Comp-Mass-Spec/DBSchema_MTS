@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadInspectPeptidesBulk
+CREATE PROCEDURE LoadInspectPeptidesBulk
 /****************************************************
 **
 **	Desc:
@@ -1860,6 +1860,7 @@ As
 
 Done:
 	Return @myError
+
 
 
 GO

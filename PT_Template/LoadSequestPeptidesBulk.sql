@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure LoadSequestPeptidesBulk
+CREATE PROCEDURE LoadSequestPeptidesBulk
 /****************************************************
 **
 **	Desc:
@@ -2233,6 +2233,7 @@ As
 
 Done:
 	Return @myError
+
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[LoadSequestPeptidesBulk] TO [MTS_DB_Dev] AS [dbo]
