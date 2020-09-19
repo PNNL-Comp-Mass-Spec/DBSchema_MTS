@@ -6,7 +6,7 @@ GO
 CREATE TABLE [dbo].[T_DMS_Organisms](
 	[Organism_ID] [int] NOT NULL,
 	[Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-	[Description] [varchar](256) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+	[Description] [varchar](512) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Short_Name] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Domain] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
 	[Kingdom] [varchar](64) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
