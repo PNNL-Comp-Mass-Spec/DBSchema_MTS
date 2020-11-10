@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE Procedure [dbo].[MakeNewMassTagDB]
+CREATE PROCEDURE [dbo].[MakeNewMassTagDB]
 /****************************************************
 **
 **	Desc: Creates a new mass tag database
@@ -43,6 +43,7 @@ CREATE Procedure [dbo].[MakeNewMassTagDB]
 **			05/28/2013 mem - Now setting LogFileAlerts to 0 when adding new databases to the DatabaseSettings table in the dba database
 **			04/14/2014 mem - Now checking for the name containing a space or carriage return
 **			07/21/2015 mem - Switched to using ScrubWhitespace to remove whitespace (including space, tab, and carriage return)
+**          12/04/2019 mem - Changed default @templateFilePath to \\proto-3\DB_Backups\MTS_Templates
 **    
 *****************************************************/
 (
