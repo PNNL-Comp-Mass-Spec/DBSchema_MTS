@@ -2,9 +2,9 @@
 CREATE DATABASE [MT_HistoricLog]
  CONTAINMENT = NONE
  ON  PRIMARY 
-( NAME = N'MT_HistoricLog_dat', FILENAME = N'J:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 764416KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_dat', FILENAME = N'J:\SQLServerData\MT_HistoricLog_data.mdf' , SIZE = 840896KB , MAXSIZE = UNLIMITED, FILEGROWTH = 10%)
  LOG ON 
-( NAME = N'MT_HistoricLog_log', FILENAME = N'L:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 209280KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
+( NAME = N'MT_HistoricLog_log', FILENAME = N'L:\SQLServerData\MT_HistoricLog_log.ldf' , SIZE = 353216KB , MAXSIZE = 2048GB , FILEGROWTH = 10%)
  COLLATE SQL_Latin1_General_CP1_CI_AS
 GO
 IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
