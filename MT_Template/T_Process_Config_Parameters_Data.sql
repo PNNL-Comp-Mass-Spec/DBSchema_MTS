@@ -1,6 +1,6 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
 /****** RowCount: 50 ******/
-/****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
+/****** Columns: Name, [Function], Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import, FTICR analysis job import',1,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_and_Experiment','MS/MS analysis job import, FTICR analysis job import',0,99,'Allow MS/MS and FTICR analysis jobs that are associated with this campaign and experiment; separate the campaign and experiment using a comma; these values are checked separately from the experiment inclusion/exclusion and dataset inclusion/exclusion filters')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Custom_SP_MSMS','Custom Processing',0,99,'Enter a stored procedure name to run it during Master Update; Optionally, supply stored procedure parameter values after the SP name, separating each value with a comma, for example: UpdatePMTQS, -10, 10, 0, 1, 2')
