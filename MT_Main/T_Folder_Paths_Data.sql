@@ -1,6 +1,6 @@
 /****** Object:  Table [T_Folder_Paths] ******/
 /****** RowCount: 13 ******/
-/****** Columns: Function, Client_Path, Server_Path ******/
+/****** Columns: [Function], Client_Path, Server_Path ******/
 INSERT INTO [T_Folder_Paths] VALUES ('Database Backup Log Path','L:\SQLServerBackup','L:\SQLServerBackup')
 INSERT INTO [T_Folder_Paths] VALUES ('Database Backup Path','\\proto-8\DB_Backups\Pogo_Backup\','\\proto-8\DB_Backups\Pogo_Backup\')
 INSERT INTO [T_Folder_Paths] VALUES ('Default Database Folder','','J:\SQLServerData')
