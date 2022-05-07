@@ -1,6 +1,6 @@
 /****** Object:  Table [AlertSettings] ******/
 /****** RowCount: 32 ******/
-/****** Columns: AlertName, VariableName, Enabled, Value, Description ******/
+/****** Columns: AlertName, VariableName, Enabled, [Value], Description ******/
 INSERT INTO [AlertSettings] VALUES ('BlockingAlert','QueryValue','True','10','Value is in seconds')
 INSERT INTO [AlertSettings] VALUES ('BlockingAlert','QueryValue2','True','20','Value is in seconds')
 INSERT INTO [AlertSettings] VALUES ('CPUAlert','QueryValue','True','85','Value is in percentage')
