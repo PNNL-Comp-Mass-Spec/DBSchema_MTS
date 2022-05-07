@@ -1,6 +1,6 @@
 /****** Object:  Table [T_Process_Config_Parameters] ******/
 /****** RowCount: 24 ******/
-/****** Columns: Name, Function, Min_Occurrences, Max_Occurrences, Description ******/
+/****** Columns: Name, [Function], Min_Occurrences, Max_Occurrences, Description ******/
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign','MS/MS analysis job import',0,99,'Allow MS/MS analysis jobs that are associated with this campaign')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Campaign_Exclusion','MS/MS analysis job import',0,99,'Exclude MS/MS analysis jobs that are associated with this campaign name.  Can be an exact name match or a name portion, containing a percent sign as a wildcard character.')
 INSERT INTO [T_Process_Config_Parameters] VALUES ('Dataset_DMS_Creation_Date_Minimum','MS/MS analysis job import, FTICR analysis job import',0,1,'Earliest allowable dataset creation date in DMS')
