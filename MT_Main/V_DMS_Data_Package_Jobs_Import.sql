@@ -11,8 +11,8 @@ SELECT Data_Package_ID,
        Job,
        Dataset,
        Tool,
-       [Package Comment] AS Package_Comment,
-       [Item Added] AS Item_Added
+       Package_Comment,
+       Item_Added
 FROM S_V_Data_Package_Analysis_Jobs
 
 
