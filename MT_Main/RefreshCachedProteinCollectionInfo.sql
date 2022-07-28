@@ -4,7 +4,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE RefreshCachedProteinCollectionInfo
+CREATE PROCEDURE [dbo].[RefreshCachedProteinCollectionInfo]
 /****************************************************
 **
 **	Desc:	Updates the data in T_DMS_Protein_Collection_Info and
@@ -18,6 +18,7 @@ CREATE PROCEDURE RefreshCachedProteinCollectionInfo
 **			08/01/2012 mem - Now using Cached_RowVersion and Collection_RowVersion to determine new/changed protein collection entries
 **			08/02/2012 mem - Turned ANSI_WARNINGS back on since we were getting error "Heterogeneous queries require the ANSI_NULLS and ANSI_WARNINGS options to be set for the connection"
 **			09/23/2014 mem - Now treating error 53 as a warning (Named Pipes Provider: Could not open a connection to SQL Server)
+**          07/27/2022 mem - Switch from Filesize to File_Size_Bytes
 **
 *****************************************************/
 (
@@ -161,7 +162,7 @@ AS
 		-- Use a MERGE Statement to synchronize T_DMS_Protein_Collection_AOF_Stats with V_Protein_Collection_List_Export
 		--
 		 MERGE T_DMS_Protein_Collection_AOF_Stats AS target
-		 USING (SELECT PCFS.Archived_File_ID, PCFS.Filesize,
+		 USING (SELECT PCFS.Archived_File_ID, PCFS.File_Size_Bytes,
                        PCFS.Protein_Collection_Count,
                        PCFS.Protein_Count, PCFS.Residue_Count,
                        PCFS.Archived_File_Name 

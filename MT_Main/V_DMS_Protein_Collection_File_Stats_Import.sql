@@ -7,7 +7,7 @@ GO
 CREATE VIEW [dbo].[V_DMS_Protein_Collection_File_Stats_Import]
 AS
 SELECT AOF.Archived_File_ID,
-        AOF.Filesize,
+        AOF.File_Size_Bytes,
         AOF.Protein_Collection_Count,
         AOF.Protein_Count,
         AOF.Residue_Count,
