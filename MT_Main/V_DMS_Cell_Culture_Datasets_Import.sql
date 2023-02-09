@@ -6,7 +6,7 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Cell_Culture_Datasets_Import]
 AS
-SELECT CellCulture, CellCultureID, DatasetID
+SELECT Biomaterial AS CellCulture, Biomaterial_ID AS CellCultureID, Dataset_ID AS DatasetID
 FROM S_V_Cell_Culture_Datasets
 
 

@@ -6,7 +6,7 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Campaign_Cell_Culture_Import]
 AS
-SELECT Campaign, CellCulture, CC_ID
+SELECT Campaign, Biomaterial AS CellCulture, Biomaterial_ID AS CC_ID
 FROM S_V_Campaign_Cell_Culture
 
 

@@ -4,10 +4,10 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-create view V_Cell_Culture_Datasets_Import
+CREATE view [dbo].[V_Cell_Culture_Datasets_Import]
 AS
-SELECT CellCulture, CellCultureID, DatasetID
-FROM Gigasax.DMS5.dbo.V_Export_Cell_Culture_Datasets
+SELECT Biomaterial AS CellCulture, Biomaterial_ID AS CellCultureID, Dataset_ID AS DatasetID
+FROM Gigasax.DMS5.dbo.V_Export_Biomaterial_Datasets
 
 
 GO
