@@ -6,7 +6,7 @@ GO
 
 CREATE VIEW [dbo].[V_DMS_Cell_Culture_Jobs_Import]
 AS
-SELECT Biomaterial AS CellCulture, Biomaterial_ID AS CellCultureID, Job AS JobID
+SELECT CellCulture, CellCultureID, JobID
 FROM S_V_Cell_Culture_Jobs
 
 
