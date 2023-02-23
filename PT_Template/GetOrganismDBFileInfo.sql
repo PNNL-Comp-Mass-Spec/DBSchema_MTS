@@ -3,8 +3,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-CREATE PROCEDURE dbo.GetOrganismDBFileInfo
+CREATE PROCEDURE [dbo].[GetOrganismDBFileInfo]
 /****************************************************
 ** 
 **	Desc:	Determines the OrgDBFileID or Archived Protein Collection File ID for the given job
@@ -15,13 +14,14 @@ CREATE PROCEDURE dbo.GetOrganismDBFileInfo
 **	Auth:	mem
 **	Date:	06/08/2006
 **			06/13/2006 mem - Updated to parse out the ID value from the file in the Organism_DB_Name field if Protein_Collection_List <> 'na' and Protein_Collection_List <> ''
-**			07/15/2006 mem - Updated to properly report when the GetArchivedFileIDForProteinCollectionList could not be found
+**			07/15/2006 mem - Updated to properly report when the get_archived_file_id_for_protein_collection_list could not be found
 **			09/07/2007 mem - Changed Protein_Sequences server reference to ProteinSeqs
 **			10/07/2007 mem - Increased @ProteinCollectionList size to varchar(max)
 **			02/19/2009 mem - Changed @ResidueCount to bigint
 **			12/13/2010 mem - Now looking up protein collection info using MT_Main.dbo.T_DMS_Protein_Collection_AOF_Stats
 **						   - Added Try/Catch error handling
-**			12/14/2010 mem-  Now looking up legacy fasta file info using MT_Main.dbo.T_DMS_Organism_DB_Info
+**			12/14/2010 mem - Now looking up legacy fasta file info using MT_Main.dbo.T_DMS_Organism_DB_Info
+**			02/22/2023 bcg - Update procedure name
 **    
 *****************************************************/
 (
@@ -153,9 +153,9 @@ As
 			If @ProteinCollectionFileID = 0
 			Begin
 				-- @OrganismDBName was 'na' or '' or @OrganismDBName did not start with ID_
-				-- Call GetArchivedFileIDForProteinCollectionList to determine the ID value associated with @ProteinCollectionList and @ProteinOptionsList
+				-- Call get_archived_file_id_for_protein_collection_list to determine the ID value associated with @ProteinCollectionList and @ProteinOptionsList
 				Set @myError = -9999
-				Exec @myError = ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList 
+				Exec @myError = ProteinSeqs.Protein_Sequences.dbo.get_archived_file_id_for_protein_collection_list 
 						@ProteinCollectionList, 
 						@ProteinOptionsList, 
 						@ArchivedFileID = @ProteinCollectionFileID output, 
@@ -165,17 +165,17 @@ As
 				Begin
 					If @myError = -9999
 					Begin
-						Set @message = 'Could not find stored procedure ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList; '
+						Set @message = 'Could not find stored procedure ProteinSeqs.Protein_Sequences.dbo.get_archived_file_id_for_protein_collection_list; '
 						Set @myError = 13
 					End
 					Else
-						set @message = 'Error calling ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList for '
+						set @message = 'Error calling ProteinSeqs.Protein_Sequences.dbo.get_archived_file_id_for_protein_collection_list for '
 					
 					set @message = @message + 'job ' + @JobStrEx + ' (Error Code ' + Convert(varchar(12), @myError) + ')'
 					RAISERROR (@message, 11, @myError)
 				End
 
-				--print 'Called ProteinSeqs.Protein_Sequences.dbo.GetArchivedFileIDForProteinCollectionList to extract the ID'
+				--print 'Called ProteinSeqs.Protein_Sequences.dbo.get_archived_file_id_for_protein_collection_list to extract the ID'
 
 				If @ProteinCollectionFileID = 0
 				Begin
@@ -244,7 +244,6 @@ As
 	End Catch	
 		
 	Return @myError
-
 
 GO
 GRANT VIEW DEFINITION ON [dbo].[GetOrganismDBFileInfo] TO [MTS_DB_Dev] AS [dbo]
