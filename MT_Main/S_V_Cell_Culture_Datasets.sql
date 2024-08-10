@@ -1,3 +1,8 @@
 /****** Object:  Synonym [dbo].[S_V_Cell_Culture_Datasets] ******/
-CREATE SYNONYM [dbo].[S_V_Cell_Culture_Datasets] FOR [Gigasax].[DMS5].[dbo].[V_Export_Cell_Culture_Datasets]
+
+--
+-- Error scripting this object:
+-- Script failed for Synonym 'dbo.S_V_Cell_Culture_Datasets'. 
+--
+
 GO
